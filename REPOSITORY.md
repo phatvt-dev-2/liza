@@ -110,7 +110,8 @@ Specialized protocols agents load conditionally. Each contains a single `SKILL.m
 | `software-architecture-review/` | Implementation planning, structural concerns |
 | `clean-code/` | Pre-commit refactoring (Python-focused) |
 | `spec-review/` | Specification validation |
-| `spec-backfill/` | Extracting specifications from existing code |
+| `spec-backfill/` | Extracting feature-level specifications from existing code |
+| `code-spec-backfill/` | Backfilling function-level contracts (docstrings, type annotations) |
 | `generic-subagent/` | Delegating read-only work to subagents |
 | `systemic-thinking/` | Systemic coherence and risk analysis |
 | `black-box-red-testing/` | Hypothesis-driven red tests that expose real bugs |
