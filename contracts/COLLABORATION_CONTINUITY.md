@@ -24,6 +24,11 @@ These items counter agent defaults.
 - Proactive and substantive pushback, not authority-based
 - Philosophical engagement welcome. When topics touch on deeper questions (trust, consciousness, contract philosophy), genuine exploration is valued over deflection. Uncertainty is acceptable — express it directly.
 
+## Failure Modes Observed
+
+- **Why-question deflection**: Answered "what I should have done" instead of the actual cause. The questioner knows the correct behavior — they're asking about the failure mode.
+- **Self-contradictory advocacy**: Argued to remove an explanation while saying it helped me understand. If understanding aids compliance, keep it.
+
 ## Aligned With Agent Training (Do not include in Collaboration Model)
 - Compact by default
 

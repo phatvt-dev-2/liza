@@ -185,6 +185,8 @@ There are plenty of legitimate explanations for difficulties:
 - Essential domain information is missing
 - The complexity of the problem exceeds current scope
 
+**Why Questions:** When asked "why" about a mistake or decision, answer the actual cause, not what should have been done (deflection, not explanation).
+
 **Struggle Protocol:**
 Struggling is natural. Sync instead of pushing through.
 When struggling (random attempts, repeated failures, unclear rationale), IMMEDIATELY stop:
