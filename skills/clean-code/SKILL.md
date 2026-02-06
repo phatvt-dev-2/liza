@@ -1,6 +1,6 @@
 ---
-name: code-cleaning
-description: Pre-commit Clean Code refactoring (Python-focused)
+name: clean-code
+description: Pre-commit Clean Code refactoring
 ---
 
 Clean Code is a reader's gift — refactor for the next developer, not the compiler.
@@ -30,10 +30,19 @@ Before any transformation:
    pytest -q || exit 1
 ```
 
-3. **Coverage gate** (≥70% of staged lines)
+3. **Coverage gate** (tiered by transformation risk)
   - Run: `pytest --cov --cov-report=xml && diff-cover coverage.xml --compare-branch=HEAD`
   - `diff-cover` maps coverage to staged hunks specifically
+
+  | Transformation Risk | Examples | Coverage Threshold |
+  |---------------------|----------|--------------------|
+  | Mechanical | Rename, dead code removal, import cleanup | ≥30% |
+  | Structural | Extract function, early return, split responsibility | ≥70% |
+  | Behavioral-adjacent | CQS split, error handling isolation | ≥90% |
+
+  - Threshold applies to the **highest-risk transformation planned** — if any structural change is planned, the structural threshold applies to the whole session
   - **STOP if below threshold** — report uncovered lines, do not proceed
+  - If tools unavailable (`pytest-cov`, `diff-cover`): warn, require explicit waiver to proceed without coverage data
 
 4. **Diff size guard**
   - If staged diff >500 lines: require scope reduction or switch to Full-file mode with chunking strategy
@@ -50,7 +59,7 @@ Before any transformation:
 Pre-flight:
   Staged files: N
   Tests: ✓ pass (X tests)
-  Coverage: Y% of staged lines (threshold: ≥70%)
+  Coverage: Y% of staged lines (threshold: ≥Z% — [risk level])
   Backup: stash@{0}
 Proceed (P)?
 ```
@@ -61,6 +70,12 @@ Proceed (P)?
 
 1. **Clean Code violations** (see Principle Catalog)
 2. **Bugs spotted** — flag separately, do not auto-fix
+
+**Batch grouping strategy:**
+- Group by **dependency chain** — transformations that could affect each other go in the same batch
+- Independent transformations go in separate batches
+- Within a batch, order from **inner scope outward** (rename a local before extracting the function that contains it)
+- When ambiguous, group by file proximity over principle similarity
 
 **Output format:**
 ```
@@ -74,8 +89,8 @@ Bugs identified (not auto-fixed):
   - [file:line] [description] — [suggested fix]
 
 Proposed batches:
-  1. [batch name] — [N transformations]
-  2. [batch name] — [N transformations]
+  1. [batch name] — [N transformations] (grouped by: [rationale])
+  2. [batch name] — [N transformations] (grouped by: [rationale])
 
 Proceed with batch 1 (P)?
 ```
@@ -87,8 +102,11 @@ For each batch:
 1. **Describe** transformations textually
 2. **Await approval** — user confirms or skips
 3. **Apply** directly to files
-4. **Run tests**
-  - ✓ Pass → continue to next batch
+4. **Run validation**
+   a. Run tests
+   b. Run type checker if project uses one (`mypy`, `pyright`): `mypy <touched files>`
+   c. Verify imports are consistent (extractions often leave stale imports — pre-commit hooks like `isort`/`autoflake` may catch this, but verify explicitly)
+  - ✓ All pass → **snapshot batch**, continue to next batch
   - ✗ Fail → **STOP**, show failure, ask user:
 ```
      Tests failed after [batch name].
@@ -96,7 +114,12 @@ For each batch:
 
      (I)nvestigate: Show failure output and affected code, propose hypothesis, await instruction. No autonomous fixing.
 ```
-5. **Loop** until no violations remain
+5. **Snapshot batch** (for per-batch rollback):
+```bash
+   git stash create | xargs -I{} git stash store -m "clean-code-batch-N-$(date +%s)" {}
+```
+   This allows reverting individual batches without losing earlier successful work.
+6. **Loop** until no violations remain
 
 **Batch completion:**
 ```
@@ -104,6 +127,8 @@ Batch N applied:
   - [transformation 1]
   - [transformation 2]
   Tests: ✓ pass
+  Types: ✓ pass (or N/A)
+  Snapshot: stash@{0}
 
 Next: [batch N+1 name] — [description]
 Proceed (P) / Skip (S) / Stop (X)?
@@ -142,7 +167,12 @@ Skip if no extractions occurred.
 After all batches complete, run pre-commit hooks on touched files:
 
 ```bash
-   pre-commit run --files $(git diff --cached --name-only)
+   git diff --cached --name-only -z | xargs -0 pre-commit run --files
+```
+
+If project uses type checking, also run:
+```bash
+   git diff --cached --name-only -z | xargs -0 mypy
 ```
 
 **Outcomes:**
@@ -152,12 +182,14 @@ After all batches complete, run pre-commit hooks on touched files:
 | ✓ Pass | Proceed to final summary |
 | ✗ Fail (formatter) | Apply formatter output, re-run tests; if tests fail, revert and report |
 | ✗ Fail (linter) | Show violations, ask user — linters require judgment |
+| ✗ Fail (type errors) | Show errors, ask user — may indicate behavioral change |
 | ✗ Fail (unfixable) | After 3 attempts, show failure, ask user |
 
 **Output:**
 ```
 Pre-commit validation:
   Hooks: ✓ pass (N hooks)
+  Types: ✓ pass (or N/A)
   — or —
   Hooks: ✗ black (reformatted 2 files)
   Auto-fixes applied. Re-running tests...
@@ -172,7 +204,18 @@ Loop terminates when:
 - User stops manually
 - **Max 5 batches reached** — if violations remain, report and stop
 
-**Idempotence:** Re-running code-cleaning on already-clean staged code must produce no changes. If it doesn't, something is wrong (oscillating renames, extract/inline loops, style churn).
+**Remaining violations:** When max batches reached with violations remaining:
+```
+⚠️ Max batches reached. Remaining violations:
+  - [file:lines] [principle] — [description]
+
+Options:
+  (T)rack as follow-up task
+  (C)ontinue with 5 more batches
+  (S)top — violations documented in output only
+```
+
+**Idempotence:** Re-running clean-code on already-clean staged code must produce no changes. If it doesn't, something is wrong (oscillating renames, extract/inline loops, style churn).
 
 **Final summary:**
 ```
@@ -186,7 +229,11 @@ Transformations: M total
 Bugs flagged (not fixed): K
   - [file:line] [description]
 
+Remaining violations (if any): R
+  - [file:lines] [principle] — [description]
+
 Backup: stash@{0} (restore with `git stash pop`, drop with `git stash drop` when satisfied)
+Batch snapshots: stash@{1}..stash@{N} (individual batch rollback available)
 
 Suggested commit message:
 ---
@@ -221,13 +268,28 @@ Equal priority — apply contextually.
 | **Clarity over brevity** | Dense one-liners, clever compaction | Prefer explicit form; longer can be cleaner |
 | **Dead code removal** | Unused imports, functions, variables, unreachable branches | Delete (use `vulture` for detection; false positives common — require explicit approval per item, do not batch delete) |
 
+## Python-Specific Patterns
+
+| Signal | Transformation |
+|--------|----------------|
+| Raw `dict` for structured data | Use `dataclass` or `TypedDict` |
+| `os.path` manipulation | Use `pathlib.Path` |
+| Manual resource cleanup (`open`/`close`) | Use context managers (`with`) |
+| List comprehension not materialized | Use generator expression |
+| Missing `__slots__` on data-heavy classes | Add `__slots__` for memory efficiency |
+| `isinstance` chains | Consider `match`/`case` (Python ≥3.10) or dispatch |
+| Mutable default arguments (`def f(x=[])`) | Use `None` sentinel + assignment in body |
+| Bare `except:` or `except Exception:` | Catch specific exceptions |
+| String formatting with `%` or `.format()` | Use f-strings |
+| Manual `__init__` + `__repr__` + `__eq__` boilerplate | Use `@dataclass` |
+
 # Scope Discipline
 
 **Staged mode (default):**
 - Transform ONLY code in `git diff --cached`
 - Impact MAY propagate (renames, signature changes affect callers)
 - Propagation to unstaged files requires explicit approval before applying batch
-- **Rename threshold:** If rename affects >10 files, show full propagation scope and require explicit confirmation before proceeding
+- **Rename propagation gate:** If rename requires non-mechanical changes in other files (logic adjustments, not just find-replace), show affected files with change descriptions and require explicit confirmation. File count alone is not the risk — semantic complexity is.
 
 **Full-file mode:**
 - Transform entire files that have a staged change
@@ -240,13 +302,16 @@ Equal priority — apply contextually.
 - Mixing bug fixes with refactoring (flag bugs separately)
 - Touching unstaged files (unless refactoring side effect with explicit user approval)
 - Continuing after test failure without user approval
-- Premature abstraction (don't extract for one use)
 - Renaming for personal preference (rename for clarity only)
-- Modifying test assertions or logic (invoke Testing skill instead) — exception: adding tests for extracted functions and removing redundant tests (see Test Maintenance)
+- Modifying test assertions to make failing tests pass (invoke Testing skill instead) — structural test changes for extractions are permitted (see Test Maintenance)
 - Formatting-only changes (delegate to pre-commit hooks; only touch formatting in lines already being refactored)
 - Changing public APIs (function signatures, class interfaces) without explicit approval
-- Over-compaction (optimizing for line count at expense of readability)
-- Premature flattening (inlining abstractions that exist for clarity, even if used once)
+- Over-compaction (optimizing for line count at expense of readability — heuristic: if a colleague would need to "unpack" the line mentally to review it, it's over-compacted)
+
+**Extraction vs. inlining decision framework:**
+- **Extract** when the extracted unit has a name that communicates intent better than the inline code. The name should be a net gain — it tells the reader *what* without requiring them to read *how*.
+- **Inline** when the abstraction name is essentially the code itself restated, or when the indirection costs more comprehension than it saves.
+- **Leave alone** when unclear — the default is no change. "I'm not sure this is better" means don't do it.
 
 # Mode-Specific Behavior
 
