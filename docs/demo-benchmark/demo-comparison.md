@@ -148,7 +148,7 @@ checkpoint:
 | Provider | Ran Pre-commit | Handled Auto-fixes |
 |----------|----------------|-------------------|
 | Claude | Yes | Yes |
-| Codex | Yes | Yes (full code-cleaning skill) |
+| Codex | Yes | Yes (full clean-code skill) |
 | Kimi | Yes | Yes |
 | Gemini | Partial | No (hooks ran during commit) |
 | Mistral | Yes | Yes (re-staged and committed) |

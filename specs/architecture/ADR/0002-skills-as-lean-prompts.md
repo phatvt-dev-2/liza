@@ -24,7 +24,7 @@ Chose **Option 3**: Skills are separate markdown files that agents load when rel
 
 **Enable specialization.** Some skills are explicitly used by Liza agents:
 - `code-review` — Reviewer role
-- `code-cleaning` — Coder cleanup tasks
+- `clean-code` — Coder cleanup tasks
 - `systemic-thinking` — Architecture analysis
 
 Other skills support pairing workflows but aren't Liza-specific.
@@ -38,7 +38,7 @@ Other skills support pairing workflows but aren't Liza-specific.
 ├── debugging/SKILL.md        # Narrowing search, not guess-and-check
 ├── testing/SKILL.md          # Tests encode intent; assume test is correct
 ├── code-review/SKILL.md      # Risk mitigation, not gatekeeping
-├── code-cleaning/SKILL.md    # Reduce complexity without changing behavior
+├── clean-code/SKILL.md    # Reduce complexity without changing behavior
 ├── systemic-thinking/SKILL.md # Where does this break under pressure?
 ├── software-architecture-review/SKILL.md
 ├── spec-review/SKILL.md

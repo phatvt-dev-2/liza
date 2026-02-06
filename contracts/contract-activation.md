@@ -53,7 +53,7 @@ In `~/.claude/settings.json`, configure global permissions for tools used across
       "Read(/home/tangi/Workspace/liza/**)",
 
       "Skill(adr-backfill)",
-      "Skill(code-cleaning)",
+      "Skill(clean-code)",
       "Skill(code-review)",
       "Skill(debugging)",
       "Skill(feynman)",

@@ -86,7 +86,7 @@ Specialized protocols agents load conditionally. Each contains a single `SKILL.m
 | `testing/` | When writing or analyzing tests (mandatory) |
 | `code-review/` | When reviewing PRs or pending changes |
 | `software-architecture-review/` | Implementation planning, structural concerns |
-| `code-cleaning/` | Pre-commit refactoring (Python-focused) |
+| `clean-code/` | Pre-commit refactoring (Python-focused) |
 | `spec-review/` | Specification validation |
 | `spec-backfill/` | Extracting specifications from existing code |
 | `generic-subagent/` | Delegating read-only work to subagents |

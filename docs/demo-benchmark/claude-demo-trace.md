@@ -208,9 +208,9 @@ Files created:
 - `hello/core.py`
 - `hello/main.py`
 
-### Code Cleaning
+### Clean Code
 
-Invoked code-cleaning skill. Detected DRY violation in tests (repeated cwd path computation). Fixed by extracting `PROJECT_ROOT` constant.
+Invoked clean-code skill. Detected DRY violation in tests (repeated cwd path computation). Fixed by extracting `PROJECT_ROOT` constant.
 
 ### Validation
 

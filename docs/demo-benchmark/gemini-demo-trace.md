@@ -457,7 +457,7 @@ The coder staged files but never ran `git commit` before calling `liza-submit-fo
 - Zero diff for reviewer to examine
 - Task effectively not submitted
 
-**Root cause:** The coder followed the code-cleaning skill checklist but missed the explicit commit step. The skill assumes files are committed as part of "staged changes" but doesn't enforce it.
+**Root cause:** The coder followed the clean-code skill checklist but missed the explicit commit step. The skill assumes files are committed as part of "staged changes" but doesn't enforce it.
 
 ### Cascading Specification Errors
 

@@ -22,7 +22,7 @@ file_classification:
   "specs/protocols/*.md": {tier: 1, category: "protocol_specs"}
 
   # Tier 2 - Skills (explicit Liza usage noted)
-  "skills/code-cleaning/SKILL.md": {tier: 2, category: "skill", liza_explicit: true}
+  "skills/clean-code/SKILL.md": {tier: 2, category: "skill", liza_explicit: true}
   "skills/code-review/SKILL.md": {tier: 2, category: "skill", liza_explicit: true}
   "skills/systemic-thinking/SKILL.md": {tier: 2, category: "skill", liza_explicit: true}
   "skills/debugging/SKILL.md": {tier: 2, category: "skill"}

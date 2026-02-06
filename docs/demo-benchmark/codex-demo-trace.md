@@ -113,7 +113,7 @@ Read contract files in sequence:
 8. Current blackboard state (task details: CLAIMED, iteration 1)
 9. `specs/vision.md` — Goal spec
 10. `skills/testing/SKILL.md` — Test protocol
-11. `skills/code-cleaning/SKILL.md` — Clean code protocol
+11. `skills/clean-code/SKILL.md` — Clean code protocol
 
 ### Pre-Execution Checkpoint
 
@@ -196,7 +196,7 @@ Manual verification:
 
 ### Code-Cleaning Skill
 
-Ran full code-cleaning protocol:
+Ran full clean-code protocol:
 
 ```
 Pre-flight:
@@ -388,7 +388,7 @@ Unregistering agent: planner-1
 
 1. **TDD enforcement** — Tests written before implementation
 2. **Pre-execution checkpoint** — Recorded intent, assumptions, risks, files to blackboard
-3. **Skill execution** — Ran code-cleaning skill with full pre-flight checks
+3. **Skill execution** — Ran clean-code skill with full pre-flight checks
 4. **Validation completeness** — pytest, manual CLI, coverage, diff-cover, pre-commit
 5. **Script usage** — Proper use of `liza-submit-for-review.sh`
 6. **MCP-first tools** — Consistent use of filesystem MCP tools over shell commands
@@ -398,7 +398,7 @@ Unregistering agent: planner-1
 
 - Used "thinking" blocks to reason through steps (visible in trace)
 - Thorough contract file reading (10+ files before starting work)
-- Created backup stash before code-cleaning transformations
+- Created backup stash before clean-code transformations
 - Cleaned up test artifacts (coverage.xml) before commit
 
 ### Reviewer Phase

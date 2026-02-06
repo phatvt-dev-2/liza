@@ -54,7 +54,7 @@ Synthesis of two benchmarks testing model compatibility with the Liza behavioral
 
 **Hello Protocol**: Executed from implicit `hello` trigger. Read files in parallel, built mental models, produced synthesized output with genuine self-reflection. Identified specific mechanisms to praise (tier system, failure mode map) and specific friction to critique (self-review gate operationalization).
 
-**Demo Sprint**: Single cohesive task with bundled tests. Coder showed full protocol adherence: explicit pre-execution checkpoint with intent/assumptions/impact declarations, TDD (tests first), code-cleaning skill for DRY fixes. Good code modularity with `greet()` business logic in `core.py` separated from CLI in `main.py`. Clean completion in 1 pass. (An earlier run completed in 2 passes after reviewer caught a Python 3.8 compatibility issue — demonstrating reviewer catch capability.)
+**Demo Sprint**: Single cohesive task with bundled tests. Coder showed full protocol adherence: explicit pre-execution checkpoint with intent/assumptions/impact declarations, TDD (tests first), clean-code skill for DRY fixes. Good code modularity with `greet()` business logic in `core.py` separated from CLI in `main.py`. Clean completion in 1 pass. (An earlier run completed in 2 passes after reviewer caught a Python 3.8 compatibility issue — demonstrating reviewer catch capability.)
 
 **Distinguishing trait**: Genuine engagement. Treats the contract as an executable specification, not context to acknowledge.
 
