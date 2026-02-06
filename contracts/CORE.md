@@ -684,6 +684,16 @@ Never leave repository in inconsistent partial-change state without acknowledgme
 
 **Before Operations:** State current branch, flag uncommitted changes.
 
+**Selective Commits (committing specific files while preserving other changes):**
+1. `git stash -u` — stash everything (staged, unstaged, untracked)
+2. `git checkout stash -- <files-to-commit>` — restore only files to commit
+3. `git add <files> && git commit`
+4. `git stash pop --index` — restore remaining changes, preserving staged state
+
+**NEVER** use `git commit -- <pathspec>` with other uncommitted changes — it can discard them.
+
+**Renames/Moves:** Always use `git mv`, never `mv`. Plain `mv` breaks history tracking.
+
 **Merge Conflicts:** Never auto-resolve. Present conflict, require explicit resolution approval.
 
 ---
