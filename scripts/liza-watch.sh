@@ -17,6 +17,15 @@ readonly STATE="$PROJECT_ROOT/.liza/state.yaml"
 readonly ALERTS_LOG="$PROJECT_ROOT/.liza/alerts.log"
 readonly LIZA_DIR="$PROJECT_ROOT/.liza"
 
+# --- Temp File Cleanup ---
+readonly WATCH_TMP_BLOCKED="/tmp/liza-watch-blocked-$$"
+readonly WATCH_TMP_ORPHANED="/tmp/liza-watch-orphaned-$$"
+readonly WATCH_TMP_REASSIGNED="/tmp/liza-watch-reassigned-$$"
+cleanup_tmp() {
+    rm -f "$WATCH_TMP_BLOCKED" "$WATCH_TMP_ORPHANED" "$WATCH_TMP_REASSIGNED" 2>/dev/null
+}
+trap cleanup_tmp EXIT
+
 # --- Helper Functions ---
 
 log_alert() {
@@ -70,7 +79,7 @@ check_expired_leases() {
 }
 
 check_blocked_tasks() {
-    local seen_file="/tmp/liza-watch-blocked-$$"
+    local seen_file="$WATCH_TMP_BLOCKED"
     touch "$seen_file"
 
     while IFS= read -r line; do
@@ -87,7 +96,7 @@ check_blocked_tasks() {
 
 # Detect REJECTED tasks where assigned coder is no longer active
 check_orphaned_rejected() {
-    local seen_file="/tmp/liza-watch-orphaned-$$"
+    local seen_file="$WATCH_TMP_ORPHANED"
     local grace_period=30
     local now
     now=$(epoch_now)
@@ -151,7 +160,7 @@ check_hypothesis_exhaustion() {
 }
 
 check_reassigned() {
-    local seen_file="/tmp/liza-watch-reassigned-$$"
+    local seen_file="$WATCH_TMP_REASSIGNED"
     touch "$seen_file"
 
     while IFS=$'\t' read -r task current_assignee first_claimer; do

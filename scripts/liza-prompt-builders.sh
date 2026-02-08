@@ -1,4 +1,6 @@
-# --- Prompt Builder Functions ---
+#!/bin/bash
+# Prompt builder functions for Liza agent supervisor
+# Sourced by liza-agent.sh — not executed directly
 
 # Build base bootstrap prompt (outputs to stdout)
 build_base_prompt() {

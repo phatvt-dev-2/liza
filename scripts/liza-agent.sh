@@ -34,9 +34,9 @@ readonly INTERACTIVE
 # --- Path Setup ---
 # Normalize role: CODE_REVIEWER → code-reviewer, "Code Reviewer" → code-reviewer
 ROLE="$1"
-ROLE="${ROLE,,}"      # lowercase
-ROLE="${ROLE// /-}"   # spaces → hyphens
-ROLE="${ROLE//_/-}"   # underscores → hyphens
+ROLE="${ROLE,,}"
+ROLE="${ROLE// /-}"
+ROLE="${ROLE//_/-}"
 readonly ROLE
 INITIAL_TASK="${2:-}"
 
