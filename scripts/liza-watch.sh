@@ -4,6 +4,8 @@
 
 set -euo pipefail
 
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/liza-common.sh"
+
 # --- Configuration ---
 readonly CHECK_INTERVAL=10
 readonly LEASE_GRACE_PERIOD=120  # seconds after expiry before alerting (allows heartbeat to extend)
@@ -16,19 +18,6 @@ readonly ALERTS_LOG="$PROJECT_ROOT/.liza/alerts.log"
 readonly LIZA_DIR="$PROJECT_ROOT/.liza"
 
 # --- Helper Functions ---
-
-iso_timestamp() {
-    date -u +%Y-%m-%dT%H:%M:%SZ
-}
-
-epoch_now() {
-    date +%s
-}
-
-to_epoch() {
-    local timestamp="$1"
-    date -d "$timestamp" +%s 2>/dev/null || echo 0
-}
 
 log_alert() {
     local level="$1"

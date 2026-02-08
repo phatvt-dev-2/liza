@@ -7,6 +7,8 @@
 
 set -euo pipefail
 
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/liza-common.sh"
+
 # --- Path Setup ---
 
 PROJECT_ROOT="${1:-$(git rev-parse --show-toplevel)}"
@@ -15,16 +17,6 @@ readonly STATE="$PROJECT_ROOT/.liza/state.yaml"
 readonly STATE_LOCK="$STATE.lock"
 
 # --- Helper Functions ---
-
-die() {
-    echo "Error: $*" >&2
-    exit 1
-}
-
-count_tasks() {
-    local filter="$1"
-    yq "[.tasks[] | select($filter)] | length" "$STATE" 2>/dev/null || echo 0
-}
 
 sum_field() {
     local field="$1"

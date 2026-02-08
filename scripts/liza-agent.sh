@@ -57,23 +57,13 @@ readonly LIZA_SPECS
 # --- Helper Functions ---
 
 source "$SCRIPT_DIR/liza-prompt-builders.sh"
-
-die() {
-    echo "ERROR: $*" >&2
-    exit 1
-}
+source "$SCRIPT_DIR/liza-common.sh"
 
 # Get config value with default fallback
 get_config() {
     local key="$1"
     local default="$2"
     yq ".config.$key // $default" "$STATE" 2>/dev/null || echo "$default"
-}
-
-# Count tasks matching a yq filter
-count_tasks() {
-    local filter="$1"
-    yq "[.tasks[] | select($filter)] | length" "$STATE" 2>/dev/null || echo 0
 }
 
 # Get task field by ID
@@ -91,17 +81,6 @@ locked_yq() {
 # Check for abort signal
 check_abort() {
     [ -f "$LIZA_DIR/ABORT" ]
-}
-
-# Format ISO timestamp
-iso_timestamp() {
-    date -u +%Y-%m-%dT%H:%M:%SZ
-}
-
-# Format ISO timestamp with offset
-iso_timestamp_offset() {
-    local offset="$1"
-    date -u -d "$offset" +%Y-%m-%dT%H:%M:%SZ
 }
 
 

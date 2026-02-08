@@ -66,3 +66,31 @@ normalize_sha() {
     fi
     echo "$full_sha"
 }
+
+# Fatal error with optional exit code
+# Usage: die "message" or die 3 "message"
+die() {
+    local code=1
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        code="$1"
+        shift
+    fi
+    echo "ERROR: $*" >&2
+    exit "$code"
+}
+
+# Current epoch seconds
+epoch_now() {
+    date +%s
+}
+
+# Convert ISO timestamp to epoch seconds
+to_epoch() {
+    date -d "$1" +%s 2>/dev/null || echo 0
+}
+
+# Count tasks matching a yq filter (requires $STATE)
+count_tasks() {
+    local filter="$1"
+    yq "[.tasks[] | select($filter)] | length" "$STATE" 2>/dev/null || echo 0
+}

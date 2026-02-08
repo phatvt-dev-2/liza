@@ -29,13 +29,6 @@ readonly STATE="$PROJECT_ROOT/.liza/state.yaml"
 readonly STATE_LOCK="$STATE.lock"
 readonly WORKTREE_DIR=".worktrees/$TASK_ID"
 
-# --- Helper Functions ---
-
-die() {
-    echo "ERROR: $*" >&2
-    exit 1
-}
-
 # --- Prepare Values (outside lock - these don't depend on state) ---
 
 integration_branch=$(yq -r '.config.integration_branch // "integration"' "$STATE" 2>/dev/null)

@@ -5,21 +5,12 @@
 
 set -euo pipefail
 
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/liza-common.sh"
+
 # --- Path Setup ---
 PROJECT_ROOT=$(git rev-parse --show-toplevel)
 readonly PROJECT_ROOT
 readonly LIZA_DIR="$PROJECT_ROOT/.liza"
-
-# --- Helper Functions ---
-
-die() {
-    echo "Error: $*" >&2
-    exit 1
-}
-
-iso_timestamp() {
-    date -u +%Y-%m-%dT%H:%M:%SZ
-}
 
 # --- Arguments ---
 

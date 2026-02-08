@@ -7,6 +7,8 @@
 
 set -euo pipefail
 
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/liza-common.sh"
+
 # --- Arguments ---
 readonly TASK_ID="$1"
 
@@ -15,13 +17,6 @@ PROJECT_ROOT=$(git rev-parse --show-toplevel)
 readonly PROJECT_ROOT
 readonly STATE="$PROJECT_ROOT/.liza/state.yaml"
 readonly STATE_LOCK="$STATE.lock"
-
-# --- Helper Functions ---
-
-die() {
-    echo "Error: $*" >&2
-    exit 1
-}
 
 # --- Validation ---
 

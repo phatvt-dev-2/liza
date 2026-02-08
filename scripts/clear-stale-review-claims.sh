@@ -12,6 +12,8 @@
 
 set -euo pipefail
 
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/liza-common.sh"
+
 # --- Path Setup ---
 PROJECT_ROOT="${1:-$(git rev-parse --show-toplevel)}"
 readonly PROJECT_ROOT
@@ -25,21 +27,6 @@ if [ ! -f "$STATE" ]; then
     echo "Error: $STATE not found" >&2
     exit 1
 fi
-
-# --- Helper Functions ---
-
-iso_timestamp() {
-    date -u +%Y-%m-%dT%H:%M:%SZ
-}
-
-epoch_now() {
-    date +%s
-}
-
-to_epoch() {
-    local timestamp="$1"
-    date -d "$timestamp" +%s 2>/dev/null || echo 0
-}
 
 # --- Main ---
 

@@ -7,23 +7,14 @@
 
 set -euo pipefail
 
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/liza-common.sh"
+
 # --- Path Setup ---
 PROJECT_ROOT="${1:-$(git rev-parse --show-toplevel)}"
 readonly PROJECT_ROOT
 readonly STATE="$PROJECT_ROOT/.liza/state.yaml"
 readonly CHECKPOINT="$PROJECT_ROOT/.liza/CHECKPOINT"
 readonly SUMMARY="$PROJECT_ROOT/.liza/sprint_summary.md"
-
-# --- Helper Functions ---
-
-iso_timestamp() {
-    date -u +%Y-%m-%dT%H:%M:%SZ
-}
-
-count_tasks() {
-    local filter="$1"
-    yq "[.tasks[] | select($filter)] | length" "$STATE" 2>/dev/null || echo 0
-}
 
 # --- Validation ---
 

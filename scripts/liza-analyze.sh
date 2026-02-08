@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/liza-common.sh"
+
 # --- Path Setup ---
 PROJECT_ROOT="${1:-$(git rev-parse --show-toplevel)}"
 readonly PROJECT_ROOT
@@ -16,10 +18,6 @@ readonly STATE_LOCK="$STATE.lock"
 readonly REPORT="$PROJECT_ROOT/.liza/circuit_breaker_report.md"
 
 # --- Helper Functions ---
-
-iso_timestamp() {
-    date -u +%Y-%m-%dT%H:%M:%SZ
-}
 
 # Count anomalies by type
 count_type() {

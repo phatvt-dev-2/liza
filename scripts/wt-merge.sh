@@ -20,20 +20,6 @@ readonly LOG="$PROJECT_ROOT/.liza/log.yaml"
 
 # --- Helper Functions ---
 
-die() {
-    local code=1
-    if [[ "$1" =~ ^[0-9]+$ ]]; then
-        code="$1"
-        shift
-    fi
-    echo "Error: $*" >&2
-    exit "$code"
-}
-
-iso_timestamp() {
-    date -u +%Y-%m-%dT%H:%M:%SZ
-}
-
 get_task_field() {
     local field="$1"
     yq ".tasks[] | select(.id == \"$TASK_ID\") | .$field" "$STATE"
