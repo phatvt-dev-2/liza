@@ -16,6 +16,17 @@ Clean Code is a reader's gift — refactor for the next developer, not the compi
 
 Announce mode: `"Cleaning in [mode]. Override?"`
 
+# Exclusion Criteria
+
+**Do not clean:**
+- **Generated code** — files produced by code generators, ORMs, protocol buffers, etc. Cleaning will be overwritten on next generation.
+- **Vendored/third-party code** — copied dependencies. Clean upstream, not the copy.
+- **Code scheduled for deletion** — cleaning dead-walking code is waste. Verify: is there an open task/PR to remove this?
+- **Code with known bugs in the staged area** — refactoring may mask the bug or make it harder to isolate. Fix the bug first (flag it, invoke Debugging skill), then clean.
+- **Files under active development on other branches** — cleaning creates merge conflicts for the team. Not a categorical exclusion — see concurrent work check in Pre-flight for detection, then require explicit acknowledgment before proceeding.
+
+If exclusion is uncertain, ask. The default is to skip, not to clean.
+
 # Pre-flight Checks
 
 Before any transformation:
@@ -51,8 +62,23 @@ Before any transformation:
 5. **Git stash backup**
 ```bash
    BACKUP=$(git stash create)
+   [ -z "$BACKUP" ] && { echo "⚠️ No changes to backup — STOP"; exit 1; }
    git stash store -m "code-cleaner-backup-$(date +%s)" "$BACKUP"
+   # Verify stored stash matches what we created
+   [ "$(git rev-parse stash@{0})" = "$BACKUP" ] || { echo "⚠️ Backup stash mismatch — STOP"; exit 1; }
 ```
+
+6. **Concurrent work check**
+```bash
+   git diff --cached --name-only | while IFS= read -r file; do
+     hits=$(git log --all --not HEAD --since="2 weeks" --oneline --source -- "$file" 2>/dev/null)
+     [ -n "$hits" ] && echo "--- $file ---" && echo "$hits"
+   done
+```
+  `--source` includes the ref name per commit; the loop prefixes output with the filename so each warning maps to a specific staged file.
+  - If other branches have recent commits touching staged files, warn:
+    `"⚠️ [file] modified on [branch] within 2 weeks — cleaning may cause merge conflicts."`
+  - **Not a hard stop** — inform, require explicit acknowledgment before proceeding
 
 **Pre-flight summary:**
 ```
@@ -60,7 +86,8 @@ Pre-flight:
   Staged files: N
   Tests: ✓ pass (X tests)
   Coverage: Y% of staged lines (threshold: ≥Z% — [risk level])
-  Backup: stash@{0}
+  Concurrent edits: none (or ⚠️ [file] — [branch])
+  Backup: stash@{0} ✓ verified
 Proceed (P)?
 ```
 
@@ -76,6 +103,38 @@ Proceed (P)?
 - Independent transformations go in separate batches
 - Within a batch, order from **inner scope outward** (rename a local before extracting the function that contains it)
 - When ambiguous, group by file proximity over principle similarity
+
+**Transformation classification:**
+
+| Type | Scope | Risk | Extra validation |
+|------|-------|------|-----------------|
+| **Refactoring** | Within file/module | Low–Medium | Tests + types |
+| **Restructuring** | Cross-module (moves, splits) | High | Tests + types + import graph + circular dependency check |
+
+Restructuring triggers:
+- Moving a function/class to a different module
+- Splitting a module into multiple files
+- Changing the import hierarchy
+
+Restructuring requires:
+- Map the full import graph of affected modules before and after
+- Verify no circular dependencies introduced (`import-linter`, `pydeps`, or manual: attempt import from a clean Python process)
+- Check test discovery still works (test runners resolve imports at collection time)
+- All consumers of moved symbols must be updated in the same batch
+
+**Performance-sensitive transformations:**
+
+Flag any transformation touching code that is in a hot loop, on a latency-critical path, or processing large data structures.
+
+| Transformation | Potential perf impact |
+|---------------|---------------------|
+| Extract function from hot loop | Call overhead per iteration |
+| List comprehension → generator | Lower memory, but recomputes; not always a win |
+| `dict` → `dataclass` | Attribute access faster with `__slots__`; construction slower than dict literal. Net depends on read/write ratio. |
+| String concat → f-string | Generally faster — but watch `.format()` in tight loops |
+| Early return refactoring | Negligible |
+
+Action: If transformation touches perf-sensitive code, note it in batch description. Not a blocker — but the reviewer should be aware.
 
 **Output format:**
 ```
@@ -282,6 +341,26 @@ Equal priority — apply contextually.
 | Bare `except:` or `except Exception:` | Catch specific exceptions |
 | String formatting with `%` or `.format()` | Use f-strings |
 | Manual `__init__` + `__repr__` + `__eq__` boilerplate | Use `@dataclass` |
+
+## Principle Conflicts
+
+When principles contradict, resolve using this priority ladder:
+
+1. **Correctness** — never sacrifice behavior preservation for cleanliness
+2. **Clarity** — the reader's comprehension wins over any single principle
+3. **KISS** — simpler solution wins when two principles suggest different directions
+4. **Context** — the surrounding code's conventions break ties
+
+**Common conflicts and resolution:**
+
+| Conflict | Resolution |
+|----------|------------|
+| DRY vs KISS — extraction adds indirection | If shared logic is ≤3 lines and used ≤2 times, prefer duplication. Extraction wins when the shared concept has a meaningful name. |
+| Small functions vs One level of abstraction — split creates level mismatch | Keep together if splitting would force the reader to jump between files/functions to understand a single logical operation. |
+| Meaningful names vs Minimal arguments — long descriptive params | Introduce parameter object when names reveal a hidden concept (e.g., `x, y, width, height` → `Rect`). Don't wrap unrelated params just to reduce count. |
+| Immutability vs KISS — immutable version is more complex | Prefer mutable when immutability requires copying large structures or convoluted workarounds. Immutability wins for data crossing boundaries. |
+
+When no resolution is clear: **flag the conflict, present both options, do not choose.**
 
 # Scope Discipline
 
