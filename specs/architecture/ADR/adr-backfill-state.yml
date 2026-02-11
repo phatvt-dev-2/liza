@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-02-01T12:00:00Z"
+last_updated: "2026-02-11T12:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -127,6 +127,35 @@ clusters:
     confidence: 0.90
     status: "adr_generated"
     adr_path: "specs/architecture/ADR/0009-canonical-contract-root.md"
+
+  - id: 10
+    title: "Loop Detection Self-Abort & Review Exhaustion"
+    commit_shas: ["72bc374"]
+    gap_commits: ["7af6035"]
+    date_range: "2026-01-31"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0010-loop-detection-self-abort.md"
+    user_context:
+      problem: "Mistral demo: reviewer ran unittest variations endlessly, consuming tokens rapidly"
+      alternatives: "Timeout-only, supervisor-side detection"
+      rationale: "Immediate abort needed due to token burn rate. Simplest mechanism for the failure mode."
+      limitations: "Heuristic thresholds, may be reconsidered based on experience"
+    note: "Subsequently promoted from spec to contract (MULTI_AGENT_MODE.md) in 7af6035"
+
+  - id: 11
+    title: "Script-Enforced Agent Status Transitions"
+    commit_shas: ["7af6035"]
+    date_range: "2026-02-03"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0011-script-enforced-agent-status.md"
+    user_context:
+      problem: "Agents could complete operations without updating own status — partial updates"
+      alternatives: "Stronger contract language, validation-only detection"
+      rationale: "Structural enforcement over behavioral compliance. Reduces agent cognitive load."
+      limitations: "New status transitions require script updates"
+    note: "Covers only status enforcement portion of mixed-concern commit 7af6035"
 
 processing_cursor:
   step: "ordering"
