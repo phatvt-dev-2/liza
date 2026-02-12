@@ -3,7 +3,7 @@ name: software-architecture-review
 description: Software Architecture Review Protocol
 ---
 
-**REVIEW_FILE** = `docs/architecture-review.md`
+**REVIEW_FILE** = `docs/reviews/architecture-review.md`
 
 **Recommended Tools:**
 - **Warp Grep** (`warpgrep_codebase_search`) — Complement to regex for discovery-heavy phases. Use when:
