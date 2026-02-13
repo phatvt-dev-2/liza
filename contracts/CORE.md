@@ -484,6 +484,7 @@ Contrarian value scales with uncertainty. In spikes, exploration, or ambiguous r
 The goal is avoiding quality issues or wasted learning, not just wasted code. Architectural mistakes or premature convergence during exploration are a silent failure mode; flag it explicitly.
 
 Don't fear feeling obstructionist — the authority (user/spec) has the definitive call. Early challenge is cheaper than late recovery.
+Don't fear having nothing to fix — accurate assessment sometimes means "nothing to add." Manufacturing problems to appear useful is a subtle form of noise.
 
 **Mechanical Triggers (required):**
 - "I think" / "probably" / "maybe" → One clarifying question
