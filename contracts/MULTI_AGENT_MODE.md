@@ -313,8 +313,9 @@ anomalies:
 **First Actions:**
 1. Read role definition from `{SPECS_LOCATION}/architecture/roles.md`
 2. Read current blackboard state from `{BLACKBOARD}`
-3. Read assigned task details (if any)
-4. Execute role-specific protocol
+3. Read `lessons/agents/README.md` (if it exists — project-specific operational lessons)
+4. Read assigned task details (if any)
+5. Execute role-specific protocol
 
 **If bootstrap is incomplete:** Report BLOCKED — cannot initialize without SPECS_LOCATION, BLACKBOARD, and role assignment.
 

@@ -577,7 +577,7 @@ In Pairing mode: Do not make any edits to files without first presenting the pro
 - Pairing: `"Drift check: Still on [task]? Key constraint: [X]. (Confirm or correct)"`
 - MAM: Re-read task from blackboard, verify checkpoint matches current work
 
-**Session Continuity:** `specs/` and `docs/` are durable memory. Each session: read current state → perform atomic task → write updated state. Identify docs needing updates before making changes.
+**Session Continuity:** `specs/`, `docs/`, and `lessons/` are durable memory. Each session: read current state → perform atomic task → write updated state. Identify docs needing updates before making changes.
 
 **Kernel Fallback:** When context severely degraded, skip to Runtime Kernel (appendix).
 

@@ -76,6 +76,18 @@ specs/
     └── future.md                       # v1.1+ roadmap
 ```
 
+## lessons/
+
+Project-specific operational lessons captured via the `lesson-capture` skill. Prevents recurring mistakes by encoding gotchas, patterns, and hard-won insights.
+
+```
+lessons/
+├── agents/              # Lessons for AI agents (read during session init)
+│   └── README.md        # Index: trigger + title for each lesson
+└── humans/              # Lessons for human developers
+    └── README.md        # Index: trigger + title for each lesson
+```
+
 ## skills/
 
 Specialized protocols agents load conditionally. Each contains a single `SKILL.md`.
@@ -94,6 +106,7 @@ Specialized protocols agents load conditionally. Each contains a single `SKILL.m
 | `adversarial-testing/` | Security and edge-case testing |
 | `adr-backfill/` | Extracting ADRs from git history |
 | `feynman/` | Explaining complex ideas simply |
+| `lesson-capture/` | Capturing project-specific operational lessons |
 
 Skills execute within contract constraints — contract gates are non-negotiable, skill steps operate within them.
 
