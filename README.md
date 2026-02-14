@@ -123,7 +123,8 @@ See [Architecture](specs/architecture).
 
 ### Hands-on
 
-See [USAGE](docs/USAGE.md), then try the [DEMO](docs/DEMO.md).
+- **Pairing**: See [Pairing Guide](docs/USAGE_PAIRING.md) — human-agent collaboration under contract
+- **Multi-Agent (Liza)**: See [USAGE](docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
 
 ### Deep understanding
 

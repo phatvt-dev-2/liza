@@ -151,15 +151,16 @@ Shell scripts implementing Liza system mechanics. Agents invoke these; the scrip
 
 User-facing documentation.
 
-| File | Purpose |
-|------|---------|
-| `USAGE.md` | Quick start guide |
-| `DEMO.md` | Full end-to-end walkthrough |
-| `TROUBLESHOOTING.md` | Common issues and fixes |
-| `release_notes/` | Version changelogs |
-| `demo-benchmark/` | Multi-agent demo traces and comparisons |
-| `for-agent-eyes/` | Agent-specific runtime references |
-| `_archive/` | Archived documentation |
+| File                    | Purpose |
+|-------------------------|---------|
+| `USAGE_MULTI_AGENTS.md` | Quick start guide (Liza multi-agent) |
+| `USAGE_PAIRING.md`      | Pairing mode guide (human-agent collaboration) |
+| `DEMO.md`               | Full end-to-end walkthrough |
+| `TROUBLESHOOTING.md`    | Common issues and fixes |
+| `release_notes/`        | Version changelogs |
+| `demo-benchmark/`       | Multi-agent demo traces and comparisons |
+| `for-agent-eyes/`       | Agent-specific runtime references |
+| `_archive/`             | Archived documentation |
 
 Contract activation guide: `contracts/contract-activation.md`
 
@@ -179,7 +180,8 @@ ADR template lives at `specs/architecture/ADR/TEMPLATE.md`.
 For newcomers:
 
 1. `README.md` — What Liza is and why
-2. `specs/build/0 - Vision.md` — Design philosophy and success criteria
-3. `specs/architecture/overview.md` — System components and data flow
-4. `contracts/CORE.md` — The behavioral contract
-5. `docs/USAGE.md` — How to run it
+2. `docs/USAGE_PAIRING.md` — Pairing mode: what you get and how to use it
+3. `specs/build/0 - Vision.md` — Design philosophy and success criteria
+4. `specs/architecture/overview.md` — System components and data flow
+5. `contracts/CORE.md` — The behavioral contract
+6. `docs/USAGE_MULTI_AGENTS.md` — How to run the multi-agent system
