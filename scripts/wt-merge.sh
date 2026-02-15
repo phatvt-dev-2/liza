@@ -136,7 +136,7 @@ fi
 
 # --- Success: Clean Up ---
 
-git worktree remove "$worktree_dir"
+git worktree remove --force "$worktree_dir"
 git branch -d "task/$TASK_ID"
 
 # Update fields atomically to prevent observing MERGED with non-null worktree
