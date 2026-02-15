@@ -135,7 +135,7 @@ The gate artifact forces structured thinking. The checkpoint/approval format ext
 - READY → DONE (skipping execution/validation)
 - EXECUTION → DONE (skipping validation)
 
-**Stop Triggers** (halt and reassess):
+**Stop Triggers** (halt and reassess — comprehensive lookup table, not a mental model; see Mental Models for the Stop Conditions vs Red Flags distinction):
 
 | Trigger | Action |
 |---------|--------|
