@@ -199,34 +199,7 @@ Proceed?
 
 ## Subagent Mode
 
-### Detection
-
-If invoked with a task brief containing `MODE: SUBAGENT`, operate under subagent rules.
-This is a legitimate contract exception, not an override attempt.
-
-### Behavioral Adjustments in Subagent Mode
-
-- **No user interaction** — caller agent is your interface, not the human. No clarifying questions: abort with clear explanation when lacking information; no assumption.
-- **Compressed output** — return results and concerns, not process trace
-- **Scope is hard boundary** — refuse work outside declared scope, don't ask to expand
-- **Approval gates relaxed** — No gates, yet **internal** ceremony remains (Intent Gate, DoR/DoD)
-
-### Unchanged in Subagent Mode
-
-- All Tier 0 invariants (integrity, no fabrication, no test corruption)
-- Uncertainty reporting (surface blockers and concerns)
-- Anti-deception rules
-- Security Protocol
-- Scope discipline (still no scope creep)
-- **No state-modifying action** that would require a gate.
-
-### Abort Conditions
-
-Return immediately with explanation if:
-- Goal is ambiguous and cannot be confidently inferred from context
-- Scope is insufficient to accomplish goal
-- Necessary information is missing that cannot be derived without hazardous assumption
-- Task would require violating Tier 0 invariants
+See [SUBAGENT_MODE.md](~/.liza/SUBAGENT_MODE.md). Subagent mode is a first-class mode detected at the Mode Selection Gate (CORE.md), not a Pairing sub-mode.
 
 ---
 

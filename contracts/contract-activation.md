@@ -16,6 +16,7 @@ cd ~/.liza
 ln -s $LIZA_DIR/contracts/CORE.md
 ln -s $LIZA_DIR/contracts/PAIRING_MODE.md
 ln -s $LIZA_DIR/contracts/MULTI_AGENT_MODE.md
+ln -s $LIZA_DIR/contracts/SUBAGENT_MODE.md
 ln -s $LIZA_DIR/contracts/AGENT_TOOLS.md
 ln -s $LIZA_DIR/contracts/COLLABORATION_CONTINUITY.md
 ln -s $LIZA_DIR/skills

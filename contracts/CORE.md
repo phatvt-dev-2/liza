@@ -25,12 +25,14 @@ DO NOT produce any response (including greetings) until Session Initialization i
 | Detection | Mode | Action |
 |-----------|------|--------|
 | First prompt contains "You are a Liza ... agent" | **Liza** | Read `~/.liza/MULTI_AGENT_MODE.md` |
+| First prompt contains `MODE: SUBAGENT` | **Subagent** | Read `~/.liza/SUBAGENT_MODE.md` |
 | Otherwise | **Pairing** (default) | Read `~/.liza/PAIRING_MODE.md` |
 
 | Mode | Human Role | Approval Mechanism |
 |------|------------|-------------------|
 | **Pairing** | Active collaborator | Human approves |
 | **Liza** | Escalation point | Peer agents approve |
+| **Subagent** | None (caller is interface) | Internal ceremony only |
 
 You MUST read the mode contract before proceeding.
 
@@ -559,6 +561,8 @@ MANDATORY: When considering delegation, read and comply with `~/.liza/skills/gen
 
 The main agent retains accountability. Subagent output is advisory digest.
 
+**Task Tool Rule:** All agents spawned via Task tool are subagents. Include `MODE: SUBAGENT` in every Task tool prompt.
+
 **Tools**
 MANDATORY: Read and comply with `~/.liza/AGENT_TOOLS.md`.
 
@@ -579,6 +583,8 @@ When context degrades mid-session, recovery uses defined tiers — not all-or-no
 | Kernel | Runtime Kernel | Severe degradation | Tier 0 + state transitions + self-check (appendix) |
 
 Full initialization is unchanged — still reads everything on fresh session. Tiers govern mid-session recovery only.
+
+**Scope:** Tiered recovery applies to long-running sessions (Pairing main agent, MAM agents before handoff). Subagents return partial results on context pressure rather than attempting in-place recovery — see SUBAGENT_MODE.md.
 
 ### Working Set (re-read list)
 
