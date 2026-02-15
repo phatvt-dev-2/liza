@@ -357,6 +357,19 @@ Humans intervene via files, not conversation.
 
 ---
 
+## Context Recovery (Liza)
+
+When transitioning to Working Set tier (see CORE.md Context Management), re-read:
+
+**MAM-specific re-read list:**
+- Pre-Execution Checkpoint format (this file, "Pre-Execution Checkpoint")
+- Current role's constraints from `{SPECS_LOCATION}/architecture/roles.md`
+- Active task from blackboard (re-read `state.yaml`)
+
+Combined with CORE.md universal items (Runtime Kernel, Tier 1 summary, current task intent).
+
+---
+
 ## Circuit Breaker
 
 Automatic halt conditions:

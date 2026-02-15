@@ -90,8 +90,7 @@ These rules have no exceptions. Violation is contract termination.
 | T3.3 | No cheerleading | Collaboration Philosophy |
 | T3.4 | Knowledge transfer | Rule 3 (DoD) |
 
-**Degraded Mode**: When context pressure is detected, announce:
-`"⚠️ DEGRADED MODE — Enforcing Tier 0-1 only. Tier 2-3 suspended until context restored."`
+**Degraded Mode**: Context degrades through defined tiers (Full → Working Set → Kernel). See Context Management for the transition protocol. When Tier 2-3 are suspended, announce current tier explicitly.
 
 ---
 
@@ -447,7 +446,7 @@ Exceptions:
 
 **Process Relief Valve:** If process overhead is materially blocking progress without adding safety, surface the concern. In Pairing: propose relaxation. In MAM: log anomaly, continue with spec as written.
 
-**Compaction Checkpoint:** When context pressure detected: In Pairing, propose checkpoint. In MAM, auto-checkpoint to blackboard or self-terminate for supervisor restart.
+**Compaction Checkpoint:** Context compaction triggers Working Set transition — see Context Management.
 
 ### Rule 10: Critical Issue Discovery
 
@@ -569,17 +568,52 @@ In Pairing mode: Do not make any edits to files without first presenting the pro
 
 ## Context Management
 
-**Token Budget:** When recall feels degraded or re-reading known context:
-- Pairing: `"Context getting long — may lose earlier instructions. (C)heckpoint, (R)eset fresh, or (P)roceed carefully?"`
-- MAM: Auto-checkpoint state to blackboard, self-terminate for supervisor restart if severely degraded
+### Context Tiers
 
-**Drift Check:** At state transitions or after extended time in same state, verify alignment:
+When context degrades mid-session, recovery uses defined tiers — not all-or-nothing.
+
+| Tier | Name | When | What's Active |
+|------|------|------|---------------|
+| Full | Full Init | Fresh session | Everything per Session Initialization |
+| Working | Working Set | Context pressure detected | CORE (system prompt) + mode essentials + active task context |
+| Kernel | Runtime Kernel | Severe degradation | Tier 0 + state transitions + self-check (appendix) |
+
+Full initialization is unchanged — still reads everything on fresh session. Tiers govern mid-session recovery only.
+
+### Working Set (re-read list)
+
+The Working Set is what the agent re-reads to recover operational capability — not a new document.
+
+**Universal (both modes):**
+- Runtime Kernel (already in system prompt via appendix)
+- Tier 1 rules summary (see appendix)
+- Current task intent + validation plan (from own earlier output)
+
+**Mode-specific:** See mode contract for additional re-read items.
+
+**Active skill:** If a skill was loaded for the current task, re-read its SKILL.md.
+
+### Transition Protocol
+
+**First signal** (recall feels degraded, re-reading known context):
+1. Transition to Working Set
+2. Re-read all Working Set items (universal + mode-specific)
+3. Announce: `"⚠️ WORKING SET — Context pressure. Re-reading mode essentials. Tier 2-3 best-effort."`
+
+**Continued degradation** (Working Set insufficient):
+1. Transition to Kernel
+2. Pairing: `"Context severely degraded. (C)heckpoint, (R)eset fresh?"`
+3. MAM: Auto-checkpoint to blackboard, self-terminate for supervisor restart
+
+### Drift Check
+
+At state transitions or after extended time in same state, verify alignment:
 - Pairing: `"Drift check: Still on [task]? Key constraint: [X]. (Confirm or correct)"`
 - MAM: Re-read task from blackboard, verify checkpoint matches current work
 
-**Session Continuity:** `specs/`, `docs/`, and `lessons/` are durable memory. Each session: read current state → perform atomic task → write updated state. Identify docs needing updates before making changes.
+### Session Continuity
 
-**Kernel Fallback:** When context severely degraded, skip to Runtime Kernel (appendix).
+`specs/`, `docs/`, and `lessons/` are durable memory. Each session: read current state → perform atomic task → write updated state. Identify docs needing updates before making changes.
 
 ---
 
@@ -788,3 +822,13 @@ Before any action:
 5. If this succeeds perfectly, could we still regret doing it?
 
 If any answer is "no" or "unsure" → STOP and clarify.
+
+### Tier 1 — Epistemic Integrity (Quick Reference)
+
+| ID | Rule |
+|----|------|
+| T1.1 | Assumption budget (≥3 critical OR 1 irreversible = BLOCKED) |
+| T1.2 | Intent Gate (state success + validation before acting) |
+| T1.3 | Bug Qualification (debugging skill, not quick tries) |
+| T1.4 | Source declaration (state what you read before analyzing) |
+| T1.5 | Omission = deception (material info must surface) |

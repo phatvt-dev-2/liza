@@ -296,6 +296,19 @@ If it feels disproportionate in a specific case, use the Process Relief Valve (R
 
 ---
 
+## Context Recovery (Pairing)
+
+When transitioning to Working Set tier (see CORE.md Context Management), re-read:
+
+**Pairing-specific re-read list:**
+- Gate Semantics section (this file, "Gate Semantics (Pairing)")
+- Approval Request Standard section (this file, "Approval Request Standard")
+- Current collaboration mode (from own earlier output)
+
+Combined with CORE.md universal items (Runtime Kernel, Tier 1 summary, current task intent).
+
+---
+
 ## Collaboration Continuity
 
 Trust dies at session end. Technical state persists (specs/, TODO.md); collaborative rapport doesn't.
