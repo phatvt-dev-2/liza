@@ -364,16 +364,18 @@ discovered:
   - id: disc-1
     by: coder-1
     during: task-2
+    source: null  # null or omitted = implementation discovery (default)
     description: "OrderAPI.create_order() has no idempotency key support"
     severity: high
     urgency: deferred  # deferred (default), immediate — immediate wakes Planner
     recommendation: "Add idempotency key parameter before retry logic"
     created: 2025-01-17T14:46:00Z
-    converted_to_task: null  # or task-id if planner created task
+    converted_to_task: null  # null, task-id, "deferred", or "dismissed"
 
   - id: disc-2
     by: coder-1
     during: task-3
+    source: null
     description: "Auth token refresh needed before retry can succeed"
     severity: critical
     urgency: immediate  # Wakes Planner immediately — blocks current work
@@ -381,18 +383,35 @@ discovered:
     created: 2025-01-17T15:30:00Z
     converted_to_task: task-3a
 
+  - id: disc-3
+    by: code-reviewer-1
+    during: task-8
+    source: systemic-thinking  # Analytical finding from systemic review
+    description: "[TENSION] Rate limiting implementation assumes single-instance deployment but spec mentions horizontal scaling"
+    severity: high
+    urgency: deferred
+    recommendation: "Rate limiting strategy will fail under horizontal scaling pressure"
+    created: 2025-01-17T17:00:00Z
+    converted_to_task: null  # Planner evaluates: task, "deferred" (→ ISSUES_FILE), or "dismissed"
+
 **Discovery Fields:**
 
 | Field | Values | Meaning |
 |-------|--------|---------|
+| `source` | `null` / omitted | Implementation discovery (default — found during coding) |
+| | `systemic-thinking` | Analytical finding from systemic review (typically by Code Reviewer) |
 | `severity` | `critical` | Blocks current task; must address before continuing |
 | | `high` | Significant issue; should address soon |
 | | `medium` | Notable finding; address when convenient |
 | | `low` | Nice-to-have; log for future consideration |
 | `urgency` | `immediate` | Wakes Planner now (for critical blockers) |
 | | `deferred` | Planner reviews at next planning cycle (default) |
+| `converted_to_task` | `null` | Not yet evaluated by Planner |
+| | `task-N` | Planner created task to address |
+| | `deferred` | Planner wrote to ISSUES_FILE — acknowledged, not actionable now |
+| | `dismissed` | Planner evaluated and dismissed — no action warranted |
 
-**Usage:** Coders encountering nice-to-haves during implementation log them with `severity: low, urgency: deferred` rather than blocking or scope-creeping.
+**Usage:** Coders encountering nice-to-haves during implementation log them with `severity: low, urgency: deferred` rather than blocking or scope-creeping. Code Reviewers invoking the systemic-thinking skill log findings with `source: systemic-thinking` (see skill for severity mapping).
 
 handoff:
   task-5:

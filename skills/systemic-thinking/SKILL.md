@@ -115,11 +115,9 @@ If nothing found: `No systemic issues identified.`
 
 **ISSUES_FILE** = `docs/architectural-issues.md`
 
-Findings from systemic analysis should be persisted to ISSUES_FILE for long-term tracking and follow-up.
+ISSUES_FILE is a curated registry of known, acknowledged architectural issues — not a raw dump. Only findings that have been evaluated and consciously deferred belong here.
 
-**What to persist:**
-- All findings (TENSION, ASSUMPTION, LOAD-BEARING, FEEDBACK, BLIND SPOT, CASCADE, FRAGILITY, STRESS POINT, TRAJECTORY)
-- Findings already in ISSUES_FILE should be updated if new information emerges, not duplicated
+**Persistence varies by mode** — see Mode-Specific Behavior below.
 
 **Persistence Format**
 
@@ -170,12 +168,53 @@ Save to docs/architectural-issues.md? (y/n/select specific)
 
 Wait for user confirmation before writing.
 
-**Liza mode (multi-agent):** Save findings automatically after analysis completion. No confirmation required — the skill is invoked by agents operating autonomously.
+**Liza mode (multi-agent):** Write findings to the blackboard `discovered` section — not to ISSUES_FILE. The blackboard is the coordination mechanism; the Planner consumes discoveries and decides disposition.
+
+For each finding, write a discovery entry:
+```yaml
+discovered:
+  - id: disc-N
+    by: <agent-id>          # Code Reviewer who ran the analysis
+    during: <task-id>        # Task under review
+    source: systemic-thinking
+    description: "[CATEGORY] <one-paragraph finding>"
+    severity: <mapped>       # See severity mapping below
+    urgency: <mapped>        # See urgency mapping below
+    recommendation: "<implication sentence from finding>"
+    created: <timestamp>
+    converted_to_task: null
+```
+
+**Severity mapping from finding categories:**
+
+| Category | Default Severity | Rationale |
+|----------|-----------------|-----------|
+| CASCADE, FRAGILITY | critical | Failure propagation / missing redundancy |
+| TENSION, STRESS POINT | high | Structural contradiction / first-failure point |
+| LOAD-BEARING, FEEDBACK, TRAJECTORY | high | Hidden criticality / compounding dynamics |
+| ASSUMPTION, BLIND SPOT | medium | Constraint or gap, not yet a failure |
+
+Override severity based on judgment when the finding's actual impact warrants it.
+
+**Urgency mapping:**
+- `immediate` — Finding blocks current task or introduces risk that compounds with in-progress work
+- `deferred` (default) — Finding is structural; Planner evaluates at next planning cycle
+
+**ISSUES_FILE in Liza mode:** Only the Planner writes to ISSUES_FILE, when it evaluates a finding and decides to defer rather than create a task. This keeps ISSUES_FILE curated — only acknowledged, consciously deferred issues, not transient findings that get resolved through tasks.
 
 ## Integration with Workflow
 
+**Pairing mode:**
 1. Complete systemic analysis as normal
 2. Present findings in standard output format
 3. Check ISSUES_FILE for existing entries on same topics
-4. Apply mode-specific confirmation
+4. Present list and ask for confirmation
 5. Append new findings or update existing entries in ISSUES_FILE
+
+**Liza mode:**
+1. Complete systemic analysis as normal
+2. Write findings to blackboard `discovered` section (see severity/urgency mapping above)
+3. Planner evaluates discoveries at next wake cycle:
+   - **Actionable:** Creates task → Coder addresses → finding resolved
+   - **Deferred:** Planner writes to ISSUES_FILE with rationale
+   - **Dismissed:** No action (finding doesn't warrant tracking)

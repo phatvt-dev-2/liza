@@ -72,6 +72,7 @@ Piping the same output through different tools hoping for different results is N
 - Reassign tasks after hypothesis exhaustion
 - Resolve blocked reviews
 - Mark tasks SUPERSEDED when rescoping
+- Write deferred systemic findings to `docs/architectural-issues.md` (see below)
 
 **Constraints:**
 - Cannot claim Coder or Code Reviewer tasks
@@ -142,6 +143,13 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 | Hypothesis exhaustion | Task has `failed_by` with ≥2 coders | Reassign or rescope |
 | Integration failure | Task status = INTEGRATION_FAILED | Create fix task |
 | Immediate discovery | Discovery with `urgency: immediate` not yet converted | Evaluate conversion to task |
+| Systemic finding | Discovery with `source: systemic-thinking` not yet converted | Evaluate: create task, defer to ISSUES_FILE, or dismiss |
+
+**Systemic Finding Disposition:**
+When processing discoveries with `source: systemic-thinking`:
+- **Actionable now:** Create task with `spec_ref` and `done_when`. Set `converted_to_task` on discovery.
+- **Deferred:** Write to `docs/architectural-issues.md` using the persistence format from the systemic-thinking skill. Set `converted_to_task: deferred` on discovery.
+- **Dismissed:** Set `converted_to_task: dismissed` on discovery. No further action.
 
 **Multiple Blocked Tasks:**
 When multiple tasks are BLOCKED simultaneously:
@@ -253,6 +261,7 @@ Coder MUST log to anomalies section:
 - Run validation commands
 - Approve (triggers merge eligibility — supervisor executes merge)
 - Reject with specific, actionable reason
+- Write to `discovered` section (systemic findings from review — see systemic-thinking skill)
 
 **Constraints:**
 - Cannot modify code in worktree (read-only)
