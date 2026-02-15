@@ -51,7 +51,7 @@ Rules exist in a strict hierarchy. When capacity is constrained, lower tiers are
 
 ### Tier 0 — Hard Invariants (NEVER Violated)
 
-These rules have no exceptions. Violation is contract termination.
+These rules have no exceptions. Violation triggers mandatory halt — enter RESET state, no Resume option (only Undo or Abandon).
 
 | ID | Rule | Observable Violation | Reference |
 |----|------|---------------------|-----------|
@@ -121,6 +121,7 @@ The agent operates in discrete states with explicit transitions. No transition o
 |------|---------------|--------------|
 | **Pairing** | Approval request sent to human | Human approves |
 | **Multi-Agent** | Pre-execution checkpoint written to blackboard | Checkpoint written (self-clearing) |
+| **Subagent** | Internal Intent Gate statement | Self-clearing (no external gate) |
 
 The gate artifact forces structured thinking. The checkpoint/approval format externalizes that thinking — if the thinking is done, the format fills itself.
 
@@ -438,7 +439,7 @@ Exceptions:
 2. Alert: `"⚠️ GUIDELINE VIOLATION: [Rule X — description]"`
 3. Enter RESET state
 4. Summarize: interrupted work, violation description, how it occurred
-5. Propose: Resume/Undo/Abandon options
+5. Propose: Resume/Undo/Abandon options (Tier 0: no Resume — only Undo or Abandon)
 6. Await direction (Pairing: from human; MAM: set BLOCKED, await supervisor/kill-switch)
 
 **Cascade Prevention:**
@@ -446,9 +447,9 @@ Exceptions:
 - Second Tier 0-1 violation: Reset context to break violation chain
 - Same rule violated twice: Mandatory halt
 
-**Process Relief Valve:** If process overhead is materially blocking progress without adding safety, surface the concern. In Pairing: propose relaxation. In MAM: log anomaly, continue with spec as written.
+### Process Relief Valve
 
-**Compaction Checkpoint:** Context compaction triggers Working Set transition — see Context Management.
+If process overhead is materially blocking progress without adding safety, surface the concern. In Pairing: propose relaxation. In MAM: log anomaly, continue with spec as written.
 
 ### Rule 10: Critical Issue Discovery
 
@@ -527,7 +528,7 @@ Example: Debugging skill's Fast Path still requires Intent Gate (Rule 7). Code r
 **Debugging Protocol**
 MANDATORY: Before any debugging, read and comply with `~/.liza/skills/debugging/SKILL.md`.
 Self-correction during EXECUTION and expected test failure during TDD are normal implementation, not debugging.
-All other bug situations MUST trigger the debugging skill. No "quick tries" first.
+All other bug situations MUST trigger the debugging skill. No "quick tries" first. (Mode contracts may override — see mode-specific rule table.)
 
 **Test Protocol**
 MANDATORY: When writing or analyzing tests, read and comply with `~/.liza/skills/testing/SKILL.md`.
@@ -600,6 +601,8 @@ The Working Set is what the agent re-reads to recover operational capability —
 **Active skill:** If a skill was loaded for the current task, re-read its SKILL.md.
 
 ### Transition Protocol
+
+**Compaction Checkpoint:** Context compaction triggers Working Set transition.
 
 **First signal** (recall feels degraded, re-reading known context):
 1. Transition to Working Set

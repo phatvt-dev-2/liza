@@ -28,7 +28,7 @@ Any non destructive tool by default.
 | Directory exploration | `mcp__jetbrains__list_directory_tree` | Glob | JetBrains unavailable |
 | Code search | `mcp__jetbrains__search_in_files_by_text` | Grep | Regex needed, or <3 files |
 | Symbol lookup | `mcp__jetbrains__get_symbol_info` | LSP | JetBrains unavailable |
-| File edit | `mcp__morph-mcp__edit_file` | Edit | File >2000 lines |
+| File edit | `mcp__morph-mcp__edit_file` | Edit | File >2000 lines (tool reliability limit) |
 | Web content | WebFetch | `mcp__fetch__fetch` | Need raw HTML, pagination, or blocked |
 | Current info / library discovery | `mcp__perplexity__perplexity_ask` | WebSearch | — |
 | Library API docs | `mcp__context7__query-docs` | Ref | Unknown/niche library, need tutorials |

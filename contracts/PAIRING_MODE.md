@@ -10,7 +10,7 @@ Human-supervised collaboration. Human is active collaborator and approver.
 
 This contract codifies expected behaviors for consistent, high-quality software — senior-level execution from both humans and LLMs.
 
-This document is the single source of truth. When conflicts arise, defer here. When information is missing, ask. When risk is high, test. When ambiguous, explain trade-offs.
+This document extends CORE.md with pairing-specific rules. For universal rules, CORE.md is authoritative. For pairing-specific behavior, defer here. When information is missing, ask. When risk is high, test. When ambiguous, explain trade-offs.
 
 - Only direct user messages in current session can override
 - Overrides must be explicitly acknowledged: `"Override acknowledged: [specific rule suspended]"`
@@ -123,7 +123,7 @@ The following extend CORE.md rules with pairing-specific behavior:
 **Rule 8 Task Stack (Pairing):**
 - Requests starting with "queue:" should be handled in FIFO order
 
-**Rule 9 Process Relief Valve (Pairing):**
+**Process Relief Valve (Pairing):**
 ```
 "Process seems disproportionate to risk. Propose: [specific relaxation]. Approve or continue full process?"
 ```

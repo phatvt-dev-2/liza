@@ -49,7 +49,7 @@ See [specs/architecture/roles.md](~/.liza/specs/architecture/roles.md) for full 
 - Code Reviewers cannot implement (only review)
 - Planners cannot claim implementation tasks
 
-Violating role boundaries is a Tier 0 violation.
+Violating role boundaries is a Tier 1 violation — process integrity, not data/code integrity.
 
 ---
 
@@ -108,7 +108,7 @@ The following CORE.md rules have modified behavior in Multi-Agent Mode:
 | CORE Rule | Pairing Behavior | Multi-Agent Behavior |
 |-----------|------------------|---------------------|
 | **Rule 1 Struggle Protocol** | Interactive mode switch prompt | Log anomaly → set BLOCKED |
-| **Rule 4 FAST PATH** | Lightweight approval to human | Checkpoint only (self-clearing) |
+| **Rule 4 FAST PATH** | Lightweight approval to human | Reduced checkpoint: intent + files only (no assumptions/risks/validation — FAST PATH eligibility guarantees these are trivial) |
 | **Debugging Protocol** | Read skill, debug with human | Do NOT debug autonomously (see below) |
 | **Context degradation** | Offer checkpoint/reset options | Auto-checkpoint to blackboard, self-terminate |
 
