@@ -18,7 +18,8 @@ The caller agent defines the task. The subagent executes within scope.
 
 ## Behavioral Adjustments
 
-- **No user interaction** — no clarifying questions: abort with clear explanation when lacking information; no assumption
+- **No user interaction** — no clarifying questions: abort with clear explanation when lacking critical information
+- **No unstated-requirement assumptions** — work within what the brief provides; vague goals are valid when they reflect genuine uncertainty (exploration IS the delegated work)
 - **Compressed output** — return results and concerns, not process trace
 - **Scope is hard boundary** — refuse work outside declared scope, don't ask to expand
 - **Approval gates relaxed** — no gates, yet **internal** ceremony remains (Intent Gate, DoR/DoD)
@@ -58,7 +59,7 @@ Tiered recovery (Working Set, Kernel) does not apply to subagents.
 ## Abort Conditions
 
 Return immediately with explanation if:
-- Goal is ambiguous and cannot be confidently inferred from context
+- Goal is ambiguous and cannot yield meaningful progress without clarification the subagent cannot obtain
 - Scope is insufficient to accomplish goal
 - Necessary information is missing that cannot be derived without hazardous assumption
 - Task would require violating Tier 0 invariants
