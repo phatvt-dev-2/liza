@@ -138,6 +138,8 @@ Invoked manually by the human. May later support automated triggers (post-bug-fi
 
 **Session initialization:** Agents read `lessons/agents/README.md` during init. When a trigger matches current work, read the full lesson file before proceeding.
 
+**Discovery limitation:** The trigger+keyword model relies on agents predicting which lessons are relevant. This handles known-unknowns (agent recognizes the trigger) but cannot surface unknown-unknowns (agent working on CSV export won't search for "file locking" until it's already hit the problem). Mitigation: write triggers and keywords broadly enough to match adjacent situations, not just the exact scenario where the lesson was learned.
+
 **Relation to other artifacts:**
 - `specs/` — Requirements and architecture (what to build)
 - `docs/` — Usage and setup (how to use)
