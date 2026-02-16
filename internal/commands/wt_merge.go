@@ -300,6 +300,11 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 				s.Tasks[i].Worktree = nil
 				s.Tasks[i].MergeCommit = &mergeCommit
 
+				// Release the assigned agent
+				if s.Tasks[i].AssignedTo != nil {
+					s.ReleaseAgent(*s.Tasks[i].AssignedTo)
+				}
+
 				// Add history entry
 				s.Tasks[i].History = append(s.Tasks[i].History, models.TaskHistoryEntry{
 					Time:   time.Now(),

@@ -424,7 +424,17 @@ func setAgentToPlanningStatus(bb *db.Blackboard, agentID string) error {
 
 		// Set to PLANNING state
 		agent.Status = models.AgentStatusPlanning
+		planning := "planning"
+		agent.CurrentTask = &planning
 		agent.Heartbeat = now
+
+		// Renew lease
+		leaseDuration := state.Config.LeaseDuration
+		if leaseDuration <= 0 {
+			leaseDuration = 1800
+		}
+		leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
+		agent.LeaseExpires = &leaseExpires
 
 		state.Agents[agentID] = agent
 		return nil

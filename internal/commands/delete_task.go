@@ -185,10 +185,7 @@ func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, r
 		if currentTask.AssignedTo != nil {
 			if agent, ok := state.Agents[*currentTask.AssignedTo]; ok {
 				if agent.CurrentTask != nil && *agent.CurrentTask == taskID {
-					agent.Status = models.AgentStatusIdle
-					agent.CurrentTask = nil
-					agent.LeaseExpires = nil
-					state.Agents[*currentTask.AssignedTo] = agent
+					state.ReleaseAgent(*currentTask.AssignedTo)
 				}
 			}
 		}

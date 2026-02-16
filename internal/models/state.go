@@ -155,6 +155,16 @@ func (as AgentStatus) IsValid() bool {
 	return false
 }
 
+// ReleaseAgent resets an agent to idle with no task assignment.
+func (s *State) ReleaseAgent(agentID string) {
+	if agent, ok := s.Agents[agentID]; ok {
+		agent.Status = AgentStatusIdle
+		agent.CurrentTask = nil
+		agent.LeaseExpires = nil
+		s.Agents[agentID] = agent
+	}
+}
+
 // Agent represents an agent (coder, reviewer, planner) in the system
 type Agent struct {
 	Role            string      `yaml:"role"`

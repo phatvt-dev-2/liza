@@ -79,6 +79,11 @@ func ReleaseClaimCommand(projectRoot, taskID, role string, force bool, reason, a
 					}
 				}
 
+				// Release reviewer agent state
+				if task.ReviewingBy != nil {
+					state.ReleaseAgent(*task.ReviewingBy)
+				}
+
 				// Release reviewer claim
 				task.ReviewingBy = nil
 				task.ReviewLeaseExpires = nil
@@ -120,6 +125,11 @@ func ReleaseClaimCommand(projectRoot, taskID, role string, force bool, reason, a
 				// Change status if CLAIMED
 				if task.Status == models.TaskStatusClaimed {
 					task.Status = models.TaskStatusUnclaimed
+				}
+
+				// Release coder agent state
+				if task.AssignedTo != nil {
+					state.ReleaseAgent(*task.AssignedTo)
 				}
 
 				// Release coder claim
