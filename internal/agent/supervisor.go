@@ -619,8 +619,8 @@ func waitForWorkPolling(
 func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			count := CountClaimableTasks(s)
-			logMsg := getCoderWorkDiagnostics(s)
+			count := models.CountClaimableTasks(s)
+			logMsg := models.GetCoderWorkDiagnostics(s)
 			return count > 0, logMsg
 		})
 }
@@ -629,8 +629,8 @@ func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot string
 func waitForReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			count := CountReviewableTasks(s)
-			logMsg := getReviewerWorkDiagnostics(s)
+			count := models.CountReviewableTasks(s)
+			logMsg := models.GetReviewerWorkDiagnostics(s)
 			return count > 0, logMsg
 		})
 }

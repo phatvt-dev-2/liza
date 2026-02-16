@@ -270,7 +270,7 @@ func (g *Git) GetWorktreeHEAD(taskID string) (string, error) {
 // Returns error if merge fails (e.g., conflicts)
 func (g *Git) MergeBranch(branch string) (fastForward bool, mergeCommit string, err error) {
 	// Try fast-forward first
-	output, err := g.exec("merge", "--ff-only", branch)
+	_, err = g.exec("merge", "--ff-only", branch)
 	if err == nil {
 		// Fast-forward succeeded
 		commit, err := g.GetCommitSHA("HEAD")
@@ -278,10 +278,11 @@ func (g *Git) MergeBranch(branch string) (fastForward bool, mergeCommit string, 
 	}
 
 	// Fast-forward failed, try regular merge
+	var output string
 	output, err = g.exec("merge", "--no-ff", "-m", "Merge "+branch, branch)
 	if err != nil {
 		// Check if it's a merge conflict
-		if strings.Contains(string(output), "CONFLICT") || strings.Contains(err.Error(), "conflict") {
+		if strings.Contains(output, "CONFLICT") || strings.Contains(err.Error(), "conflict") {
 			return false, "", fmt.Errorf("merge conflict: %w", err)
 		}
 		return false, "", err

@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
@@ -43,16 +42,13 @@ func setupTestProject(t *testing.T) (projectDir string, cleanup func()) {
 	return tmpDir, cleanup
 }
 
-// TestSimpleWorkflow tests: init -> add-task -> claim -> submit-for-review -> approve -> merge
-func TestSimpleWorkflow(t *testing.T) {
-	projectDir, cleanup := setupTestProject(t)
-	defer cleanup()
+// setupIntegrationTest performs the common integration test setup:
+// init, create spec, add tasks, and return the blackboard.
+func setupIntegrationTest(t *testing.T, projectDir string, taskIDs []string) (*db.Blackboard, string, string) {
+	t.Helper()
 
-	// Create spec file
-	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature\nImplement feature")
+	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
 
-	// Step 1: Initialize liza
-	t.Log("Step 1: Initialize liza")
 	if err := commands.InitCommand("Test goal", "specs/feature.md"); err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
@@ -61,6 +57,34 @@ func TestSimpleWorkflow(t *testing.T) {
 	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
 	bb := db.New(statePath)
 
+	for _, taskID := range taskIDs {
+		taskInput := &commands.TaskInput{
+			ID:          taskID,
+			Description: "Test feature " + taskID,
+			DoneWhen:    "Done",
+			Scope:       "Feature",
+			Priority:    1,
+			SpecRef:     "specs/feature.md",
+			DependsOn:   []string{},
+		}
+		if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
+			t.Fatalf("AddTask %s failed: %v", taskID, err)
+		}
+	}
+
+	return bb, statePath, logPath
+}
+
+// TestSimpleWorkflow tests: init -> add-task -> claim -> submit-for-review -> approve -> merge
+func TestSimpleWorkflow(t *testing.T) {
+	projectDir, cleanup := setupTestProject(t)
+	defer cleanup()
+
+	// Steps 1-2: Initialize liza and add task
+	t.Log("Steps 1-2: Initialize liza and add task")
+	taskID := "task-1"
+	bb, _, _ := setupIntegrationTest(t, projectDir, []string{taskID})
+
 	// Verify initialization
 	state, err := bb.Read()
 	testhelpers.AssertNoError(t, err)
@@ -68,26 +92,7 @@ func TestSimpleWorkflow(t *testing.T) {
 		t.Errorf("Expected goal description 'Test goal', got %s", state.Goal.Description)
 	}
 
-	// Step 2: Add a task
-	t.Log("Step 2: Add task")
-	taskID := "task-1"
-	taskInput := &commands.TaskInput{
-		ID:          taskID,
-		Description: "Implement feature X",
-		DoneWhen:    "Feature is implemented",
-		Scope:       "Feature",
-		Priority:    1,
-		SpecRef:     "specs/feature.md",
-		DependsOn:   []string{},
-	}
-
-	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
-		t.Fatalf("AddTask failed: %v", err)
-	}
-
 	// Verify task was added
-	state, err = bb.Read()
-	testhelpers.AssertNoError(t, err)
 	if len(state.Tasks) != 1 {
 		t.Fatalf("Expected 1 task, got %d", len(state.Tasks))
 	}
@@ -98,23 +103,7 @@ func TestSimpleWorkflow(t *testing.T) {
 	// Step 3: Register an agent
 	t.Log("Step 3: Register agent")
 	agentID := "coder-1"
-	now := time.Now().UTC()
-	agentLeaseExpires := now.Add(30 * time.Minute)
-
-	err = bb.Modify(func(state *models.State) error {
-		state.Agents[agentID] = models.Agent{
-			Role:            "coder",
-			Status:          models.AgentStatusWaiting,
-			Heartbeat:       now,
-			LeaseExpires:    &agentLeaseExpires,
-			CurrentTask:     nil,
-			Terminal:        "test",
-			IterationsTotal: 0,
-			ContextPercent:  0,
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
 
 	// Step 4: Claim the task
 	t.Log("Step 4: Claim task")
@@ -176,20 +165,7 @@ func TestSimpleWorkflow(t *testing.T) {
 	// Step 6: Register reviewer and approve
 	t.Log("Step 6: Register reviewer and approve")
 	reviewerID := "reviewer-1"
-	err = bb.Modify(func(state *models.State) error {
-		state.Agents[reviewerID] = models.Agent{
-			Role:            "reviewer",
-			Status:          models.AgentStatusWaiting,
-			Heartbeat:       now,
-			LeaseExpires:    &agentLeaseExpires,
-			CurrentTask:     nil,
-			Terminal:        "test",
-			IterationsTotal: 0,
-			ContextPercent:  0,
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	testhelpers.RegisterTestAgent(t, bb, reviewerID, "reviewer")
 
 	if err := commands.SubmitVerdictCommand(projectDir, taskID, "APPROVED", "", reviewerID); err != nil {
 		t.Fatalf("SubmitVerdict failed: %v", err)
@@ -232,32 +208,10 @@ func TestTaskDependencyWorkflow(t *testing.T) {
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
-	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
+	// Setup: init + add task-1 (no deps)
+	bb, statePath, logPath := setupIntegrationTest(t, projectDir, []string{"task-1"})
 
-	// Initialize
-	if err := commands.InitCommand("Test goal", "specs/feature.md"); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
-
-	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
-	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
-	bb := db.New(statePath)
-
-	// Add task-1 (no dependencies)
-	task1Input := &commands.TaskInput{
-		ID:          "task-1",
-		Description: "Base feature",
-		DoneWhen:    "Done",
-		Scope:       "Base",
-		Priority:    1,
-		SpecRef:     "specs/feature.md",
-		DependsOn:   []string{},
-	}
-	if err := commands.AddTaskCommand(statePath, logPath, task1Input, "planner-1"); err != nil {
-		t.Fatalf("AddTask task-1 failed: %v", err)
-	}
-
-	// Add task-2 (depends on task-1)
+	// Add task-2 (depends on task-1) — custom deps, can't use helper
 	task2Input := &commands.TaskInput{
 		ID:          "task-2",
 		Description: "Dependent feature",
@@ -273,27 +227,11 @@ func TestTaskDependencyWorkflow(t *testing.T) {
 
 	// Register agent
 	agentID := "coder-1"
-	now := time.Now().UTC()
-	agentLeaseExpires := now.Add(30 * time.Minute)
-
-	err := bb.Modify(func(state *models.State) error {
-		state.Agents[agentID] = models.Agent{
-			Role:            "coder",
-			Status:          models.AgentStatusWaiting,
-			Heartbeat:       now,
-			LeaseExpires:    &agentLeaseExpires,
-			CurrentTask:     nil,
-			Terminal:        "test",
-			IterationsTotal: 0,
-			ContextPercent:  0,
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
 
 	// Try to claim task-2 (should fail because task-1 not merged)
 	t.Log("Attempting to claim task-2 before task-1 is done")
-	err = commands.ClaimTaskCommand(projectDir, "task-2", agentID)
+	err := commands.ClaimTaskCommand(projectDir, "task-2", agentID)
 	if err == nil {
 		t.Fatal("Expected error when claiming task with unmet dependencies")
 	}

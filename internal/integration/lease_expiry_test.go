@@ -6,12 +6,10 @@ package integration
 // both task claims and review claims.
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/commands"
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -21,51 +19,12 @@ func TestExpiredClaimLease(t *testing.T) {
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
-	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
-
-	// Initialize
-	if err := commands.InitCommand("Test goal", "specs/feature.md"); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
-
-	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
-	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
-	bb := db.New(statePath)
-
-	// Add a task
 	taskID := "task-1"
-	taskInput := &commands.TaskInput{
-		ID:          taskID,
-		Description: "Test feature",
-		DoneWhen:    "Done",
-		Scope:       "Feature",
-		Priority:    1,
-		SpecRef:     "specs/feature.md",
-		DependsOn:   []string{},
-	}
-	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
-		t.Fatalf("AddTask failed: %v", err)
-	}
+	bb, _, _ := setupIntegrationTest(t, projectDir, []string{taskID})
 
 	// Register first agent
 	agent1 := "coder-1"
-	now := time.Now().UTC()
-	agentLeaseExpires := now.Add(30 * time.Minute)
-
-	err := bb.Modify(func(state *models.State) error {
-		state.Agents[agent1] = models.Agent{
-			Role:            "coder",
-			Status:          models.AgentStatusWaiting,
-			Heartbeat:       now,
-			LeaseExpires:    &agentLeaseExpires,
-			CurrentTask:     nil,
-			Terminal:        "test",
-			IterationsTotal: 0,
-			ContextPercent:  0,
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	testhelpers.RegisterTestAgent(t, bb, agent1, "coder")
 
 	// First agent claims the task
 	t.Log("Agent 1 claims task")
@@ -86,7 +45,7 @@ func TestExpiredClaimLease(t *testing.T) {
 	err = bb.Modify(func(state *models.State) error {
 		for i := range state.Tasks {
 			if state.Tasks[i].ID == taskID {
-				expiredTime := now.Add(-1 * time.Hour) // Expired 1 hour ago
+				expiredTime := time.Now().UTC().Add(-1 * time.Hour) // Expired 1 hour ago
 				state.Tasks[i].LeaseExpires = &expiredTime
 				break
 			}
@@ -97,20 +56,7 @@ func TestExpiredClaimLease(t *testing.T) {
 
 	// Register second agent
 	agent2 := "coder-2"
-	err = bb.Modify(func(state *models.State) error {
-		state.Agents[agent2] = models.Agent{
-			Role:            "coder",
-			Status:          models.AgentStatusWaiting,
-			Heartbeat:       now,
-			LeaseExpires:    &agentLeaseExpires,
-			CurrentTask:     nil,
-			Terminal:        "test",
-			IterationsTotal: 0,
-			ContextPercent:  0,
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	testhelpers.RegisterTestAgent(t, bb, agent2, "coder")
 
 	// Second agent should NOT be able to claim the task directly
 	// (The claim command doesn't check for expired leases itself - that's the watch command's job)
@@ -129,73 +75,16 @@ func TestExpiredReviewLease(t *testing.T) {
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
-	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
-
-	// Initialize
-	if err := commands.InitCommand("Test goal", "specs/feature.md"); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
-
-	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
-	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
-	bb := db.New(statePath)
-
-	// Add and claim a task
 	taskID := "task-1"
-	taskInput := &commands.TaskInput{
-		ID:          taskID,
-		Description: "Test feature",
-		DoneWhen:    "Done",
-		Scope:       "Feature",
-		Priority:    1,
-		SpecRef:     "specs/feature.md",
-		DependsOn:   []string{},
-	}
-	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
-		t.Fatalf("AddTask failed: %v", err)
-	}
+	bb, _, _ := setupIntegrationTest(t, projectDir, []string{taskID})
 
 	// Register agents
 	coderID := "coder-1"
 	reviewer1 := "reviewer-1"
 	reviewer2 := "reviewer-2"
-	now := time.Now().UTC()
-	agentLeaseExpires := now.Add(30 * time.Minute)
-
-	err := bb.Modify(func(state *models.State) error {
-		state.Agents[coderID] = models.Agent{
-			Role:            "coder",
-			Status:          models.AgentStatusWaiting,
-			Heartbeat:       now,
-			LeaseExpires:    &agentLeaseExpires,
-			CurrentTask:     nil,
-			Terminal:        "test",
-			IterationsTotal: 0,
-			ContextPercent:  0,
-		}
-		state.Agents[reviewer1] = models.Agent{
-			Role:            "reviewer",
-			Status:          models.AgentStatusWaiting,
-			Heartbeat:       now,
-			LeaseExpires:    &agentLeaseExpires,
-			CurrentTask:     nil,
-			Terminal:        "test",
-			IterationsTotal: 0,
-			ContextPercent:  0,
-		}
-		state.Agents[reviewer2] = models.Agent{
-			Role:            "reviewer",
-			Status:          models.AgentStatusWaiting,
-			Heartbeat:       now,
-			LeaseExpires:    &agentLeaseExpires,
-			CurrentTask:     nil,
-			Terminal:        "test",
-			IterationsTotal: 0,
-			ContextPercent:  0,
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	testhelpers.RegisterTestAgent(t, bb, coderID, "coder")
+	testhelpers.RegisterTestAgent(t, bb, reviewer1, "reviewer")
+	testhelpers.RegisterTestAgent(t, bb, reviewer2, "reviewer")
 
 	// Claim and submit task for review
 	if err := commands.ClaimTaskCommand(projectDir, taskID, coderID); err != nil {
@@ -203,7 +92,7 @@ func TestExpiredReviewLease(t *testing.T) {
 	}
 
 	// Manually set task to READY_FOR_REVIEW with a commit
-	err = bb.Modify(func(state *models.State) error {
+	err := bb.Modify(func(state *models.State) error {
 		for i := range state.Tasks {
 			if state.Tasks[i].ID == taskID {
 				state.Tasks[i].Status = models.TaskStatusReadyForReview
@@ -218,7 +107,7 @@ func TestExpiredReviewLease(t *testing.T) {
 
 	// First reviewer claims the review
 	t.Log("Reviewer 1 claims review")
-	reviewLeaseExpires := now.Add(30 * time.Minute)
+	reviewLeaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	err = bb.Modify(func(state *models.State) error {
 		for i := range state.Tasks {
 			if state.Tasks[i].ID == taskID {
@@ -244,7 +133,7 @@ func TestExpiredReviewLease(t *testing.T) {
 	err = bb.Modify(func(state *models.State) error {
 		for i := range state.Tasks {
 			if state.Tasks[i].ID == taskID {
-				expiredTime := now.Add(-1 * time.Hour)
+				expiredTime := time.Now().UTC().Add(-1 * time.Hour)
 				state.Tasks[i].ReviewLeaseExpires = &expiredTime
 				break
 			}
@@ -305,51 +194,12 @@ func TestLeaseRenewal(t *testing.T) {
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
-	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
-
-	// Initialize
-	if err := commands.InitCommand("Test goal", "specs/feature.md"); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
-
-	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
-	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
-	bb := db.New(statePath)
-
-	// Add a task
 	taskID := "task-1"
-	taskInput := &commands.TaskInput{
-		ID:          taskID,
-		Description: "Test feature",
-		DoneWhen:    "Done",
-		Scope:       "Feature",
-		Priority:    1,
-		SpecRef:     "specs/feature.md",
-		DependsOn:   []string{},
-	}
-	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
-		t.Fatalf("AddTask failed: %v", err)
-	}
+	bb, _, _ := setupIntegrationTest(t, projectDir, []string{taskID})
 
 	// Register agent
 	agentID := "coder-1"
-	now := time.Now().UTC()
-	agentLeaseExpires := now.Add(30 * time.Minute)
-
-	err := bb.Modify(func(state *models.State) error {
-		state.Agents[agentID] = models.Agent{
-			Role:            "coder",
-			Status:          models.AgentStatusWaiting,
-			Heartbeat:       now,
-			LeaseExpires:    &agentLeaseExpires,
-			CurrentTask:     nil,
-			Terminal:        "test",
-			IterationsTotal: 0,
-			ContextPercent:  0,
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
 
 	// Claim task
 	if err := commands.ClaimTaskCommand(projectDir, taskID, agentID); err != nil {

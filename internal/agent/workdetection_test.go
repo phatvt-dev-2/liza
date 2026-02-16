@@ -109,7 +109,7 @@ func TestCountClaimableTasks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
-			got := CountClaimableTasks(state)
+			got := models.CountClaimableTasks(state)
 			if got != tt.want {
 				t.Errorf("CountClaimableTasks() = %d, want %d", got, tt.want)
 			}
@@ -220,7 +220,7 @@ func TestCountReviewableTasks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
-			got := CountReviewableTasks(state)
+			got := models.CountReviewableTasks(state)
 			if got != tt.want {
 				t.Errorf("CountReviewableTasks() = %d, want %d", got, tt.want)
 			}
@@ -441,7 +441,7 @@ func TestHasCoderWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CountClaimableTasks(tt.state) > 0
+			got := models.CountClaimableTasks(tt.state) > 0
 			if got != tt.want {
 				t.Errorf("HasCoderWork() = %v, want %v", got, tt.want)
 			}
@@ -492,7 +492,7 @@ func TestHasReviewerWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CountReviewableTasks(tt.state) > 0
+			got := models.CountReviewableTasks(tt.state) > 0
 			if got != tt.want {
 				t.Errorf("HasReviewerWork() = %v, want %v", got, tt.want)
 			}
@@ -645,9 +645,9 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getCoderWorkDiagnostics(tt.state)
+			got := models.GetCoderWorkDiagnostics(tt.state)
 			if got != tt.wantMsg {
-				t.Errorf("getCoderWorkDiagnostics() = %q, want %q", got, tt.wantMsg)
+				t.Errorf("GetCoderWorkDiagnostics() = %q, want %q", got, tt.wantMsg)
 			}
 		})
 	}
@@ -774,9 +774,9 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getReviewerWorkDiagnostics(tt.state)
+			got := models.GetReviewerWorkDiagnostics(tt.state)
 			if got != tt.wantMsg {
-				t.Errorf("getReviewerWorkDiagnostics() = %q, want %q", got, tt.wantMsg)
+				t.Errorf("GetReviewerWorkDiagnostics() = %q, want %q", got, tt.wantMsg)
 			}
 		})
 	}

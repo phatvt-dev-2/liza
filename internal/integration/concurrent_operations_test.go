@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/commands"
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -25,56 +24,17 @@ func TestConcurrentClaimAttempts(t *testing.T) {
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
-	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
-
-	// Initialize
-	if err := commands.InitCommand("Test goal", "specs/feature.md"); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
-
-	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
-	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
-	bb := db.New(statePath)
-
-	// Add a single task
 	taskID := "task-1"
-	taskInput := &commands.TaskInput{
-		ID:          taskID,
-		Description: "Test feature",
-		DoneWhen:    "Done",
-		Scope:       "Feature",
-		Priority:    1,
-		SpecRef:     "specs/feature.md",
-		DependsOn:   []string{},
-	}
-	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
-		t.Fatalf("AddTask failed: %v", err)
-	}
+	bb, _, _ := setupIntegrationTest(t, projectDir, []string{taskID})
 
 	// Register multiple agents
-	now := time.Now().UTC()
 	numAgents := 5
 	agentIDs := make([]string, numAgents)
-	agentLeaseExpires := now.Add(30 * time.Minute)
-
-	err := bb.Modify(func(state *models.State) error {
-		for i := 0; i < numAgents; i++ {
-			agentID := "coder-" + string(rune('a'+i))
-			agentIDs[i] = agentID
-			state.Agents[agentID] = models.Agent{
-				Role:            "coder",
-				Status:          models.AgentStatusWaiting,
-				Heartbeat:       now,
-				LeaseExpires:    &agentLeaseExpires,
-				CurrentTask:     nil,
-				Terminal:        "test",
-				IterationsTotal: 0,
-				ContextPercent:  0,
-			}
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	for i := 0; i < numAgents; i++ {
+		agentID := "coder-" + string(rune('a'+i))
+		agentIDs[i] = agentID
+		testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
+	}
 
 	// Have all agents try to claim the same task concurrently
 	var wg sync.WaitGroup
@@ -137,60 +97,20 @@ func TestConcurrentClaimsOfDifferentTasks(t *testing.T) {
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
-	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
-
-	// Initialize
-	if err := commands.InitCommand("Test goal", "specs/feature.md"); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
-
-	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
-	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
-	bb := db.New(statePath)
-
-	// Add multiple tasks
 	numTasks := 5
 	taskIDs := make([]string, numTasks)
 	for i := 0; i < numTasks; i++ {
-		taskID := "task-" + string(rune('a'+i))
-		taskIDs[i] = taskID
-		taskInput := &commands.TaskInput{
-			ID:          taskID,
-			Description: "Test feature " + taskID,
-			DoneWhen:    "Done",
-			Scope:       "Feature",
-			Priority:    1,
-			SpecRef:     "specs/feature.md",
-			DependsOn:   []string{},
-		}
-		if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
-			t.Fatalf("AddTask %s failed: %v", taskID, err)
-		}
+		taskIDs[i] = "task-" + string(rune('a'+i))
 	}
+	bb, _, _ := setupIntegrationTest(t, projectDir, taskIDs)
 
 	// Register multiple agents (one per task)
-	now := time.Now().UTC()
 	agentIDs := make([]string, numTasks)
-	agentLeaseExpires := now.Add(30 * time.Minute)
-
-	err := bb.Modify(func(state *models.State) error {
-		for i := 0; i < numTasks; i++ {
-			agentID := "coder-" + string(rune('a'+i))
-			agentIDs[i] = agentID
-			state.Agents[agentID] = models.Agent{
-				Role:            "coder",
-				Status:          models.AgentStatusWaiting,
-				Heartbeat:       now,
-				LeaseExpires:    &agentLeaseExpires,
-				CurrentTask:     nil,
-				Terminal:        "test",
-				IterationsTotal: 0,
-				ContextPercent:  0,
-			}
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	for i := 0; i < numTasks; i++ {
+		agentID := "coder-" + string(rune('a'+i))
+		agentIDs[i] = agentID
+		testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
+	}
 
 	// Have each agent claim a different task concurrently
 	var wg sync.WaitGroup
@@ -370,56 +290,17 @@ func TestConcurrentClaimWithWorktreeConflict(t *testing.T) {
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
-	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
-
-	// Initialize
-	if err := commands.InitCommand("Test goal", "specs/feature.md"); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
-
-	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
-	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
-	bb := db.New(statePath)
-
-	// Add a single task
 	taskID := "test-task"
-	taskInput := &commands.TaskInput{
-		ID:          taskID,
-		Description: "Test task",
-		DoneWhen:    "Tests pass",
-		Scope:       "Test scope",
-		Priority:    1,
-		SpecRef:     "specs/feature.md",
-		DependsOn:   []string{},
-	}
-	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
-		t.Fatalf("AddTask failed: %v", err)
-	}
+	bb, _, _ := setupIntegrationTest(t, projectDir, []string{taskID})
 
 	// Register multiple agents
-	now := time.Now().UTC()
 	numCoders := 5
 	agentIDs := make([]string, numCoders)
-	agentLeaseExpires := now.Add(30 * time.Minute)
-
-	err := bb.Modify(func(state *models.State) error {
-		for i := 0; i < numCoders; i++ {
-			agentID := "coder-" + string(rune('1'+i))
-			agentIDs[i] = agentID
-			state.Agents[agentID] = models.Agent{
-				Role:            "coder",
-				Status:          models.AgentStatusWaiting,
-				Heartbeat:       now,
-				LeaseExpires:    &agentLeaseExpires,
-				CurrentTask:     nil,
-				Terminal:        "test",
-				IterationsTotal: 0,
-				ContextPercent:  0,
-			}
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	for i := 0; i < numCoders; i++ {
+		agentID := "coder-" + string(rune('1'+i))
+		agentIDs[i] = agentID
+		testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
+	}
 
 	// Launch concurrent claim attempts
 	var wg sync.WaitGroup
@@ -516,31 +397,8 @@ func TestConcurrentClaimIntegrationFailedTask(t *testing.T) {
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
-	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
-
-	// Initialize
-	if err := commands.InitCommand("Test goal", "specs/feature.md"); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
-
-	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
-	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
-	bb := db.New(statePath)
-
-	// Add a task and set it to INTEGRATION_FAILED with IntegrationFix=true
 	taskID := "task-failed"
-	taskInput := &commands.TaskInput{
-		ID:          taskID,
-		Description: "Test feature with merge conflict",
-		DoneWhen:    "Done",
-		Scope:       "Feature",
-		Priority:    1,
-		SpecRef:     "specs/feature.md",
-		DependsOn:   []string{},
-	}
-	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
-		t.Fatalf("AddTask failed: %v", err)
-	}
+	bb, _, _ := setupIntegrationTest(t, projectDir, []string{taskID})
 
 	// Set task to INTEGRATION_FAILED with a worktree (simulating failed merge)
 	worktreeName := ".worktrees/task-failed"
@@ -564,29 +422,13 @@ func TestConcurrentClaimIntegrationFailedTask(t *testing.T) {
 	testhelpers.AssertNoError(t, err)
 
 	// Register multiple coder agents
-	now := time.Now().UTC()
 	numAgents := 3
 	agentIDs := make([]string, numAgents)
-	agentLeaseExpires := now.Add(30 * time.Minute)
-
-	err = bb.Modify(func(state *models.State) error {
-		for i := 0; i < numAgents; i++ {
-			agentID := "coder-" + string(rune('1'+i))
-			agentIDs[i] = agentID
-			state.Agents[agentID] = models.Agent{
-				Role:            "coder",
-				Status:          models.AgentStatusWaiting,
-				Heartbeat:       now,
-				LeaseExpires:    &agentLeaseExpires,
-				CurrentTask:     nil,
-				Terminal:        "test",
-				IterationsTotal: 0,
-				ContextPercent:  0,
-			}
-		}
-		return nil
-	})
-	testhelpers.AssertNoError(t, err)
+	for i := 0; i < numAgents; i++ {
+		agentID := "coder-" + string(rune('1'+i))
+		agentIDs[i] = agentID
+		testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
+	}
 
 	// Have all agents try to claim the same INTEGRATION_FAILED task concurrently
 	var wg sync.WaitGroup

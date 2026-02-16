@@ -10,12 +10,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestStateWatcherBasicNotification tests that watcher sends notifications on file changes
-func TestStateWatcherBasicNotification(t *testing.T) {
+// setupWatcherTest creates a temp directory with initial state and returns a Blackboard.
+func setupWatcherTest(t *testing.T) (*Blackboard, string) {
+	t.Helper()
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.yaml")
-
-	// Create initial state
 	now := time.Now().UTC()
 	state := &models.State{
 		Version: 1,
@@ -24,11 +23,16 @@ func TestStateWatcherBasicNotification(t *testing.T) {
 		Agents:  make(map[string]models.Agent),
 		Config:  models.Config{IntegrationBranch: "main"},
 	}
-
 	bb := New(statePath)
 	if err := bb.Write(state); err != nil {
 		t.Fatalf("Initial write failed: %v", err)
 	}
+	return bb, statePath
+}
+
+// TestStateWatcherBasicNotification tests that watcher sends notifications on file changes
+func TestStateWatcherBasicNotification(t *testing.T) {
+	bb, _ := setupWatcherTest(t)
 
 	// Start watcher
 	watcher, err := bb.WatchForChanges()
@@ -59,23 +63,7 @@ func TestStateWatcherBasicNotification(t *testing.T) {
 
 // TestStateWatcherMultipleWrites tests that multiple rapid writes coalesce
 func TestStateWatcherMultipleWrites(t *testing.T) {
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "state.yaml")
-
-	// Create initial state
-	now := time.Now().UTC()
-	state := &models.State{
-		Version: 1,
-		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
-		Tasks:   []models.Task{},
-		Agents:  make(map[string]models.Agent),
-		Config:  models.Config{IntegrationBranch: "main"},
-	}
-
-	bb := New(statePath)
-	if err := bb.Write(state); err != nil {
-		t.Fatalf("Initial write failed: %v", err)
-	}
+	bb, _ := setupWatcherTest(t)
 
 	// Start watcher
 	watcher, err := bb.WatchForChanges()
@@ -130,23 +118,7 @@ drainLoop:
 
 // TestStateWatcherClose tests graceful watcher shutdown
 func TestStateWatcherClose(t *testing.T) {
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "state.yaml")
-
-	// Create initial state
-	now := time.Now().UTC()
-	state := &models.State{
-		Version: 1,
-		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
-		Tasks:   []models.Task{},
-		Agents:  make(map[string]models.Agent),
-		Config:  models.Config{IntegrationBranch: "main"},
-	}
-
-	bb := New(statePath)
-	if err := bb.Write(state); err != nil {
-		t.Fatalf("Initial write failed: %v", err)
-	}
+	bb, _ := setupWatcherTest(t)
 
 	// Start watcher
 	watcher, err := bb.WatchForChanges()
@@ -172,23 +144,7 @@ func TestStateWatcherClose(t *testing.T) {
 
 // TestStateWatcherDoubleClose tests that closing twice doesn't panic
 func TestStateWatcherDoubleClose(t *testing.T) {
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "state.yaml")
-
-	// Create initial state
-	now := time.Now().UTC()
-	state := &models.State{
-		Version: 1,
-		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
-		Tasks:   []models.Task{},
-		Agents:  make(map[string]models.Agent),
-		Config:  models.Config{IntegrationBranch: "main"},
-	}
-
-	bb := New(statePath)
-	if err := bb.Write(state); err != nil {
-		t.Fatalf("Initial write failed: %v", err)
-	}
+	bb, _ := setupWatcherTest(t)
 
 	// Start watcher
 	watcher, err := bb.WatchForChanges()
@@ -249,23 +205,7 @@ func TestStateWatcherNonExistentFile(t *testing.T) {
 
 // TestStateWatcherExternalModification tests detection of external changes
 func TestStateWatcherExternalModification(t *testing.T) {
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "state.yaml")
-
-	// Create initial state
-	now := time.Now().UTC()
-	state := &models.State{
-		Version: 1,
-		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
-		Tasks:   []models.Task{},
-		Agents:  make(map[string]models.Agent),
-		Config:  models.Config{IntegrationBranch: "main"},
-	}
-
-	bb := New(statePath)
-	if err := bb.Write(state); err != nil {
-		t.Fatalf("Initial write failed: %v", err)
-	}
+	bb, statePath := setupWatcherTest(t)
 
 	// Start watcher
 	watcher, err := bb.WatchForChanges()
@@ -277,6 +217,10 @@ func TestStateWatcherExternalModification(t *testing.T) {
 	time.Sleep(10 * time.Millisecond) // Allow watcher to start
 
 	// External modification (direct file write)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
 	state.Version = 3
 	data, err := yaml.Marshal(state)
 	if err != nil {

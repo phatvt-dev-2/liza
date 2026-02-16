@@ -26,7 +26,7 @@ func InitCommand(description string, specRef string) error {
 
 	// Validate .liza doesn't already exist
 	if _, err := os.Stat(lizaPaths.LizaDir()); !os.IsNotExist(err) {
-		return fmt.Errorf(".liza already exists at %s. Remove or use existing.", lizaPaths.LizaDir())
+		return fmt.Errorf(".liza already exists at %s, remove or use existing", lizaPaths.LizaDir())
 	}
 
 	// Validate spec file exists

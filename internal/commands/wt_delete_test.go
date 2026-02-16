@@ -56,7 +56,7 @@ func TestWtDeleteCommand(t *testing.T) {
 			taskStatus:  models.TaskStatusClaimed,
 			hasWorktree: true,
 			wantErr:     true,
-			errContains: "Cannot delete worktree",
+			errContains: "cannot delete worktree",
 		},
 		{
 			name:        "cannot delete worktree for UNCLAIMED task",
@@ -64,7 +64,7 @@ func TestWtDeleteCommand(t *testing.T) {
 			taskStatus:  models.TaskStatusUnclaimed,
 			hasWorktree: true,
 			wantErr:     true,
-			errContains: "Cannot delete worktree",
+			errContains: "cannot delete worktree",
 		},
 		{
 			name:        "cannot delete worktree for READY_FOR_REVIEW task",
@@ -72,7 +72,7 @@ func TestWtDeleteCommand(t *testing.T) {
 			taskStatus:  models.TaskStatusReadyForReview,
 			hasWorktree: true,
 			wantErr:     true,
-			errContains: "Cannot delete worktree",
+			errContains: "cannot delete worktree",
 		},
 		{
 			name:        "task has no worktree",

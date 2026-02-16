@@ -277,3 +277,35 @@ func StringPtr(s string) *string {
 func TimePtr(t time.Time) *time.Time {
 	return &t
 }
+
+// RegisterTestAgent registers a test agent with standard defaults in the blackboard.
+// This eliminates the repeated 10-line models.Agent struct literal that appears
+// 17+ times across integration test files.
+//
+// Usage:
+//
+//	testhelpers.RegisterTestAgent(t, bb, "coder-1", "coder")
+//	testhelpers.RegisterTestAgent(t, bb, "reviewer-1", "reviewer")
+func RegisterTestAgent(t *testing.T, bb *db.Blackboard, agentID, role string) {
+	t.Helper()
+
+	now := time.Now().UTC()
+	leaseExpires := now.Add(30 * time.Minute)
+
+	err := bb.Modify(func(state *models.State) error {
+		state.Agents[agentID] = models.Agent{
+			Role:            role,
+			Status:          models.AgentStatusWaiting,
+			Heartbeat:       now,
+			LeaseExpires:    &leaseExpires,
+			CurrentTask:     nil,
+			Terminal:        "test",
+			IterationsTotal: 0,
+			ContextPercent:  0,
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to register agent %s: %v", agentID, err)
+	}
+}

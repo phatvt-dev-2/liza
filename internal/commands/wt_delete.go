@@ -49,7 +49,7 @@ func WtDeleteCommand(projectRoot, taskID string) error {
 		// Allow deletion but warn
 		fmt.Fprintf(os.Stderr, "Warning: Task %s is MERGED — worktree should already be cleaned\n", taskID)
 	default:
-		return fmt.Errorf("Cannot delete worktree for task %s (status: %s)\nDeletion only allowed for: BLOCKED, ABANDONED, SUPERSEDED, MERGED\nIf task is CLAIMED, the Coder may be actively working in this worktree.", taskID, task.Status)
+		return fmt.Errorf("cannot delete worktree for task %s (status: %s), deletion only allowed for: BLOCKED, ABANDONED, SUPERSEDED, MERGED", taskID, task.Status)
 	}
 
 	// Check if task has worktree

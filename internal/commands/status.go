@@ -237,8 +237,8 @@ func buildTaskStatus(state *models.State) taskStatus {
 	}
 
 	// Count work availability
-	ts.Claimable = countClaimableTasks(state)
-	ts.Reviewable = countReviewableTasks(state)
+	ts.Claimable = models.CountClaimableTasks(state)
+	ts.Reviewable = models.CountReviewableTasks(state)
 
 	return ts
 }
@@ -304,79 +304,6 @@ func buildPlannerStatus(state *models.State) plannerStatus {
 	return ps
 }
 
-// buildWorkQueuesStatus calculates work queue availability
-func buildWorkQueuesStatus(state *models.State) workQueuesStatus {
-	coderCount := countClaimableTasks(state)
-	reviewerCount := countReviewableTasks(state)
-
-	return workQueuesStatus{
-		Coder: queueStatus{
-			Available: coderCount,
-			Reason:    getCoderWorkDiagnostics(state),
-		},
-		Reviewer: queueStatus{
-			Available: reviewerCount,
-			Reason:    getReviewerWorkDiagnostics(state),
-		},
-	}
-}
-
-// countClaimableTasks counts tasks that coders can claim
-func countClaimableTasks(state *models.State) int {
-	mergedIDs := make(map[string]bool)
-	for _, task := range state.Tasks {
-		if task.Status == models.TaskStatusMerged {
-			mergedIDs[task.ID] = true
-		}
-	}
-
-	count := 0
-	for _, task := range state.Tasks {
-		if task.Status != models.TaskStatusUnclaimed &&
-			task.Status != models.TaskStatusRejected &&
-			task.Status != models.TaskStatusIntegrationFailed {
-			continue
-		}
-
-		allDepsSatisfied := true
-		for _, depID := range task.DependsOn {
-			if !mergedIDs[depID] {
-				allDepsSatisfied = false
-				break
-			}
-		}
-
-		if allDepsSatisfied {
-			count++
-		}
-	}
-
-	return count
-}
-
-// countReviewableTasks counts tasks that reviewers can review
-func countReviewableTasks(state *models.State) int {
-	now := time.Now().UTC()
-	count := 0
-
-	for _, task := range state.Tasks {
-		if task.Status != models.TaskStatusReadyForReview {
-			continue
-		}
-
-		if task.ReviewingBy == nil {
-			count++
-			continue
-		}
-
-		if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
-			count++
-		}
-	}
-
-	return count
-}
-
 // detectPlannerWakeTriggers detects conditions that should wake the planner
 func detectPlannerWakeTriggers(state *models.State) (trigger string, count int) {
 	if len(state.Tasks) == 0 {
@@ -426,100 +353,21 @@ func detectPlannerWakeTriggers(state *models.State) (trigger string, count int) 
 	return "NONE", 0
 }
 
-// getCoderWorkDiagnostics returns diagnostic message for coder work
-func getCoderWorkDiagnostics(state *models.State) string {
-	claimable := countClaimableTasks(state)
+// buildWorkQueuesStatus calculates work queue availability
+func buildWorkQueuesStatus(state *models.State) workQueuesStatus {
+	coderCount := models.CountClaimableTasks(state)
+	reviewerCount := models.CountReviewableTasks(state)
 
-	if claimable > 0 {
-		return fmt.Sprintf("Found %d claimable task(s)", claimable)
+	return workQueuesStatus{
+		Coder: queueStatus{
+			Available: coderCount,
+			Reason:    models.GetCoderWorkDiagnostics(state),
+		},
+		Reviewer: queueStatus{
+			Available: reviewerCount,
+			Reason:    models.GetReviewerWorkDiagnostics(state),
+		},
 	}
-
-	blockedByDeps := 0
-	inProgress := 0
-
-	mergedIDs := make(map[string]bool)
-	for _, task := range state.Tasks {
-		if task.Status == models.TaskStatusMerged {
-			mergedIDs[task.ID] = true
-		}
-	}
-
-	for _, task := range state.Tasks {
-		if task.Status == models.TaskStatusUnclaimed ||
-			task.Status == models.TaskStatusRejected ||
-			task.Status == models.TaskStatusIntegrationFailed {
-			hasUnsatisfiedDeps := false
-			for _, depID := range task.DependsOn {
-				if !mergedIDs[depID] {
-					hasUnsatisfiedDeps = true
-					break
-				}
-			}
-			if hasUnsatisfiedDeps {
-				blockedByDeps++
-			}
-		}
-
-		if task.Status == models.TaskStatusClaimed ||
-			task.Status == models.TaskStatusReadyForReview ||
-			task.Status == models.TaskStatusApproved {
-			inProgress++
-		}
-	}
-
-	parts := []string{"No claimable tasks"}
-	if blockedByDeps > 0 {
-		parts = append(parts, fmt.Sprintf("%d blocked by dependencies", blockedByDeps))
-	}
-	if inProgress > 0 {
-		parts = append(parts, fmt.Sprintf("%d in progress", inProgress))
-	}
-
-	return strings.Join(parts, "; ")
-}
-
-// getReviewerWorkDiagnostics returns diagnostic message for reviewer work
-// This is a copy of the internal agent function to avoid import cycles
-func getReviewerWorkDiagnostics(state *models.State) string {
-	now := time.Now().UTC()
-
-	unassigned := 0
-	expiredLeases := 0
-	activelyReviewing := 0
-
-	for _, task := range state.Tasks {
-		if task.Status == models.TaskStatusReadyForReview {
-			if task.ReviewingBy == nil {
-				unassigned++
-			} else if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
-				expiredLeases++
-			} else if task.ReviewLeaseExpires != nil {
-				activelyReviewing++
-			}
-		}
-	}
-
-	reviewable := unassigned + expiredLeases
-	if reviewable > 0 {
-		parts := []string{fmt.Sprintf("Found %d reviewable task(s)", reviewable)}
-		details := []string{}
-		if unassigned > 0 {
-			details = append(details, fmt.Sprintf("%d unassigned", unassigned))
-		}
-		if expiredLeases > 0 {
-			details = append(details, fmt.Sprintf("%d with expired leases", expiredLeases))
-		}
-		if len(details) > 0 {
-			parts = append(parts, strings.Join(details, ", "))
-		}
-		return strings.Join(parts, ": ")
-	}
-
-	if activelyReviewing > 0 {
-		return fmt.Sprintf("No reviewable tasks; %d actively being reviewed", activelyReviewing)
-	}
-
-	return "No reviewable tasks"
 }
 
 // getProcessStatus checks if a process is running

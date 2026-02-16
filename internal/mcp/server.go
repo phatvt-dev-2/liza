@@ -89,68 +89,52 @@ func (s *Server) HandleRequest(req *protocol.JSONRPCRequest) *protocol.JSONRPCRe
 	case "resources/read":
 		return s.handleResourceRead(req)
 	default:
-		return &protocol.JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Error:   protocol.NewMethodNotFoundError(req.Method),
-		}
+		return rpcError(req, protocol.NewMethodNotFoundError(req.Method))
 	}
+}
+
+// rpcResult builds a successful JSON-RPC response.
+func rpcResult(req *protocol.JSONRPCRequest, result any) *protocol.JSONRPCResponse {
+	return &protocol.JSONRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: result}
+}
+
+// rpcError builds an error JSON-RPC response.
+func rpcError(req *protocol.JSONRPCRequest, jerr *protocol.JSONRPCError) *protocol.JSONRPCResponse {
+	return &protocol.JSONRPCResponse{JSONRPC: "2.0", ID: req.ID, Error: jerr}
 }
 
 // handleInitialize handles the initialize request
 func (s *Server) handleInitialize(req *protocol.JSONRPCRequest) *protocol.JSONRPCResponse {
-	return &protocol.JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result: map[string]any{
-			"protocolVersion": "2024-11-05",
-			"capabilities":    s.GetCapabilities(),
-			"serverInfo": map[string]any{
-				"name":    "liza-mcp",
-				"version": Version,
-			},
+	return rpcResult(req, map[string]any{
+		"protocolVersion": "2024-11-05",
+		"capabilities":    s.GetCapabilities(),
+		"serverInfo": map[string]any{
+			"name":    "liza-mcp",
+			"version": Version,
 		},
-	}
+	})
 }
 
 // handleToolsList handles the tools/list request
 func (s *Server) handleToolsList(req *protocol.JSONRPCRequest) *protocol.JSONRPCResponse {
-	return &protocol.JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result: map[string]any{
-			"tools": s.ListTools(),
-		},
-	}
+	return rpcResult(req, map[string]any{"tools": s.ListTools()})
 }
 
 // handleToolCall handles the tools/call request
 func (s *Server) handleToolCall(req *protocol.JSONRPCRequest) *protocol.JSONRPCResponse {
 	params, ok := req.Params.(map[string]any)
 	if !ok {
-		return &protocol.JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Error:   protocol.NewInvalidParamsError("params must be an object"),
-		}
+		return rpcError(req, protocol.NewInvalidParamsError("params must be an object"))
 	}
 
 	toolName, ok := params["name"].(string)
 	if !ok {
-		return &protocol.JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Error:   protocol.NewInvalidParamsError("name must be a string"),
-		}
+		return rpcError(req, protocol.NewInvalidParamsError("name must be a string"))
 	}
 
 	handler, ok := s.handlers[toolName]
 	if !ok {
-		return &protocol.JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Error:   protocol.NewError(protocol.NotFound, "Tool not found: "+toolName, nil),
-		}
+		return rpcError(req, protocol.NewError(protocol.NotFound, "Tool not found: "+toolName, nil))
 	}
 
 	// Extract arguments
@@ -162,66 +146,36 @@ func (s *Server) handleToolCall(req *protocol.JSONRPCRequest) *protocol.JSONRPCR
 	// Call handler
 	result, err := handler(args)
 	if err != nil {
-		return &protocol.JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Error:   s.classifyError(err),
-		}
+		return rpcError(req, s.classifyError(err))
 	}
 
-	return &protocol.JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result:  result,
-	}
+	return rpcResult(req, result)
 }
 
 // handleResourcesList handles the resources/list request
 func (s *Server) handleResourcesList(req *protocol.JSONRPCRequest) *protocol.JSONRPCResponse {
-	return &protocol.JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result: map[string]any{
-			"resources": s.ListResources(),
-		},
-	}
+	return rpcResult(req, map[string]any{"resources": s.ListResources()})
 }
 
 // handleResourceRead handles the resources/read request
 func (s *Server) handleResourceRead(req *protocol.JSONRPCRequest) *protocol.JSONRPCResponse {
 	params, ok := req.Params.(map[string]any)
 	if !ok {
-		return &protocol.JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Error:   protocol.NewInvalidParamsError("params must be an object"),
-		}
+		return rpcError(req, protocol.NewInvalidParamsError("params must be an object"))
 	}
 
 	uri, ok := params["uri"].(string)
 	if !ok {
-		return &protocol.JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Error:   protocol.NewInvalidParamsError("uri must be a string"),
-		}
+		return rpcError(req, protocol.NewInvalidParamsError("uri must be a string"))
 	}
 
 	// Handle resource read (will implement in handlers.go)
 	result, err := s.handleResourceReadInternal(uri)
 	if err != nil {
-		return &protocol.JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Error:   s.classifyError(err),
-		}
+		return rpcError(req, s.classifyError(err))
 	}
 
-	return &protocol.JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result:  result,
-	}
+	return rpcResult(req, result)
 }
 
 // classifyError converts Go errors to MCP error codes.

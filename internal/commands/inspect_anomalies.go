@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
@@ -138,24 +137,4 @@ func formatAnomaliesTable(anomalies []anomalyInfo) string {
 	}
 
 	return formatTable(headers, rows)
-}
-
-// formatAnomalyValue formats a single anomaly as key-value pairs
-func formatAnomalyValue(anomaly anomalyInfo) string {
-	var result strings.Builder
-
-	fmt.Fprintf(&result, "Type: %s\n", anomaly.Type)
-	fmt.Fprintf(&result, "Task: %s\n", anomaly.Task)
-	fmt.Fprintf(&result, "Reporter: %s\n", anomaly.Reporter)
-	fmt.Fprintf(&result, "Timestamp: %s\n", anomaly.Timestamp.Format("2006-01-02 15:04:05"))
-	fmt.Fprintf(&result, "Age: %s ago\n", anomaly.Age)
-
-	if len(anomaly.Details) > 0 {
-		result.WriteString("Details:\n")
-		for key, value := range anomaly.Details {
-			fmt.Fprintf(&result, "  %s: %v\n", key, value)
-		}
-	}
-
-	return result.String()
 }
