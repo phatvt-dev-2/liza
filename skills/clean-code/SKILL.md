@@ -31,6 +31,8 @@ If exclusion is uncertain, ask. The default is to skip, not to clean.
 
 Before any transformation:
 
+0. **Language detection** — detect project language from staged file extensions, load the corresponding language file from `skills/clean-code/languages/<lang>.md`. This populates `$TEST_CMD`, `$COVERAGE_CMD`, and all other Tool Map variables used below. See Language-Specific Patterns for the full contract. If mixed languages are staged, see the mixed-language rule in that section.
+
 1. **Staged changes exist**
 ```bash
    git diff --cached --quiet && echo "Nothing staged" && exit 1
@@ -38,12 +40,12 @@ Before any transformation:
 
 2. **Tests pass**
 ```bash
-   pytest -q || exit 1
+   $TEST_CMD || exit 1
 ```
 
 3. **Coverage gate** (tiered by transformation risk)
-  - Run: `pytest --cov --cov-report=xml && diff-cover coverage.xml --compare-branch=HEAD`
-  - `diff-cover` maps coverage to staged hunks specifically
+  - Run: `$COVERAGE_CMD && diff-cover $COVERAGE_REPORT --compare-branch=HEAD`
+  - `diff-cover` maps coverage to staged hunks specifically (language-agnostic — works with any Cobertura XML)
 
   | Transformation Risk | Examples | Coverage Threshold |
   |---------------------|----------|--------------------|
@@ -53,7 +55,7 @@ Before any transformation:
 
   - Threshold applies to the **highest-risk transformation planned** — if any structural change is planned, the structural threshold applies to the whole session
   - **STOP if below threshold** — report uncovered lines, do not proceed
-  - If tools unavailable (`pytest-cov`, `diff-cover`): warn, require explicit waiver to proceed without coverage data
+  - If tools unavailable (coverage tool or `diff-cover`): warn, require explicit waiver to proceed without coverage data
 
 4. **Diff size guard**
   - If staged diff >500 lines: require scope reduction or switch to Full-file mode with chunking strategy
@@ -117,22 +119,17 @@ Restructuring triggers:
 - Changing the import hierarchy
 
 Restructuring requires:
-- Map the full import graph of affected modules before and after
-- Verify no circular dependencies introduced (`import-linter`, `pydeps`, or manual: attempt import from a clean Python process)
-- Check test discovery still works (test runners resolve imports at collection time)
+- Map the full import/dependency graph of affected modules before and after
+- Verify imports are clean: run `$IMPORT_CHECKER` (unused imports, missing imports, formatting)
+- Verify no circular dependencies introduced: run `$CYCLE_CHECKER` or confirm the project builds cleanly after the move
+- Check test discovery still works (test runners resolve imports/packages at collection time)
 - All consumers of moved symbols must be updated in the same batch
 
 **Performance-sensitive transformations:**
 
 Flag any transformation touching code that is in a hot loop, on a latency-critical path, or processing large data structures.
 
-| Transformation | Potential perf impact |
-|---------------|---------------------|
-| Extract function from hot loop | Call overhead per iteration |
-| List comprehension → generator | Lower memory, but recomputes; not always a win |
-| `dict` → `dataclass` | Attribute access faster with `__slots__`; construction slower than dict literal. Net depends on read/write ratio. |
-| String concat → f-string | Generally faster — but watch `.format()` in tight loops |
-| Early return refactoring | Negligible |
+Extracting a function from a hot loop adds call overhead per iteration — flag it in the batch description. See language file for language-specific performance considerations.
 
 Action: If transformation touches perf-sensitive code, note it in batch description. Not a blocker — but the reviewer should be aware.
 
@@ -163,8 +160,8 @@ For each batch:
 3. **Apply** directly to files
 4. **Run validation**
    a. Run tests
-   b. Run type checker if project uses one (`mypy`, `pyright`): `mypy <touched files>`
-   c. Verify imports are consistent (extractions often leave stale imports — pre-commit hooks like `isort`/`autoflake` may catch this, but verify explicitly)
+   b. Run `$TYPE_CHECKER` on touched files (if project uses type checking)
+   c. Verify imports are consistent (extractions often leave stale imports — pre-commit hooks may catch this, but verify explicitly)
   - ✓ All pass → **snapshot batch**, continue to next batch
   - ✗ Fail → **STOP**, show failure, ask user:
 ```
@@ -229,10 +226,7 @@ After all batches complete, run pre-commit hooks on touched files:
    git diff --cached --name-only -z | xargs -0 pre-commit run --files
 ```
 
-If project uses type checking, also run:
-```bash
-   git diff --cached --name-only -z | xargs -0 mypy
-```
+If project uses type checking, also run `$TYPE_CHECKER` from the language file's Tool Map on touched files.
 
 **Outcomes:**
 
@@ -325,22 +319,24 @@ Equal priority — apply contextually.
 | **KISS** | Complex solution where simple one works | Simplify: fewer branches, less indirection, obvious over clever |
 | **No nested ternaries** | Chained `? :` operators | Use if/else chain or switch statement |
 | **Clarity over brevity** | Dense one-liners, clever compaction | Prefer explicit form; longer can be cleaner |
-| **Dead code removal** | Unused imports, functions, variables, unreachable branches | Delete (use `vulture` for detection; false positives common — require explicit approval per item, do not batch delete) |
+| **Dead code removal** | Unused imports, functions, variables, unreachable branches | Delete (use `$DEAD_CODE_TOOL` from language file; false positives common — require explicit approval per item, do not batch delete) |
 
-## Python-Specific Patterns
+## Language-Specific Patterns
 
-| Signal | Transformation |
-|--------|----------------|
-| Raw `dict` for structured data | Use `dataclass` or `TypedDict` |
-| `os.path` manipulation | Use `pathlib.Path` |
-| Manual resource cleanup (`open`/`close`) | Use context managers (`with`) |
-| List comprehension not materialized | Use generator expression |
-| Missing `__slots__` on data-heavy classes | Add `__slots__` for memory efficiency |
-| `isinstance` chains | Consider `match`/`case` (Python ≥3.10) or dispatch |
-| Mutable default arguments (`def f(x=[])`) | Use `None` sentinel + assignment in body |
-| Bare `except:` or `except Exception:` | Catch specific exceptions |
-| String formatting with `%` or `.format()` | Use f-strings |
-| Manual `__init__` + `__repr__` + `__eq__` boilerplate | Use `@dataclass` |
+Language file is loaded at Pre-flight step 0 (before tests or coverage run).
+The same file is reused throughout Analysis and Transformation phases.
+
+The language file provides:
+1. **Tool Map** — concrete commands for `$TEST_CMD`, `$COVERAGE_CMD`, `$COVERAGE_REPORT`, `$TYPE_CHECKER`, `$DEAD_CODE_TOOL`, `$IMPORT_CHECKER`, `$CYCLE_CHECKER`. `$COVERAGE_CMD` must produce a Cobertura-format XML report at `$COVERAGE_REPORT` for `diff-cover` compatibility. Include a fallback note if the Cobertura bridge requires an extra tool.
+2. **Performance Patterns** — language-specific perf-sensitive transformations
+3. **Idiom Patterns** — language-specific signals and transformations (extends the universal Principle Catalog)
+
+If no language file exists: use only the universal Principle Catalog and warn:
+`"⚠️ No language-specific patterns for [lang] — universal principles only."`
+
+**Mixed-language staged diffs:** If staged files span multiple languages, resolve per-batch — each batch targets one language and uses that language's profile. Pre-flight uses the majority language's `$TEST_CMD`/`$COVERAGE_CMD`; if no clear majority, run each language's test suite.
+
+Discover available profiles with `ls skills/clean-code/languages/`.
 
 ## Principle Conflicts
 
