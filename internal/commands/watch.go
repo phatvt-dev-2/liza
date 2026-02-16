@@ -13,29 +13,18 @@ import (
 )
 
 const (
-	// DefaultCheckInterval is how often to run checks
-	DefaultCheckInterval = 10 * time.Second
-	// LeaseGracePeriod is the grace period after lease expiry before alerting
-	LeaseGracePeriod = 120 * time.Second
-	// StallThreshold is when to alert about no log activity
-	StallThreshold = 30 * time.Minute
-	// StaleDraftThreshold is when to alert about stale drafts
-	StaleDraftThreshold = 30 * time.Minute
-	// CheckpointStaleThreshold is first warning for stale checkpoint
-	CheckpointStaleThreshold = 30 * time.Minute
-	// CheckpointStuckThreshold is second warning for stuck checkpoint
-	CheckpointStuckThreshold = 2 * time.Hour
-	// CheckpointAbandonedThreshold is critical warning for abandoned checkpoint
+	DefaultCheckInterval         = 10 * time.Second
+	LeaseGracePeriod             = 120 * time.Second
+	StallThreshold               = 30 * time.Minute
+	StaleDraftThreshold          = 30 * time.Minute
+	CheckpointStaleThreshold     = 30 * time.Minute
+	CheckpointStuckThreshold     = 2 * time.Hour
 	CheckpointAbandonedThreshold = 8 * time.Hour
-	// PauseStaleThreshold is first warning for stale pause
-	PauseStaleThreshold = 30 * time.Minute
-	// PauseForgottenThreshold is critical warning for forgotten pause
-	PauseForgottenThreshold = 2 * time.Hour
-	// OrphanedGracePeriod is grace period before alerting about orphaned rejected tasks
-	OrphanedGracePeriod = 30 * time.Second
+	PauseStaleThreshold          = 30 * time.Minute
+	PauseForgottenThreshold      = 2 * time.Hour
+	OrphanedGracePeriod          = 30 * time.Second
 )
 
-// alertLevel represents the severity of an alert
 type alertLevel string
 
 const (
@@ -43,7 +32,6 @@ const (
 	alertLevelCritical alertLevel = "🚨"
 )
 
-// Alert represents a monitoring alert
 type alert struct {
 	Timestamp time.Time
 	Level     alertLevel
@@ -51,7 +39,6 @@ type alert struct {
 	Message   string
 }
 
-// String formats the alert for display
 func (a alert) String() string {
 	return fmt.Sprintf("[%s] %s %s: %s",
 		a.Timestamp.UTC().Format(time.RFC3339),
@@ -60,7 +47,6 @@ func (a alert) String() string {
 		a.Message)
 }
 
-// WatchConfig configures the watch command
 type WatchConfig struct {
 	ProjectRoot   string
 	CheckInterval time.Duration
@@ -69,7 +55,6 @@ type WatchConfig struct {
 	StateCache map[string]time.Time
 }
 
-// WatchCommand runs the monitoring daemon
 func WatchCommand(ctx context.Context, config WatchConfig) error {
 	if config.CheckInterval == 0 {
 		config.CheckInterval = DefaultCheckInterval
@@ -82,9 +67,6 @@ func WatchCommand(ctx context.Context, config WatchConfig) error {
 		config.StateCache = make(map[string]time.Time)
 	}
 
-	statePath := lizaPaths.StatePath()
-	logPath := lizaPaths.LogPath()
-
 	fmt.Printf("[%s] Watching %s\n",
 		time.Now().UTC().Format("15:04:05"),
 		lizaPaths.LizaDir())
@@ -93,7 +75,7 @@ func WatchCommand(ctx context.Context, config WatchConfig) error {
 	defer ticker.Stop()
 
 	// Run checks immediately on start
-	if err := runChecks(ctx, config, statePath, logPath); err != nil {
+	if err := runChecks(ctx, config); err != nil {
 		fmt.Fprintf(os.Stderr, "Check error: %v\n", err)
 	}
 
@@ -102,44 +84,47 @@ func WatchCommand(ctx context.Context, config WatchConfig) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			if err := runChecks(ctx, config, statePath, logPath); err != nil {
+			if err := runChecks(ctx, config); err != nil {
 				fmt.Fprintf(os.Stderr, "Check error: %v\n", err)
 			}
 		}
 	}
 }
 
-// runChecks executes all monitoring checks
-func runChecks(_ context.Context, config WatchConfig, statePath, logPath string) error {
-	// Check if state file exists
+func runChecks(_ context.Context, config WatchConfig) error {
+	lizaPaths := paths.New(config.ProjectRoot)
+	statePath := lizaPaths.StatePath()
+
 	if _, err := os.Stat(statePath); os.IsNotExist(err) {
-		return nil // Skip checks if no state yet
+		return nil
 	}
 
-	// Read state
 	bb := db.New(statePath)
 	state, err := bb.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Run all checks
+	logPath := lizaPaths.LogPath()
+	checks := []func() []alert{
+		func() []alert { return checkExpiredLeases(state) },
+		func() []alert { return checkBlockedTasks(state, config.StateCache) },
+		func() []alert { return checkOrphanedRejected(state, config.StateCache) },
+		func() []alert { return checkReviewLoops(state) },
+		func() []alert { return checkIntegrationFailures(state) },
+		func() []alert { return checkHypothesisExhaustion(state) },
+		func() []alert { return checkReassigned(state, config.StateCache) },
+		func() []alert { return checkApproachingLimits(state) },
+		func() []alert { return checkStalled(logPath, config.StateCache) },
+		func() []alert { return checkStaleDrafts(state) },
+		func() []alert { return checkImmediateDiscoveries(state) },
+	}
+
 	var alerts []alert
+	for _, check := range checks {
+		alerts = append(alerts, check()...)
+	}
 
-	alerts = append(alerts, checkExpiredLeases(state)...)
-	alerts = append(alerts, checkBlockedTasks(state, config.StateCache)...)
-	alerts = append(alerts, checkOrphanedRejected(state, config.StateCache)...)
-	alerts = append(alerts, checkReviewLoops(state)...)
-	alerts = append(alerts, checkIntegrationFailures(state)...)
-	alerts = append(alerts, checkHypothesisExhaustion(state)...)
-	alerts = append(alerts, checkReassigned(state, config.StateCache)...)
-	alerts = append(alerts, checkApproachingLimits(state)...)
-	alerts = append(alerts, checkStalled(logPath, config.StateCache)...)
-	alerts = append(alerts, checkStaleDrafts(state)...)
-	alerts = append(alerts, checkImmediateDiscoveries(state)...)
-
-	// Validate state by calling ValidateCommand
-	// Use the state path directly for validation
 	if err := ValidateCommand(statePath, true); err != nil {
 		alerts = append(alerts, alert{
 			Timestamp: time.Now().UTC(),
@@ -149,18 +134,16 @@ func runChecks(_ context.Context, config WatchConfig, statePath, logPath string)
 		})
 	}
 
-	// Write alerts
-	for _, alert := range alerts {
-		if err := writeAlert(config.AlertsLog, alert); err != nil {
+	for _, a := range alerts {
+		if err := writeAlert(config.AlertsLog, a); err != nil {
 			return fmt.Errorf("failed to write alert: %w", err)
 		}
-		fmt.Fprintln(os.Stderr, alert.String())
+		fmt.Fprintln(os.Stderr, a.String())
 	}
 
 	return nil
 }
 
-// checkExpiredLeases checks for expired coder and reviewer leases
 func checkExpiredLeases(state *models.State) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -208,7 +191,6 @@ func checkExpiredLeases(state *models.State) []alert {
 	return alerts
 }
 
-// checkBlockedTasks checks for tasks in BLOCKED status
 func checkBlockedTasks(state *models.State, cache map[string]time.Time) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -237,7 +219,6 @@ func checkBlockedTasks(state *models.State, cache map[string]time.Time) []alert 
 	return alerts
 }
 
-// checkOrphanedRejected checks for REJECTED tasks assigned to inactive agents
 func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -281,7 +262,6 @@ func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []al
 	return alerts
 }
 
-// checkReviewLoops checks for tasks at or above the review cycle limit
 func checkReviewLoops(state *models.State) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -300,7 +280,6 @@ func checkReviewLoops(state *models.State) []alert {
 	return alerts
 }
 
-// checkIntegrationFailures checks for tasks in INTEGRATION_FAILED status
 func checkIntegrationFailures(state *models.State) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -319,7 +298,6 @@ func checkIntegrationFailures(state *models.State) []alert {
 	return alerts
 }
 
-// checkHypothesisExhaustion checks for tasks with multiple failed coders
 func checkHypothesisExhaustion(state *models.State) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -338,7 +316,6 @@ func checkHypothesisExhaustion(state *models.State) []alert {
 	return alerts
 }
 
-// checkReassigned checks for tasks reassigned to different coders
 func checkReassigned(state *models.State, cache map[string]time.Time) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -378,7 +355,6 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []alert {
 	return alerts
 }
 
-// checkApproachingLimits checks for tasks approaching iteration or review cycle limits
 func checkApproachingLimits(state *models.State) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -419,8 +395,7 @@ func checkApproachingLimits(state *models.State) []alert {
 	return alerts
 }
 
-// checkStalled checks for no log activity in the last 30 minutes
-// Throttles alerts to once every 5 minutes to reduce log noise
+// Throttles stall alerts to once every 5 minutes.
 func checkStalled(logPath string, cache map[string]time.Time) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -483,7 +458,6 @@ func checkStalled(logPath string, cache map[string]time.Time) []alert {
 	return alerts
 }
 
-// checkStaleDrafts checks for DRAFT tasks older than 30 minutes
 func checkStaleDrafts(state *models.State) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -508,7 +482,6 @@ func checkStaleDrafts(state *models.State) []alert {
 	return alerts
 }
 
-// checkImmediateDiscoveries checks for immediate urgency discoveries not converted to tasks
 func checkImmediateDiscoveries(state *models.State) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
@@ -527,15 +500,14 @@ func checkImmediateDiscoveries(state *models.State) []alert {
 	return alerts
 }
 
-// writeAlert appends an alert to the alerts log file
-func writeAlert(alertsLog string, alert alert) error {
+func writeAlert(alertsLog string, a alert) error {
 	f, err := os.OpenFile(alertsLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open alerts log: %w", err)
 	}
 	defer f.Close()
 
-	_, err = fmt.Fprintln(f, alert.String())
+	_, err = fmt.Fprintln(f, a.String())
 	if err != nil {
 		return fmt.Errorf("failed to write alert: %w", err)
 	}
