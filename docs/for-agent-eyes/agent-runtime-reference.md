@@ -27,13 +27,13 @@ All operations use the `liza` binary (assumed in PATH).
 | `liza wt-delete <task-id>` | Delete worktree | Planner |
 | `liza status` | Show system status | All |
 
-> **Note:** `liza handoff` is pending Go implementation. Agents write handoff notes directly to state.yaml for now.
+> **Blackboard is read-only.** Agents MUST NOT edit `state.yaml` directly. All state mutations go through `liza` CLI commands or MCP tools. Direct edits bypass validation and produce invalid states.
 
 ---
 
 ## Blackboard Field Reference
 
-Location: `.liza/state.yaml`
+Location: `.liza/state.yaml` (read via `liza get`, mutated via CLI/MCP tools only)
 
 ### Task Fields
 
@@ -41,7 +41,7 @@ Location: `.liza/state.yaml`
 |-------|------|--------|-------------|
 | `id` | string | Planner | Unique task identifier (kebab-case) |
 | `description` | string | Planner | What to build (1-2 sentences) |
-| `status` | enum | Various | Current state (see MAM Task State Machine) |
+| `status` | enum | CLI/MCP | Current state (see MAM Task State Machine) |
 | `priority` | int | Planner | 1 (highest) to 5 (lowest) |
 | `spec_ref` | string | Planner | Path to spec, optionally with `#anchor` |
 | `done_when` | string | Planner | Falsifiable completion criteria |
