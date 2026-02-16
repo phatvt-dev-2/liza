@@ -566,6 +566,75 @@ func TestHandleSubmitForReview(t *testing.T) {
 	if task.Status != models.TaskStatusReadyForReview {
 		t.Errorf("Expected status READY_FOR_REVIEW, got %s", task.Status)
 	}
+
+	agent := state.Agents["coder-1"]
+	if agent.Status != models.AgentStatusWaiting {
+		t.Errorf("Expected coder status WAITING, got %s", agent.Status)
+	}
+}
+
+// TestHandleHandoff verifies liza_handoff tool
+func TestHandleHandoff(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Tasks[0].Status = models.TaskStatusClaimed
+		assignedTo := "coder-1"
+		state.Tasks[0].AssignedTo = &assignedTo
+		state.Agents["coder-1"] = models.Agent{
+			Role:      "coder",
+			Status:    models.AgentStatusWorking,
+			Heartbeat: time.Now().UTC(),
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	result, err := server.handleHandoff(map[string]any{
+		"task_id":     "task-1",
+		"summary":     "Implemented parser and core validation",
+		"next_action": "Add edge-case tests for malformed payloads",
+		"agent_id":    "coder-1",
+	})
+	if err != nil {
+		t.Fatalf("handleHandoff failed: %v", err)
+	}
+
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.Tasks[0]
+	if !task.HandoffPending {
+		t.Fatal("expected task handoff_pending to be true")
+	}
+	note, ok := state.Handoff["task-1"]
+	if !ok {
+		t.Fatal("expected handoff note for task-1")
+	}
+	if note.Summary == "" || note.NextAction == "" {
+		t.Fatal("expected handoff note summary and next_action to be set")
+	}
+	agent := state.Agents["coder-1"]
+	if agent.Status != models.AgentStatusHandoff {
+		t.Fatalf("expected agent status HANDOFF, got %s", agent.Status)
+	}
 }
 
 // TestHandleSubmitVerdict verifies liza_submit_verdict tool
@@ -577,6 +646,7 @@ func TestHandleSubmitVerdict(t *testing.T) {
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
+		now := time.Now().UTC()
 		state.Tasks[0].Status = models.TaskStatusReadyForReview
 		assignedTo := "coder-1"
 		state.Tasks[0].AssignedTo = &assignedTo
@@ -584,6 +654,15 @@ func TestHandleSubmitVerdict(t *testing.T) {
 		state.Tasks[0].ReviewCommit = &reviewCommit
 		worktree := ".worktrees/task-1"
 		state.Tasks[0].Worktree = &worktree
+		currentTask := "task-1"
+		reviewLease := now.Add(30 * time.Minute)
+		state.Agents["reviewer-1"] = models.Agent{
+			Role:         "code-reviewer",
+			Status:       models.AgentStatusReviewing,
+			CurrentTask:  &currentTask,
+			LeaseExpires: &reviewLease,
+			Heartbeat:    now,
+		}
 		return nil
 	})
 	if err != nil {
@@ -621,6 +700,11 @@ func TestHandleSubmitVerdict(t *testing.T) {
 	task := state.Tasks[0]
 	if task.Status != models.TaskStatusApproved {
 		t.Errorf("Expected status APPROVED, got %s", task.Status)
+	}
+
+	agent := state.Agents["reviewer-1"]
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Expected reviewer status IDLE, got %s", agent.Status)
 	}
 }
 

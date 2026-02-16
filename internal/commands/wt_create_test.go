@@ -165,7 +165,7 @@ func TestWtCreateCommand(t *testing.T) {
 
 				// Set base_commit in state since worktree already exists
 				gitWrapper := git.New(tmpDir)
-				baseCommit, err := gitWrapper.GetCommitSHA("integration", true)
+				baseCommit, err := gitWrapper.GetCommitSHA("integration")
 				if err != nil {
 					t.Fatalf("Failed to get base commit: %v", err)
 				}
@@ -357,7 +357,7 @@ func TestWtCreateCommandIntegration(t *testing.T) {
 		t.Fatalf("Failed to get integration SHA: %v", err)
 	}
 
-	if !strings.HasPrefix(integrationSHA, *task.BaseCommit) {
+	if integrationSHA != *task.BaseCommit {
 		t.Errorf("base_commit %s doesn't match integration branch %s", *task.BaseCommit, integrationSHA)
 	}
 }

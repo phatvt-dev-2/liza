@@ -30,7 +30,7 @@ __pycache__/
 # Go build artifacts
 internal/embedded/contracts/
 internal/embedded/skills/
-internal/embedded/specs/
+internal/embedded/docs/
 internal/embedded/claude-settings.json
 internal/embedded/mcp.json
 /liza

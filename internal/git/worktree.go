@@ -103,8 +103,8 @@ func (g *Git) CheckoutBranch(branch string) error {
 	return err
 }
 
-// CreateWorktree creates a worktree for the given task from the specified branch
-// Returns the base commit (short SHA) for drift tracking
+// CreateWorktree creates a worktree for the given task from the specified branch.
+// Returns the base commit (full SHA) for drift tracking.
 func (g *Git) CreateWorktree(taskID, fromBranch string) (string, error) {
 	if err := paths.ValidateTaskID(taskID); err != nil {
 		return "", fmt.Errorf("invalid task ID: %w", err)
@@ -125,7 +125,7 @@ func (g *Git) CreateWorktree(taskID, fromBranch string) (string, error) {
 	}
 
 	// Get base commit before creating worktree
-	baseCommit, err := g.GetCommitSHA(fromBranch, true)
+	baseCommit, err := g.GetCommitSHA(fromBranch)
 	if err != nil {
 		return "", fmt.Errorf("failed to get base commit: %w", err)
 	}

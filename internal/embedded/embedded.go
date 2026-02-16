@@ -1,5 +1,5 @@
-// Package embedded provides embedded resource files (contracts, skills, specs)
-// that are written to project .liza/ directory during initialization.
+// Package embedded provides embedded resource files (contracts, skills, runtime reference)
+// used during workspace initialization.
 package embedded
 
 import (
@@ -28,8 +28,8 @@ var contractsFS embed.FS
 //go:embed skills/*/SKILL.md
 var skillsFS embed.FS
 
-//go:embed specs
-var specsFS embed.FS
+//go:embed "docs/for-agent-eyes/agent-runtime-reference.md"
+var runtimeReferenceContent []byte
 
 //go:embed "claude-settings.json"
 var claudeSettingsContent []byte
@@ -37,8 +37,9 @@ var claudeSettingsContent []byte
 //go:embed "mcp.json"
 var mcpSettingsContent []byte
 
-// WriteAllFiles writes all embedded files to the project's .liza directory.
-// Files are written to contracts/, skills/, and specs/ subdirectories.
+// WriteAllFiles writes embedded files for initialization.
+// Contracts and skills are written to .liza/, and the runtime reference
+// is written to docs/for-agent-eyes/ in the project root.
 // Each file is prepended with YAML frontmatter containing version metadata.
 func WriteAllFiles(projectRoot string) error {
 	lizaPaths := paths.New(projectRoot)
@@ -49,8 +50,10 @@ func WriteAllFiles(projectRoot string) error {
 	if err := writeEmbeddedFS(skillsFS, lizaPaths.SkillsDir()); err != nil {
 		return fmt.Errorf("failed to write skills: %w", err)
 	}
-	if err := writeEmbeddedFS(specsFS, lizaPaths.SpecsDir()); err != nil {
-		return fmt.Errorf("failed to write specs: %w", err)
+
+	runtimeRefPath := filepath.Join(projectRoot, "docs", "for-agent-eyes", "agent-runtime-reference.md")
+	if err := writeEmbeddedFile(runtimeReferenceContent, runtimeRefPath); err != nil {
+		return fmt.Errorf("failed to write runtime reference: %w", err)
 	}
 
 	return nil
@@ -99,6 +102,21 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string) error {
 	})
 }
 
+// writeEmbeddedFile writes a single embedded file to the target path.
+func writeEmbeddedFile(content []byte, targetPath string) error {
+	contentWithFrontmatter := prependFrontmatter(content)
+
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return fmt.Errorf("failed to create directory for %s: %w", targetPath, err)
+	}
+
+	if err := os.WriteFile(targetPath, contentWithFrontmatter, 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", targetPath, err)
+	}
+
+	return nil
+}
+
 // prependFrontmatter adds YAML frontmatter with version metadata to file content.
 func prependFrontmatter(content []byte) []byte {
 	fm := frontmatter()
@@ -119,13 +137,14 @@ liza_build_date: "%s"
 // ListEmbeddedFiles returns a list of all embedded file paths (for testing).
 func ListEmbeddedFiles() ([]string, error) {
 	var files []string
-	for _, fsys := range []embed.FS{contractsFS, skillsFS, specsFS} {
+	for _, fsys := range []embed.FS{contractsFS, skillsFS} {
 		collected, err := collectFiles(fsys)
 		if err != nil {
 			return nil, err
 		}
 		files = append(files, collected...)
 	}
+	files = append(files, "docs/for-agent-eyes/agent-runtime-reference.md")
 	return files, nil
 }
 

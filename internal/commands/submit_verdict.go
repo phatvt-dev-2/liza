@@ -104,6 +104,7 @@ func SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID string) 
 
 		// Update reviewer agent status: no longer actively reviewing
 		if agent, ok := state.Agents[agentID]; ok {
+			agent.Status = models.AgentStatusIdle
 			agent.CurrentTask = nil
 			agent.LeaseExpires = nil
 			state.Agents[agentID] = agent

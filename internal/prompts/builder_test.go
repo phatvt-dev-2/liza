@@ -31,26 +31,26 @@ func TestBuildBasePrompt(t *testing.T) {
 				"You are a Liza code-coder agent",
 				"Agent ID: coder-1",
 				"ROLE: code-coder",
-				"SPECS_LOCATION: /project/specs",
+				"PROJECT_SPECS: /project/specs",
 				"PROJECT: /project",
 				"BLACKBOARD: /project/.liza/state.yaml",
 				"GOAL: Build a web API",
 				"APPROVED: use MCP tools with escalated permissions",
-				"Read these specs before acting",
-				"- Role definition: /project/specs/architecture/roles.md (section: Code Coder)",
-				"- Task lifecycle: /project/specs/protocols/task-lifecycle.md",
-				"- Blackboard schema: /project/specs/architecture/blackboard-schema.md",
-				"- State machines: /project/specs/architecture/state-machines.md",
+				"Read before acting",
+				"- Agent runtime reference: /project/docs/for-agent-eyes/agent-runtime-reference.md (section: Code Coder)",
 				"You have FULL read access to .liza/ directory for specs and logs",
 				"For READING state: use liza_get MCP tool",
 				"For MODIFYING state: use role-specific MCP tools",
-				"State modification MUST go through MCP tools",
+				"Prefer MCP tools for atomicity and validation",
+				"If a required operation has no MCP tool yet",
 				"Execute all commands immediately",
 				"DO NOT ask \"should I proceed?\"",
 				"MCP TOOLS AVAILABLE:",
 				"liza_add_task",
 				"liza_submit_for_review",
+				"liza_handoff",
 				"liza_submit_verdict",
+				"liza_mark_blocked",
 				"liza_get",
 				"liza_status",
 				"liza_validate",
@@ -59,7 +59,7 @@ func TestBuildBasePrompt(t *testing.T) {
 				"FORBIDDEN:",
 				"Do NOT attempt to claim tasks",
 				"FIRST ACTIONS:",
-				"Read your role definition from roles.md",
+				"Read the agent runtime reference (your role section)",
 				"Read the current blackboard state",
 				"Read your assigned task's FULL entry",
 				"Read the goal spec: specs/vision.md",
@@ -78,7 +78,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			},
 			wantContains: []string{
 				"You are a Liza code-reviewer agent",
-				"- Role definition: /specs/architecture/roles.md (section: Code Reviewer)",
+				"- Agent runtime reference: /project/docs/for-agent-eyes/agent-runtime-reference.md (section: Code Reviewer)",
 			},
 		},
 		{
@@ -94,7 +94,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			},
 			wantContains: []string{
 				"You are a Liza planner agent",
-				"- Role definition: /specs/architecture/roles.md (section: Planner)",
+				"- Agent runtime reference: /project/docs/for-agent-eyes/agent-runtime-reference.md (section: Planner)",
 			},
 		},
 	}
@@ -312,6 +312,8 @@ func TestBuildCoderContext(t *testing.T) {
 				"liza_submit_for_review",
 				"Tool parameters: {\"task_id\":",
 				"Use your agent ID (provided in bootstrap context)",
+				"liza_handoff",
+				"If context exhaustion is near (~90%)",
 				"--- IMPLEMENTATION PHASE ---",
 				"The task is already CLAIMED for you",
 				"Do NOT run liza claim-task",
@@ -329,6 +331,34 @@ func TestBuildCoderContext(t *testing.T) {
 				"liza_submit_for_review tool executed",
 				"EXPECTED BEHAVIOR EXAMPLES:",
 				"Execute tool: liza_submit_for_review with",
+			},
+		},
+		{
+			name: "handoff resume context is rendered",
+			task: func() *models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+				task.Description = "Continue parser hardening"
+				task.DoneWhen = "All parser edge cases handled"
+				task.Scope = "Parser module"
+				task.Iteration = 2
+				worktree := ".worktrees/task-1"
+				task.Worktree = &worktree
+				return &task
+			}(),
+			config: CoderContextConfig{
+				ProjectRoot: "/project",
+				AgentID:     "coder-1",
+				HandoffNote: &models.HandoffNote{
+					Agent:      "coder-1",
+					Summary:    "Parser support added for nested objects",
+					NextAction: "Add malformed payload tests",
+				},
+			},
+			wantContains: []string{
+				"=== HANDOFF RESUME CONTEXT ===",
+				"FROM: coder-1",
+				"SUMMARY: Parser support added for nested objects",
+				"NEXT ACTION: Add malformed payload tests",
 			},
 		},
 		{
@@ -876,7 +906,7 @@ func TestPlannerPromptAutonomyForAllWakeTriggers(t *testing.T) {
 			wantContains: []string{
 				"Analyze and resolve immediately",
 				"execute liza_add_task tool NOW",
-				"update state NOW",
+				"fallback state edit + liza_validate",
 				"execute tools NOW",
 				"Execute all state-modifying tools in this session",
 				"Do NOT defer",
@@ -945,7 +975,7 @@ func TestPlannerPromptAutonomyForAllWakeTriggers(t *testing.T) {
 				"Urgent discoveries need immediate action",
 				"execute decision NOW",
 				"execute liza_add_task tool NOW",
-				"update NOW",
+				"fallback state edit + liza_validate",
 				"All discovered items must be processed and all tools executed in this session",
 			},
 		},

@@ -292,6 +292,31 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 	return textResult(fmt.Sprintf("Task %s submitted for review", taskID))
 }
 
+// handleHandoff implements the liza_handoff tool
+// Maps to: liza handoff
+func (s *Server) handleHandoff(params map[string]any) (any, error) {
+	taskID, agentID, err := requireTaskAndAgent(params)
+	if err != nil {
+		return nil, err
+	}
+
+	summary, err := requireString(params, "summary")
+	if err != nil {
+		return nil, err
+	}
+
+	nextAction, err := requireString(params, "next_action")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := commands.HandoffCommand(s.projectRoot, taskID, summary, nextAction, agentID); err != nil {
+		return nil, fmt.Errorf("handoff failed: %w", err)
+	}
+
+	return textResult(fmt.Sprintf("Handoff initiated for task %s", taskID))
+}
+
 // handleSubmitVerdict implements the liza_submit_verdict tool
 // Maps to: liza submit-verdict
 func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {

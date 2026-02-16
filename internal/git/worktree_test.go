@@ -109,9 +109,9 @@ func TestCreateWorktree(t *testing.T) {
 		t.Errorf("task/%s branch was not created", taskID)
 	}
 
-	// Verify base_commit is valid short SHA
-	if len(baseCommit) != 7 {
-		t.Errorf("baseCommit length = %d, want 7", len(baseCommit))
+	// Verify base_commit is a full SHA
+	if len(baseCommit) != 40 {
+		t.Errorf("baseCommit length = %d, want 40", len(baseCommit))
 	}
 
 	// Verify worktree is on correct branch
@@ -274,7 +274,7 @@ func TestCalculateDrift(t *testing.T) {
 	git := New(repoDir)
 
 	// Get current integration HEAD as base
-	baseCommit, err := git.GetCommitSHA("integration", true)
+	baseCommit, err := git.GetCommitSHA("integration")
 	if err != nil {
 		t.Fatalf("GetCommitSHA() error = %v", err)
 	}

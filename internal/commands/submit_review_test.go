@@ -217,6 +217,7 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 	agentID := "coder-1"
 	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	worktree := g.GetWorktreeRelPath(taskID)
+	currentTask := taskID
 	initialState := &models.State{
 		Config: models.Config{
 			IntegrationBranch: "integration",
@@ -236,7 +237,15 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 				History:      []models.TaskHistoryEntry{},
 			},
 		},
-		Agents: make(map[string]models.Agent),
+		Agents: map[string]models.Agent{
+			agentID: {
+				Role:         "coder",
+				Status:       models.AgentStatusWorking,
+				CurrentTask:  &currentTask,
+				LeaseExpires: &leaseExpires,
+				Heartbeat:    time.Now().UTC(),
+			},
+		},
 	}
 
 	bb := testhelpers.WriteInitialState(t, statePath, initialState)
@@ -252,6 +261,14 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 	task := &state.Tasks[0]
 	if task.Status != models.TaskStatusReadyForReview {
 		t.Errorf("expected status READY_FOR_REVIEW, got %s", task.Status)
+	}
+
+	agent := state.Agents[agentID]
+	if agent.Status != models.AgentStatusWaiting {
+		t.Errorf("expected coder status WAITING after submission, got %s", agent.Status)
+	}
+	if agent.CurrentTask == nil || *agent.CurrentTask != taskID {
+		t.Errorf("expected coder current_task %s after submission, got %v", taskID, agent.CurrentTask)
 	}
 
 	// Verify review_commit is set (and different from wtCommit due to rebase)

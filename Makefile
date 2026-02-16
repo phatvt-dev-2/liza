@@ -17,12 +17,12 @@ LDFLAGS=-ldflags "-X 'github.com/liza-mas/liza/internal/embedded.Version=$(VERSI
 .PHONY: sync-embedded
 sync-embedded:
 	@echo "Syncing files to internal/embedded/..."
-	@rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/specs
+	@rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/docs internal/embedded/specs
 	@rm -f internal/embedded/claude-settings.json internal/embedded/mcp.json
-	@mkdir -p internal/embedded/contracts internal/embedded/skills internal/embedded/specs
+	@mkdir -p internal/embedded/contracts internal/embedded/skills internal/embedded/docs/for-agent-eyes
 	@cp contracts/*.md internal/embedded/contracts/
 	@cp -r skills/* internal/embedded/skills/
-	@cp -r specs internal/embedded/
+	@cp docs/for-agent-eyes/agent-runtime-reference.md internal/embedded/docs/for-agent-eyes/
 	@cp claude-settings.json internal/embedded/
 	@cp mcp.json internal/embedded/
 	@echo "Files synced successfully"
@@ -36,8 +36,8 @@ build: sync-embedded
 
 # Run tests
 # IMPORTANT: Always use `make test`, not bare `go test ./...`.
-# The sync-embedded step copies contracts/, skills/, specs/, claude-settings.json,
-# and mcp.json into internal/embedded/ for go:embed. Without these files the
+# The sync-embedded step copies contracts/, skills/, docs/for-agent-eyes/agent-runtime-reference.md,
+# claude-settings.json, and mcp.json into internal/embedded/ for go:embed. Without these files the
 # embedded package fails to compile.
 test: sync-embedded check-testhelpers
 	go test -v -race -coverprofile=coverage.out ./...
@@ -54,7 +54,7 @@ clean:
 	rm -f $(MCP_BINARY_NAME)-*
 	rm -f coverage.out
 	rm -rf dist
-	rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/specs
+	rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/docs internal/embedded/specs
 	rm -f internal/embedded/claude-settings.json internal/embedded/mcp.json
 	go clean
 

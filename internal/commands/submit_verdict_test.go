@@ -28,9 +28,11 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			agentID: "reviewer-1",
 			wantErr: false,
 			setupState: func(s *models.State) {
+				now := time.Now().UTC()
 				reviewCommit := "abc123"
 				reviewingBy := "reviewer-1"
-				reviewLeaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				reviewLeaseExpires := now.Add(30 * time.Minute)
+				currentTask := "t1"
 				s.Tasks = []models.Task{
 					{
 						ID:                 "t1",
@@ -39,9 +41,16 @@ func TestSubmitVerdictCommand(t *testing.T) {
 						ReviewCommit:       &reviewCommit,
 						ReviewingBy:        &reviewingBy,
 						ReviewLeaseExpires: &reviewLeaseExpires,
-						Created:            time.Now().UTC(),
+						Created:            now,
 						History:            []models.TaskHistoryEntry{},
 					},
+				}
+				s.Agents["reviewer-1"] = models.Agent{
+					Role:         "code-reviewer",
+					Status:       models.AgentStatusReviewing,
+					CurrentTask:  &currentTask,
+					LeaseExpires: &reviewLeaseExpires,
+					Heartbeat:    now,
 				}
 			},
 			validateState: func(t *testing.T, s *models.State) {
@@ -70,6 +79,14 @@ func TestSubmitVerdictCommand(t *testing.T) {
 				if task.History[0].Agent == nil || *task.History[0].Agent != "reviewer-1" {
 					t.Errorf("expected agent reviewer-1 in history, got %v", task.History[0].Agent)
 				}
+
+				agent := s.Agents["reviewer-1"]
+				if agent.Status != models.AgentStatusIdle {
+					t.Errorf("expected reviewer status IDLE, got %s", agent.Status)
+				}
+				if agent.CurrentTask != nil {
+					t.Errorf("expected reviewer current_task nil, got %v", agent.CurrentTask)
+				}
 			},
 		},
 		{
@@ -80,9 +97,11 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			agentID: "reviewer-1",
 			wantErr: false,
 			setupState: func(s *models.State) {
+				now := time.Now().UTC()
 				reviewCommit := "def456"
 				reviewingBy := "reviewer-1"
-				reviewLeaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				reviewLeaseExpires := now.Add(30 * time.Minute)
+				currentTask := "t2"
 				s.Tasks = []models.Task{
 					{
 						ID:                  "t2",
@@ -93,9 +112,16 @@ func TestSubmitVerdictCommand(t *testing.T) {
 						ReviewLeaseExpires:  &reviewLeaseExpires,
 						ReviewCyclesCurrent: 0,
 						ReviewCyclesTotal:   0,
-						Created:             time.Now().UTC(),
+						Created:             now,
 						History:             []models.TaskHistoryEntry{},
 					},
+				}
+				s.Agents["reviewer-1"] = models.Agent{
+					Role:         "code-reviewer",
+					Status:       models.AgentStatusReviewing,
+					CurrentTask:  &currentTask,
+					LeaseExpires: &reviewLeaseExpires,
+					Heartbeat:    now,
 				}
 			},
 			validateState: func(t *testing.T, s *models.State) {
@@ -129,6 +155,14 @@ func TestSubmitVerdictCommand(t *testing.T) {
 				}
 				if task.History[0].Reason == nil || *task.History[0].Reason != "Code doesn't meet requirements" {
 					t.Errorf("expected reason in history, got %v", task.History[0].Reason)
+				}
+
+				agent := s.Agents["reviewer-1"]
+				if agent.Status != models.AgentStatusIdle {
+					t.Errorf("expected reviewer status IDLE, got %s", agent.Status)
+				}
+				if agent.CurrentTask != nil {
+					t.Errorf("expected reviewer current_task nil, got %v", agent.CurrentTask)
 				}
 			},
 		},

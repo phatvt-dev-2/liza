@@ -175,10 +175,10 @@ Alternatively, abort the rebase and ask for help:
 		}
 		task.History = append(task.History, historyEntry)
 
-		// Update agent status: coder is no longer working on this task
+		// Update agent status: coder transitions to WAITING after submission.
+		// CurrentTask is preserved so dashboards can correlate waiting coders with their tasks.
 		if agent, ok := state.Agents[agentID]; ok {
-			agent.Status = models.AgentStatusIdle
-			agent.CurrentTask = nil
+			agent.Status = models.AgentStatusWaiting
 			agent.LeaseExpires = nil
 			state.Agents[agentID] = agent
 		}

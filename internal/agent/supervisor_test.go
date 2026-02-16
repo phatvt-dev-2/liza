@@ -1179,7 +1179,7 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 
 	// Start waiting in background
 	go func() {
-		hasWork, err := waitForCoderWork(ctx, bb, lizaDir, 10*time.Millisecond, 5*time.Second)
+		hasWork, err := waitForCoderWork(ctx, bb, lizaDir, "coder-1", 10*time.Millisecond, 5*time.Second)
 		if err != nil {
 			errCh <- err
 			return
@@ -1302,7 +1302,7 @@ func TestAbortPrecedenceOverWork(t *testing.T) {
 	defer cancel()
 
 	// Should return false (ABORT), not true (work available)
-	hasWork, err := waitForCoderWork(ctx, bb, lizaDir, 10*time.Millisecond, 100*time.Millisecond)
+	hasWork, err := waitForCoderWork(ctx, bb, lizaDir, "coder-1", 10*time.Millisecond, 100*time.Millisecond)
 
 	if err != nil {
 		t.Fatalf("waitForCoderWork() error = %v", err)
@@ -1310,6 +1310,34 @@ func TestAbortPrecedenceOverWork(t *testing.T) {
 
 	if hasWork {
 		t.Error("waitForCoderWork() should return false when ABORT present, even with work available")
+	}
+}
+
+func TestWaitForCoderWorkDetectsResumableHandoff(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	lizaDir := filepath.Dir(statePath)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+	task.HandoffPending = true
+	assigned := "coder-1"
+	task.AssignedTo = &assigned
+	state.Tasks = []models.Task{task}
+	state.Config.Mode = models.SystemModeRunning
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	hasWork, err := waitForCoderWork(ctx, bb, lizaDir, "coder-1", 10*time.Millisecond, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("waitForCoderWork() error = %v", err)
+	}
+	if !hasWork {
+		t.Fatal("expected resumable handoff to be detected as available work")
 	}
 }
 

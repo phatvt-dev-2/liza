@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -92,15 +91,20 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 		return fmt.Errorf("failed to get worktree HEAD: %w", err)
 	}
 
-	// Compare commits (handle both short and long SHAs)
+	// Normalize review_commit to full SHA and compare exact match.
+	// This mirrors shell parity: resolve refs/short SHAs first, then compare canonical SHAs.
 	reviewCommit := *task.ReviewCommit
-	if !strings.HasPrefix(wtHEAD, reviewCommit) && !strings.HasPrefix(reviewCommit, wtHEAD) {
+	expectedCommit, err := gitWrapper.GetCommitSHA(reviewCommit)
+	if err != nil {
+		return fmt.Errorf("review_commit (%s) not found in repository: %w", reviewCommit, err)
+	}
+	if wtHEAD != expectedCommit {
 		// HEAD mismatch indicates state corruption - treat as integration failure
 		// This stops retry loops and preserves worktree for investigation
 		fmt.Fprintf(os.Stderr, "⚠️  Worktree HEAD does not match approved commit\n")
 		fmt.Fprintf(os.Stderr, "Task %s marked as INTEGRATION_FAILED\n", taskID)
 		fmt.Fprintf(os.Stderr, "Worktree preserved for investigation\n")
-		fmt.Fprintf(os.Stderr, "  Expected: %s\n", reviewCommit)
+		fmt.Fprintf(os.Stderr, "  Expected: %s\n", expectedCommit)
 		fmt.Fprintf(os.Stderr, "  Actual:   %s\n", wtHEAD)
 
 		// Update state to INTEGRATION_FAILED
@@ -119,9 +123,9 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 					if len(wtHEAD) > 7 {
 						shortWtHEAD = wtHEAD[:7]
 					}
-					shortReviewCommit := reviewCommit
-					if len(reviewCommit) > 7 {
-						shortReviewCommit = reviewCommit[:7]
+					shortReviewCommit := expectedCommit
+					if len(expectedCommit) > 7 {
+						shortReviewCommit = expectedCommit[:7]
 					}
 					reason := fmt.Sprintf("worktree HEAD (%s) does not match approved commit (%s)", shortWtHEAD, shortReviewCommit)
 					s.Tasks[i].History = append(s.Tasks[i].History, models.TaskHistoryEntry{

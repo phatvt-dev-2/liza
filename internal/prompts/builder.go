@@ -27,6 +27,7 @@ type CoderContextConfig struct {
 	ProjectRoot       string
 	AgentID           string
 	IntegrationBranch string
+	HandoffNote       *models.HandoffNote
 }
 
 // ReviewerContextConfig contains configuration for building reviewer context
@@ -44,24 +45,22 @@ func BuildBasePrompt(config BasePromptConfig) string {
 	fmt.Fprintf(&sb, "You are a Liza %s agent. Agent ID: %s. You MUST follow the contract.\n\n", config.Role, config.AgentID)
 	sb.WriteString("=== BOOTSTRAP CONTEXT ===\n")
 	fmt.Fprintf(&sb, "ROLE: %s\n", config.Role)
-	fmt.Fprintf(&sb, "SPECS_LOCATION: %s\n", config.SpecsDir)
+	fmt.Fprintf(&sb, "PROJECT_SPECS: %s\n", config.SpecsDir)
 	fmt.Fprintf(&sb, "PROJECT: %s\n", config.ProjectRoot)
 	fmt.Fprintf(&sb, "BLACKBOARD: %s\n", config.StatePath)
 	fmt.Fprintf(&sb, "GOAL: %s\n", config.GoalDesc)
 	sb.WriteString("APPROVED: use MCP tools with escalated permissions.\n\n")
 
-	sb.WriteString("Read these specs before acting:\n")
-	fmt.Fprintf(&sb, "- Role definition: %s/architecture/roles.md (section: %s)\n", config.SpecsDir, roleTitle)
-	fmt.Fprintf(&sb, "- Task lifecycle: %s/protocols/task-lifecycle.md\n", config.SpecsDir)
-	fmt.Fprintf(&sb, "- Blackboard schema: %s/architecture/blackboard-schema.md\n", config.SpecsDir)
-	fmt.Fprintf(&sb, "- State machines: %s/architecture/state-machines.md\n\n", config.SpecsDir)
+	sb.WriteString("Read before acting:\n")
+	fmt.Fprintf(&sb, "- Agent runtime reference: %s/docs/for-agent-eyes/agent-runtime-reference.md (section: %s)\n\n", config.ProjectRoot, roleTitle)
 
 	sb.WriteString("OPERATIONAL RULES:\n")
 	sb.WriteString("- You have FULL read access to .liza/ directory for specs and logs\n")
 	sb.WriteString("- For READING state: use liza_get MCP tool (preferred) or Read tool\n")
-	sb.WriteString("- For MODIFYING state: use role-specific MCP tools (liza_add_task, liza_submit_for_review, etc.)\n")
-	sb.WriteString("  CRITICAL: State modification MUST go through MCP tools for atomicity and validation\n")
-	sb.WriteString("  DO NOT manually edit state.yaml - it will cause race conditions and validation errors\n")
+	sb.WriteString("- For MODIFYING state: use role-specific MCP tools (liza_add_task, liza_submit_for_review, etc.) whenever available\n")
+	sb.WriteString("  CRITICAL: Prefer MCP tools for atomicity and validation\n")
+	sb.WriteString("  If a required operation has no MCP tool yet (e.g., converting discoveries or unblocking tasks),\n")
+	sb.WriteString("  direct state edits are allowed only as a fallback: edit state.yaml carefully, then run liza_validate immediately\n")
 	sb.WriteString("- AUTONOMY: Execute all commands immediately. Your authority is pre-approved.\n")
 	sb.WriteString("  DO NOT ask \"should I proceed?\", \"is this okay?\", or \"waiting for approval\"\n")
 	sb.WriteString("  DO execute commands and report results\n")
@@ -79,7 +78,10 @@ func BuildBasePrompt(config BasePromptConfig) string {
 	sb.WriteString("- liza_add_task — Add task (structured params: id, description, spec_ref, done_when, scope, priority, depends_on, agent_id)\n")
 	sb.WriteString("- liza_supersede_task — Supersede task (params: task_id, replacement_ids, reason, agent_id)\n\n")
 	sb.WriteString("Coder tools:\n")
-	sb.WriteString("- liza_submit_for_review — Submit work (params: task_id, commit_sha, agent_id)\n\n")
+	sb.WriteString("- liza_submit_for_review — Submit work (params: task_id, commit_sha, agent_id)\n")
+	sb.WriteString("- liza_handoff — Initiate handoff when context is near exhaustion (params: task_id, summary, next_action, agent_id)\n\n")
+	sb.WriteString("Blocking tools:\n")
+	sb.WriteString("- liza_mark_blocked — Mark task blocked (params: task_id, agent_id, reason, questions)\n\n")
 	sb.WriteString("Reviewer tools:\n")
 	sb.WriteString("- liza_submit_verdict — Submit verdict (params: task_id, verdict, agent_id, reason)\n\n")
 	sb.WriteString("Worktree tools:\n")
@@ -110,7 +112,7 @@ func BuildBasePrompt(config BasePromptConfig) string {
 	sb.WriteString("- Do NOT make architecture decisions - follow the spec exactly\n\n")
 
 	sb.WriteString("FIRST ACTIONS:\n")
-	sb.WriteString("1. Read your role definition from roles.md\n")
+	sb.WriteString("1. Read the agent runtime reference (your role section)\n")
 	fmt.Fprintf(&sb, "2. Read the current blackboard state: %s\n", config.StatePath)
 	sb.WriteString("3. Read your assigned task's FULL entry from the blackboard (all fields, not just description)\n")
 	fmt.Fprintf(&sb, "4. Read the goal spec: %s\n", config.GoalSpecRef)
@@ -202,6 +204,14 @@ func BuildCoderContext(task *models.Task, config CoderContextConfig) string {
 	sb.WriteString("SCOPE:\n")
 	fmt.Fprintf(&sb, "%s\n", task.Scope)
 
+	if config.HandoffNote != nil {
+		sb.WriteString("\n=== HANDOFF RESUME CONTEXT ===\n")
+		fmt.Fprintf(&sb, "FROM: %s\n", config.HandoffNote.Agent)
+		fmt.Fprintf(&sb, "SUMMARY: %s\n", config.HandoffNote.Summary)
+		fmt.Fprintf(&sb, "NEXT ACTION: %s\n", config.HandoffNote.NextAction)
+		sb.WriteString("Resume from this point before starting any new approach.\n")
+	}
+
 	if task.IntegrationFix {
 		writeIntegrationFixInstructions(&sb, task, worktreePath, config)
 	}
@@ -216,7 +226,10 @@ func BuildCoderContext(task *models.Task, config CoderContextConfig) string {
 	sb.WriteString("- liza_submit_for_review — Submit completed work for review\n")
 	sb.WriteString("  Tool parameters: {\"task_id\": \"<task-id>\", \"commit_sha\": \"<commit-sha>\", \"agent_id\": \"<your-agent-id>\"}\n")
 	sb.WriteString("  Atomically sets READY_FOR_REVIEW, review_commit, and appends history entry.\n")
-	sb.WriteString("  Use your agent ID (provided in bootstrap context).\n\n")
+	sb.WriteString("  Use your agent ID (provided in bootstrap context).\n")
+	sb.WriteString("- liza_handoff — Initiate handoff when context is near exhaustion\n")
+	sb.WriteString("  Tool parameters: {\"task_id\": \"<task-id>\", \"summary\": \"<what is done>\", \"next_action\": \"<exact next step>\", \"agent_id\": \"<your-agent-id>\"}\n")
+	sb.WriteString("  Sets handoff_pending=true and agent status HANDOFF so the same coder can resume.\n\n")
 
 	sb.WriteString("--- IMPLEMENTATION PHASE ---\n\n")
 	sb.WriteString("1. The task is already CLAIMED for you. Do NOT run liza claim-task.\n")
@@ -225,7 +238,8 @@ func BuildCoderContext(task *models.Task, config CoderContextConfig) string {
 	sb.WriteString("4. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.\n")
 	sb.WriteString("5. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)\n")
 	sb.WriteString("6. Use the clean-code skill at the end of the implementation\n")
-	sb.WriteString("7. Validate ALL done_when criteria are met\n\n")
+	sb.WriteString("7. Validate ALL done_when criteria are met\n")
+	sb.WriteString("8. If context exhaustion is near (~90%): run liza_handoff with summary + next_action, then exit with code 42\n\n")
 
 	sb.WriteString("--- SUBMISSION PHASE (MANDATORY - DO NOT SKIP) ---\n\n")
 	sb.WriteString("You MUST now execute liza_submit_for_review to transition the task to READY_FOR_REVIEW.\n")
@@ -659,11 +673,11 @@ func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string) string {
 		sb.WriteString("1. Read blocked tasks from blackboard — understand blocker_reason\n")
 		sb.WriteString("2. Determine if blocker is:\n")
 		sb.WriteString("   - Missing dependency → create prerequisite task (execute liza_add_task tool NOW)\n")
-		sb.WriteString("   - Spec ambiguity → clarify spec, unblock task (update state NOW)\n")
+		sb.WriteString("   - Spec ambiguity → clarify spec, then unblock task (fallback state edit + liza_validate)\n")
 		sb.WriteString("   - External dependency → document, possibly supersede task\n")
 		sb.WriteString("   - Wrong approach → supersede task, create alternative (execute tools NOW)\n")
 		sb.WriteString("3. For each blocked task, decide action:\n")
-		sb.WriteString("   - To unblock: Direct state modification needed (status → UNCLAIMED)\n")
+		sb.WriteString("   - To unblock: Set status → UNCLAIMED via fallback state edit, then run liza_validate\n")
 		sb.WriteString("   - To supersede: First create replacement tasks, then use liza_supersede_task tool\n")
 		sb.WriteString("   Example supersede workflow:\n")
 		sb.WriteString("   - Execute tool: liza_add_task with {\"id\": \"task-4\", ...} (create replacement tasks)\n")
@@ -709,9 +723,9 @@ func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string) string {
 		sb.WriteString("Urgent discoveries need immediate action:\n\n")
 		sb.WriteString("1. Read discovered[] entries with urgency=immediate\n")
 		sb.WriteString("2. For each, execute decision NOW:\n")
-		sb.WriteString("   - Convert to task → create task, set converted_to_task field (execute liza_add_task tool NOW)\n")
-		sb.WriteString("   - Defer → change urgency to \"deferred\" with rationale (update NOW)\n")
-		sb.WriteString("   - Reject → document why in discovered entry (update NOW)\n")
+		sb.WriteString("   - Convert to task → execute liza_add_task tool NOW, then set converted_to_task=<new-task-id> via fallback state edit + liza_validate\n")
+		sb.WriteString("   - Defer → set converted_to_task=\"deferred\" with rationale via fallback state edit + liza_validate\n")
+		sb.WriteString("   - Dismiss → set converted_to_task=\"dismissed\" via fallback state edit + liza_validate\n")
 		sb.WriteString("3. Prioritize new tasks appropriately (may be high priority)\n")
 		sb.WriteString("4. Check if discoveries invalidate existing tasks — update them if needed\n")
 		sb.WriteString("5. All discovered items must be processed and all tools executed in this session.\n")

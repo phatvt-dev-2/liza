@@ -367,25 +367,10 @@ func TestInitCommand_WritesEmbeddedFiles(t *testing.T) {
 		}
 	}
 
-	// Verify specs directory and files
-	specsDir := filepath.Join(gitDir, ".liza", "specs")
-	if _, err := os.Stat(specsDir); os.IsNotExist(err) {
-		t.Errorf("specs directory not created: %s", specsDir)
-	}
-
-	// Check root specs files (vision.md is a project file created by users, not embedded)
-	readmePath := filepath.Join(specsDir, "README.md")
-	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
-		t.Errorf("Spec file not created: README.md")
-	}
-
-	// Check subdirectory structure
-	specSubdirs := []string{"architecture", "implementation", "protocols"}
-	for _, dir := range specSubdirs {
-		dirPath := filepath.Join(specsDir, dir)
-		if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-			t.Errorf("Spec subdirectory not created: %s", dir)
-		}
+	// Verify runtime reference was written to project docs
+	runtimeRefPath := filepath.Join(gitDir, "docs", "for-agent-eyes", "agent-runtime-reference.md")
+	if _, err := os.Stat(runtimeRefPath); os.IsNotExist(err) {
+		t.Errorf("Runtime reference not created: %s", runtimeRefPath)
 	}
 }
 

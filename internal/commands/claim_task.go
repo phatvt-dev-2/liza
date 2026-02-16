@@ -109,7 +109,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 
 	// Get base commit for the integration branch
 	var err2 error
-	baseCommit, err2 = gitWrapper.GetCommitSHA(integrationBranch, true)
+	baseCommit, err2 = gitWrapper.GetCommitSHA(integrationBranch)
 	if err2 != nil {
 		return fmt.Errorf("failed to get integration branch commit: %w", err2)
 	}

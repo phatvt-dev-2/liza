@@ -106,15 +106,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	pollInterval := time.Duration(state.Config.CoderPollInterval) * time.Second
-	if pollInterval == 0 {
-		pollInterval = 30 * time.Second
-	}
-
-	maxWait := time.Duration(state.Config.CoderMaxWait) * time.Second
-	if maxWait == 0 {
-		maxWait = 1800 * time.Second
-	}
+	pollInterval, maxWait := getRoleWaitConfig(state, config.Role)
 
 	// Set execution timeout if not configured
 	if config.ExecutionTimeout == 0 {
@@ -241,10 +233,10 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			return fmt.Errorf("agent execution error: %w", err)
 		}
 
-		// Always reset agent to IDLE when CLI exits, regardless of exit code
-		// This ensures stuck agents don't remain in WORKING/REVIEWING status
-		if err := resetAgentToIdle(bb, config.AgentID); err != nil {
-			GetLogger().Warn("Failed to reset agent status to IDLE", "error", err, "agent_id", config.AgentID)
+		// Reset runtime status after CLI exits, but preserve explicit command-driven
+		// states such as WAITING and HANDOFF.
+		if err := resetAgentAfterExit(bb, config.AgentID); err != nil {
+			GetLogger().Warn("Failed to reset agent status after exit", "error", err, "agent_id", config.AgentID)
 		}
 
 		// Handle exit code
@@ -394,6 +386,32 @@ func resetAgentToIdle(bb *db.Blackboard, agentID string) error {
 	})
 }
 
+// resetAgentAfterExit clears transient runtime states after CLI exit while preserving
+// explicit command-driven states that are meaningful between loops.
+func resetAgentAfterExit(bb *db.Blackboard, agentID string) error {
+	now := time.Now().UTC()
+
+	return bb.Modify(func(state *models.State) error {
+		agent, exists := state.Agents[agentID]
+		if !exists {
+			return fmt.Errorf("agent %s not found", agentID)
+		}
+
+		switch agent.Status {
+		case models.AgentStatusWaiting, models.AgentStatusHandoff:
+			agent.Heartbeat = now
+			state.Agents[agentID] = agent
+			return nil
+		default:
+			agent.Status = models.AgentStatusIdle
+			agent.CurrentTask = nil
+			agent.Heartbeat = now
+			state.Agents[agentID] = agent
+			return nil
+		}
+	})
+}
+
 // setAgentToPlanningStatus sets a planner agent's status to PLANNING
 func setAgentToPlanningStatus(bb *db.Blackboard, agentID string) error {
 	now := time.Now().UTC()
@@ -411,6 +429,34 @@ func setAgentToPlanningStatus(bb *db.Blackboard, agentID string) error {
 		state.Agents[agentID] = agent
 		return nil
 	})
+}
+
+// nonZeroOr returns val if positive, otherwise fallback.
+func nonZeroOr(val, fallback int) int {
+	if val > 0 {
+		return val
+	}
+	return fallback
+}
+
+// getRoleWaitConfig returns poll interval and max wait based on role-specific config.
+// Falls back to shell-script parity defaults when config values are unset.
+func getRoleWaitConfig(state *models.State, role string) (pollInterval, maxWait time.Duration) {
+	var pollSeconds, maxWaitSeconds int
+
+	switch role {
+	case "planner":
+		pollSeconds = nonZeroOr(state.Config.PlannerPollInterval, 60)
+		maxWaitSeconds = nonZeroOr(state.Config.PlannerMaxWait, 1800)
+	case "code-reviewer":
+		pollSeconds = nonZeroOr(state.Config.ReviewerPollInterval, 30)
+		maxWaitSeconds = nonZeroOr(state.Config.ReviewerMaxWait, 1800)
+	default:
+		pollSeconds = nonZeroOr(state.Config.CoderPollInterval, 30)
+		maxWaitSeconds = nonZeroOr(state.Config.CoderMaxWait, 1800)
+	}
+
+	return time.Duration(pollSeconds) * time.Second, time.Duration(maxWaitSeconds) * time.Second
 }
 
 // waitForWork is a dispatcher to role-specific wait functions
@@ -431,7 +477,7 @@ func waitForWork(ctx context.Context, bb *db.Blackboard, projectRoot string, rol
 
 	switch role {
 	case "coder":
-		return waitForCoderWork(ctx, bb, projectRoot, pollInterval, effectiveMaxWait)
+		return waitForCoderWork(ctx, bb, projectRoot, config.AgentID, pollInterval, effectiveMaxWait)
 	case "code-reviewer":
 		return waitForReviewerWork(ctx, bb, projectRoot, pollInterval, effectiveMaxWait)
 	case "planner":
@@ -611,14 +657,42 @@ func waitForWorkPolling(
 	}
 }
 
-// waitForCoderWork waits for claimable tasks using event-driven detection
-func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
+// waitForCoderWork waits for claimable tasks or resumable handoff tasks.
+func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			count := models.CountClaimableTasks(s)
+			claimable := models.CountClaimableTasks(s)
+			resumableHandoffs := countResumableHandoffTasks(s, agentID)
 			logMsg := models.GetCoderWorkDiagnostics(s)
-			return count > 0, logMsg
+
+			if resumableHandoffs > 0 {
+				handoffMsg := fmt.Sprintf("Found %d resumable handoff task(s) for %s", resumableHandoffs, agentID)
+				if logMsg != "" {
+					logMsg = handoffMsg + "; " + logMsg
+				} else {
+					logMsg = handoffMsg
+				}
+			}
+
+			return claimable > 0 || resumableHandoffs > 0, logMsg
 		})
+}
+
+func isResumableHandoff(task *models.Task, agentID string) bool {
+	return task.Status == models.TaskStatusClaimed &&
+		task.HandoffPending &&
+		task.AssignedTo != nil &&
+		*task.AssignedTo == agentID
+}
+
+func countResumableHandoffTasks(state *models.State, agentID string) int {
+	count := 0
+	for i := range state.Tasks {
+		if isResumableHandoff(&state.Tasks[i], agentID) {
+			count++
+		}
+	}
+	return count
 }
 
 // waitForReviewerWork waits for reviewable tasks using event-driven detection
@@ -701,14 +775,95 @@ func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string) err
 	return nil
 }
 
-// claimCoderTask finds and claims a claimable task
+// resumeHandoffTask looks for a handoff task assigned to agentID and resumes it.
+// Returns found=false when no resumable handoff exists.
+func resumeHandoffTask(bb *db.Blackboard, state *models.State, agentID string) (taskID, worktree string, found bool, err error) {
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if !isResumableHandoff(task, agentID) {
+			continue
+		}
+		if task.Worktree == nil {
+			return "", "", false, fmt.Errorf("handoff task %s missing worktree", task.ID)
+		}
+
+		now := time.Now().UTC()
+		id := task.ID
+		wt := *task.Worktree
+
+		err := bb.Modify(func(s *models.State) error {
+			var t *models.Task
+			for j := range s.Tasks {
+				if s.Tasks[j].ID == id {
+					t = &s.Tasks[j]
+					break
+				}
+			}
+			if t == nil {
+				return fmt.Errorf("task %s not found while resuming handoff", id)
+			}
+			if t.Status != models.TaskStatusClaimed {
+				return fmt.Errorf("task %s is no longer CLAIMED", id)
+			}
+			if t.AssignedTo == nil || *t.AssignedTo != agentID {
+				return fmt.Errorf("task %s is no longer assigned to %s", id, agentID)
+			}
+
+			if t.LeaseExpires == nil || t.LeaseExpires.Before(now) {
+				leaseDuration := s.Config.LeaseDuration
+				if leaseDuration <= 0 {
+					leaseDuration = 1800
+				}
+				renewed := now.Add(time.Duration(leaseDuration) * time.Second)
+				t.LeaseExpires = &renewed
+			}
+
+			t.HandoffPending = false
+			agentPtr := &agentID
+			t.History = append(t.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: "handoff_resumed",
+				Agent: agentPtr,
+			})
+
+			agent, ok := s.Agents[agentID]
+			if !ok {
+				agent = models.Agent{Role: "coder"}
+			}
+			agent.Status = models.AgentStatusWorking
+			agent.CurrentTask = &id
+			agent.LeaseExpires = t.LeaseExpires
+			agent.Heartbeat = now
+			s.Agents[agentID] = agent
+			return nil
+		})
+		if err != nil {
+			GetLogger().Warn("Handoff resume conflict, trying next candidate", "task_id", id, "error", err)
+			continue
+		}
+
+		return id, wt, true, nil
+	}
+	return "", "", false, nil
+}
+
+// claimCoderTask finds and claims a claimable task.
+// If the same coder previously initiated a handoff, it resumes that task first.
 func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, worktree string, err error) {
 	logger := GetLogger()
 
-	// Find claimable task
 	state, err := bb.Read()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to read state: %w", err)
+	}
+
+	id, wt, found, err := resumeHandoffTask(bb, state, agentID)
+	if err != nil {
+		return "", "", err
+	}
+	if found {
+		logger.Info("Resuming claimed task from handoff", "task_id", id, "agent_id", agentID)
+		return id, wt, nil
 	}
 
 	var candidates []*models.Task
@@ -723,19 +878,16 @@ func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, wor
 		return "", "", fmt.Errorf("no claimable tasks found")
 	}
 
-	// Claim the task using ClaimTaskCommand
 	if err := commands.ClaimTaskCommand(projectRoot, task.ID, agentID); err != nil {
 		logger.Error("Claim error", "error", err)
 		return "", "", err
 	}
 
-	// Re-read state to get updated worktree
 	state, err = bb.Read()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to read state after claim: %w", err)
 	}
 
-	// Find the claimed task
 	for i := range state.Tasks {
 		if state.Tasks[i].ID == task.ID && state.Tasks[i].Worktree != nil {
 			return task.ID, *state.Tasks[i].Worktree, nil
@@ -826,10 +978,17 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 			return "", fmt.Errorf("task not found: %s", taskID)
 		}
 
+		var handoffNote *models.HandoffNote
+		if note, ok := state.Handoff[task.ID]; ok {
+			noteCopy := note
+			handoffNote = &noteCopy
+		}
+
 		coderConfig := prompts.CoderContextConfig{
 			ProjectRoot:       config.ProjectRoot,
 			AgentID:           config.AgentID,
 			IntegrationBranch: state.Config.IntegrationBranch,
+			HandoffNote:       handoffNote,
 		}
 		prompt += prompts.BuildCoderContext(task, coderConfig)
 

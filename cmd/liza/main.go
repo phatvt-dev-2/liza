@@ -256,6 +256,41 @@ Updates:
 	},
 }
 
+var handoffCmd = &cobra.Command{
+	Use:   "handoff <task-id> <summary> <next-action>",
+	Short: "Initiate context-exhaustion handoff for a claimed task",
+	Long: `Atomically initiate handoff when a coder is nearing context exhaustion.
+
+Requirements:
+  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Task must be in CLAIMED status
+  - Task must be assigned to the submitting agent
+
+Updates:
+  - task.handoff_pending = true
+  - task history appends handoff_initiated event
+  - handoff.<task-id> note is recorded with summary and next_action
+  - agent status = HANDOFF`,
+	Args: cobra.ExactArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+		summary := args[1]
+		nextAction := args[2]
+
+		agentID, err := requireAgentID(cmd)
+		if err != nil {
+			return err
+		}
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		return commands.HandoffCommand(projectRoot, taskID, summary, nextAction, agentID)
+	},
+}
+
 var submitVerdictCmd = &cobra.Command{
 	Use:   "submit-verdict <task-id> <APPROVED|REJECTED> [rejection-reason]",
 	Short: "Submit a review verdict",
@@ -862,7 +897,7 @@ Example:
 
 		specsDir := os.Getenv("LIZA_SPECS")
 		if specsDir == "" {
-			specsDir = filepath.Join(projectRoot, ".liza", "specs")
+			specsDir = filepath.Join(projectRoot, "specs")
 		}
 
 		config := agent.SupervisorConfig{
@@ -1104,6 +1139,7 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(claimTaskCmd)
 	rootCmd.AddCommand(submitForReviewCmd)
+	rootCmd.AddCommand(handoffCmd)
 	rootCmd.AddCommand(submitVerdictCmd)
 	rootCmd.AddCommand(markBlockedCmd)
 	rootCmd.AddCommand(releaseClaimCmd)

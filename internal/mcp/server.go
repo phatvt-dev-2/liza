@@ -430,6 +430,34 @@ func (s *Server) registerMutationTools() {
 		},
 	}, s.handleSubmitForReview)
 
+	// liza_handoff tool
+	s.registerTool(protocol.Tool{
+		Name:        "liza_handoff",
+		Description: "Initiate context-exhaustion handoff for a claimed task",
+		InputSchema: protocol.InputSchema{
+			Type: "object",
+			Properties: map[string]protocol.Property{
+				"task_id": {
+					Type:        "string",
+					Description: "Task ID to hand off",
+				},
+				"summary": {
+					Type:        "string",
+					Description: "Brief summary of completed work",
+				},
+				"next_action": {
+					Type:        "string",
+					Description: "Concrete next action for resume",
+				},
+				"agent_id": {
+					Type:        "string",
+					Description: "Coder agent ID initiating handoff",
+				},
+			},
+			Required: []string{"task_id", "summary", "next_action", "agent_id"},
+		},
+	}, s.handleHandoff)
+
 	// liza_submit_verdict tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_verdict",

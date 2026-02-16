@@ -23,19 +23,15 @@ func TestListEmbeddedFiles(t *testing.T) {
 
 	// Verify key files exist
 	requiredFiles := map[string]bool{
-		"contracts/CORE.md":                       false,
-		"contracts/PAIRING_MODE.md":               false,
-		"contracts/MULTI_AGENT_MODE.md":           false,
-		"contracts/AGENT_TOOLS.md":                false,
-		"contracts/COLLABORATION_CONTINUITY.md":   false,
-		"skills/adr-backfill/SKILL.md":            false,
-		"skills/code-review/SKILL.md":             false,
-		"skills/debugging/SKILL.md":               false,
-		"specs/README.md":                         false,
-		"specs/architecture/overview.md":          false,
-		"specs/architecture/blackboard-schema.md": false,
-		"specs/implementation/phases.md":          false,
-		"specs/protocols/agent-initialization.md": false,
+		"contracts/CORE.md":                              false,
+		"contracts/PAIRING_MODE.md":                      false,
+		"contracts/MULTI_AGENT_MODE.md":                  false,
+		"contracts/AGENT_TOOLS.md":                       false,
+		"contracts/COLLABORATION_CONTINUITY.md":          false,
+		"skills/adr-backfill/SKILL.md":                   false,
+		"skills/code-review/SKILL.md":                    false,
+		"skills/debugging/SKILL.md":                      false,
+		"docs/for-agent-eyes/agent-runtime-reference.md": false,
 	}
 
 	for _, file := range files {
@@ -128,15 +124,13 @@ func TestWriteAllFiles(t *testing.T) {
 		t.Fatalf("WriteAllFiles failed: %v", err)
 	}
 
-	// Verify directory structure exists in .liza subdirectory
+	// Verify directory structure exists
 	lizaDir := filepath.Join(tmpDir, ".liza")
 	expectedDirs := []string{
 		filepath.Join(lizaDir, "contracts"),
 		filepath.Join(lizaDir, "skills"),
-		filepath.Join(lizaDir, "specs"),
-		filepath.Join(lizaDir, "specs", "architecture"),
-		filepath.Join(lizaDir, "specs", "implementation"),
-		filepath.Join(lizaDir, "specs", "protocols"),
+		filepath.Join(tmpDir, "docs"),
+		filepath.Join(tmpDir, "docs", "for-agent-eyes"),
 	}
 
 	for _, dir := range expectedDirs {
@@ -151,8 +145,7 @@ func TestWriteAllFiles(t *testing.T) {
 		filepath.Join(lizaDir, "contracts", "PAIRING_MODE.md"),
 		filepath.Join(lizaDir, "skills", "adr-backfill", "SKILL.md"),
 		filepath.Join(lizaDir, "skills", "code-review", "SKILL.md"),
-		filepath.Join(lizaDir, "specs", "README.md"),
-		filepath.Join(lizaDir, "specs", "architecture", "overview.md"),
+		filepath.Join(tmpDir, "docs", "for-agent-eyes", "agent-runtime-reference.md"),
 	}
 
 	for _, file := range expectedFiles {
@@ -204,12 +197,12 @@ func TestWriteAllFiles_FrontmatterInAllFiles(t *testing.T) {
 		t.Fatalf("WriteAllFiles failed: %v", err)
 	}
 
-	// Check a few sample files for frontmatter in .liza subdirectory
+	// Check a few sample files for frontmatter
 	lizaDir := filepath.Join(tmpDir, ".liza")
 	sampleFiles := []string{
 		filepath.Join(lizaDir, "contracts", "CORE.md"),
 		filepath.Join(lizaDir, "skills", "code-review", "SKILL.md"),
-		filepath.Join(lizaDir, "specs", "README.md"),
+		filepath.Join(tmpDir, "docs", "for-agent-eyes", "agent-runtime-reference.md"),
 	}
 
 	for _, file := range sampleFiles {

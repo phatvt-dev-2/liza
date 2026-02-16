@@ -229,12 +229,23 @@ func TestWtMergeCommand(t *testing.T) {
 				}
 				wtCommit = strings.TrimSpace(string(output))
 
-				// If we want HEAD to match review_commit, update the task
-				if tt.worktreeHeadMatch && tt.reviewCommit != nil {
+				// Normalize review_commit test fixture to a valid SHA.
+				// - matching case: review_commit == worktree HEAD
+				// - mismatch case: review_commit == integration HEAD (valid, but different)
+				if tt.reviewCommit != nil {
+					targetReviewCommit := wtCommit
+					if !tt.worktreeHeadMatch {
+						cmd = exec.Command("git", "-C", tmpDir, "rev-parse", "integration")
+						integrationOut, err := cmd.Output()
+						if err != nil {
+							t.Fatalf("Failed to get integration HEAD: %v", err)
+						}
+						targetReviewCommit = strings.TrimSpace(string(integrationOut))
+					}
 					err := bb.Modify(func(s *models.State) error {
 						for i := range s.Tasks {
 							if s.Tasks[i].ID == tt.taskID {
-								s.Tasks[i].ReviewCommit = &wtCommit
+								s.Tasks[i].ReviewCommit = &targetReviewCommit
 								return nil
 							}
 						}

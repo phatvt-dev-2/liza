@@ -45,10 +45,17 @@ func InitCommand(description string, specRef string) error {
 		return fmt.Errorf("failed to create archive directory: %w", err)
 	}
 
-	// Write embedded files (contracts, skills, specs)
-	if err := embedded.WriteAllFiles(lizaPaths.ProjectRoot()); err != nil {
-		// Clean up on failure
+	// cleanupInit removes all artifacts created during init.
+	// Needed because WriteAllFiles writes both inside .liza/ and outside (docs/).
+	runtimeRefPath := filepath.Join(lizaPaths.ProjectRoot(), "docs", "for-agent-eyes", "agent-runtime-reference.md")
+	cleanupInit := func() {
 		os.RemoveAll(lizaPaths.LizaDir())
+		os.Remove(runtimeRefPath)
+	}
+
+	// Write embedded files (contracts, skills, runtime reference)
+	if err := embedded.WriteAllFiles(lizaPaths.ProjectRoot()); err != nil {
+		cleanupInit()
 		return fmt.Errorf("failed to write embedded files: %w", err)
 	}
 
@@ -124,23 +131,26 @@ func InitCommand(description string, specRef string) error {
 			History:        []models.CircuitBreakerHistory{},
 		},
 		Config: models.Config{
-			MaxCoderIterations: 10,
-			MaxReviewCycles:    5,
-			HeartbeatInterval:  60,
-			LeaseDuration:      1800,
-			CoderPollInterval:  30,
-			CoderMaxWait:       1800,
-			IntegrationBranch:  "integration",
-			EscalationWebhook:  nil,
-			Mode:               models.SystemModeRunning,
+			MaxCoderIterations:   10,
+			MaxReviewCycles:      5,
+			HeartbeatInterval:    60,
+			LeaseDuration:        1800,
+			CoderPollInterval:    30,
+			CoderMaxWait:         1800,
+			PlannerPollInterval:  60,
+			PlannerMaxWait:       1800,
+			ReviewerPollInterval: 30,
+			ReviewerMaxWait:      1800,
+			IntegrationBranch:    "integration",
+			EscalationWebhook:    nil,
+			Mode:                 models.SystemModeRunning,
 		},
 	}
 
 	// Write state file
 	bb := db.New(lizaPaths.StatePath())
 	if err := bb.Write(state); err != nil {
-		// Clean up on failure
-		os.RemoveAll(lizaPaths.LizaDir())
+		cleanupInit()
 		return fmt.Errorf("failed to write state file: %w", err)
 	}
 
@@ -154,20 +164,20 @@ func InitCommand(description string, specRef string) error {
 `, timestamp.Format(time.RFC3339), description)
 
 	if err := os.WriteFile(logPath, []byte(logContent), 0644); err != nil {
-		os.RemoveAll(lizaPaths.LizaDir())
+		cleanupInit()
 		return fmt.Errorf("failed to write log file: %w", err)
 	}
 
 	// Create supporting files
 	alertsPath := lizaPaths.AlertsLogPath()
 	if err := os.WriteFile(alertsPath, []byte{}, 0644); err != nil {
-		os.RemoveAll(lizaPaths.LizaDir())
+		cleanupInit()
 		return fmt.Errorf("failed to create alerts.log: %w", err)
 	}
 
 	// Create lock file
 	if err := os.WriteFile(lizaPaths.LockPath(), []byte{}, 0644); err != nil {
-		os.RemoveAll(lizaPaths.LizaDir())
+		cleanupInit()
 		return fmt.Errorf("failed to create lock file: %w", err)
 	}
 

@@ -378,16 +378,20 @@ func (sm SystemMode) IsValid() bool {
 
 // Config holds system configuration parameters
 type Config struct {
-	MaxCoderIterations int        `yaml:"max_coder_iterations"`
-	MaxReviewCycles    int        `yaml:"max_review_cycles"`
-	HeartbeatInterval  int        `yaml:"heartbeat_interval"`
-	LeaseDuration      int        `yaml:"lease_duration"`
-	CoderPollInterval  int        `yaml:"coder_poll_interval"`
-	CoderMaxWait       int        `yaml:"coder_max_wait"`
-	IntegrationBranch  string     `yaml:"integration_branch"`
-	EscalationWebhook  *string    `yaml:"escalation_webhook,omitempty"`
-	Mode               SystemMode `yaml:"mode,omitempty"`
-	ModeChangedAt      *time.Time `yaml:"mode_changed_at,omitempty"`
-	ModeChangedBy      *string    `yaml:"mode_changed_by,omitempty"`
-	DiagnosticLogging  bool       `yaml:"diagnostic_logging,omitempty"`
+	MaxCoderIterations   int        `yaml:"max_coder_iterations"`
+	MaxReviewCycles      int        `yaml:"max_review_cycles"`
+	HeartbeatInterval    int        `yaml:"heartbeat_interval"`
+	LeaseDuration        int        `yaml:"lease_duration"`
+	CoderPollInterval    int        `yaml:"coder_poll_interval"`
+	CoderMaxWait         int        `yaml:"coder_max_wait"`
+	PlannerPollInterval  int        `yaml:"planner_poll_interval"`
+	PlannerMaxWait       int        `yaml:"planner_max_wait"`
+	ReviewerPollInterval int        `yaml:"reviewer_poll_interval"`
+	ReviewerMaxWait      int        `yaml:"reviewer_max_wait"`
+	IntegrationBranch    string     `yaml:"integration_branch"`
+	EscalationWebhook    *string    `yaml:"escalation_webhook,omitempty"`
+	Mode                 SystemMode `yaml:"mode,omitempty"`
+	ModeChangedAt        *time.Time `yaml:"mode_changed_at,omitempty"`
+	ModeChangedBy        *string    `yaml:"mode_changed_by,omitempty"`
+	DiagnosticLogging    bool       `yaml:"diagnostic_logging,omitempty"`
 }
