@@ -60,6 +60,10 @@ Signal files → state fields: `.liza/PAUSE` → `config.mode: PAUSED` via `liza
 
 ADR-0011's principle — structural enforcement of agent status transitions — is preserved. The enforcement mechanism changes from bash scripts to Go CLI commands. Each command that modifies task state still atomically sets the acting agent's status.
 
+### Supervision Model
+
+The Go CLI preserves the bash scripts' action responsibility model: the supervisor guarantees infrastructure actions (registration, claiming, merging, heartbeat); MCP tools handle agent-initiated workflow actions (submit for review, verdicts, handoff). MCP tools also provide manual fallback for supervisor actions but don't shift responsibility. See [Supervision Model](../supervision-model.md) for the full matrix.
+
 ### Consequences
 
 **Positive:**

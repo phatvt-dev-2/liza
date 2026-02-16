@@ -137,7 +137,7 @@ When tasks are rescoped, original task becomes SUPERSEDED with explicit reason. 
 
 ### Supervisor-Assigns-Work
 
-Agents don't discover and claim their own work. Each agent's supervisor (the enclosing bash loop) claims the task BEFORE spawning the agent. The agent receives pre-claimed work in its bootstrap prompt. This eliminates race conditions and simplifies agent logic. See ADR-0006.
+Agents don't discover and claim their own work. Each agent's supervisor (the Go process wrapping the agent CLI) claims the task BEFORE spawning the agent. The agent receives pre-claimed work in its bootstrap prompt. This eliminates race conditions and simplifies agent logic. See ADR-0006 and [Supervision Model](supervision-model.md) for the full responsibility matrix.
 
 ### TDD Enforcement
 
@@ -248,4 +248,5 @@ Merge to main is human-triggered, not part of Liza flow.
 - [Roles](roles.md) — detailed role responsibilities
 - [State Machines](state-machines.md) — task and agent states
 - [Blackboard Schema](blackboard-schema.md) — state.yaml structure
+- [Supervision Model](supervision-model.md) — supervisor vs MCP tool responsibility
 - [Worktree Management](../protocols/worktree-management.md) — worktree lifecycle
