@@ -723,3 +723,127 @@ func TestFormatStatusDashboard(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteTasksSection(t *testing.T) {
+	tests := []struct {
+		name   string
+		tasks  taskStatus
+		expect string
+	}{
+		{
+			name: "statuses sorted alphabetically",
+			tasks: taskStatus{
+				Total: 5, Active: 3, Terminal: 2,
+				ByStatus: map[string]int{
+					"UNCLAIMED": 2,
+					"CLAIMED":   1,
+					"MERGED":    2,
+				},
+				Claimable: 2, Reviewable: 0, BlockedByDeps: 0,
+			},
+			expect: "=== TASKS ===\n" +
+				"Total: 5 (3 active, 2 terminal)\n" +
+				"\nBy Status:\n" +
+				"  CLAIMED: 1\n" +
+				"  MERGED: 2\n" +
+				"  UNCLAIMED: 2\n" +
+				"\nClaimable: 2 tasks\n" +
+				"Reviewable: 0 tasks\n" +
+				"\n",
+		},
+		{
+			name: "blocked by deps line appears when nonzero",
+			tasks: taskStatus{
+				Total: 3, Active: 3, Terminal: 0,
+				ByStatus:      map[string]int{"UNCLAIMED": 3},
+				Claimable:     0,
+				Reviewable:    0,
+				BlockedByDeps: 2,
+			},
+			expect: "=== TASKS ===\n" +
+				"Total: 3 (3 active, 0 terminal)\n" +
+				"\nBy Status:\n" +
+				"  UNCLAIMED: 3\n" +
+				"\nClaimable: 0 tasks\n" +
+				"Reviewable: 0 tasks\n" +
+				"Blocked by dependencies: 2 tasks\n" +
+				"\n",
+		},
+		{
+			name: "empty status map omits By Status subsection",
+			tasks: taskStatus{
+				Total: 0, Active: 0, Terminal: 0,
+				ByStatus:      map[string]int{},
+				Claimable:     0,
+				Reviewable:    0,
+				BlockedByDeps: 0,
+			},
+			expect: "=== TASKS ===\n" +
+				"Total: 0 (0 active, 0 terminal)\n" +
+				"\nClaimable: 0 tasks\n" +
+				"Reviewable: 0 tasks\n" +
+				"\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b strings.Builder
+			writeTasksSection(&b, tt.tasks)
+			if got := b.String(); got != tt.expect {
+				t.Errorf("output mismatch:\n--- got ---\n%s--- expect ---\n%s", got, tt.expect)
+			}
+		})
+	}
+}
+
+func TestWriteAgentsSection(t *testing.T) {
+	t.Run("no agents", func(t *testing.T) {
+		var b strings.Builder
+		writeAgentsSection(&b, []agentStatus{})
+		expect := "=== AGENTS ===\nNo active agents\n\n"
+		if got := b.String(); got != expect {
+			t.Errorf("output mismatch:\n--- got ---\n%q\n--- expect ---\n%q", got, expect)
+		}
+	})
+
+	t.Run("agent table structure", func(t *testing.T) {
+		agents := []agentStatus{{
+			ID: "c-1", Role: "coder", Status: "WORKING",
+			PID: 123, CurrentTask: "t-1",
+			TimeSinceHeartbeat: "30s", ProcessStatus: "running",
+		}}
+
+		var b strings.Builder
+		writeAgentsSection(&b, agents)
+		got := b.String()
+
+		expect := "=== AGENTS ===\n" +
+			"ID   Role   Status   PID  Task  Heartbeat  Process\n" +
+			"c-1  coder  WORKING  123  t-1   30s        running\n\n"
+
+		if got != expect {
+			t.Errorf("output mismatch:\n--- got ---\n%q\n--- expect ---\n%q", got, expect)
+		}
+	})
+
+	t.Run("PID zero renders as dash", func(t *testing.T) {
+		agents := []agentStatus{{
+			ID: "c-1", Role: "coder", Status: "IDLE",
+			PID: 0, CurrentTask: "",
+			TimeSinceHeartbeat: "10s", ProcessStatus: "unknown",
+		}}
+
+		var b strings.Builder
+		writeAgentsSection(&b, agents)
+		got := b.String()
+
+		expect := "=== AGENTS ===\n" +
+			"ID   Role   Status  PID  Task  Heartbeat  Process\n" +
+			"c-1  coder  IDLE    -          10s        unknown\n\n"
+
+		if got != expect {
+			t.Errorf("output mismatch:\n--- got ---\n%q\n--- expect ---\n%q", got, expect)
+		}
+	})
+}

@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -145,7 +146,6 @@ func buildStatusData(state *models.State, detailed bool) statusData {
 	}
 	if state.Config.Mode == models.SystemModePaused {
 		data.Config.PausedBy = state.Config.ModeChangedBy
-		// Could add reason if we had a field for it
 	}
 
 	// Populate task statistics
@@ -158,7 +158,7 @@ func buildStatusData(state *models.State, detailed bool) statusData {
 	data.PlannerState = buildPlannerStatus(state)
 
 	// Populate work queues
-	data.WorkQueues = buildWorkQueuesStatus(state)
+	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable)
 
 	// Optionally include detailed information
 	if detailed {
@@ -310,33 +310,26 @@ func detectPlannerWakeTriggers(state *models.State) (trigger string, count int) 
 		return "INITIAL_PLANNING", 1
 	}
 
-	blocked := 0
+	var blocked, integrationFailed, hypothesisExhausted int
 	for _, task := range state.Tasks {
-		if task.Status == models.TaskStatusBlocked {
+		switch task.Status {
+		case models.TaskStatusBlocked:
 			blocked++
-		}
-	}
-	if blocked > 0 {
-		return "BLOCKED_TASKS", blocked
-	}
-
-	integrationFailed := 0
-	for _, task := range state.Tasks {
-		if task.Status == models.TaskStatusIntegrationFailed {
+		case models.TaskStatusIntegrationFailed:
 			integrationFailed++
 		}
-	}
-	if integrationFailed > 0 {
-		return "INTEGRATION_FAILED", integrationFailed
-	}
-
-	hypothesisExhausted := 0
-	for _, task := range state.Tasks {
 		if len(task.FailedBy) >= 2 {
 			hypothesisExhausted++
 		}
 	}
-	if hypothesisExhausted > 0 {
+
+	// Return in priority order
+	switch {
+	case blocked > 0:
+		return "BLOCKED_TASKS", blocked
+	case integrationFailed > 0:
+		return "INTEGRATION_FAILED", integrationFailed
+	case hypothesisExhausted > 0:
 		return "HYPOTHESIS_EXHAUSTED", hypothesisExhausted
 	}
 
@@ -354,17 +347,14 @@ func detectPlannerWakeTriggers(state *models.State) (trigger string, count int) 
 }
 
 // buildWorkQueuesStatus calculates work queue availability
-func buildWorkQueuesStatus(state *models.State) workQueuesStatus {
-	coderCount := models.CountClaimableTasks(state)
-	reviewerCount := models.CountReviewableTasks(state)
-
+func buildWorkQueuesStatus(state *models.State, claimable, reviewable int) workQueuesStatus {
 	return workQueuesStatus{
 		Coder: queueStatus{
-			Available: coderCount,
+			Available: claimable,
 			Reason:    models.GetCoderWorkDiagnostics(state),
 		},
 		Reviewer: queueStatus{
-			Available: reviewerCount,
+			Available: reviewable,
 			Reason:    models.GetReviewerWorkDiagnostics(state),
 		},
 	}
@@ -389,6 +379,58 @@ func getProcessStatus(pid int) string {
 	}
 
 	return "stopped"
+}
+
+func writeTasksSection(b *strings.Builder, tasks taskStatus) {
+	b.WriteString("=== TASKS ===\n")
+	fmt.Fprintf(b, "Total: %d (%d active, %d terminal)\n",
+		tasks.Total, tasks.Active, tasks.Terminal)
+
+	if len(tasks.ByStatus) > 0 {
+		b.WriteString("\nBy Status:\n")
+		statuses := make([]string, 0, len(tasks.ByStatus))
+		for status := range tasks.ByStatus {
+			statuses = append(statuses, status)
+		}
+		slices.Sort(statuses)
+		for _, status := range statuses {
+			fmt.Fprintf(b, "  %s: %d\n", status, tasks.ByStatus[status])
+		}
+	}
+
+	fmt.Fprintf(b, "\nClaimable: %d tasks\n", tasks.Claimable)
+	fmt.Fprintf(b, "Reviewable: %d tasks\n", tasks.Reviewable)
+	if tasks.BlockedByDeps > 0 {
+		fmt.Fprintf(b, "Blocked by dependencies: %d tasks\n", tasks.BlockedByDeps)
+	}
+	b.WriteString("\n")
+}
+
+func writeAgentsSection(b *strings.Builder, agents []agentStatus) {
+	b.WriteString("=== AGENTS ===\n")
+	if len(agents) == 0 {
+		b.WriteString("No active agents\n\n")
+		return
+	}
+	headers := []string{"ID", "Role", "Status", "PID", "Task", "Heartbeat", "Process"}
+	rows := make([][]string, len(agents))
+	for i, agent := range agents {
+		pidStr := "-"
+		if agent.PID != 0 {
+			pidStr = fmt.Sprintf("%d", agent.PID)
+		}
+		rows[i] = []string{
+			agent.ID,
+			agent.Role,
+			agent.Status,
+			pidStr,
+			agent.CurrentTask,
+			agent.TimeSinceHeartbeat,
+			agent.ProcessStatus,
+		}
+	}
+	b.WriteString(formatTable(headers, rows))
+	b.WriteString("\n\n")
 }
 
 // formatStatusDashboard renders the status as a dashboard
@@ -420,64 +462,8 @@ func formatStatusDashboard(data statusData) (string, error) {
 	}
 	b.WriteString("\n")
 
-	// Tasks section
-	b.WriteString("=== TASKS ===\n")
-	b.WriteString(fmt.Sprintf("Total: %d (%d active, %d terminal)\n",
-		data.Tasks.Total, data.Tasks.Active, data.Tasks.Terminal))
-
-	if len(data.Tasks.ByStatus) > 0 {
-		b.WriteString("\nBy Status:\n")
-		// Sort status names for consistent output
-		statuses := make([]string, 0, len(data.Tasks.ByStatus))
-		for status := range data.Tasks.ByStatus {
-			statuses = append(statuses, status)
-		}
-		// Simple bubble sort for consistent ordering
-		for i := 0; i < len(statuses); i++ {
-			for j := i + 1; j < len(statuses); j++ {
-				if statuses[i] > statuses[j] {
-					statuses[i], statuses[j] = statuses[j], statuses[i]
-				}
-			}
-		}
-		for _, status := range statuses {
-			count := data.Tasks.ByStatus[status]
-			b.WriteString(fmt.Sprintf("  %s: %d\n", status, count))
-		}
-	}
-
-	b.WriteString(fmt.Sprintf("\nClaimable: %d tasks\n", data.Tasks.Claimable))
-	b.WriteString(fmt.Sprintf("Reviewable: %d tasks\n", data.Tasks.Reviewable))
-	if data.Tasks.BlockedByDeps > 0 {
-		b.WriteString(fmt.Sprintf("Blocked by dependencies: %d tasks\n", data.Tasks.BlockedByDeps))
-	}
-	b.WriteString("\n")
-
-	// Agents section
-	b.WriteString("=== AGENTS ===\n")
-	if len(data.Agents) == 0 {
-		b.WriteString("No active agents\n\n")
-	} else {
-		headers := []string{"ID", "Role", "Status", "PID", "Task", "Heartbeat", "Process"}
-		rows := make([][]string, len(data.Agents))
-		for i, agent := range data.Agents {
-			pidStr := "-"
-			if agent.PID != 0 {
-				pidStr = fmt.Sprintf("%d", agent.PID)
-			}
-			rows[i] = []string{
-				agent.ID,
-				agent.Role,
-				agent.Status,
-				pidStr,
-				agent.CurrentTask,
-				agent.TimeSinceHeartbeat,
-				agent.ProcessStatus,
-			}
-		}
-		b.WriteString(formatTable(headers, rows))
-		b.WriteString("\n\n")
-	}
+	writeTasksSection(&b, data.Tasks)
+	writeAgentsSection(&b, data.Agents)
 
 	// Planner section
 	b.WriteString("=== PLANNER ===\n")
