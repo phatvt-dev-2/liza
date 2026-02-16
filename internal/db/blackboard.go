@@ -15,10 +15,8 @@ import (
 )
 
 const (
-	// DefaultLockTimeout is the default maximum time to wait for a file lock
 	DefaultLockTimeout = 10 * time.Second
-	// LockCheckInterval is how often to check for lock acquisition
-	LockCheckInterval = 100 * time.Millisecond
+	LockCheckInterval  = 100 * time.Millisecond
 )
 
 // Blackboard provides thread-safe access to the state.yaml file
@@ -39,7 +37,7 @@ type Blackboard struct {
 	enableMetrics   bool
 }
 
-// New creates a new Blackboard instance for the given state file path
+// New creates a Blackboard backed by the given state file path.
 func New(statePath string) *Blackboard {
 	return &Blackboard{
 		statePath:   statePath,
@@ -47,8 +45,7 @@ func New(statePath string) *Blackboard {
 	}
 }
 
-// WithLockTimeout returns a new Blackboard with a custom lock timeout
-// Note: This creates a new instance; cached bytes are copied (not shared)
+// WithLockTimeout creates a new instance; cached bytes are copied (not shared).
 func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 	bb.cacheMu.RLock()
 	cachedData := bb.cachedData
@@ -64,7 +61,7 @@ func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 	return newBB
 }
 
-// EnableMetrics enables lock metrics collection
+// EnableMetrics enables lock metrics collection.
 func (bb *Blackboard) EnableMetrics() {
 	if bb.metricsRecorder == nil {
 		bb.metricsRecorder = newLockMetricsRecorder()
@@ -72,53 +69,45 @@ func (bb *Blackboard) EnableMetrics() {
 	bb.enableMetrics = true
 }
 
-// DisableMetrics disables lock metrics collection
+// DisableMetrics disables lock metrics collection.
 func (bb *Blackboard) DisableMetrics() {
 	bb.enableMetrics = false
 }
 
-// GetMetricsRecorder returns the metrics recorder (may be nil if metrics not enabled)
+// GetMetricsRecorder returns the metrics recorder, or nil if not enabled.
 func (bb *Blackboard) GetMetricsRecorder() *lockMetricsRecorder {
 	return bb.metricsRecorder
 }
 
-// lockPath returns the path to the lock file
 func (bb *Blackboard) lockPath() string {
 	return bb.statePath + ".lock"
 }
 
-// pidPath returns the path to the PID file
 func (bb *Blackboard) pidPath() string {
 	return bb.statePath + ".lock.pid"
 }
 
-// acquireLockWithPID attempts to acquire a lock and writes the current PID
 func (bb *Blackboard) acquireLockWithPID() (*flock.Flock, error) {
 	lock := flock.New(bb.lockPath())
 	acquired, err := lock.TryLock()
 	if err != nil {
-		// Classify the lock acquisition error
 		return nil, classifyLockError(err)
 	}
 	if !acquired {
 		return nil, fmt.Errorf("lock not acquired")
 	}
 
-	// Write current PID to file
 	pid := os.Getpid()
 	pidData := []byte(strconv.Itoa(pid))
 	if err := os.WriteFile(bb.pidPath(), pidData, 0644); err != nil {
 		lock.Unlock()
-		// Classify the PID file write error
 		return nil, classifyLockError(err)
 	}
 
 	return lock, nil
 }
 
-// isProcessAlive checks if a process with the given PID is running
 func isProcessAlive(pid int) bool {
-	// Try to find the process
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false
@@ -130,8 +119,6 @@ func isProcessAlive(pid int) bool {
 	return err == nil
 }
 
-// isLockStale checks if the lock is held by a dead process
-// Returns (isStale bool, pid int)
 func (bb *Blackboard) isLockStale() (bool, int) {
 	pidData, err := os.ReadFile(bb.pidPath())
 	if err != nil {
@@ -145,7 +132,6 @@ func (bb *Blackboard) isLockStale() (bool, int) {
 		return false, 0
 	}
 
-	// Check if the process is alive
 	return !isProcessAlive(pid), pid
 }
 
@@ -162,21 +148,15 @@ func (bb *Blackboard) cleanupStaleLock() error {
 	return nil
 }
 
-// withLock executes a function while holding an exclusive lock on the state file
 func (bb *Blackboard) withLock(fn func() error) error {
 	return bb.withLockOperation("unknown", fn)
 }
 
-// withLockOperation executes a function while holding an exclusive lock,
-// optionally collecting metrics for the named operation
 func (bb *Blackboard) withLockOperation(operation string, fn func() error) error {
 	var lock *flock.Flock
 	var err error
 
-	// Track acquisition time if metrics enabled
 	acquisitionStart := time.Now()
-
-	// Try to acquire lock with timeout using TryLock in a loop
 	deadline := time.Now().Add(bb.lockTimeout)
 	locked := false
 
@@ -193,25 +173,19 @@ func (bb *Blackboard) withLockOperation(operation string, fn func() error) error
 				return lockErr
 			}
 		}
-		// Sleep before retrying
 		time.Sleep(LockCheckInterval)
 	}
 
 	if !locked {
-		// Timeout - check if lock is stale
 		isStale, stalePID := bb.isLockStale()
 		if isStale {
-			// Lock is held by a dead process
 			bb.cleanupStaleLock()
-			// Retry once after cleanup
 			lock, err = bb.acquireLockWithPID()
 			if err != nil {
-				// Return the stale lock error with context
 				return newLockStale(stalePID)
 			}
 			locked = true
 		} else {
-			// Lock is held by a live process - timeout
 			return newLockTimeout(fmt.Errorf("lock held by live process after %v", bb.lockTimeout))
 		}
 	}
@@ -219,8 +193,7 @@ func (bb *Blackboard) withLockOperation(operation string, fn func() error) error
 	acquisitionTime := time.Since(acquisitionStart)
 	holdStart := time.Now()
 
-	// Ensure cleanup on exit
-	// NOTE: We intentionally do NOT remove the lock file or PID file here.
+	// We intentionally do NOT remove the lock file or PID file here.
 	// Removing the lock file after unlock creates a race: another process can
 	// create a new file (different inode) and acquire flock on it, then this
 	// process deletes that file, allowing a third process to create yet another
@@ -230,7 +203,6 @@ func (bb *Blackboard) withLockOperation(operation string, fn func() error) error
 	defer func() {
 		lock.Unlock()
 
-		// Record metrics if enabled
 		if bb.enableMetrics && bb.metricsRecorder != nil {
 			holdTime := time.Since(holdStart)
 			bb.metricsRecorder.Record(&lockMetrics{
@@ -244,7 +216,7 @@ func (bb *Blackboard) withLockOperation(operation string, fn func() error) error
 	return fn()
 }
 
-// Read reads the current state from the state file
+// Read returns the current state under an exclusive file lock.
 func (bb *Blackboard) Read() (*models.State, error) {
 	var state models.State
 	err := bb.withLock(func() error {
@@ -272,7 +244,6 @@ func (bb *Blackboard) Read() (*models.State, error) {
 // YAML bytes. Each call returns a freshly-parsed *models.State, so callers
 // can safely mutate the result without corrupting other readers.
 func (bb *Blackboard) ReadCached() (*models.State, error) {
-	// Check file mtime
 	fileInfo, err := os.Stat(bb.statePath)
 	if err != nil {
 		bb.InvalidateCache()
@@ -281,7 +252,6 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 
 	currentMtime := fileInfo.ModTime()
 
-	// Try to use cached bytes
 	bb.cacheMu.RLock()
 	cachedData := bb.cachedData
 	cachedMtime := bb.cachedMtime
@@ -289,24 +259,20 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 
 	var data []byte
 	if cachedData != nil && currentMtime.Equal(cachedMtime) {
-		// Cache hit — use cached bytes (skip disk I/O)
 		data = cachedData
 	} else {
-		// Cache miss — read from disk
 		data, err = os.ReadFile(bb.statePath)
 		if err != nil {
 			bb.InvalidateCache()
 			return nil, err
 		}
 
-		// Update cache
 		bb.cacheMu.Lock()
 		bb.cachedData = data
 		bb.cachedMtime = currentMtime
 		bb.cacheMu.Unlock()
 	}
 
-	// Always parse into a fresh struct so callers get their own copy
 	var state models.State
 	if err := yaml.Unmarshal(data, &state); err != nil {
 		return nil, fmt.Errorf("failed to parse state.yaml: %w", err)
@@ -315,7 +281,7 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 	return &state, nil
 }
 
-// InvalidateCache clears the cached bytes, forcing the next read to reload from disk
+// InvalidateCache forces the next ReadCached call to reload from disk.
 func (bb *Blackboard) InvalidateCache() {
 	bb.cacheMu.Lock()
 	bb.cachedData = nil
@@ -416,7 +382,7 @@ func (bb *Blackboard) Modify(fn func(*models.State) error) error {
 	return err
 }
 
-// GetTask retrieves a task by ID
+// GetTask returns the task with the given ID, or (nil, nil) if not found.
 func (bb *Blackboard) GetTask(taskID string) (*models.Task, error) {
 	state, err := bb.Read()
 	if err != nil {
@@ -432,7 +398,7 @@ func (bb *Blackboard) GetTask(taskID string) (*models.Task, error) {
 	return nil, nil
 }
 
-// GetAgent retrieves an agent by ID
+// GetAgent returns the agent with the given ID, or (nil, nil) if not found.
 func (bb *Blackboard) GetAgent(agentID string) (*models.Agent, error) {
 	state, err := bb.Read()
 	if err != nil {
@@ -470,13 +436,12 @@ func (bb *Blackboard) UpdateAgent(agentID string, fn func(*models.Agent) error) 
 			return err
 		}
 
-		// Update the agent in the map
 		state.Agents[agentID] = agent
 		return nil
 	})
 }
 
-// GetStatePath returns the path to the state file
+// GetStatePath returns the path to the state file.
 func (bb *Blackboard) GetStatePath() string {
 	return bb.statePath
 }
