@@ -1,5 +1,7 @@
 # 5 - Bash Scripts for POC Orchestration
 
+> **Status: SUPERSEDED by [ADR-0012](0012-go-cli-replaces-bash-scripts.md)** — Bash scripts replaced by Go CLI binary (`liza`).
+
 ## Context and Problem Statement
 
 The multi-agent system needs orchestration: spawning agents, managing worktrees, coordinating through the blackboard, handling agent lifecycle. How should this be implemented?

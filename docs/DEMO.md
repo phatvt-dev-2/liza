@@ -115,7 +115,7 @@ git commit -m "Initial commit: vision spec and dev tooling"
 ## Step 5: Initialize Liza
 
 ```bash
-~/.liza/scripts/liza-init.sh "Build hello CLI" specs/vision.md
+liza init "Build hello CLI" --spec specs/vision.md
 ```
 
 This creates:
@@ -149,7 +149,7 @@ Open a terminal for monitoring:
 
 ```bash
 cd hello-cli
-~/.liza/scripts/liza-watch.sh
+liza watch
 ```
 
 This monitors for anomalies and alerts. Leave it running.
@@ -160,7 +160,7 @@ This monitors for anomalies and alerts. Leave it running.
 
 ```bash
 cd hello-cli
-LIZA_AGENT_ID=planner-1 ~/.liza/scripts/liza-agent.sh planner
+liza agent planner --agent-id planner-1
 ```
 
 The Planner will:
@@ -188,7 +188,7 @@ Once UNCLAIMED tasks appear:
 
 ```bash
 cd hello-cli
-LIZA_AGENT_ID=coder-1 ~/.liza/scripts/liza-agent.sh coder
+liza agent coder --agent-id coder-1
 ```
 
 The Coder will:
@@ -209,7 +209,7 @@ ls -la .worktrees/
 
 ```bash
 cd hello-cli
-LIZA_AGENT_ID=code-reviewer-1 ~/.liza/scripts/liza-agent.sh code-reviewer
+liza agent code-reviewer --agent-id code-reviewer-1
 ```
 
 The Code Reviewer will:
@@ -394,13 +394,13 @@ agents: {}
 
 **Pause the system:**
 ```bash
-touch .liza/PAUSE
+liza pause
 # All agents will pause at next check
 ```
 
 **Resume:**
 ```bash
-rm .liza/PAUSE
+liza resume
 ```
 
 **View alerts:**
@@ -410,13 +410,12 @@ cat .liza/alerts.log
 
 **Trigger checkpoint (sprint boundary):**
 ```bash
-~/.liza/scripts/liza-checkpoint.sh "Sprint 1 complete"
-# Generates .liza/checkpoints/checkpoint-YYYYMMDD-HHMMSS.md
+liza checkpoint
 ```
 
 **Abort everything:**
 ```bash
-touch .liza/ABORT
+liza stop
 # All agents will exit gracefully
 ```
 
@@ -439,13 +438,13 @@ touch .liza/ABORT
 - Verify task is READY_FOR_REVIEW: `yq '.tasks[] | select(.status == "READY_FOR_REVIEW")' .liza/state.yaml`
 
 **Debug agent interactively (-i option)**
-- Terminate the agent and release the task: `~/.liza/scripts/release-claim.sh <task-id>> --full --force`
+- Terminate the agent and release the task: `liza release-claim <task-id> --role both`
 - Get its prompt from `.liza/agent-prompts/`
-- Run `LIZA_AGENT_ID=<agent-id> ~/.liza/scripts/liza-agent.sh --cli <claude|codex|gemini|mistral> -i <agent-type>`
+- Run `liza agent <role> --agent-id <agent-id> --cli <claude|codex|gemini|mistral> -i`
 - Paste the prompt
 
 Codex is a nice option for debugging too because it displays everything.
-Run `LIZA_AGENT_ID=coder-1 ~/.liza/scripts/liza-agent.sh --cli codex coder`
+Run `liza agent coder --agent-id coder-1 --cli codex`
 
 **Watcher alerts?**
 - `LEASE EXPIRED`: Agent crashed, supervisor will restart
@@ -462,7 +461,7 @@ For more issues and recovery procedures, see the full [Troubleshooting Guide](TR
 # Stop all agents (Ctrl+C in each terminal)
 
 # Or force abort
-touch .liza/ABORT
+liza stop
 
 # Remove git worktrees and task branches
 for wt in .worktrees/*/; do

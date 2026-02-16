@@ -1,0 +1,97 @@
+package commands
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/log"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
+)
+
+// ClearStaleReviewClaimsCommand finds and clears expired review leases on READY_FOR_REVIEW tasks.
+// Returns the number of claims cleared.
+func ClearStaleReviewClaimsCommand(projectRoot string) (int, error) {
+	// Setup paths
+	lp := paths.New(projectRoot)
+
+	// Get database and logger instances
+	bb := db.New(lp.StatePath())
+	logger := log.New(lp.LogPath())
+
+	// Track cleared claims
+	cleared := 0
+	now := time.Now().UTC()
+
+	// Atomic update
+	err := bb.Modify(func(state *models.State) error {
+		// Find READY_FOR_REVIEW tasks with expired review leases
+		for i := range state.Tasks {
+			task := &state.Tasks[i]
+
+			// Skip if not READY_FOR_REVIEW
+			if task.Status != models.TaskStatusReadyForReview {
+				continue
+			}
+
+			// Skip if no reviewing_by
+			if task.ReviewingBy == nil {
+				continue
+			}
+
+			// Check if lease is expired
+			// If lease is nil but reviewing_by is set, treat as malformed/expired
+			isExpired := false
+			var staleReviewer string
+			var expiredAt string
+
+			if task.ReviewLeaseExpires == nil {
+				// Malformed state: reviewing_by set but no lease
+				isExpired = true
+				staleReviewer = *task.ReviewingBy
+				expiredAt = "unknown (lease missing)"
+			} else if task.ReviewLeaseExpires.Before(now) || task.ReviewLeaseExpires.Equal(now) {
+				// Lease has expired
+				isExpired = true
+				staleReviewer = *task.ReviewingBy
+				expiredAt = task.ReviewLeaseExpires.Format(time.RFC3339)
+			}
+
+			if !isExpired {
+				continue
+			}
+
+			// Clear the stale claim
+			task.ReviewingBy = nil
+			task.ReviewLeaseExpires = nil
+
+			// Log the cleanup
+			taskIDPtr := &task.ID
+			detail := fmt.Sprintf("Review claim expired at %s (reviewer: %s)", expiredAt, staleReviewer)
+
+			logEntry := log.Entry{
+				Timestamp: now,
+				Agent:     "system",
+				Action:    "stale_review_cleared",
+				Task:      taskIDPtr,
+				Detail:    detail,
+			}
+
+			// Append log entry (this will acquire its own lock)
+			if err := logger.Append(logEntry); err != nil {
+				return fmt.Errorf("failed to log stale review cleanup for %s: %w", task.ID, err)
+			}
+
+			cleared++
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to clear stale review claims: %w", err)
+	}
+
+	return cleared, nil
+}

@@ -20,36 +20,45 @@ Contracts are versioned with the project:
 
 **Note:** Update symlink when switching projects: `ln -sf /path/to/project/contracts/CORE.md ~/.claude/CLAUDE.md`
 
-### Scripts (`~/.liza/scripts/`)
+### Go CLI (`liza`)
 
-| Script | Purpose |
-|--------|---------|
-| `liza-init.sh` | Initialize `.liza/` for new goal |
-| `liza-add-task.sh` | Add task to blackboard (atomic, with validation) |
-| `liza-lock.sh` | Atomic read-modify-write operations |
-| `liza-validate.sh` | Schema validation |
-| `liza-watch.sh` | Alarm monitor daemon |
-| `liza-analyze.sh` | Circuit breaker analysis (human-triggered) |
-| `liza-checkpoint.sh` | Create checkpoint and generate sprint summary |
-| `liza-agent.sh` | Agent supervisor (while-true wrapper) |
-| `liza-claim-task.sh` | Claim task with two-phase commit (called by supervisor) |
-| `liza-submit-for-review.sh` | Atomically set READY_FOR_REVIEW + review_commit + history |
-| `liza-submit-verdict.sh` | Atomically set APPROVED/REJECTED + review fields + history |
-| `wt-create.sh` | Create worktree for task |
-| `wt-merge.sh` | Merge approved worktree (supervisor-executed after APPROVED) |
-| `wt-delete.sh` | Clean up abandoned/merged worktree |
-| `update-sprint-metrics.sh` | Recompute sprint.metrics from task state |
-| `clear-stale-review-claims.sh` | Clear expired review claims |
+All system mechanics are provided by the `liza` Go binary (assumed in PATH). See [ADR-0012](../architecture/ADR/0012-go-cli-replaces-bash-scripts.md).
 
-**Deployment Note:** All scripts above are fully implemented in `scripts/`. They must be deployed to their runtime location (`~/.liza/scripts/`) before use. Until deployed, cross-script references (e.g., `wt-merge.sh` calling `update-sprint-metrics.sh`) will silently no-op.
+| Command | Purpose |
+|---------|---------|
+| `liza init "goal" --spec spec` | Initialize `.liza/` for new goal |
+| `liza add-task --id X ...` | Add task to blackboard (atomic, with validation) |
+| `liza validate [state]` | Schema validation |
+| `liza watch` | Alarm monitor daemon |
+| `liza analyze` | Circuit breaker analysis (human-triggered) |
+| `liza checkpoint` | Create checkpoint and generate sprint summary |
+| `liza agent <role> --agent-id x` | Agent supervisor |
+| `liza claim-task <task> <agent>` | Claim task with two-phase commit (called by supervisor) |
+| `liza submit-for-review <task> <sha>` | Atomically set READY_FOR_REVIEW + review_commit + history |
+| `liza submit-verdict <task> <V> [reason]` | Atomically set APPROVED/REJECTED + review fields + history |
+| `liza wt-create <task> [--fresh]` | Create worktree for task |
+| `liza wt-merge <task>` | Merge approved worktree (supervisor-executed after APPROVED) |
+| `liza wt-delete <task>` | Clean up abandoned/merged worktree |
+| `liza update-sprint-metrics` | Recompute sprint.metrics from task state |
+| `liza clear-stale-review-claims` | Clear expired review claims |
+| `liza release-claim <task> [--role R]` | Release claim on task or review |
+| `liza pause` / `liza resume` | Pause/resume system |
+| `liza stop` / `liza start` | Stop/start system |
+| `liza status` | Show system status |
+| `liza get` | Get blackboard data |
+| `liza mark-blocked` | Mark task as blocked |
+| `liza supersede-task` | Supersede a task |
+| `liza delete agent\|task` | Delete agent or task entry |
+
+Locking is internal to the binary — no external `flock` wrapper needed.
 
 ### Optional Project Files
 
 | Path | Purpose | Used By |
 |------|---------|---------|
-| `scripts/integration-test.sh` | Integration test suite | `wt-merge.sh` runs if present after merge |
+| `integration-test.sh` | Integration test suite | `liza wt-merge` runs if present after merge |
 
-If `scripts/integration-test.sh` exists, `wt-merge.sh` executes it after successful merge. On failure, merge is rolled back and task marked INTEGRATION_FAILED.
+If `integration-test.sh` exists in the project, `liza wt-merge` executes it after successful merge. On failure, merge is rolled back and task marked INTEGRATION_FAILED.
 
 ### Templates (`<project>/templates/`)
 
@@ -69,9 +78,9 @@ If `scripts/integration-test.sh` exists, `wt-merge.sh` executes it after success
 | `.liza/archive/` | Archived terminal-state tasks |
 | `.worktrees/` | Git worktrees, one per active task |
 
-### Script Exit Codes
+### CLI Exit Codes
 
-All Liza scripts use a consistent exit code taxonomy:
+The `liza` CLI uses a consistent exit code taxonomy:
 
 | Code | Meaning | Recovery |
 |------|---------|----------|
@@ -80,16 +89,14 @@ All Liza scripts use a consistent exit code taxonomy:
 | 2 | Lock acquisition failed | Retry with backoff |
 | 3 | Git operation failed | Check git state, resolve conflicts |
 | 4 | State inconsistency (invariant violation) | Manual inspection required |
-| 5 | External dependency failed (yq, git, bc not found) | Install dependencies |
 
-**Per-Script Specifics:**
+**Per-Command Specifics:**
 
-| Script | Exit 1 | Exit 3 | Exit 4 |
-|--------|--------|--------|--------|
-| `liza-lock.sh` | Invalid operation | — | Concurrent modification detected |
-| `wt-create.sh` | Task not CLAIMED | Worktree creation failed | — |
-| `wt-merge.sh` | Task not APPROVED, SHA mismatch | Merge conflict | — |
-| `liza-validate.sh` | Schema violation found | — | — |
+| Command | Exit 1 | Exit 3 | Exit 4 |
+|---------|--------|--------|--------|
+| `liza wt-create` | Task not CLAIMED | Worktree creation failed | — |
+| `liza wt-merge` | Task not APPROVED, SHA mismatch | Merge conflict | — |
+| `liza validate` | Schema violation found | — | — |
 
 **Recovery Procedures:**
 - **Exit 2 (lock failed):** Another process holds lock. Wait 1-5s, retry up to 3 times.
@@ -102,9 +109,9 @@ All Liza scripts use a consistent exit code taxonomy:
 
 ### How Agents Execute Blackboard Operations
 
-Agents have shell access via Claude Code's bash tool. Blackboard operations are direct script calls.
+Agents have shell access via Claude Code's bash tool. Blackboard operations are `liza` CLI calls.
 
-**Task Claiming:** The supervisor (`liza-agent.sh`) claims tasks using `liza-claim-task.sh` which implements a two-phase commit pattern to prevent invalid intermediate states:
+**Task Claiming:** The supervisor (`liza agent`) claims tasks using `liza claim-task` which implements a two-phase commit pattern to prevent invalid intermediate states:
 
 ```
 Phase 1: Validate under lock (no state mutation)
@@ -126,23 +133,14 @@ Cleanup: If commit fails, worktree is deleted to maintain consistency
 
 This pattern ensures no task is ever in CLAIMED state without a valid worktree.
 
-**State Updates:** Always combine related field updates in a single yq expression using `|=` and `|`:
+**State Updates:** Agents use dedicated CLI commands for state transitions. The CLI handles locking and validation internally:
 
 ```bash
-# IMPORTANT: If yq fails mid-update, state.yaml is inconsistent.
-# Always combine related field updates in a single yq expression
-
-# Extend lease
-~/.liza/scripts/liza-lock.sh write '.agents.coder-1.lease_expires' '2025-01-17T15:00:00Z'
-
-# Read current state
-~/.liza/scripts/liza-lock.sh read
-
-# Request review (MUST be atomic)
-$SCRIPT_DIR/liza-submit-for-review.sh task-3 a1b2c3d
+# Request review (atomic)
+liza submit-for-review task-3 a1b2c3d
 
 # Add task (Planner operation)
-~/.liza/scripts/liza-add-task.sh \
+liza add-task \
   --id task-3 \
   --desc "Add retry decorator to UserAPI.get_user()" \
   --spec specs/retry-logic.md \
@@ -151,55 +149,48 @@ $SCRIPT_DIR/liza-submit-for-review.sh task-3 a1b2c3d
   --priority 1 \
   --depends "task-1,task-2"
 
-# Log spec change (when human updates specs)
-TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-~/.liza/scripts/liza-lock.sh modify \
-  env TS="$TS" yq -i '.spec_changes += [{
-    "timestamp": strenv(TS),
-    "spec": "specs/retry-logic.md#auth",
-    "change": "Added auth token refresh retry behavior",
-    "triggered_by": "task-4a"
-  }]' .liza/state.yaml
+# Read current state
+liza get
 
-# Finalize DRAFT → UNCLAIMED (Planner only, after defining all required fields)
-~/.liza/scripts/liza-lock.sh modify yq -i '(.tasks[] | select(.id == "task-3" and .status == "DRAFT")) |=
-    select(.done_when != null and .spec_ref != null) |
-    .status = "UNCLAIMED"' .liza/state.yaml
-# Note: The select() ensures task has required fields before finalization
+# System status
+liza status
 ```
 
-### Script Availability
+### Command Availability
 
-Scripts are divided into agent-callable and supervisor-only:
+CLI commands are divided into agent-callable and supervisor-only:
 
-**Agent-Callable Scripts:**
+**Agent-Callable Commands:**
 
-| Script | Called By | Purpose |
-|--------|-----------|---------|
-| `liza-add-task.sh` | Planner | Add task atomically (validates after write) |
-| `liza-lock.sh` | All agents | Atomic blackboard operations |
-| `liza-validate.sh` | All agents (optional) | Verify state before/after operations |
-| `wt-merge.sh` | Supervisor | Merge after Code Reviewer approves |
-| `wt-delete.sh` | Planner | Clean up abandoned tasks |
+| Command | Called By | Purpose |
+|---------|-----------|---------|
+| `liza add-task` | Planner | Add task atomically (validates after write) |
+| `liza validate` | All agents (optional) | Verify state before/after operations |
+| `liza get` | All agents | Read blackboard data |
+| `liza submit-for-review` | Coder | Request review (atomic state transition) |
+| `liza submit-verdict` | Code Reviewer | Approve/reject (atomic state transition) |
+| `liza mark-blocked` | Coder, Planner | Mark task as blocked |
+| `liza wt-merge` | Supervisor | Merge after Code Reviewer approves |
+| `liza wt-delete` | Planner | Clean up abandoned tasks |
 
-**Supervisor-Only Scripts:**
+**Supervisor-Only Commands:**
 
-| Script | Purpose |
-|--------|---------|
-| `liza-agent.sh` | Agent lifecycle management (start, restart, backoff) |
-| `liza-claim-task.sh` | Two-phase task claiming with worktree creation |
-| `wt-create.sh` | Create worktree (called by liza-claim-task.sh) |
+| Command | Purpose |
+|---------|---------|
+| `liza agent` | Agent lifecycle management (start, restart, backoff) |
+| `liza claim-task` | Two-phase task claiming with worktree creation |
+| `liza wt-create` | Create worktree (called internally by `liza claim-task`) |
 
 ### Supervisor-Only Operations
 
-**Terminology clarification:** "Supervisor" refers to the enclosing bash loop within each `liza-agent.sh` instance—not a central singleton process. Each agent role runs in its own terminal with its own supervisor loop:
+**Terminology clarification:** "Supervisor" refers to the Go process loop within each `liza agent` instance—not a central singleton process. Each agent role runs in its own terminal with its own supervisor loop:
 
 ```
 Terminal 1                    Terminal 2                    Terminal 3
 ┌─────────────────────┐      ┌─────────────────────┐      ┌─────────────────────┐
-│ liza-agent.sh       │      │ liza-agent.sh       │      │ liza-agent.sh       │
-│ (planner supervisor)│      │ (coder supervisor)  │      │ (reviewer supervisor)│
-│                     │      │                     │      │                     │
+│ liza agent planner  │      │ liza agent coder    │      │ liza agent          │
+│ --agent-id planner-1│      │ --agent-id coder-1  │      │ code-reviewer       │
+│                     │      │                     │      │ --agent-id cr-1     │
 │  while true:        │      │  while true:        │      │  while true:        │
 │    wait_for_work()  │      │    claim_task()     │      │    claim_review()   │
 │    claude -p "..."  │      │    claude -p "..."  │      │    claude -p "..."  │
@@ -207,14 +198,14 @@ Terminal 1                    Terminal 2                    Terminal 3
 └─────────────────────┘      └─────────────────────┘      └─────────────────────┘
 ```
 
-When specs say "supervisor claims task before spawning agent," this means the bash loop claims the task before invoking `claude`—all within the same `liza-agent.sh` process. The `claude` call blocks until the session ends.
+When specs say "supervisor claims task before spawning agent," this means the Go loop claims the task before invoking `claude`—all within the same `liza agent` process. The `claude` call blocks until the session ends.
 
 The supervisor handles:
 - Starting/restarting the Claude Code process
-- Claiming tasks before spawning Coders (via `liza-claim-task.sh`)
+- Claiming tasks before spawning Coders (via `liza claim-task`)
 - Assigning reviews before spawning Code Reviewers
 - Detecting exit codes
-- Respecting PAUSE/ABORT/CHECKPOINT files
+- Respecting system mode (`config.mode: PAUSED`, `STOPPED`) and sprint status (`CHECKPOINT`)
 - Backoff timing on crashes
 
 Agents do not call supervisor-only scripts or manage their own lifecycle.
@@ -237,7 +228,7 @@ Before any agent starts:
 2. **Initialize blackboard:**
    ```bash
    cd /path/to/project
-   ~/.liza/scripts/liza-init.sh "Implement retry logic for all API calls"
+   liza init "Implement retry logic for all API calls"
    ```
 
 3. **Write/verify specs:**
@@ -248,7 +239,7 @@ Before any agent starts:
 4. **Start watcher (optional but recommended):**
    ```bash
    # Dedicated terminal
-   ~/.liza/scripts/liza-watch.sh
+   liza watch
    ```
 
 ### Agent Startup (Human Triggers, Agents Run)
@@ -257,13 +248,13 @@ Start agents in separate terminals. Each agent requires a unique `LIZA_AGENT_ID`
 
 ```bash
 # Terminal 1: Planner
-LIZA_AGENT_ID=planner-1 ~/.liza/scripts/liza-agent.sh planner
+liza agent planner --agent-id planner-1
 
 # Terminal 2: Coder (after planner has created tasks)
-LIZA_AGENT_ID=coder-1 ~/.liza/scripts/liza-agent.sh coder
+liza agent coder --agent-id coder-1
 
 # Terminal 3: Code Reviewer (after coder starts requesting reviews)
-LIZA_AGENT_ID=code-reviewer-1 ~/.liza/scripts/liza-agent.sh code_reviewer
+liza agent code-reviewer --agent-id code-reviewer-1
 ```
 
 See [Agent Identity Protocol](../architecture/roles.md#agent-identity-protocol) for identity validation and collision prevention.
@@ -303,116 +294,120 @@ The supervisor passes context via the initial prompt, including structured task 
 # - INSTRUCTIONS: trigger-specific guidance (varies by wake trigger)
 ```
 
-See `liza-agent.sh` functions `build_coder_context()`, `build_reviewer_context()`, and `build_planner_context()` for exact formats.
+See `liza agent` source (Go) for exact prompt-building logic per role.
 
 Exact CLI syntax depends on Claude Code version. The contract handles mode selection regardless of invocation method.
 
 ---
 
-## Script Specifications
+## CLI Command Reference
 
-Script implementations are in the [`scripts/`](scripts/) directory:
+All commands are subcommands of the `liza` binary. Run `liza help` or `liza <command> --help` for full usage.
 
-| Script | Purpose | Source |
-|--------|---------|--------|
-| `liza-init.sh` | Initialize `.liza/` for new goal | [scripts/liza-init.sh](scripts/liza-init.sh) |
-| `liza-lock.sh` | Atomic read-modify-write operations | [scripts/liza-lock.sh](scripts/liza-lock.sh) |
-| `liza-validate.sh` | Schema validation | [scripts/liza-validate.sh](scripts/liza-validate.sh) |
-| `liza-watch.sh` | Alarm monitor daemon | [scripts/liza-watch.sh](scripts/liza-watch.sh) |
-| `liza-analyze.sh` | Circuit breaker analysis (human-triggered) | [scripts/liza-analyze.sh](scripts/liza-analyze.sh) |
-| `liza-checkpoint.sh` | Create checkpoint and generate sprint summary | [scripts/liza-checkpoint.sh](scripts/liza-checkpoint.sh) |
-| `liza-agent.sh` | Agent supervisor (while-true wrapper) | [scripts/liza-agent.sh](scripts/liza-agent.sh) |
-| `liza-claim-task.sh` | Claim task with two-phase commit | [scripts/liza-claim-task.sh](scripts/liza-claim-task.sh) |
-| `wt-create.sh` | Create worktree for task | [scripts/wt-create.sh](scripts/wt-create.sh) |
-| `wt-merge.sh` | Merge approved worktree (supervisor-executed after APPROVED) | [scripts/wt-merge.sh](scripts/wt-merge.sh) |
-| `wt-delete.sh` | Clean up abandoned/merged worktree | [scripts/wt-delete.sh](scripts/wt-delete.sh) |
+### Key Commands
 
-### Script Usage Summary
-
-**liza-init.sh** — Initialize Liza blackboard for new goal
+**liza init** — Initialize blackboard for new goal
 ```bash
-liza-init.sh "Goal description"
+liza init "Goal description" --spec specs/vision.md
 ```
 
-**liza-add-task.sh** — Add task to blackboard (Planner)
+**liza add-task** — Add task to blackboard (Planner)
 ```bash
-liza-add-task.sh --id TASK_ID --desc DESCRIPTION --spec SPEC_REF \
+liza add-task --id TASK_ID --desc DESCRIPTION --spec SPEC_REF \
   --done DONE_WHEN --scope SCOPE [--priority N] [--depends "task-a,task-b"]
 # Atomically adds task, updates sprint.scope.planned and goal.alignment_history, validates
 ```
 
-**liza-lock.sh** — Atomic blackboard operations
+**liza validate** — Validate blackboard state
 ```bash
-liza-lock.sh read                    # Print current state
-liza-lock.sh write field value       # Set field (yq syntax, value passed via env)
-liza-lock.sh modify <cmd> [args...]  # Run command with lock held (no shell)
-```
-
-**Write limitations:** `write` is only for simple field assignments (string values). It does not support array appends or complex yq expressions. Use `modify` for anything beyond `path = "value"`.
-
-**Modify examples (safe patterns):**
-```bash
-# Append to anomalies
-NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-~/.liza/scripts/liza-lock.sh modify \
-  env NOW="$NOW" yq -i '.anomalies += [{"timestamp": strenv(NOW), "reporter": "agent-id", "type": "system_ambiguity", "details": "..." }]' \
-  .liza/state.yaml
-
-# Update a task by id
-TASK_ID="task-3"
-~/.liza/scripts/liza-lock.sh modify \
-  env TASK_ID="$TASK_ID" yq -i '(.tasks[] | select(.id == strenv(TASK_ID))) |= .status = "READY_FOR_REVIEW"' \
-  .liza/state.yaml
-```
-
-**liza-validate.sh** — Validate blackboard state
-```bash
-liza-validate.sh [state.yaml]
+liza validate [state.yaml]
 # Returns "VALID" or "INVALID: [issue description]"
 ```
 
-**liza-watch.sh** — Monitor blackboard and alert
+**liza watch** — Monitor blackboard and alert
 ```bash
-liza-watch.sh [project_root]
+liza watch
 # Runs continuously, alerts on: expired leases, blocked tasks, review loops, etc.
 ```
 
-**liza-analyze.sh** — Circuit breaker analysis
+**liza analyze** — Circuit breaker analysis
 ```bash
-liza-analyze.sh [project_root]
-# Detects systemic patterns, generates report, creates CHECKPOINT if triggered
+liza analyze
+# Detects systemic patterns, generates report, sets sprint.status: CHECKPOINT if triggered
 ```
 
-**liza-checkpoint.sh** — Create checkpoint
+**liza checkpoint** — Create checkpoint
 ```bash
-liza-checkpoint.sh [project_root]
-# Creates CHECKPOINT file and generates sprint summary
+liza checkpoint
+# Sets sprint.status: CHECKPOINT and generates sprint summary
 ```
 
-**liza-agent.sh** — Agent supervisor
+**liza agent** — Agent supervisor
 ```bash
-LIZA_AGENT_ID=coder-1 liza-agent.sh coder [initial-task-id]
-# Runs agent in loop, handles exit codes, respects PAUSE/ABORT/CHECKPOINT
+liza agent coder --agent-id coder-1
+# Runs agent in loop, handles exit codes, respects config.mode and sprint.status
 ```
 
-**wt-create.sh** — Create worktree
+**liza claim-task** — Claim task (supervisor-only)
 ```bash
-wt-create.sh [--fresh] <task-id>
-# Creates .worktrees/<task-id> from integration branch
+liza claim-task task-3 coder-1
+# Two-phase commit: validate → create worktree → re-validate and commit
+```
+
+**liza submit-for-review** — Request review (Coder)
+```bash
+liza submit-for-review task-3 a1b2c3d
+# Atomically sets READY_FOR_REVIEW + review_commit + history
+```
+
+**liza submit-verdict** — Submit review verdict (Code Reviewer)
+```bash
+liza submit-verdict task-3 APPROVED
+liza submit-verdict task-3 REJECTED "Missing error handling for 429 responses"
+```
+
+**liza wt-create** — Create worktree (supervisor-only)
+```bash
+liza wt-create task-3 [--fresh]
+# Creates .worktrees/task-3 from integration branch
 # --fresh: Delete existing worktree before creating (for reassignment to different coder)
 ```
 
-**wt-merge.sh** — Merge worktree (supervisor-executed after APPROVED)
+**liza wt-merge** — Merge worktree (supervisor-executed after APPROVED)
 ```bash
-wt-merge.sh <task-id>
-# Requires LIZA_AGENT_ID to be a Code Reviewer, task must be APPROVED
+liza wt-merge task-3
+# Task must be APPROVED
 ```
 
-**wt-delete.sh** — Delete worktree
+**liza wt-delete** — Delete worktree
 ```bash
-wt-delete.sh <task-id>
+liza wt-delete task-3
 # Removes worktree and branch for abandoned/superseded tasks
 ```
+
+**liza pause / liza resume** — Pause/resume system
+```bash
+liza pause    # Sets config.mode: PAUSED — agents exit gracefully
+liza resume   # Sets config.mode: RUNNING — supervisors restart agents
+```
+
+**liza stop / liza start** — Stop/start system
+```bash
+liza stop     # Sets config.mode: STOPPED — all agents terminate
+liza start    # Sets config.mode: RUNNING — supervisors restart agents
+```
+
+**liza status** — Show system status
+```bash
+liza status   # Summary of goal, sprint, agents, tasks
+```
+
+**liza get** — Read blackboard data
+```bash
+liza get      # Print current state
+```
+
+> **Note:** `liza handoff` command is pending Go implementation. The data model exists (`HandoffNote` struct, `handoff_pending` field) but no CLI command wraps it yet. Agents write handoff notes directly to state.yaml for now.
 
 ---
 
@@ -427,18 +422,18 @@ Human owns the intent and acts as observer and circuit-breaker, not approver.
 | Terminals | Watch agent output in real-time |
 | `.liza/state.yaml` | Current assignments and states |
 | `.liza/log.yaml` | Activity history (skimmable) |
-| `liza-watch.sh` output | Alarms for attention-needed conditions |
+| `liza watch` output | Alarms for attention-needed conditions |
 
 ### Override Actions
 
 | Action | Mechanism | Effect |
 |--------|-----------|--------|
 | Kill agent | Ctrl+C / kill | Supervisor restarts; agent re-reads blackboard |
-| Pause all | Create `.liza/PAUSE` file | Agents exit gracefully (code 42), supervisors wait |
-| Resume | Remove `.liza/PAUSE` file | Supervisors restart agents |
-| Force replan | Edit `state.yaml`: set task to BLOCKED with `blocked_reason: "human override"` | Planner escalation triggered |
-| Inject task | Edit `state.yaml`: add task (as UNCLAIMED, not DRAFT) | New task available for claim |
-| Abort goal | Create `.liza/ABORT` file | All agents terminate, supervisors stop |
+| Pause all | `liza pause` | Sets `config.mode: PAUSED`; agents exit gracefully (code 42), supervisors wait |
+| Resume | `liza resume` | Sets `config.mode: RUNNING`; supervisors restart agents |
+| Force replan | `liza mark-blocked <task> --reason "human override"` | Planner escalation triggered |
+| Inject task | `liza add-task --id X ...` (as UNCLAIMED) | New task available for claim |
+| Abort goal | `liza stop` | Sets `config.mode: STOPPED`; all agents terminate, supervisors stop |
 
 ### Human Communication
 
@@ -457,7 +452,7 @@ Agents must read `human_notes` relevant to their task before starting/resuming w
 
 ## Alarm Conditions
 
-`liza-watch.sh` monitors and alerts on:
+`liza watch` monitors and alerts on:
 
 | Condition | Threshold | Alert |
 |-----------|-----------|-------|

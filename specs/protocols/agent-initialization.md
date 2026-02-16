@@ -2,7 +2,7 @@
 
 ## Overview
 
-When `liza-agent.sh` spawns an agent, the agent must bootstrap itself from prompt to productive work. This document specifies that sequence.
+When ``liza agent`` spawns an agent, the agent must bootstrap itself from prompt to productive work. This document specifies that sequence.
 
 ---
 
@@ -104,7 +104,7 @@ Role-specific decision tree for what to do first.
 
 ### Planner Startup
 
-**Planning Context:** The supervisor (`liza-agent.sh`) provides planners with computed sprint metrics and context-specific instructions. The planner receives its context in the bootstrap prompt and should follow the wake trigger's instructions.
+**Planning Context:** The supervisor (``liza agent``) provides planners with computed sprint metrics and context-specific instructions. The planner receives its context in the bootstrap prompt and should follow the wake trigger's instructions.
 
 ```
 1. Extract planning context from bootstrap prompt (=== PLANNING CONTEXT === section):
@@ -136,7 +136,7 @@ Role-specific decision tree for what to do first.
 
 ### Coder Startup
 
-**Task Assignment:** The supervisor (`liza-agent.sh`) claims tasks and creates worktrees BEFORE spawning the agent. This avoids permission prompts in non-interactive mode. The coder receives its assigned task in the bootstrap prompt and should NOT attempt to claim tasks directly.
+**Task Assignment:** The supervisor (``liza agent``) claims tasks and creates worktrees BEFORE spawning the agent. This avoids permission prompts in non-interactive mode. The coder receives its assigned task in the bootstrap prompt and should NOT attempt to claim tasks directly.
 
 ```
 1. Extract task from bootstrap prompt (=== ASSIGNED TASK === section):
@@ -164,7 +164,7 @@ Role-specific decision tree for what to do first.
 
 ### Code Reviewer Startup
 
-**Review Assignment:** The supervisor (`liza-agent.sh`) assigns review tasks to Code Reviewers BEFORE spawning the agent, similar to Coder task assignment. This avoids permission prompts in non-interactive mode.
+**Review Assignment:** The supervisor (``liza agent``) assigns review tasks to Code Reviewers BEFORE spawning the agent, similar to Coder task assignment. This avoids permission prompts in non-interactive mode.
 
 ```
 1. Extract review task from bootstrap prompt (=== REVIEW TASK === section):
@@ -247,7 +247,7 @@ Supervisor                    Agent                         Blackboard
     │  find claimable task      │                               │
     │──────────────────────────────────────────────────────────>│
     │                           │                               │
-    │  liza-claim-task.sh       │                               │
+    │  `liza claim-task`       │                               │
     │  (two-phase commit)       │                               │
     │──────────────────────────────────────────────────────────>│
     │                           │                               │
@@ -280,4 +280,4 @@ Supervisor                    Agent                         Blackboard
 - [Task Lifecycle](task-lifecycle.md) — claim, iterate, review flow
 - [Worktree Management](worktree-management.md) — worktree creation on claim
 - [State Machines](../architecture/state-machines.md) — valid state transitions
-- [Tooling](../implementation/tooling.md) — liza-agent.sh specification
+- [Tooling](../implementation/tooling.md) — `liza agent` specification

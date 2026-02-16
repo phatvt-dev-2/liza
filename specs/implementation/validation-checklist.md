@@ -102,8 +102,8 @@ Review concludes when ANY of:
 - [ ] Restarted agent verifies lease
 - [ ] Restarted agent reads handoff notes
 - [ ] Context exhaustion triggers graceful handoff
-- [ ] Agent can call liza-lock.sh via bash
-- [ ] Agent can call wt-create.sh, wt-merge.sh
+- [ ] Agent can call `liza` CLI commands via bash
+- [ ] Agent can call `liza wt-create`, `liza wt-merge`
 - [ ] Restart-to-check model works for review waiting
 - [ ] Supervisor backoff prevents hot spinning on waiting
 
@@ -111,7 +111,7 @@ Review concludes when ANY of:
 
 ## Bootstrap
 
-- [ ] liza-init.sh creates valid blackboard
+- [ ] `liza init` creates valid blackboard
 - [ ] Specs exist before planner starts
 - [ ] Planner can decompose without human interaction
 - [ ] Startup order documented and tested
@@ -149,15 +149,15 @@ Review concludes when ANY of:
 ## Sprint Governance
 
 - [ ] Sprint section in blackboard schema
-- [ ] Sprint initialized by liza-init.sh
-- [ ] CHECKPOINT file halts all agents
-- [ ] Supervisors wait on CHECKPOINT (like PAUSE)
+- [ ] Sprint initialized by `liza init`
+- [ ] `sprint.status: CHECKPOINT` halts all agents
+- [ ] Supervisors wait on CHECKPOINT (like PAUSED)
 - [ ] Sprint summary generated at checkpoint
 - [ ] Retrospective template available
 - [ ] Checkpoint release resumes agents
 - [ ] Sprint deadline detected by watcher
 - [ ] Sprint metrics collected correctly
-- [ ] liza-checkpoint.sh creates CHECKPOINT and generates summary
+- [ ] `liza checkpoint` creates CHECKPOINT and generates summary
 
 ---
 
@@ -167,7 +167,7 @@ Review concludes when ANY of:
 - [ ] Coders log retry_loop anomalies
 - [ ] Coders log trade_off anomalies
 - [ ] Code Reviewers log scope_deviation anomalies
-- [ ] liza-analyze.sh parses anomalies
+- [ ] `liza analyze` parses anomalies
 - [ ] Pattern rules detect retry_cluster
 - [ ] Pattern rules detect debt_accumulation
 - [ ] Pattern rules detect assumption_cascade

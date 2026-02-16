@@ -100,7 +100,7 @@
 - Rationale: salvaging failed work often costs more than restarting from spec (see vision.md)
 - Exception: INTEGRATION_FAILED keeps worktree (conflict resolution requires seeing the failed merge state)
 
-**Validation Note:** `liza-validate.sh` should verify that CLAIMED tasks always have valid `lease_expires`, regardless of prior state.
+**Validation Note:** `liza validate` should verify that CLAIMED tasks always have valid `lease_expires`, regardless of prior state.
 
 ---
 

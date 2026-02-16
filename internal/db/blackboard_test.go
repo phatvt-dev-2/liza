@@ -1,0 +1,1479 @@
+package db
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/models"
+)
+
+// TestBlackboardBasicReadWrite tests basic read and write operations
+func TestBlackboardBasicReadWrite(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	// Create a test state
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Created:     now,
+			Status:      models.GoalStatusInProgress,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusUnclaimed,
+				Priority:    1,
+				SpecRef:     "spec.md",
+				DoneWhen:    "Task is done",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{
+			MaxCoderIterations: 5,
+			MaxReviewCycles:    3,
+			HeartbeatInterval:  30,
+			LeaseDuration:      300,
+			CoderPollInterval:  10,
+			CoderMaxWait:       600,
+			IntegrationBranch:  "main",
+		},
+	}
+
+	// Write the state
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Read it back
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+
+	// Verify basic fields
+	if readState.Version != state.Version {
+		t.Errorf("Version mismatch: got %d, want %d", readState.Version, state.Version)
+	}
+	if readState.Goal.ID != state.Goal.ID {
+		t.Errorf("Goal ID mismatch: got %s, want %s", readState.Goal.ID, state.Goal.ID)
+	}
+	if len(readState.Tasks) != len(state.Tasks) {
+		t.Fatalf("Task count mismatch: got %d, want %d", len(readState.Tasks), len(state.Tasks))
+	}
+	if readState.Tasks[0].ID != state.Tasks[0].ID {
+		t.Errorf("Task ID mismatch: got %s, want %s", readState.Tasks[0].ID, state.Tasks[0].ID)
+	}
+}
+
+// TestBlackboardGetTask tests retrieving a specific task
+func TestBlackboardGetTask(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:      "goal-1",
+			Status:  models.GoalStatusInProgress,
+			Created: now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "First task",
+				Status:      models.TaskStatusUnclaimed,
+				Priority:    1,
+				Created:     now,
+			},
+			{
+				ID:          "task-2",
+				Description: "Second task",
+				Status:      models.TaskStatusClaimed,
+				Priority:    2,
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Get existing task
+	task, err := bb.GetTask("task-2")
+	if err != nil {
+		t.Fatalf("GetTask failed: %v", err)
+	}
+	if task == nil {
+		t.Fatal("GetTask returned nil for existing task")
+	}
+	if task.ID != "task-2" {
+		t.Errorf("Task ID mismatch: got %s, want task-2", task.ID)
+	}
+	if task.Description != "Second task" {
+		t.Errorf("Task description mismatch: got %s, want 'Second task'", task.Description)
+	}
+
+	// Get non-existent task
+	task, err = bb.GetTask("task-999")
+	if err != nil {
+		t.Fatalf("GetTask failed for non-existent task: %v", err)
+	}
+	if task != nil {
+		t.Error("GetTask should return nil for non-existent task")
+	}
+}
+
+// TestBlackboardGetAgent tests retrieving a specific agent
+func TestBlackboardGetAgent(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents: map[string]models.Agent{
+			"agent-1": {
+				Role:      "coder",
+				Status:    models.AgentStatusIdle,
+				Heartbeat: now,
+				Terminal:  "term-1",
+			},
+			"agent-2": {
+				Role:      "reviewer",
+				Status:    models.AgentStatusWorking,
+				Heartbeat: now,
+				Terminal:  "term-2",
+			},
+		},
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Get existing agent
+	agent, err := bb.GetAgent("agent-2")
+	if err != nil {
+		t.Fatalf("GetAgent failed: %v", err)
+	}
+	if agent == nil {
+		t.Fatal("GetAgent returned nil for existing agent")
+	}
+	if agent.Role != "reviewer" {
+		t.Errorf("Agent role mismatch: got %s, want reviewer", agent.Role)
+	}
+
+	// Get non-existent agent
+	agent, err = bb.GetAgent("agent-999")
+	if err != nil {
+		t.Fatalf("GetAgent failed for non-existent agent: %v", err)
+	}
+	if agent != nil {
+		t.Error("GetAgent should return nil for non-existent agent")
+	}
+}
+
+// TestBlackboardModify tests atomic read-modify-write operations
+func TestBlackboardModify(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Original description",
+				Status:      models.TaskStatusUnclaimed,
+				Priority:    1,
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Modify the task
+	err := bb.Modify(func(s *models.State) error {
+		if len(s.Tasks) > 0 {
+			s.Tasks[0].Description = "Modified description"
+			s.Tasks[0].Status = models.TaskStatusClaimed
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Modify failed: %v", err)
+	}
+
+	// Read back and verify
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if len(readState.Tasks) == 0 {
+		t.Fatal("No tasks found after modify")
+	}
+	if readState.Tasks[0].Description != "Modified description" {
+		t.Errorf("Description not modified: got %s, want 'Modified description'", readState.Tasks[0].Description)
+	}
+	if readState.Tasks[0].Status != models.TaskStatusClaimed {
+		t.Errorf("Status not modified: got %s, want %s", readState.Tasks[0].Status, models.TaskStatusClaimed)
+	}
+}
+
+// TestBlackboardUpdateTask tests updating a task
+func TestBlackboardUpdateTask(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Task 1",
+				Status:      models.TaskStatusUnclaimed,
+				Priority:    1,
+				Created:     now,
+			},
+			{
+				ID:          "task-2",
+				Description: "Task 2",
+				Status:      models.TaskStatusUnclaimed,
+				Priority:    2,
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Update task-2
+	assignedTo := "agent-1"
+	err := bb.UpdateTask("task-2", func(task *models.Task) error {
+		task.Status = models.TaskStatusClaimed
+		task.AssignedTo = &assignedTo
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("UpdateTask failed: %v", err)
+	}
+
+	// Verify the update
+	task, err := bb.GetTask("task-2")
+	if err != nil {
+		t.Fatalf("GetTask failed: %v", err)
+	}
+	if task.Status != models.TaskStatusClaimed {
+		t.Errorf("Task status not updated: got %s, want %s", task.Status, models.TaskStatusClaimed)
+	}
+	if task.AssignedTo == nil || *task.AssignedTo != "agent-1" {
+		t.Errorf("Task assignedTo not updated correctly")
+	}
+
+	// Verify task-1 was not modified
+	task1, err := bb.GetTask("task-1")
+	if err != nil {
+		t.Fatalf("GetTask task-1 failed: %v", err)
+	}
+	if task1.Status != models.TaskStatusUnclaimed {
+		t.Errorf("Task-1 status should be unchanged, got %s", task1.Status)
+	}
+}
+
+// TestBlackboardLockTimeout tests that lock acquisition times out appropriately
+func TestBlackboardLockTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping timeout test in short mode")
+	}
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	// Create initial state
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Use short timeout for faster testing
+	testTimeout := 1 * time.Second
+	bb1 := New(statePath).WithLockTimeout(testTimeout)
+	bb2 := New(statePath).WithLockTimeout(testTimeout)
+
+	// Acquire lock with bb1 and hold it longer than timeout
+	locked := make(chan bool)
+	done := make(chan bool)
+
+	go func() {
+		err := bb1.Modify(func(s *models.State) error {
+			locked <- true
+			// Hold lock longer than timeout period to force timeout
+			time.Sleep(2 * time.Second)
+			return nil
+		})
+		if err != nil {
+			t.Errorf("bb1 Modify failed: %v", err)
+		}
+		done <- true
+	}()
+
+	// Wait for lock to be acquired
+	<-locked
+
+	// Try to read with bb2 - should timeout
+	start := time.Now()
+	_, err := bb2.Read()
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Error("Expected timeout error, got nil")
+	}
+	if elapsed < 900*time.Millisecond || elapsed > 1200*time.Millisecond {
+		t.Errorf("Timeout duration unexpected: %v (expected ~1s)", elapsed)
+	}
+
+	// Wait for first goroutine to finish
+	<-done
+}
+
+// TestBlackboardFileNotExists tests behavior when state file doesn't exist
+func TestBlackboardFileNotExists(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "nonexistent.yaml")
+
+	bb := New(statePath)
+	_, err := bb.Read()
+	if err == nil {
+		t.Error("Expected error reading non-existent file, got nil")
+	}
+	if !os.IsNotExist(err) {
+		t.Errorf("Expected IsNotExist error, got: %v", err)
+	}
+}
+
+// TestBlackboardUpdateAgent tests updating an agent
+func TestBlackboardUpdateAgent(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents: map[string]models.Agent{
+			"agent-1": {
+				Role:      "coder",
+				Status:    models.AgentStatusIdle,
+				Heartbeat: now,
+				Terminal:  "term-1",
+			},
+		},
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Update agent
+	taskID := "task-1"
+	err := bb.UpdateAgent("agent-1", func(agent *models.Agent) error {
+		agent.Status = models.AgentStatusWorking
+		agent.CurrentTask = &taskID
+		agent.IterationsTotal = 1
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("UpdateAgent failed: %v", err)
+	}
+
+	// Verify the update
+	agent, err := bb.GetAgent("agent-1")
+	if err != nil {
+		t.Fatalf("GetAgent failed: %v", err)
+	}
+	if agent.Status != models.AgentStatusWorking {
+		t.Errorf("Agent status not updated: got %s, want %s", agent.Status, models.AgentStatusWorking)
+	}
+	if agent.CurrentTask == nil || *agent.CurrentTask != "task-1" {
+		t.Error("Agent CurrentTask not updated correctly")
+	}
+	if agent.IterationsTotal != 1 {
+		t.Errorf("Agent IterationsTotal not updated: got %d, want 1", agent.IterationsTotal)
+	}
+}
+
+// TestBlackboardUpdateAgentNotFound tests updating a non-existent agent
+func TestBlackboardUpdateAgentNotFound(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Try to update non-existent agent
+	err := bb.UpdateAgent("agent-999", func(agent *models.Agent) error {
+		agent.Status = models.AgentStatusWorking
+		return nil
+	})
+	if err == nil {
+		t.Error("Expected error updating non-existent agent, got nil")
+	}
+}
+
+// TestBlackboardUpdateTaskNotFound tests updating a non-existent task
+func TestBlackboardUpdateTaskNotFound(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Try to update non-existent task
+	err := bb.UpdateTask("task-999", func(task *models.Task) error {
+		task.Status = models.TaskStatusClaimed
+		return nil
+	})
+	if err == nil {
+		t.Error("Expected error updating non-existent task, got nil")
+	}
+}
+
+// TestBlackboardModifyError tests error handling in Modify
+func TestBlackboardModifyError(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Test modification function returning error
+	testErr := fmt.Errorf("modification failed")
+	err := bb.Modify(func(s *models.State) error {
+		return testErr
+	})
+	if err == nil {
+		t.Error("Expected error from modification function, got nil")
+	}
+
+	// Verify state was not modified
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if readState.Version != 1 {
+		t.Error("State should not have been modified")
+	}
+}
+
+// TestBlackboardModifyFileNotFound tests Modify with non-existent file
+func TestBlackboardModifyFileNotFound(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "nonexistent.yaml")
+
+	bb := New(statePath)
+	err := bb.Modify(func(s *models.State) error {
+		return nil
+	})
+	if err == nil {
+		t.Error("Expected error modifying non-existent file, got nil")
+	}
+}
+
+// TestBlackboardGetStatePath tests GetStatePath
+func TestBlackboardGetStatePath(t *testing.T) {
+	statePath := "/path/to/state.yaml"
+	bb := New(statePath)
+
+	got := bb.GetStatePath()
+	if got != statePath {
+		t.Errorf("GetStatePath() = %s, want %s", got, statePath)
+	}
+}
+
+// TestBlackboardConcurrentReads tests multiple concurrent reads
+func TestBlackboardConcurrentReads(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping concurrency test in short mode")
+	}
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks: []models.Task{
+			{ID: "task-1", Description: "Test", Status: models.TaskStatusUnclaimed, Priority: 1, Created: now},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Spawn multiple goroutines to read concurrently
+	const numReaders = 10
+	done := make(chan bool, numReaders)
+	errors := make(chan error, numReaders)
+
+	for range numReaders {
+		go func() {
+			s, err := bb.Read()
+			if err != nil {
+				errors <- err
+				return
+			}
+			if s.Version != 1 {
+				errors <- fmt.Errorf("unexpected version: %d", s.Version)
+				return
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all readers to complete
+	for range numReaders {
+		select {
+		case <-done:
+			// Success
+		case err := <-errors:
+			t.Errorf("Reader error: %v", err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("Timeout waiting for concurrent reads")
+		}
+	}
+}
+
+// TestBlackboardConcurrentModifications tests multiple concurrent modifications
+func TestBlackboardConcurrentModifications(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping concurrency test in short mode")
+	}
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Spawn multiple goroutines to modify concurrently
+	const numWriters = 10
+	done := make(chan bool, numWriters)
+	errors := make(chan error, numWriters)
+
+	for i := range numWriters {
+		taskID := fmt.Sprintf("task-%d", i)
+		go func(id string) {
+			err := bb.Modify(func(s *models.State) error {
+				s.Tasks = append(s.Tasks, models.Task{
+					ID:          id,
+					Description: "Test task",
+					Status:      models.TaskStatusUnclaimed,
+					Priority:    1,
+					Created:     now,
+				})
+				return nil
+			})
+			if err != nil {
+				errors <- err
+				return
+			}
+			done <- true
+		}(taskID)
+	}
+
+	// Wait for all writers to complete
+	for range numWriters {
+		select {
+		case <-done:
+			// Success
+		case err := <-errors:
+			t.Errorf("Writer error: %v", err)
+		case <-time.After(10 * time.Second):
+			t.Fatal("Timeout waiting for concurrent modifications")
+		}
+	}
+
+	// Verify all tasks were added
+	finalState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Final read failed: %v", err)
+	}
+	if len(finalState.Tasks) != numWriters {
+		t.Errorf("Expected %d tasks, got %d", numWriters, len(finalState.Tasks))
+	}
+}
+
+// TestBlackboardWriteReadOnlyDir tests Write error when directory is read-only
+func TestBlackboardWriteReadOnlyDir(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("Skipping test when running as root")
+	}
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+
+	// First write should succeed
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Initial write failed: %v", err)
+	}
+
+	// Make directory read-only
+	if err := os.Chmod(dir, 0555); err != nil {
+		t.Fatalf("Failed to make directory read-only: %v", err)
+	}
+	defer os.Chmod(dir, 0755) // Restore permissions for cleanup
+
+	// Use shorter timeout for error case since we expect immediate failure
+	bbShortTimeout := bb.WithLockTimeout(500 * time.Millisecond)
+
+	// Try to write again - should fail
+	err := bbShortTimeout.Write(state)
+	if err == nil {
+		t.Error("Expected error writing to read-only directory, got nil")
+	}
+}
+
+// TestBlackboardPIDTracking tests that PID is written to lock file
+func TestBlackboardPIDTracking(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// PID file persists after lock release (lock files are not deleted to
+	// prevent flock inode races — see withLockOperation comment)
+	pidPath := statePath + ".lock.pid"
+
+	// Verify PID file exists DURING lock hold
+	lockHeld := make(chan bool)
+	done := make(chan bool)
+	finished := make(chan error, 1)
+
+	go func() {
+		err := bb.Modify(func(s *models.State) error {
+			lockHeld <- true
+			// Wait for main goroutine to finish checking
+			<-done
+			return nil
+		})
+		finished <- err
+	}()
+
+	// Wait for lock to be acquired
+	<-lockHeld
+
+	// PID file should exist while lock is held
+	if _, err := os.Stat(pidPath); err != nil {
+		t.Errorf("PID file should exist while lock is held, got error: %v", err)
+	}
+
+	// Read PID and verify it matches current process
+	pidData, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatalf("Failed to read PID file: %v", err)
+	}
+	pid, err := strconv.Atoi(string(pidData))
+	if err != nil {
+		t.Fatalf("Failed to parse PID: %v", err)
+	}
+	if pid != os.Getpid() {
+		t.Errorf("PID mismatch: got %d, want %d", pid, os.Getpid())
+	}
+
+	// Signal goroutine to finish and wait for it
+	done <- true
+	if goroutineErr := <-finished; goroutineErr != nil {
+		t.Errorf("Modify failed: %v", goroutineErr)
+	}
+}
+
+// TestBlackboardStaleLockDetection tests cleanup of stale locks
+func TestBlackboardStaleLockDetection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping stale lock test in short mode")
+	}
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+	lockPath := statePath + ".lock"
+	pidPath := statePath + ".lock.pid"
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Initial write failed: %v", err)
+	}
+
+	// Create a stale lock with a non-existent PID
+	stalePID := 999999 // Very unlikely to exist
+	if err := os.WriteFile(lockPath, []byte{}, 0644); err != nil {
+		t.Fatalf("Failed to create lock file: %v", err)
+	}
+	pidData := strconv.Itoa(stalePID)
+	if err := os.WriteFile(pidPath, []byte(pidData), 0644); err != nil {
+		t.Fatalf("Failed to create PID file: %v", err)
+	}
+
+	// Try to acquire lock with short timeout - should clean up stale lock and succeed
+	bb2 := New(statePath).WithLockTimeout(2 * time.Second)
+	err := bb2.Modify(func(s *models.State) error {
+		s.Version = 2
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("Should successfully acquire lock after stale cleanup, got error: %v", err)
+	}
+
+	// Verify state was modified (lock was acquired)
+	readState, err := bb2.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if readState.Version != 2 {
+		t.Errorf("Version should be 2 after modification, got %d", readState.Version)
+	}
+
+	// After stale lock recovery and successful Modify, lock and PID files
+	// persist (lock files are not deleted on unlock). Verify PID now
+	// reflects the current process, not the stale PID.
+	recoveredPID, readErr := os.ReadFile(pidPath)
+	if readErr != nil {
+		t.Fatalf("PID file should exist after lock recovery: %v", readErr)
+	}
+	currentPID, parseErr := strconv.Atoi(string(recoveredPID))
+	if parseErr != nil {
+		t.Fatalf("Invalid PID format: %v", parseErr)
+	}
+	if currentPID == stalePID {
+		t.Error("PID file should no longer contain stale PID")
+	}
+	if currentPID != os.Getpid() {
+		t.Errorf("PID should be current process: got %d, want %d", currentPID, os.Getpid())
+	}
+}
+
+// TestBlackboardLiveLockNotCleaned tests that live process locks are NOT cleaned
+func TestBlackboardLiveLockNotCleaned(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping live lock test in short mode")
+	}
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb1 := New(statePath)
+	if err := bb1.Write(state); err != nil {
+		t.Fatalf("Initial write failed: %v", err)
+	}
+
+	// bb1 holds lock for 2 seconds
+	lockHeld := make(chan bool)
+	done := make(chan error)
+	go func() {
+		err := bb1.Modify(func(s *models.State) error {
+			lockHeld <- true
+			time.Sleep(2 * time.Second)
+			return nil
+		})
+		done <- err
+	}()
+
+	<-lockHeld // Wait for lock to be held
+
+	// bb2 tries to acquire with short timeout - should fail because lock is live
+	bb2 := New(statePath).WithLockTimeout(1 * time.Second)
+	_, err := bb2.Read()
+
+	if err == nil {
+		t.Error("Should fail to acquire lock held by live process")
+	}
+
+	if !strings.Contains(err.Error(), "timeout") && !strings.Contains(err.Error(), "lock") {
+		t.Errorf("Error should mention timeout or lock, got: %v", err)
+	}
+
+	// Wait for goroutine to complete
+	if goroutineErr := <-done; goroutineErr != nil {
+		t.Errorf("bb1 Modify failed: %v", goroutineErr)
+	}
+}
+
+// TestBlackboardPIDFileConsistency tests that PID file tracks the lock holder
+func TestBlackboardPIDFileConsistency(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+	pidPath := statePath + ".lock.pid"
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+
+	// Multiple operations — PID file persists and contains current PID
+	for i := range 3 {
+		if err := bb.Write(state); err != nil {
+			t.Fatalf("Write %d failed: %v", i, err)
+		}
+
+		// PID file should exist with current process PID
+		pidData, err := os.ReadFile(pidPath)
+		if err != nil {
+			t.Fatalf("Iteration %d: PID file should exist after operation: %v", i, err)
+		}
+		pid, err := strconv.Atoi(string(pidData))
+		if err != nil {
+			t.Fatalf("Iteration %d: invalid PID format: %v", i, err)
+		}
+		if pid != os.Getpid() {
+			t.Errorf("Iteration %d: PID mismatch: got %d, want %d", i, pid, os.Getpid())
+		}
+	}
+}
+
+// TestBlackboardWriteWithFsync tests that Write uses fsync for durability
+func TestBlackboardWriteWithFsync(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+
+	// Write state
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Verify state file exists and has correct permissions
+	info, err := os.Stat(statePath)
+	if err != nil {
+		t.Fatalf("State file not found: %v", err)
+	}
+	if info.Mode().Perm() != 0644 {
+		t.Errorf("State file has wrong permissions: got %o, want 0644", info.Mode().Perm())
+	}
+
+	// Verify temp file was cleaned up
+	tmpPath := statePath + ".tmp"
+	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
+		t.Error("Temporary file should be cleaned up")
+	}
+
+	// Verify we can read back the state
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if readState.Version != state.Version {
+		t.Errorf("Version mismatch: got %d, want %d", readState.Version, state.Version)
+	}
+}
+
+// TestBlackboardModifyWithFsync tests that Modify uses fsync for durability
+func TestBlackboardModifyWithFsync(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+
+	// Initial write
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Initial write failed: %v", err)
+	}
+
+	// Modify state
+	if err := bb.Modify(func(s *models.State) error {
+		s.Version = 2
+		return nil
+	}); err != nil {
+		t.Fatalf("Modify failed: %v", err)
+	}
+
+	// Verify temp file was cleaned up
+	tmpPath := statePath + ".tmp"
+	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
+		t.Error("Temporary file should be cleaned up after modify")
+	}
+
+	// Verify modification persisted
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read after modify failed: %v", err)
+	}
+	if readState.Version != 2 {
+		t.Errorf("Version should be 2 after modify, got %d", readState.Version)
+	}
+}
+
+// TestBlackboardAtomicWriteOnError tests cleanup when write fails
+func TestBlackboardAtomicWriteOnError(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	initialState := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+
+	// Write initial state
+	if err := bb.Write(initialState); err != nil {
+		t.Fatalf("Initial write failed: %v", err)
+	}
+
+	// Make directory read-only to force write error
+	if os.Getuid() != 0 {
+		if err := os.Chmod(dir, 0555); err != nil {
+			t.Fatalf("Failed to make directory read-only: %v", err)
+		}
+		defer os.Chmod(dir, 0755)
+
+		// Use shorter timeout for error case since we expect immediate failure
+		bbShortTimeout := bb.WithLockTimeout(500 * time.Millisecond)
+
+		// Try to modify - should fail
+		err := bbShortTimeout.Modify(func(s *models.State) error {
+			s.Version = 2
+			return nil
+		})
+		if err == nil {
+			t.Error("Expected error when writing to read-only directory")
+		}
+	}
+
+	// Restore permissions and verify original state is intact
+	os.Chmod(dir, 0755)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read after failed modify failed: %v", err)
+	}
+	if readState.Version != 1 {
+		t.Errorf("Version should still be 1 after failed modify, got %d", readState.Version)
+	}
+
+	// Verify no temp files left behind
+	tmpPath := statePath + ".tmp"
+	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
+		t.Error("Temporary file should be cleaned up even on error")
+	}
+}
+
+// BenchmarkBlackboardWrite benchmarks write performance with fsync
+func BenchmarkBlackboardWrite(b *testing.B) {
+	dir := b.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks: []models.Task{
+			{ID: "task-1", Status: "pending"},
+			{ID: "task-2", Status: "pending"},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+
+	b.ResetTimer()
+	for i := range b.N {
+		state.Version = i + 1
+		if err := bb.Write(state); err != nil {
+			b.Fatalf("Write failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkBlackboardModify benchmarks modify performance with fsync
+func BenchmarkBlackboardModify(b *testing.B) {
+	dir := b.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks: []models.Task{
+			{ID: "task-1", Status: "pending"},
+			{ID: "task-2", Status: "pending"},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+
+	// Initial write
+	if err := bb.Write(state); err != nil {
+		b.Fatalf("Initial write failed: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := range b.N {
+		if err := bb.Modify(func(s *models.State) error {
+			s.Version = i + 1
+			return nil
+		}); err != nil {
+			b.Fatalf("Modify failed: %v", err)
+		}
+	}
+}
+
+// TestBlackboardReadCachedHit tests that cached reads use cache
+func TestBlackboardReadCachedHit(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// First read - should populate cache
+	readState1, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("First ReadCached failed: %v", err)
+	}
+	if readState1.Version != 1 {
+		t.Errorf("First read version: got %d, want 1", readState1.Version)
+	}
+
+	// Second read - should use cache (same mtime)
+	readState2, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("Second ReadCached failed: %v", err)
+	}
+	if readState2.Version != 1 {
+		t.Errorf("Second read version: got %d, want 1", readState2.Version)
+	}
+
+	// Verify both reads return equivalent data
+	if readState1.Goal.ID != readState2.Goal.ID {
+		t.Error("Cached read returned different data")
+	}
+}
+
+// TestBlackboardReadCachedInvalidation tests cache invalidation on mtime change
+func TestBlackboardReadCachedInvalidation(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// First read - populates cache
+	readState1, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("First ReadCached failed: %v", err)
+	}
+	if readState1.Version != 1 {
+		t.Errorf("First read version: got %d, want 1", readState1.Version)
+	}
+
+	// Wait to ensure mtime changes
+	time.Sleep(10 * time.Millisecond)
+
+	// Modify state - should invalidate cache
+	if err := bb.Modify(func(s *models.State) error {
+		s.Version = 2
+		return nil
+	}); err != nil {
+		t.Fatalf("Modify failed: %v", err)
+	}
+
+	// Read again - should detect mtime change and reload
+	readState2, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("Second ReadCached failed: %v", err)
+	}
+	if readState2.Version != 2 {
+		t.Errorf("After modify version: got %d, want 2", readState2.Version)
+	}
+}
+
+// TestBlackboardInvalidateCache tests explicit cache invalidation
+func TestBlackboardInvalidateCache(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Read to populate cache
+	_, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("ReadCached failed: %v", err)
+	}
+
+	// Explicitly invalidate cache
+	bb.InvalidateCache()
+
+	// Next read should reload from disk (we can't directly observe this,
+	// but we verify it still works correctly)
+	readState, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("ReadCached after invalidation failed: %v", err)
+	}
+	if readState.Version != 1 {
+		t.Errorf("Version after invalidation: got %d, want 1", readState.Version)
+	}
+}
+
+// TestBlackboardConcurrentCachedReads tests concurrent cached reads
+func TestBlackboardConcurrentCachedReads(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{{ID: "task-1", Status: "pending"}},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Concurrent reads from multiple goroutines
+	const numReaders = 10
+	done := make(chan error, numReaders)
+
+	for range numReaders {
+		go func() {
+			for range 5 {
+				s, err := bb.ReadCached()
+				if err != nil {
+					done <- err
+					return
+				}
+				if s.Version != 1 {
+					done <- fmt.Errorf("wrong version: got %d, want 1", s.Version)
+					return
+				}
+			}
+			done <- nil
+		}()
+	}
+
+	// Wait for all readers to complete
+	for range numReaders {
+		if err := <-done; err != nil {
+			t.Errorf("Concurrent read error: %v", err)
+		}
+	}
+}
+
+// TestBlackboardCacheWithExternalModification tests cache detects external changes
+func TestBlackboardCacheWithExternalModification(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks:   []models.Task{},
+		Agents:  make(map[string]models.Agent),
+		Config:  models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Read to populate cache
+	readState1, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("First ReadCached failed: %v", err)
+	}
+	if readState1.Version != 1 {
+		t.Errorf("First read version: got %d, want 1", readState1.Version)
+	}
+
+	// Wait to ensure mtime changes
+	time.Sleep(10 * time.Millisecond)
+
+	// External modification (simulated by another Blackboard instance)
+	bb2 := New(statePath)
+	if err := bb2.Modify(func(s *models.State) error {
+		s.Version = 3
+		return nil
+	}); err != nil {
+		t.Fatalf("External modify failed: %v", err)
+	}
+
+	// Original bb should detect mtime change and reload
+	readState2, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("ReadCached after external change failed: %v", err)
+	}
+	if readState2.Version != 3 {
+		t.Errorf("After external modification version: got %d, want 3", readState2.Version)
+	}
+}
+
+// BenchmarkBlackboardReadCached benchmarks cached read performance
+func BenchmarkBlackboardReadCached(b *testing.B) {
+	dir := b.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks: []models.Task{
+			{ID: "task-1", Status: "pending"},
+			{ID: "task-2", Status: "pending"},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		b.Fatalf("Write failed: %v", err)
+	}
+
+	b.ResetTimer()
+	for range b.N {
+		_, err := bb.ReadCached()
+		if err != nil {
+			b.Fatalf("ReadCached failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkBlackboardReadUncached benchmarks non-cached read performance
+func BenchmarkBlackboardReadUncached(b *testing.B) {
+	dir := b.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
+		Tasks: []models.Task{
+			{ID: "task-1", Status: "pending"},
+			{ID: "task-2", Status: "pending"},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	bb := New(statePath)
+	if err := bb.Write(state); err != nil {
+		b.Fatalf("Write failed: %v", err)
+	}
+
+	b.ResetTimer()
+	for range b.N {
+		_, err := bb.Read()
+		if err != nil {
+			b.Fatalf("Read failed: %v", err)
+		}
+	}
+}

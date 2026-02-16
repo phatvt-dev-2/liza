@@ -1,0 +1,459 @@
+package commands
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/models"
+)
+
+const (
+	// GracePeriod is the grace period for expired leases (in seconds)
+	GracePeriod = 60
+)
+
+// ValidateCommand validates the state.yaml file against all schema rules.
+// Returns an error with detailed description if validation fails.
+func ValidateCommand(statePath string, skipSpecFileCheck bool) error {
+	// Get project root from state path
+	lizaDir := filepath.Dir(statePath)
+	projectRoot := filepath.Dir(lizaDir)
+
+	// Read state
+	bb := db.New(statePath)
+	state, err := bb.Read()
+	if err != nil {
+		return fmt.Errorf("failed to read state file: %w", err)
+	}
+
+	// Run all validation checks
+	validators := []func(*models.State, string, bool) error{
+		validateRequiredFields,
+		validateTaskStates,
+		validateTaskInvariants,
+		validateDependencies,
+		validateAgentInvariants,
+		validateHandoff,
+		validateDiscovered,
+		validateAnomalies,
+		validateSprint,
+	}
+
+	for _, validator := range validators {
+		if err := validator(state, projectRoot, skipSpecFileCheck); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateRequiredFields checks that all required top-level fields are present
+func validateRequiredFields(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	if state.Version == 0 {
+		return fmt.Errorf("missing required field 'version'")
+	}
+
+	if state.Goal.ID == "" {
+		return fmt.Errorf("missing required field 'goal'")
+	}
+
+	if state.Tasks == nil {
+		return fmt.Errorf("missing required field 'tasks'")
+	}
+
+	if state.Agents == nil {
+		return fmt.Errorf("missing required field 'agents'")
+	}
+
+	if state.Config.IntegrationBranch == "" {
+		return fmt.Errorf("missing required field 'config'")
+	}
+
+	if state.Sprint.ID == "" {
+		return fmt.Errorf("missing required field 'sprint'")
+	}
+
+	// Validate goal spec_ref file exists (unless skipped)
+	if !skipSpecFileCheck && state.Goal.SpecRef != "" {
+		specFile := state.Goal.SpecRef
+		if idx := strings.Index(specFile, "#"); idx != -1 {
+			specFile = specFile[:idx]
+		}
+		specPath := filepath.Join(projectRoot, specFile)
+		if _, err := os.Stat(specPath); os.IsNotExist(err) {
+			return fmt.Errorf("goal spec_ref file not found: %s", specFile)
+		}
+	}
+
+	return nil
+}
+
+// validateTaskStates checks that all task statuses are valid
+func validateTaskStates(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	for _, task := range state.Tasks {
+		if !task.Status.IsValid() {
+			return fmt.Errorf("unknown task status '%s' for task %s", task.Status, task.ID)
+		}
+	}
+	return nil
+}
+
+// validateTaskInvariants checks task-specific state invariants
+func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	// Track agent assignments to prevent duplicates
+	assignments := make(map[string][]string) // agent ID -> task IDs
+
+	for _, task := range state.Tasks {
+		// DRAFT cannot have assigned_to
+		if task.Status == models.TaskStatusDraft && task.AssignedTo != nil {
+			return fmt.Errorf("DRAFT task with assigned_to: %s", task.ID)
+		}
+
+		// CLAIMED must have assigned_to
+		if task.Status == models.TaskStatusClaimed && task.AssignedTo == nil {
+			return fmt.Errorf("CLAIMED task without assigned_to: %s", task.ID)
+		}
+
+		// CLAIMED must have worktree
+		if task.Status == models.TaskStatusClaimed && task.Worktree == nil {
+			return fmt.Errorf("CLAIMED task without worktree: %s", task.ID)
+		}
+
+		// CLAIMED must have base_commit (except integration_fix tasks)
+		if task.Status == models.TaskStatusClaimed && !task.IntegrationFix && task.BaseCommit == nil {
+			return fmt.Errorf("CLAIMED task without base_commit: %s", task.ID)
+		}
+
+		// CLAIMED must have lease_expires
+		if task.Status == models.TaskStatusClaimed && task.LeaseExpires == nil {
+			return fmt.Errorf("CLAIMED task without lease_expires: %s", task.ID)
+		}
+
+		// READY_FOR_REVIEW must have review_commit
+		if task.Status == models.TaskStatusReadyForReview && task.ReviewCommit == nil {
+			return fmt.Errorf("READY_FOR_REVIEW task without review_commit: %s", task.ID)
+		}
+
+		// MERGED task must NOT have worktree
+		if task.Status == models.TaskStatusMerged && task.Worktree != nil {
+			return fmt.Errorf("MERGED task still has worktree: %s", task.ID)
+		}
+
+		// BLOCKED must have blocked_reason and blocked_questions
+		if task.Status == models.TaskStatusBlocked {
+			if task.BlockedReason == nil {
+				return fmt.Errorf("BLOCKED task without blocked_reason: %s", task.ID)
+			}
+			if len(task.BlockedQuestions) == 0 {
+				return fmt.Errorf("BLOCKED task without blocked_questions: %s", task.ID)
+			}
+		}
+
+		// REJECTED must have rejection_reason
+		if task.Status == models.TaskStatusRejected && task.RejectionReason == nil {
+			return fmt.Errorf("REJECTED task without rejection_reason: %s", task.ID)
+		}
+
+		// SUPERSEDED must have superseded_by and rescope_reason
+		if task.Status == models.TaskStatusSuperseded {
+			if len(task.SupersededBy) == 0 {
+				return fmt.Errorf("SUPERSEDED task without superseded_by: %s", task.ID)
+			}
+			if task.RescopeReason == nil {
+				return fmt.Errorf("SUPERSEDED task without rescope_reason: %s", task.ID)
+			}
+		}
+
+		// Track assignments for duplicate check (only CLAIMED tasks count as active)
+		if task.AssignedTo != nil && task.Status == models.TaskStatusClaimed {
+			agent := *task.AssignedTo
+			assignments[agent] = append(assignments[agent], task.ID)
+		}
+
+		// CLAIMED worktree path must exist (only check if projectRoot is not empty to allow tests)
+		if task.Status == models.TaskStatusClaimed && task.Worktree != nil && projectRoot != "" {
+			wtPath := filepath.Join(projectRoot, *task.Worktree)
+			if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+				return fmt.Errorf("CLAIMED task %s has worktree=%s but directory does not exist", task.ID, *task.Worktree)
+			}
+		}
+
+		// Non-DRAFT tasks must have done_when
+		if task.Status != models.TaskStatusDraft &&
+			task.Status != models.TaskStatusSuperseded &&
+			task.Status != models.TaskStatusAbandoned &&
+			task.DoneWhen == "" {
+			return fmt.Errorf("non-DRAFT task missing done_when: %s", task.ID)
+		}
+
+		// Non-DRAFT tasks must have spec_ref
+		if task.Status != models.TaskStatusDraft &&
+			task.Status != models.TaskStatusSuperseded &&
+			task.Status != models.TaskStatusAbandoned &&
+			task.SpecRef == "" {
+			return fmt.Errorf("non-DRAFT task missing spec_ref: %s", task.ID)
+		}
+
+		// Validate spec_ref file exists (unless skipped)
+		if !skipSpecFileCheck && task.SpecRef != "" {
+			// Strip anchor if present
+			specFile := task.SpecRef
+			if idx := strings.Index(specFile, "#"); idx != -1 {
+				specFile = specFile[:idx]
+			}
+			specPath := filepath.Join(projectRoot, specFile)
+			if _, err := os.Stat(specPath); os.IsNotExist(err) {
+				return fmt.Errorf("spec_ref file not found: %s (task: %s)", specFile, task.ID)
+			}
+		}
+
+		// Task with integration_fix must have INTEGRATION_FAILED in history
+		if task.IntegrationFix {
+			hasFailedEvent := false
+			for _, entry := range task.History {
+				if entry.Event == "integration_failed" {
+					hasFailedEvent = true
+					break
+				}
+			}
+			if !hasFailedEvent {
+				return fmt.Errorf("task %s has integration_fix:true but no INTEGRATION_FAILED event in history", task.ID)
+			}
+		}
+
+		// failed_by must have unique agent IDs
+		if len(task.FailedBy) > 0 {
+			seen := make(map[string]bool)
+			for _, agent := range task.FailedBy {
+				if seen[agent] {
+					return fmt.Errorf("task %s has duplicate agent IDs in failed_by (manually edit .liza/state.yaml to remove duplicates)", task.ID)
+				}
+				seen[agent] = true
+			}
+		}
+	}
+
+	// Check for duplicate assignments
+	for agent, taskIDs := range assignments {
+		if len(taskIDs) > 1 {
+			return fmt.Errorf("agent %s assigned to multiple active tasks simultaneously: %v", agent, taskIDs)
+		}
+	}
+
+	return nil
+}
+
+// validateDependencies checks task dependencies
+func validateDependencies(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	// Build task ID set
+	taskIDs := make(map[string]bool)
+	for _, task := range state.Tasks {
+		taskIDs[task.ID] = true
+	}
+
+	// Check each task's dependencies
+	for _, task := range state.Tasks {
+		if len(task.DependsOn) == 0 {
+			continue
+		}
+
+		// All dependencies must reference existing tasks
+		for _, depID := range task.DependsOn {
+			if !taskIDs[depID] {
+				return fmt.Errorf("task %s has depends_on referencing non-existent task '%s'", task.ID, depID)
+			}
+		}
+
+		// CLAIMED tasks must have all dependencies MERGED
+		if task.Status == models.TaskStatusClaimed {
+			unmet := []string{}
+			for _, depID := range task.DependsOn {
+				depTask := findTask(state.Tasks, depID)
+				if depTask != nil && depTask.Status != models.TaskStatusMerged {
+					unmet = append(unmet, depID)
+				}
+			}
+			if len(unmet) > 0 {
+				return fmt.Errorf("CLAIMED task %s has unmet dependencies: %s (must be MERGED)", task.ID, strings.Join(unmet, ", "))
+			}
+		}
+	}
+
+	// Check for circular dependencies
+	for _, task := range state.Tasks {
+		if len(task.DependsOn) == 0 {
+			continue
+		}
+
+		visited := make(map[string]bool)
+		if err := checkCircular(task.ID, task.ID, visited, state.Tasks); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// checkCircular recursively checks for circular dependencies
+func checkCircular(start, current string, visited map[string]bool, tasks []models.Task) error {
+	task := findTask(tasks, current)
+	if task == nil || len(task.DependsOn) == 0 {
+		return nil
+	}
+
+	for _, depID := range task.DependsOn {
+		if depID == start {
+			return fmt.Errorf("circular dependency detected: %s eventually depends on itself", start)
+		}
+		if !visited[depID] {
+			visited[depID] = true
+			if err := checkCircular(start, depID, visited, tasks); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateAgentInvariants checks agent-specific invariants
+func validateAgentInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	now := time.Now().Unix()
+
+	for agentID, agent := range state.Agents {
+		// WORKING agent must have current_task
+		if agent.Status == models.AgentStatusWorking && agent.CurrentTask == nil {
+			return fmt.Errorf("agent %s has status WORKING but no current_task assigned", agentID)
+		}
+
+		// WORKING agent must have valid lease_expires
+		if agent.Status == models.AgentStatusWorking {
+			if agent.LeaseExpires == nil {
+				return fmt.Errorf("agent %s has status WORKING but no lease_expires", agentID)
+			}
+
+			// Check lease expiry with grace period (warning only in original script)
+			leaseEpoch := agent.LeaseExpires.Unix()
+			if leaseEpoch+GracePeriod < now {
+				// In bash this is a warning, but we'll treat it as an error for stricter validation
+				// Could make this configurable if needed
+				fmt.Fprintf(os.Stderr, "WARNING: Agent %s has status WORKING but lease expired (may be long-running operation)\n", agentID)
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateHandoff checks handoff entries
+func validateHandoff(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	for taskID, handoff := range state.Handoff {
+		if handoff.Summary == "" {
+			return fmt.Errorf("handoff entry for task %s missing summary", taskID)
+		}
+		if handoff.NextAction == "" {
+			return fmt.Errorf("handoff entry for task %s missing next_action", taskID)
+		}
+	}
+	return nil
+}
+
+// validateDiscovered checks discovered items
+func validateDiscovered(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	for i, disc := range state.Discovered {
+		if disc.Urgency != "" && disc.Urgency != "deferred" && disc.Urgency != "immediate" {
+			return fmt.Errorf("discovered item %d has invalid urgency '%s' (must be 'deferred' or 'immediate')", i, disc.Urgency)
+		}
+	}
+	return nil
+}
+
+// validateAnomalies checks anomaly entries
+func validateAnomalies(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	for i, anomaly := range state.Anomalies {
+		// Check type is valid
+		if !anomaly.IsValidType() {
+			return fmt.Errorf("unknown anomaly type '%s' at index %d", anomaly.Type, i)
+		}
+
+		// Type-specific detail validation
+		switch anomaly.Type {
+		case "retry_loop":
+			if anomaly.Details["count"] == nil || anomaly.Details["error_pattern"] == nil {
+				return fmt.Errorf("retry_loop anomaly at index %d missing required details (count, error_pattern)", i)
+			}
+		case "trade_off":
+			if anomaly.Details["what"] == nil || anomaly.Details["why"] == nil || anomaly.Details["debt_created"] == nil {
+				return fmt.Errorf("trade_off anomaly at index %d missing required details (what, why, debt_created)", i)
+			}
+		case "external_blocker":
+			if anomaly.Details["blocker_service"] == nil {
+				return fmt.Errorf("external_blocker anomaly at index %d missing required details (blocker_service)", i)
+			}
+		case "assumption_violated":
+			if anomaly.Details["assumption"] == nil || anomaly.Details["reality"] == nil {
+				return fmt.Errorf("assumption_violated anomaly at index %d missing required details (assumption, reality)", i)
+			}
+		case "system_ambiguity":
+			if anomaly.Details["protocol_section"] == nil || anomaly.Details["question"] == nil {
+				return fmt.Errorf("system_ambiguity anomaly at index %d missing required details (protocol_section, question)", i)
+			}
+		}
+	}
+	return nil
+}
+
+// validateSprint checks sprint-specific invariants
+func validateSprint(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	// Sprint status must be valid
+	if !state.Sprint.Status.IsValid() {
+		return fmt.Errorf("unknown sprint status '%s'", state.Sprint.Status)
+	}
+
+	// Sprint goal_ref must match goal.id
+	if state.Sprint.GoalRef != state.Goal.ID {
+		return fmt.Errorf("sprint.goal_ref (%s) does not match goal.id (%s)", state.Sprint.GoalRef, state.Goal.ID)
+	}
+
+	// Build task ID set
+	taskIDs := make(map[string]bool)
+	for _, task := range state.Tasks {
+		taskIDs[task.ID] = true
+	}
+
+	// Sprint scope.planned tasks must exist
+	for _, taskID := range state.Sprint.Scope.Planned {
+		if !taskIDs[taskID] {
+			return fmt.Errorf("sprint.scope.planned references non-existent task '%s'", taskID)
+		}
+	}
+
+	// Sprint scope.stretch tasks must exist
+	for _, taskID := range state.Sprint.Scope.Stretch {
+		if !taskIDs[taskID] {
+			return fmt.Errorf("sprint.scope.stretch references non-existent task '%s'", taskID)
+		}
+	}
+
+	// Sprint timeline.started must be set
+	if state.Sprint.Timeline.Started.IsZero() {
+		return fmt.Errorf("sprint.timeline.started is required")
+	}
+
+	return nil
+}
+
+// Helper function to find a task by ID
+func findTask(tasks []models.Task, taskID string) *models.Task {
+	for i := range tasks {
+		if tasks[i].ID == taskID {
+			return &tasks[i]
+		}
+	}
+	return nil
+}

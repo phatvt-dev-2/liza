@@ -132,13 +132,13 @@ The pattern conditions use pseudo-functions for matching:
 | `count(...)` | Script counts via yq queries | Same |
 
 **v1 Limitations:**
-- `liza-analyze.sh` uses **exact string matching** for pattern detection
+- ``liza analyze`` uses **exact string matching** for pattern detection
 - Anomalies with `error_pattern: "timeout"` and `error_pattern: "connection timeout"` are counted separately
 - Human must review script output and apply judgment for similar-but-not-identical patterns
 - Thresholds may need adjustment: exact matching misses related errors, so lower counts may indicate real patterns
 
 **v1 Workflow:**
-1. Run `liza-analyze.sh` — outputs exact-match counts per pattern
+1. Run ``liza analyze`` — outputs exact-match counts per pattern
 2. Human reviews output and anomalies section
 3. Human applies judgment: "these 2 exact + 1 similar = pattern"
 4. Human triggers circuit breaker if pattern warrants
@@ -215,12 +215,12 @@ The pattern conditions use pseudo-functions for matching:
 ## Implementation: v1 vs v2
 
 **v1: Human-triggered analysis**
-- Human runs `liza-analyze.sh` during checkpoint
+- Human runs ``liza analyze`` during checkpoint
 - Script parses anomalies, applies rules, generates report
 - No background daemon
 
 **v2: Continuous monitoring**
-- `liza-watch.sh` extended with pattern detection
+- ``liza watch`` extended with pattern detection
 - Auto-triggers checkpoint if pattern matches
 
 **Recommendation:** Start with v1. Promote to v2 if manual analysis becomes bottleneck.
@@ -265,7 +265,7 @@ circuit_breaker:
 
 When circuit breaker is triggered:
 
-1. **Automatic:** `liza-analyze.sh` sets `status: TRIGGERED`, populates `current_trigger`
+1. **Automatic:** ``liza analyze`` sets `status: TRIGGERED`, populates `current_trigger`
 2. **Human review:** Human analyzes report, takes corrective action (ADR, spec update, etc.)
 3. **Human resolves:** Human edits state.yaml directly:
    ```bash

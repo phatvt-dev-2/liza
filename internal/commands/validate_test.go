@@ -1,0 +1,485 @@
+package commands
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+func TestValidateCommand_RequiredFields(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupState  func() *models.State
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid complete state",
+			setupState: func() *models.State {
+				return testhelpers.CreateValidState()
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing version",
+			setupState: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Version = 0
+				return state
+			},
+			wantErr:     true,
+			errContains: "version",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			state := tt.setupState()
+			testhelpers.WriteInitialState(t, statePath, state)
+
+			// Skip spec file checks for most tests
+			err := ValidateCommand(statePath, true)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateCommand() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				testhelpers.AssertErrorContains(t, err, tt.errContains)
+			}
+		})
+	}
+}
+
+func TestValidateCommand_TaskStateInvariants(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupTask   func() models.Task
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "DRAFT with assigned_to",
+			setupTask: func() models.Task {
+				agent := "coder-1"
+				return models.Task{
+					ID:          "task-1",
+					Description: "Test",
+					Status:      models.TaskStatusDraft,
+					AssignedTo:  &agent,
+					Created:     time.Now().UTC(),
+					SpecRef:     "specs/test.md",
+					DoneWhen:    "Complete",
+					History:     []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr:     true,
+			errContains: "DRAFT task with assigned_to",
+		},
+		{
+			name: "CLAIMED without assigned_to",
+			setupTask: func() models.Task {
+				return models.Task{
+					ID:          "task-1",
+					Description: "Test",
+					Status:      models.TaskStatusClaimed,
+					Created:     time.Now().UTC(),
+					SpecRef:     "specs/test.md",
+					DoneWhen:    "Complete",
+					History:     []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr:     true,
+			errContains: "CLAIMED task without assigned_to",
+		},
+		{
+			name: "CLAIMED without worktree",
+			setupTask: func() models.Task {
+				agent := "coder-1"
+				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				baseCommit := "abc123"
+				return models.Task{
+					ID:           "task-1",
+					Description:  "Test",
+					Status:       models.TaskStatusClaimed,
+					AssignedTo:   &agent,
+					LeaseExpires: &leaseExpires,
+					BaseCommit:   &baseCommit,
+					Created:      time.Now().UTC(),
+					SpecRef:      "specs/test.md",
+					DoneWhen:     "Complete",
+					History:      []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr:     true,
+			errContains: "CLAIMED task without worktree",
+		},
+		{
+			name: "READY_FOR_REVIEW without review_commit",
+			setupTask: func() models.Task {
+				return models.Task{
+					ID:          "task-1",
+					Description: "Test",
+					Status:      models.TaskStatusReadyForReview,
+					Created:     time.Now().UTC(),
+					SpecRef:     "specs/test.md",
+					DoneWhen:    "Complete",
+					History:     []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr:     true,
+			errContains: "READY_FOR_REVIEW task without review_commit",
+		},
+		{
+			name: "BLOCKED without blocked_reason",
+			setupTask: func() models.Task {
+				return models.Task{
+					ID:               "task-1",
+					Description:      "Test",
+					Status:           models.TaskStatusBlocked,
+					Created:          time.Now().UTC(),
+					SpecRef:          "specs/test.md",
+					DoneWhen:         "Complete",
+					BlockedQuestions: []string{"How to proceed?"},
+					History:          []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr:     true,
+			errContains: "BLOCKED task without blocked_reason",
+		},
+		{
+			name: "REJECTED without rejection_reason",
+			setupTask: func() models.Task {
+				return models.Task{
+					ID:          "task-1",
+					Description: "Test",
+					Status:      models.TaskStatusRejected,
+					Created:     time.Now().UTC(),
+					SpecRef:     "specs/test.md",
+					DoneWhen:    "Complete",
+					History:     []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr:     true,
+			errContains: "REJECTED task without rejection_reason",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			state := testhelpers.CreateValidState()
+			state.Tasks = []models.Task{tt.setupTask()}
+
+			testhelpers.WriteInitialState(t, statePath, state)
+
+			err := ValidateCommand(statePath, true) // Skip spec file check
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateCommand() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				testhelpers.AssertErrorContains(t, err, tt.errContains)
+			}
+		})
+	}
+}
+
+func TestValidateCommand_Dependencies(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupTasks  func() []models.Task
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "depends_on references non-existent task",
+			setupTasks: func() []models.Task {
+				return []models.Task{
+					{
+						ID:          "task-1",
+						Description: "Test",
+						Status:      models.TaskStatusUnclaimed,
+						DependsOn:   []string{"task-nonexistent"},
+						Created:     time.Now().UTC(),
+						SpecRef:     "specs/test.md",
+						DoneWhen:    "Complete",
+						History:     []models.TaskHistoryEntry{},
+					},
+				}
+			},
+			wantErr:     true,
+			errContains: "non-existent task",
+		},
+		{
+			name: "CLAIMED task with unmet dependencies",
+			setupTasks: func() []models.Task {
+				agent := "coder-1"
+				worktree := "wt-task-1"
+				baseCommit := "abc123"
+				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				return []models.Task{
+					{
+						ID:          "task-2",
+						Description: "Dependency",
+						Status:      models.TaskStatusUnclaimed, // Not MERGED
+						Created:     time.Now().UTC(),
+						SpecRef:     "specs/test.md",
+						DoneWhen:    "Complete",
+						History:     []models.TaskHistoryEntry{},
+					},
+					{
+						ID:           "task-1",
+						Description:  "Test",
+						Status:       models.TaskStatusClaimed,
+						AssignedTo:   &agent,
+						Worktree:     &worktree,
+						BaseCommit:   &baseCommit,
+						LeaseExpires: &leaseExpires,
+						DependsOn:    []string{"task-2"},
+						Created:      time.Now().UTC(),
+						SpecRef:      "specs/test.md",
+						DoneWhen:     "Complete",
+						History:      []models.TaskHistoryEntry{},
+					},
+				}
+			},
+			wantErr:     true,
+			errContains: "unmet dependencies",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			state := testhelpers.CreateValidState()
+			state.Tasks = tt.setupTasks()
+
+			// Create worktree directories if tasks have them
+			for _, task := range state.Tasks {
+				if task.Worktree != nil {
+					wtPath := filepath.Join(tmpDir, *task.Worktree)
+					if err := os.MkdirAll(wtPath, 0755); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+
+			testhelpers.WriteInitialState(t, statePath, state)
+
+			err := ValidateCommand(statePath, true)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateCommand() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				testhelpers.AssertErrorContains(t, err, tt.errContains)
+			}
+		})
+	}
+}
+
+func TestValidateCommand_AgentInvariants(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupAgent  func() map[string]models.Agent
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "WORKING agent without current_task",
+			setupAgent: func() map[string]models.Agent {
+				return map[string]models.Agent{
+					"coder-1": {
+						Role:      "coder",
+						Status:    models.AgentStatusWorking,
+						Heartbeat: time.Now().UTC(),
+						Terminal:  "term-1",
+					},
+				}
+			},
+			wantErr:     true,
+			errContains: "WORKING but no current_task",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			state := testhelpers.CreateValidState()
+			state.Agents = tt.setupAgent()
+
+			testhelpers.WriteInitialState(t, statePath, state)
+
+			err := ValidateCommand(statePath, true)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateCommand() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				testhelpers.AssertErrorContains(t, err, tt.errContains)
+			}
+		})
+	}
+}
+
+func TestValidateCommand_DuplicateAssignments(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupTasks  func() []models.Task
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "agent with multiple CLAIMED tasks fails",
+			setupTasks: func() []models.Task {
+				agent := "coder-1"
+				worktree1 := "wt-task-1"
+				worktree2 := "wt-task-2"
+				baseCommit := "abc123"
+				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				return []models.Task{
+					{
+						ID:           "task-1",
+						Description:  "Test 1",
+						Status:       models.TaskStatusClaimed,
+						AssignedTo:   &agent,
+						Worktree:     &worktree1,
+						BaseCommit:   &baseCommit,
+						LeaseExpires: &leaseExpires,
+						Created:      time.Now().UTC(),
+						SpecRef:      "specs/test.md",
+						DoneWhen:     "Complete",
+						History:      []models.TaskHistoryEntry{},
+					},
+					{
+						ID:           "task-2",
+						Description:  "Test 2",
+						Status:       models.TaskStatusClaimed,
+						AssignedTo:   &agent,
+						Worktree:     &worktree2,
+						BaseCommit:   &baseCommit,
+						LeaseExpires: &leaseExpires,
+						Created:      time.Now().UTC(),
+						SpecRef:      "specs/test.md",
+						DoneWhen:     "Complete",
+						History:      []models.TaskHistoryEntry{},
+					},
+				}
+			},
+			wantErr:     true,
+			errContains: "assigned to multiple active tasks",
+		},
+		{
+			name: "agent with REJECTED and CLAIMED tasks passes",
+			setupTasks: func() []models.Task {
+				agent := "coder-1"
+				worktree := "wt-task-2"
+				baseCommit := "abc123"
+				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				rejectionReason := "Not good enough"
+				return []models.Task{
+					{
+						ID:              "task-1",
+						Description:     "Rejected task",
+						Status:          models.TaskStatusRejected,
+						AssignedTo:      &agent,
+						RejectionReason: &rejectionReason,
+						Created:         time.Now().UTC(),
+						SpecRef:         "specs/test.md",
+						DoneWhen:        "Complete",
+						History:         []models.TaskHistoryEntry{},
+					},
+					{
+						ID:           "task-2",
+						Description:  "Active task",
+						Status:       models.TaskStatusClaimed,
+						AssignedTo:   &agent,
+						Worktree:     &worktree,
+						BaseCommit:   &baseCommit,
+						LeaseExpires: &leaseExpires,
+						Created:      time.Now().UTC(),
+						SpecRef:      "specs/test.md",
+						DoneWhen:     "Complete",
+						History:      []models.TaskHistoryEntry{},
+					},
+				}
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			state := testhelpers.CreateValidState()
+			state.Tasks = tt.setupTasks()
+
+			// Create worktree directories if tasks have them
+			for _, task := range state.Tasks {
+				if task.Worktree != nil {
+					wtPath := filepath.Join(tmpDir, *task.Worktree)
+					if err := os.MkdirAll(wtPath, 0755); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+
+			testhelpers.WriteInitialState(t, statePath, state)
+
+			err := ValidateCommand(statePath, true)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateCommand() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				testhelpers.AssertErrorContains(t, err, tt.errContains)
+			}
+		})
+	}
+}
+
+func TestValidateCommand_SpecFileValidation(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create a spec file
+	specFile := testhelpers.CreateSpecFile(t, tmpDir, "test.md", "# Test Spec\n")
+
+	state := testhelpers.CreateValidState()
+	state.Goal.SpecRef = "specs/test.md"
+
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	// Should pass with spec file check
+	if err := ValidateCommand(statePath, false); err != nil {
+		t.Errorf("ValidateCommand() with existing spec file error = %v", err)
+	}
+
+	// Remove spec file
+	os.Remove(specFile)
+
+	// Should fail without skip flag
+	if err := ValidateCommand(statePath, false); err == nil {
+		t.Error("ValidateCommand() should fail for missing spec file")
+	}
+
+	// Should pass with skip flag
+	if err := ValidateCommand(statePath, true); err != nil {
+		t.Errorf("ValidateCommand() with skip spec check error = %v", err)
+	}
+}

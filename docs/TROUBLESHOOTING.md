@@ -31,10 +31,10 @@ ERROR: Failed to register agent planner-1 (collision?)
 
 3. **Use a different agent ID** — If running multiple instances:
    ```bash
-   LIZA_AGENT_ID=planner-2 ~/.liza/scripts/liza-agent.sh planner
+   liza agent planner --agent-id planner-2
    ```
 
-**Prevention:** Use `touch .liza/PAUSE` before stopping agents — they'll exit gracefully at next check.
+**Prevention:** Use `liza pause` before stopping agents — they'll exit gracefully at next check.
 
 ---
 
@@ -46,7 +46,7 @@ ERROR: Failed to register agent planner-1 (collision?)
 
 **Cause:** Empty arrays in `state.yaml` produce empty lines that get processed as valid entries.
 
-**Solution:** Update to latest `liza-watch.sh` which includes empty-line guards.
+**Solution:** Update to latest `liza` binary which includes empty-line guards in `liza watch`.
 
 ### INVALID STATE alert
 
@@ -75,7 +75,7 @@ ERROR: Failed to register agent planner-1 (collision?)
 
 2. **Debug specific issue:**
    ```bash
-   ~/.liza/scripts/liza-validate.sh .liza/state.yaml
+   liza validate .liza/state.yaml
    ```
 
 ---
@@ -178,7 +178,7 @@ git merge --abort  # if mid-merge
 
 ### Error: .liza already exists
 
-**Cause:** Running `liza-init.sh` on a project that's already initialized.
+**Cause:** Running `liza init` on a project that's already initialized.
 
 **Solutions:**
 
@@ -187,7 +187,7 @@ git merge --abort  # if mid-merge
 2. **Reset completely:**
    ```bash
    rm -rf .liza .worktrees
-   ~/.liza/scripts/liza-init.sh "New goal description"
+   liza init "New goal description"
    ```
 
 ### Error: specs/vision.md required
@@ -254,7 +254,7 @@ cp -r .liza .liza.backup.$(date +%Y%m%d-%H%M%S)
 
 # Remove and reinitialize
 rm -rf .liza
-~/.liza/scripts/liza-init.sh "Goal description"
+liza init "Goal description"
 
 # Manually migrate any in-progress work from backup if needed
 ```
@@ -280,5 +280,5 @@ yq -i '(.tasks[] | select(.assigned_to == "<agent-id>")).assigned_to = null' .li
 
 1. **Check alerts log:** `cat .liza/alerts.log`
 2. **Check activity log:** `cat .liza/log.yaml`
-3. **Validate state:** `~/.liza/scripts/liza-validate.sh .liza/state.yaml`
-4. **Watch live:** `~/.liza/scripts/liza-watch.sh`
+3. **Validate state:** `liza validate .liza/state.yaml`
+4. **Watch live:** `liza watch`

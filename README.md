@@ -119,6 +119,35 @@ More at [I Tried to Kill Vibe Coding. I Built Adversarial Vibe Coding. Without t
 
 See [Architecture](specs/architecture).
 
+### Task Lifecycle
+
+```
+DRAFT → UNCLAIMED → CLAIMED → READY_FOR_REVIEW → APPROVED → MERGED
+                        │              │
+                        │              └─> REJECTED ──┘
+                        │
+                        ├──> BLOCKED ──> UNCLAIMED (rescoped)
+                        │                ├──> SUPERSEDED
+                        │                └──> ABANDONED
+                        │
+                        └──> INTEGRATION_FAILED ──┘
+```
+
+### Common Commands
+
+```bash
+liza init "Project goal" --spec specs/vision.md   # Initialize blackboard
+liza add-task --id t1 --desc "..." --done "..."    # Add tasks
+liza agent coder --agent-id coder-1                # Start agent supervisor
+liza validate                                       # Validate state
+liza get tasks                                      # Query tasks
+liza status                                         # Dashboard overview
+liza watch                                          # Monitor for anomalies
+liza pause / liza resume                            # Human intervention
+liza stop / liza start                              # System control
+liza checkpoint                                     # Sprint checkpoint
+```
+
 ## Getting Started
 
 ### Hands-on
@@ -136,7 +165,7 @@ Liza is simultaneously a Pairing and Multi-Agent System optimized for thoughtful
 
 The contract in Pairing mode is battle-tested for making the **agents write most of the production code (~90%) under human supervision**.
 
-The Multi-Agent mode is an **operational proof of concept** with ongoing refinement. The contract, blackboard schema, coordination protocols, and tooling are implemented. Scripts run end-to-end.
+The Multi-Agent mode is an **operational proof of concept** with ongoing refinement. The contract, blackboard schema, coordination protocols, and tooling are implemented. The Go CLI runs end-to-end.
 
 ### Provider Compatibility
 
@@ -168,13 +197,21 @@ See [Model Capability Assessment](docs/demo-benchmark/wrap-up.md) for detailed a
 
 Liza is not autonomous. She is accountable.
 
+## Features
+
+- **Blackboard Pattern**: All agents read/write to a central `state.yaml` with atomic file locking
+- **Git Worktrees**: Each task gets an isolated worktree for parallel development
+- **Agent Supervisors**: Long-running processes that claim tasks, execute work, and handle failures
+- **State Machine**: Strict task state transitions with 43+ validation rules
+- **Restart Logic**: Agents can request restarts (exit code 42) for incremental work
+- **Monitoring**: Watch daemon alerts on anomalies (expired leases, blocked tasks, etc.)
+- **MCP Server**: Structured API access to Liza operations for Claude Code agents
+
 ## Requirements
 
 - Claude Code or Codex CLI (tested: Claude Opus 4.5, GPT-5.2-Codex)
-- Git with worktree support
-- `yq` for YAML processing
-- `flock` for file locking (standard on Linux)
-- Bash 4+
+- Git 2.5+ (for worktree support)
+- Go 1.25.5+ (for building from source)
 
 ## License
 
@@ -188,3 +225,4 @@ The behavioral contract draws on research into LLM failure modes, sycophancy pat
 - **[BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)** — Role templates and workflow patterns
 - **Classical blackboard architecture** — Shared state coordination
 - **[Ralph Wiggum technique](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)** — Iteration until convergence
+- Stephen Oberther (**[liza-go](https://github.com/smo921/liza-go)**) — Shell to Go CLI migration

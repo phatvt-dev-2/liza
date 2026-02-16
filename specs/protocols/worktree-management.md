@@ -4,15 +4,15 @@
 
 | Event | Action | Actor |
 |-------|--------|-------|
-| Task CLAIMED (fresh) | Create worktree via `liza-claim-task.sh` | Supervisor |
-| Task CLAIMED (reassignment) | Create fresh worktree via `liza-claim-task.sh` | Supervisor |
+| Task CLAIMED (fresh) | Create worktree via `liza claim-task` | Supervisor |
+| Task CLAIMED (reassignment) | Create fresh worktree via `liza claim-task` | Supervisor |
 | Task APPROVED | Merge eligible | — |
-| Task MERGED | `wt-merge.sh task-N` | Supervisor (after Code Reviewer approves) |
-| Task BLOCKED | Delete worktree: `wt-delete.sh task-N` | Planner |
-| Task ABANDONED/SUPERSEDED | Delete worktree: `wt-delete.sh task-N` | Planner |
+| Task MERGED | `liza wt-merge task-N` | Supervisor (after Code Reviewer approves) |
+| Task BLOCKED | Delete worktree: `liza wt-delete task-N` | Planner |
+| Task ABANDONED/SUPERSEDED | Delete worktree: `liza wt-delete task-N` | Planner |
 | Task INTEGRATION_FAILED | Worktree retained for conflict resolution | — |
 
-**Note:** Worktree creation is supervisor-only (via `liza-claim-task.sh`), not agent-callable. This ensures worktrees exist before agents are spawned.
+**Note:** Worktree creation is supervisor-only (via `liza claim-task`), not agent-callable. This ensures worktrees exist before agents are spawned.
 
 **Reassignment rule:** When a different coder claims a task (after REJECTED or BLOCKED → UNCLAIMED), the worktree is deleted and recreated fresh. Same coder re-claiming keeps the existing worktree. Rationale: salvaging failed work often costs more than restarting from spec.
 
@@ -134,7 +134,7 @@ drift_commits=$(git rev-list --count $base_commit..$current_integration)
 After APPROVED, **Code Reviewer** executes:
 
 1. Verify `review_commit` matches current HEAD
-2. Run `wt-merge.sh task-N`
+2. Run `liza wt-merge task-N`
 3. Script attempts fast-forward or clean merge
 4. If conflict: task → INTEGRATION_FAILED, Code Reviewer reports
 5. If integration tests fail: task → INTEGRATION_FAILED
@@ -196,5 +196,5 @@ fi
 ## Related Documents
 
 - [Task Lifecycle](task-lifecycle.md) — claim, iterate, review
-- [Tooling](../implementation/tooling.md) — wt-create.sh, wt-merge.sh, wt-delete.sh
+- [Tooling](../implementation/tooling.md) — `liza wt-create`, `liza wt-merge`, `liza wt-delete`
 - [Roles](../architecture/roles.md) — commit permissions

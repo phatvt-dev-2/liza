@@ -10,7 +10,6 @@ This document is a navigation aid: where to find things and why they're organize
 ├── contracts/              # Behavioral contracts governing agents
 ├── specs/                  # Specifications (durable agent context)
 ├── skills/                 # Domain-specific agent skills
-├── scripts/                # Shell scripts (Liza system mechanics)
 ├── docs/                   # User-facing documentation
 ├── templates/              # Document templates
 │
@@ -110,42 +109,29 @@ Specialized protocols agents load conditionally. Each contains a single `SKILL.m
 
 Skills execute within contract constraints — contract gates are non-negotiable, skill steps operate within them.
 
-## scripts/
+## Go CLI (`liza`)
 
-Shell scripts implementing Liza system mechanics. Agents invoke these; the scripts don't invoke agents.
+All Liza system mechanics are provided by the `liza` Go binary (assumed in PATH). See [ADR-0012](specs/architecture/ADR/0012-go-cli-replaces-bash-scripts.md).
 
-**Initialization & validation:**
-- `liza-init.sh` — Initialize `.liza/` directory with blackboard
-- `liza-validate.sh` — Validate blackboard state against schema
-- `liza-lock.sh` — Atomic file operations with flock
+**Build requirement:** The Go binary embeds contracts, skills, specs, and config files via `//go:embed`. These are copied from the repo root by `make sync-embedded` (a prerequisite of `make build` and `make test`). Always use `make test` instead of bare `go test ./...` — without the sync step, the `internal/embedded` package fails to compile.
 
-**Agent supervision:**
-- `liza-agent.sh` — Agent supervisor (main entry point)
-- `liza-checkpoint.sh` — Halt + generate summary
-- `liza-watch.sh` — Monitor blackboard, alert on anomalies
+Key command groups:
 
-**Task management:**
-- `liza-add-task.sh` — Add new task to backlog
-- `liza-claim-task.sh` — Atomically claim a task for a coder
-- `liza-analyze.sh` — Analysis helper
-- `liza-prompt-builders.sh` — Construct prompts from state
+**Initialization & validation:** `liza init`, `liza validate`
 
-**Review & merge:**
-- `liza-submit-for-review.sh` — Atomic review submission
-- `liza-submit-verdict.sh` — Atomic review verdict
-- `release-claim.sh` — Release claim on task or review
-- `clear-stale-review-claims.sh` — Clean up abandoned reviews
+**Agent supervision:** `liza agent`, `liza watch`, `liza analyze`, `liza checkpoint`
 
-**Shared utilities:**
-- `liza-common.sh` — Common functions sourced by other scripts
+**Task management:** `liza add-task`, `liza claim-task`, `liza mark-blocked`, `liza supersede-task`
 
-**Worktree management:**
-- `wt-create.sh` — Create isolated per-task worktree
-- `wt-merge.sh` — Merge after reviewer approval
-- `wt-delete.sh` — Clean up worktree
+**Review & merge:** `liza submit-for-review`, `liza submit-verdict`, `liza release-claim`, `liza clear-stale-review-claims`
 
-**Metrics:**
-- `update-sprint-metrics.sh` — Sprint statistics
+**Worktree management:** `liza wt-create`, `liza wt-merge`, `liza wt-delete`
+
+**System control:** `liza pause`, `liza resume`, `liza stop`, `liza start`, `liza status`, `liza get`
+
+**Metrics:** `liza update-sprint-metrics`
+
+Locking is internal to the binary — no external `flock` wrapper needed.
 
 ## docs/
 

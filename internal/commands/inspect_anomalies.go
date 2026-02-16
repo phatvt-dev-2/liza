@@ -1,0 +1,161 @@
+package commands
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/liza-mas/liza/internal/models"
+)
+
+// inspectAnomaliesOptions contains options for anomaly inspection
+type inspectAnomaliesOptions struct {
+	Format         string // Output format: json, yaml, table, value
+	TypeFilter     string // Filter by anomaly type
+	TaskFilter     string // Filter by task ID
+	ReporterFilter string // Filter by reporter (agent ID)
+	Internal       bool   // Return structured data for composition
+}
+
+// anomalyInfo represents anomaly information with computed fields
+type anomalyInfo struct {
+	Timestamp time.Time      `json:"timestamp" yaml:"timestamp"`
+	Age       string         `json:"age" yaml:"age"` // Computed: time since anomaly occurred
+	Task      string         `json:"task" yaml:"task"`
+	Reporter  string         `json:"reporter" yaml:"reporter"`
+	Type      string         `json:"type" yaml:"type"`
+	Details   map[string]any `json:"details,omitempty" yaml:"details,omitempty"`
+}
+
+// inspectAnomalies lists all anomalies or filters by criteria
+func inspectAnomalies(state *models.State, opts inspectAnomaliesOptions) (any, error) {
+	// Get all anomalies
+	anomalies := state.Anomalies
+
+	// Apply filters
+	filtered := filterAnomalies(anomalies, opts)
+
+	// Build anomalyInfo with computed fields
+	anomalyInfos := make([]anomalyInfo, len(filtered))
+	for i, anomaly := range filtered {
+		anomalyInfos[i] = buildanomalyInfo(anomaly)
+	}
+
+	// If called internally (for composition), return structured data
+	if opts.Internal {
+		return anomalyInfos, nil
+	}
+
+	// Otherwise, format for output
+	return formatAnomaliesOutput(anomalyInfos, opts.Format)
+}
+
+// buildanomalyInfo converts an Anomaly to anomalyInfo with computed fields
+func buildanomalyInfo(anomaly models.Anomaly) anomalyInfo {
+	info := anomalyInfo{
+		Timestamp: anomaly.Timestamp,
+		Task:      anomaly.Task,
+		Reporter:  anomaly.Reporter,
+		Type:      anomaly.Type,
+		Details:   anomaly.Details,
+	}
+
+	// Compute age (time since anomaly occurred)
+	age := time.Since(anomaly.Timestamp)
+	info.Age = formatDuration(age)
+
+	return info
+}
+
+// filterAnomalies applies filters to anomaly list
+func filterAnomalies(anomalies []models.Anomaly, opts inspectAnomaliesOptions) []models.Anomaly {
+	var filtered []models.Anomaly
+
+	for _, anomaly := range anomalies {
+		// Apply type filter
+		if opts.TypeFilter != "" && anomaly.Type != opts.TypeFilter {
+			continue
+		}
+
+		// Apply task filter
+		if opts.TaskFilter != "" && anomaly.Task != opts.TaskFilter {
+			continue
+		}
+
+		// Apply reporter filter
+		if opts.ReporterFilter != "" && anomaly.Reporter != opts.ReporterFilter {
+			continue
+		}
+
+		filtered = append(filtered, anomaly)
+	}
+
+	return filtered
+}
+
+// formatAnomaliesOutput formats a list of anomalies for output
+func formatAnomaliesOutput(anomalies []anomalyInfo, format string) (string, error) {
+	// Default to table format
+	if format == "" {
+		format = "table"
+	}
+
+	switch format {
+	case "json":
+		return formatJSON(anomalies)
+	case "yaml":
+		return formatYAML(anomalies)
+	case "table":
+		return formatAnomaliesTable(anomalies), nil
+	case "value":
+		// Value format doesn't make sense for multiple anomalies
+		return "", fmt.Errorf("value format not supported for anomaly lists (use json, yaml, or table)")
+	default:
+		return "", fmt.Errorf("invalid format: %s", format)
+	}
+}
+
+// formatAnomaliesTable formats anomalies as a table
+func formatAnomaliesTable(anomalies []anomalyInfo) string {
+	if len(anomalies) == 0 {
+		return "No anomalies found"
+	}
+
+	headers := []string{"AGE", "TYPE", "TASK", "REPORTER", "TIMESTAMP"}
+	var rows [][]string
+
+	for _, anomaly := range anomalies {
+		// Format timestamp for display
+		timestampStr := anomaly.Timestamp.Format("2006-01-02 15:04:05")
+
+		rows = append(rows, []string{
+			anomaly.Age + " ago",
+			anomaly.Type,
+			anomaly.Task,
+			anomaly.Reporter,
+			timestampStr,
+		})
+	}
+
+	return formatTable(headers, rows)
+}
+
+// formatAnomalyValue formats a single anomaly as key-value pairs
+func formatAnomalyValue(anomaly anomalyInfo) string {
+	var result strings.Builder
+
+	fmt.Fprintf(&result, "Type: %s\n", anomaly.Type)
+	fmt.Fprintf(&result, "Task: %s\n", anomaly.Task)
+	fmt.Fprintf(&result, "Reporter: %s\n", anomaly.Reporter)
+	fmt.Fprintf(&result, "Timestamp: %s\n", anomaly.Timestamp.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(&result, "Age: %s ago\n", anomaly.Age)
+
+	if len(anomaly.Details) > 0 {
+		result.WriteString("Details:\n")
+		for key, value := range anomaly.Details {
+			fmt.Fprintf(&result, "  %s: %v\n", key, value)
+		}
+	}
+
+	return result.String()
+}

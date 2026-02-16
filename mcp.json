@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "MCP (Model Context Protocol) Server Configuration",
+    "",
+    "This file tells Claude Code how to start the liza-mcp server.",
+    "The MCP server provides structured API access to liza operations",
+    "for Claude Code agents (liza_add_task, liza_submit_for_review, etc.)",
+    "",
+    "Prerequisites:",
+    "  - Build: make build (creates liza and liza-mcp binaries)",
+    "  - Install: make install (installs to $GOPATH/bin)",
+    "",
+    "If liza-mcp is not in your PATH, specify the full path:",
+    "  \"command\": \"/usr/local/bin/liza-mcp\""
+  ],
+
+  "mcpServers": {
+    "liza": {
+      "command": "liza-mcp",
+      "args": ["--project-root", "."]
+    }
+  }
+}

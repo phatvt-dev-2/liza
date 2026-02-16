@@ -1,0 +1,376 @@
+package main
+
+import (
+	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
+	"gopkg.in/yaml.v3"
+)
+
+func TestGetCommand(t *testing.T) {
+	// Create a temporary directory for the test
+	tmpDir, err := os.MkdirTemp("", "liza-get-test-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Initialize git repo so paths.GetProjectRoot() works
+	cmd := exec.Command("git", "init", "-b", "main")
+	cmd.Dir = tmpDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to init git repo: %v\n%s", err, out)
+	}
+
+	// Create .liza directory
+	lizaDir := filepath.Join(tmpDir, paths.LizaDirName)
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatalf("failed to create .liza dir: %v", err)
+	}
+
+	// Create a minimal test state
+	now := time.Now()
+	coder1 := "coder-1"
+	reviewer1 := "code-reviewer-1"
+	planner1 := "planner-1"
+	task1 := "task-1"
+	task2 := "fix-auth-bug"    // Non-standard task ID
+	task3 := "feature-xyz-123" // Another non-standard task ID
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "specs/vision.md",
+			Created:     now,
+			Status:      models.GoalStatusInProgress,
+		},
+		Sprint: models.Sprint{
+			ID:      "sprint-1",
+			GoalRef: "goal-1",
+			Status:  models.SprintStatusInProgress,
+			Timeline: models.SprintTimeline{
+				Started:  now.Add(-24 * time.Hour),
+				Deadline: now.Add(6 * 24 * time.Hour),
+			},
+			Metrics: models.SprintMetrics{
+				TasksDone:       2,
+				TasksInProgress: 1,
+				TasksBlocked:    0,
+			},
+		},
+		Tasks: []models.Task{
+			{
+				ID:          task1,
+				Description: "Test task",
+				Status:      models.TaskStatusClaimed,
+				Priority:    1,
+				AssignedTo:  &coder1,
+				SpecRef:     "specs/vision.md",
+				DoneWhen:    "Task is complete",
+				Scope:       "Test scope",
+				Created:     now.Add(-2 * time.Hour),
+				History: []models.TaskHistoryEntry{
+					{Time: now.Add(-1 * time.Hour), Event: "claimed"},
+				},
+			},
+			{
+				ID:          task2,
+				Description: "Fix authentication bug",
+				Status:      models.TaskStatusUnclaimed,
+				Priority:    2,
+				SpecRef:     "specs/auth.md",
+				DoneWhen:    "Auth bug is fixed",
+				Scope:       "Authentication module",
+				Created:     now.Add(-3 * time.Hour),
+			},
+			{
+				ID:          task3,
+				Description: "Implement feature XYZ",
+				Status:      models.TaskStatusUnclaimed,
+				Priority:    3,
+				SpecRef:     "specs/features.md",
+				DoneWhen:    "Feature is implemented",
+				Scope:       "Feature module",
+				Created:     now.Add(-4 * time.Hour),
+			},
+		},
+		Agents: map[string]models.Agent{
+			coder1: {
+				Role:            "coder",
+				Status:          models.AgentStatusWorking,
+				CurrentTask:     &task1,
+				Heartbeat:       now,
+				Terminal:        "terminal1",
+				IterationsTotal: 5,
+				ContextPercent:  45,
+			},
+			reviewer1: {
+				Role:            "code-reviewer",
+				Status:          models.AgentStatusIdle,
+				Heartbeat:       now,
+				Terminal:        "terminal2",
+				IterationsTotal: 2,
+				ContextPercent:  20,
+			},
+			planner1: {
+				Role:      "planner",
+				Status:    models.AgentStatusIdle,
+				Heartbeat: now,
+				Terminal:  "terminal3",
+			},
+		},
+		Anomalies: []models.Anomaly{
+			{
+				Timestamp: now.Add(-1 * time.Hour),
+				Task:      task1,
+				Reporter:  coder1,
+				Type:      "retry_loop",
+				Details:   map[string]any{},
+			},
+		},
+		CircuitBreaker: models.CircuitBreaker{
+			Status:    "OK",
+			LastCheck: now,
+		},
+		Config: models.Config{
+			MaxCoderIterations: 10,
+			MaxReviewCycles:    5,
+			HeartbeatInterval:  60,
+			LeaseDuration:      300,
+			CoderPollInterval:  10,
+			CoderMaxWait:       60,
+			IntegrationBranch:  "main",
+			Mode:               models.SystemModeRunning,
+		},
+	}
+
+	// Write state to file
+	statePath := filepath.Join(lizaDir, paths.StateFileName)
+	stateData, err := yaml.Marshal(state)
+	if err != nil {
+		t.Fatalf("failed to marshal state: %v", err)
+	}
+	if err := os.WriteFile(statePath, stateData, 0644); err != nil {
+		t.Fatalf("failed to write state file: %v", err)
+	}
+
+	// Change to the temp directory
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp directory: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		args           []string
+		wantContains   []string
+		wantNotContain []string
+		wantErr        bool
+	}{
+		{
+			name:         "get config.mode",
+			args:         []string{"get", "config.mode"},
+			wantContains: []string{"RUNNING"},
+		},
+		{
+			name:         "get sprint.status",
+			args:         []string{"get", "sprint.status"},
+			wantContains: []string{"IN_PROGRESS"},
+		},
+		{
+			name:         "get sprint.metrics.tasks_done",
+			args:         []string{"get", "sprint.metrics.tasks_done"},
+			wantContains: []string{"2"},
+		},
+		{
+			name:         "get tasks - table format",
+			args:         []string{"get", "tasks", "--format", "table"},
+			wantContains: []string{"task-1", "CLAIMED", "Test task"},
+		},
+		{
+			name:         "get specific task",
+			args:         []string{"get", "tasks", "task-1", "--format", "value"},
+			wantContains: []string{"ID: task-1", "Status: CLAIMED", "Description: Test task"},
+		},
+		{
+			name:         "get agents - table format",
+			args:         []string{"get", "agents", "--format", "table"},
+			wantContains: []string{"coder-1", "WORKING"},
+		},
+		{
+			name:         "get specific agent",
+			args:         []string{"get", "agents", "coder-1", "--format", "value"},
+			wantContains: []string{"ID: coder-1", "Role: coder", "Status: WORKING"},
+		},
+		{
+			name:         "get metrics",
+			args:         []string{"get", "metrics", "--format", "value"},
+			wantContains: []string{"Tasks Done: 2", "Tasks In Progress: 1"},
+		},
+		{
+			name:         "get anomalies",
+			args:         []string{"get", "anomalies", "--format", "table"},
+			wantContains: []string{"retry_loop", "task-1", "coder-1"},
+		},
+		{
+			name:         "get tasks - JSON format",
+			args:         []string{"get", "tasks", "--format", "json"},
+			wantContains: []string{`"id": "task-1"`, `"status": "CLAIMED"`},
+		},
+		{
+			name:         "get task by ID shorthand",
+			args:         []string{"get", "task-1", "--format", "value"},
+			wantContains: []string{"ID: task-1", "Status: CLAIMED", "Description: Test task"},
+		},
+		{
+			name:         "get task by ID shorthand - JSON",
+			args:         []string{"get", "task-1", "--format", "json"},
+			wantContains: []string{`"id": "task-1"`, `"status": "CLAIMED"`},
+		},
+		{
+			name:         "get agent by ID shorthand",
+			args:         []string{"get", "coder-1", "--format", "value"},
+			wantContains: []string{"ID: coder-1", "Role: coder", "Status: WORKING"},
+		},
+		{
+			name:         "get agent by ID shorthand - JSON",
+			args:         []string{"get", "coder-1", "--format", "json"},
+			wantContains: []string{`"role": "coder"`, `"status": "WORKING"`},
+		},
+		{
+			name:         "get code-reviewer by ID shorthand",
+			args:         []string{"get", "code-reviewer-1", "--format", "value"},
+			wantContains: []string{"ID: code-reviewer-1", "Role: code-reviewer", "Status: IDLE"},
+		},
+		{
+			name:         "get planner by ID shorthand",
+			args:         []string{"get", "planner-1", "--format", "value"},
+			wantContains: []string{"ID: planner-1", "Role: planner", "Status: IDLE"},
+		},
+		{
+			name:         "get task with non-standard ID",
+			args:         []string{"get", "fix-auth-bug", "--format", "value"},
+			wantContains: []string{"ID: fix-auth-bug", "Status: UNCLAIMED", "Description: Fix authentication bug"},
+		},
+		{
+			name:         "get task with alphanumeric ID",
+			args:         []string{"get", "feature-xyz-123", "--format", "value"},
+			wantContains: []string{"ID: feature-xyz-123", "Status: UNCLAIMED", "Description: Implement feature XYZ"},
+		},
+		{
+			name:         "get nonexistent task by ID shorthand",
+			args:         []string{"get", "task-999"},
+			wantErr:      true,
+			wantContains: []string{"not found"},
+		},
+		{
+			name:         "get nonexistent agent by ID shorthand",
+			args:         []string{"get", "coder-999"},
+			wantErr:      true,
+			wantContains: []string{"not found"},
+		},
+		{
+			name:         "get nonexistent field",
+			args:         []string{"get", "config.nonexistent"},
+			wantErr:      true,
+			wantContains: []string{"not found"},
+		},
+		{
+			name:    "no args",
+			args:    []string{"get"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset root command
+			rootCmd.SetArgs(tt.args)
+
+			// Capture output
+			var outBuf bytes.Buffer
+			rootCmd.SetOut(&outBuf)
+			rootCmd.SetErr(&outBuf)
+
+			// Execute command
+			err := rootCmd.Execute()
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			output := outBuf.String()
+
+			// Check expected content
+			for _, want := range tt.wantContains {
+				if !strings.Contains(output, want) {
+					t.Errorf("expected output to contain %q\nGot:\n%s", want, output)
+				}
+			}
+
+			// Check unexpected content
+			for _, notWant := range tt.wantNotContain {
+				if strings.Contains(output, notWant) {
+					t.Errorf("expected output to NOT contain %q\nGot:\n%s", notWant, output)
+				}
+			}
+		})
+	}
+}
+
+func TestGetCommandHelp(t *testing.T) {
+	// Test that help output is generated correctly
+	rootCmd.SetArgs([]string{"get", "--help"})
+
+	var outBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&outBuf)
+
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := outBuf.String()
+
+	expectedSections := []string{
+		"Query Types:",
+		"Field queries:",
+		"Entity queries:",
+		"Formats:",
+		"Examples:",
+		"config.mode",
+		"tasks",
+		"agents",
+		"metrics",
+		"anomalies",
+	}
+
+	for _, section := range expectedSections {
+		if !strings.Contains(output, section) {
+			t.Errorf("expected help output to contain %q", section)
+		}
+	}
+}

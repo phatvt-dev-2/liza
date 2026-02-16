@@ -1,5 +1,7 @@
 # 11 - Script-Enforced Agent Status Transitions
 
+> **Note:** Enforcement mechanism changed from bash scripts to Go CLI commands per [ADR-0012](0012-go-cli-replaces-bash-scripts.md). The principle (structural enforcement over behavioral compliance) is preserved.
+
 ## Context and Problem Statement
 
 Agent status in the blackboard (WORKING, WAITING, IDLE, HANDOFF) was managed by agents themselves via contract compliance. This created a reliability gap: agents could complete operations (submit for review, submit verdict) without updating their own status, leaving the blackboard in an inconsistent state. The general direction is to move to scripts what can be moved, so agents don't do things partially.

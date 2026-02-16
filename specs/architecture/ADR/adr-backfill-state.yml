@@ -15,9 +15,9 @@ file_classification:
   "contracts/PAIRING_MODE.md": {tier: 1, category: "core_contract"}
   "AGENTS.md": {tier: 1, category: "prompt_compliance", note: "symlink to ~/.liza/"}
   "CLAUDE.md": {tier: 1, category: "prompt_compliance", note: "symlink to ~/.liza/"}
-  "scripts/liza-agent.sh": {tier: 1, category: "agent_entry_point"}
-  "scripts/liza-watch.sh": {tier: 1, category: "supervisor_orchestration"}
-  "scripts/liza-lock.sh": {tier: 1, category: "blackboard_state"}
+  "scripts/liza-agent.sh": {tier: 1, category: "agent_entry_point", note: "deleted — replaced by liza CLI (ADR-0012)"}
+  "scripts/liza-watch.sh": {tier: 1, category: "supervisor_orchestration", note: "deleted — replaced by liza CLI (ADR-0012)"}
+  "scripts/liza-lock.sh": {tier: 1, category: "blackboard_state", note: "deleted — replaced by liza CLI (ADR-0012)"}
   "specs/architecture/*.md": {tier: 1, category: "architecture_specs"}
   "specs/protocols/*.md": {tier: 1, category: "protocol_specs"}
 
@@ -156,6 +156,20 @@ clusters:
       rationale: "Structural enforcement over behavioral compliance. Reduces agent cognitive load."
       limitations: "New status transitions require script updates"
     note: "Covers only status enforcement portion of mixed-concern commit 7af6035"
+
+  - id: 12
+    title: "Go CLI Replaces Bash Scripts"
+    commit_shas: []
+    date_range: "2026-02-15"
+    confidence: 1.0
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0012-go-cli-replaces-bash-scripts.md"
+    user_context:
+      problem: "Bash scripts had limited error handling, no type safety, DRY violations, no automated testing"
+      alternatives: "Refactor bash, Python orchestrator"
+      rationale: "Single binary, type-safe blackboard ops, built-in MCP server, internal locking"
+      limitations: "liza handoff command not yet implemented"
+    note: "Supersedes ADR-0005. Changes enforcement mechanism of ADR-0011."
 
 processing_cursor:
   step: "ordering"

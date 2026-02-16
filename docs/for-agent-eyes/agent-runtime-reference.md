@@ -12,21 +12,22 @@ Operational quick-reference for Liza agents. For authoritative protocols, see [M
 
 ---
 
-## Scripts Reference
+## CLI Commands Reference
 
-All scripts are in `$SCRIPT_DIR` (passed in bootstrap prompt).
+All operations use the `liza` binary (assumed in PATH).
 
-| Script | Purpose | Used By |
-|--------|---------|---------|
-| `liza-lock.sh read` | Read blackboard atomically | All |
-| `liza-lock.sh write <path> <value>` | Write single field | All |
-| `liza-lock.sh modify env VAR=val yq ...` | Complex atomic update | All |
-| `liza-validate.sh <state.yaml>` | Validate blackboard state | All |
-| `liza-add-task.sh` | Add task to blackboard | Planner |
-| `liza-submit-for-review.sh <task-id> <commit>` | Submit for review (sets agent status WAITING) | Coder |
-| `liza-handoff.sh <task-id> <summary> <next-action>` | Context exhaustion handoff (sets agent status HANDOFF) | Coder |
-| `liza-submit-verdict.sh <task-id> <verdict> [reason]` | Submit review verdict (sets agent status IDLE) | Code Reviewer |
-| `wt-delete.sh <task-id>` | Delete worktree | Planner |
+| Command | Purpose | Used By |
+|---------|---------|---------|
+| `liza get` | Read blackboard data | All |
+| `liza validate [state.yaml]` | Validate blackboard state | All |
+| `liza add-task --id X ...` | Add task to blackboard | Planner |
+| `liza submit-for-review <task-id> <commit>` | Submit for review (sets agent status WAITING) | Coder |
+| `liza submit-verdict <task-id> <verdict> [reason]` | Submit review verdict (sets agent status IDLE) | Code Reviewer |
+| `liza mark-blocked <task-id> --reason "..."` | Mark task as blocked | Coder, Planner |
+| `liza wt-delete <task-id>` | Delete worktree | Planner |
+| `liza status` | Show system status | All |
+
+> **Note:** `liza handoff` is pending Go implementation. Agents write handoff notes directly to state.yaml for now.
 
 ---
 
@@ -65,7 +66,7 @@ Location: `.liza/state.yaml`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `role` | enum | `coder`, `code_reviewer`, `planner` |
+| `role` | enum | `coder`, `code-reviewer`, `planner` |
 | `status` | enum | `STARTING`, `IDLE`, `WORKING`, `REVIEWING`, `WAITING`, `HANDOFF` |
 | `current_task` | string | Task ID currently assigned |
 | `lease_expires` | timestamp | When lease expires |
