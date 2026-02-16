@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -74,7 +75,6 @@ Returns detailed error messages if validation fails.`,
 		if len(args) > 0 {
 			statePath = args[0]
 		} else {
-			// Default to .liza/state.yaml in current directory
 			statePath = filepath.Join(paths.LizaDirName, paths.StateFileName)
 		}
 
@@ -105,10 +105,9 @@ a new one (useful for task reassignment).`,
 		taskID := args[0]
 		fresh, _ := cmd.Flags().GetBool("fresh")
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.WtCreateCommand(projectRoot, taskID, fresh)
@@ -135,10 +134,9 @@ The worktree directory and branch are removed, and task.worktree is set to null.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		taskID := args[0]
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.WtDeleteCommand(projectRoot, taskID)
@@ -172,17 +170,11 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		taskID := args[0]
 
-		// Resolve agent ID from flag or env var
-		flagValue, _ := cmd.Flags().GetString("agent-id")
-		agentID, err := identity.Resolve(identity.Config{
-			FlagValue: flagValue,
-			Required:  true,
-		})
+		agentID, err := requireAgentID(cmd)
 		if err != nil {
-			return fmt.Errorf("agent ID required: use --agent-id flag or set LIZA_AGENT_ID environment variable")
+			return err
 		}
 
-		// Validate agent is a code-reviewer
 		role, err := identity.ExtractRole(agentID)
 		if err != nil {
 			return err
@@ -191,10 +183,9 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 			return fmt.Errorf("wt-merge requires code-reviewer agent (got: %s)", role)
 		}
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.WtMergeCommand(projectRoot, taskID, agentID)
@@ -221,10 +212,9 @@ This pattern prevents TOCTOU races in multi-agent scenarios.`,
 		taskID := args[0]
 		agentID := args[1]
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.ClaimTaskCommand(projectRoot, taskID, agentID)
@@ -252,20 +242,14 @@ Updates:
 		taskID := args[0]
 		commitSHA := args[1]
 
-		// Resolve agent ID from flag or env var
-		flagValue, _ := cmd.Flags().GetString("agent-id")
-		agentID, err := identity.Resolve(identity.Config{
-			FlagValue: flagValue,
-			Required:  true,
-		})
+		agentID, err := requireAgentID(cmd)
 		if err != nil {
-			return fmt.Errorf("agent ID required: use --agent-id flag or set LIZA_AGENT_ID environment variable")
+			return err
 		}
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.SubmitForReviewCommand(projectRoot, taskID, commitSHA, agentID)
@@ -306,20 +290,14 @@ For REJECTED verdict:
 			reason = args[2]
 		}
 
-		// Resolve agent ID from flag or env var
-		flagValue, _ := cmd.Flags().GetString("agent-id")
-		agentID, err := identity.Resolve(identity.Config{
-			FlagValue: flagValue,
-			Required:  true,
-		})
+		agentID, err := requireAgentID(cmd)
 		if err != nil {
-			return fmt.Errorf("agent ID required: use --agent-id flag or set LIZA_AGENT_ID environment variable")
+			return err
 		}
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID)
@@ -357,20 +335,14 @@ Effects:
 		reason, _ := cmd.Flags().GetString("reason")
 		questions, _ := cmd.Flags().GetStringSlice("questions")
 
-		// Resolve agent ID from flag or env var
-		flagValue, _ := cmd.Flags().GetString("agent-id")
-		agentID, err := identity.Resolve(identity.Config{
-			FlagValue: flagValue,
-			Required:  true,
-		})
+		agentID, err := requireAgentID(cmd)
 		if err != nil {
-			return fmt.Errorf("agent ID required: use --agent-id flag or set LIZA_AGENT_ID environment variable")
+			return err
 		}
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.MarkBlockedCommand(projectRoot, taskID, reason, questions, agentID)
@@ -406,23 +378,15 @@ Agent ID for audit trail:
 		reason, _ := cmd.Flags().GetString("reason")
 		full, _ := cmd.Flags().GetBool("full")
 
-		// --full is an alias for --role both
-		if full {
+		if full { // --full is an alias for --role both
 			role = "both"
 		}
 
-		// Resolve changed-by from flag or env var, default to "human"
-		flagValue, _ := cmd.Flags().GetString("changed-by")
-		agentID, _ := identity.Resolve(identity.Config{
-			FlagValue:    flagValue,
-			DefaultValue: "human",
-			Required:     false,
-		})
+		agentID := resolveChangedBy(cmd)
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.ReleaseClaimCommand(projectRoot, taskID, role, force, reason, agentID)
@@ -452,10 +416,9 @@ If no patterns are detected:
   - Updates circuit_breaker.status to OK
   - Continues normal operation`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.AnalyzeCommand(projectRoot)
@@ -486,10 +449,9 @@ Warnings:
 
 The metrics are used to track sprint progress and detect quality issues.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.UpdateSprintMetricsCommand(projectRoot)
@@ -520,10 +482,9 @@ Alerts are written to .liza/alerts.log and printed to stderr.
 
 Press Ctrl+C to stop watching.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		interval, _ := cmd.Flags().GetInt("interval")
@@ -537,9 +498,7 @@ Press Ctrl+C to stop watching.`,
 			StateCache:    make(map[string]time.Time),
 		}
 
-		// Run until interrupted
-		ctx := context.Background()
-		return commands.WatchCommand(ctx, config)
+		return commands.WatchCommand(context.Background(), config)
 	},
 }
 
@@ -558,10 +517,9 @@ Typically called by:
 
 Reports the number of claims cleared and logs each cleanup action.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		cleared, err := commands.ClearStaleReviewClaimsCommand(projectRoot)
@@ -595,18 +553,11 @@ This is useful for:
 Use 'liza resume' to continue normal operation.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reason, _ := cmd.Flags().GetString("reason")
+		changedBy := resolveChangedBy(cmd)
 
-		// Resolve changed-by from flag or env var, default to "human"
-		flagValue, _ := cmd.Flags().GetString("changed-by")
-		changedBy, _ := identity.Resolve(identity.Config{
-			FlagValue:    flagValue,
-			DefaultValue: "human",
-			Required:     false,
-		})
-
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.PauseCommand(projectRoot, reason, changedBy)
@@ -631,18 +582,11 @@ Use this for:
 - Shutting down before system updates`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reason, _ := cmd.Flags().GetString("reason")
+		changedBy := resolveChangedBy(cmd)
 
-		// Resolve changed-by from flag or env var, default to "human"
-		flagValue, _ := cmd.Flags().GetString("changed-by")
-		changedBy, _ := identity.Resolve(identity.Config{
-			FlagValue:    flagValue,
-			DefaultValue: "human",
-			Required:     false,
-		})
-
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.StopCommand(projectRoot, reason, changedBy)
@@ -671,18 +615,11 @@ After running this command, restart agents manually:
   LIZA_AGENT_ID=reviewer-1 liza agent code-reviewer &`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reason, _ := cmd.Flags().GetString("reason")
+		changedBy := resolveChangedBy(cmd)
 
-		// Resolve changed-by from flag or env var, default to "human"
-		flagValue, _ := cmd.Flags().GetString("changed-by")
-		changedBy, _ := identity.Resolve(identity.Config{
-			FlagValue:    flagValue,
-			DefaultValue: "human",
-			Required:     false,
-		})
-
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.StartCommand(projectRoot, reason, changedBy)
@@ -704,17 +641,11 @@ Agents will detect the status changes and resume normal operation at their next 
 If the system is STOPPED, agents must be restarted manually - resume
 cannot be used to restart stopped agents.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Resolve changed-by from flag or env var, default to "human"
-		flagValue, _ := cmd.Flags().GetString("changed-by")
-		changedBy, _ := identity.Resolve(identity.Config{
-			FlagValue:    flagValue,
-			DefaultValue: "human",
-			Required:     false,
-		})
+		changedBy := resolveChangedBy(cmd)
 
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.ResumeCommand(projectRoot, changedBy)
@@ -743,9 +674,9 @@ This is useful for:
 - Decision points (continue vs pivot)
 - Coordinated team synchronization`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.CheckpointCommand(projectRoot)
@@ -798,10 +729,9 @@ Examples:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		format, _ := cmd.Flags().GetString("format")
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		opts := commands.InspectOptions{
@@ -847,9 +777,9 @@ Examples:
 		format, _ := cmd.Flags().GetString("format")
 		detailed, _ := cmd.Flags().GetBool("detailed")
 
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		opts := commands.StatusOptions{
@@ -900,67 +830,41 @@ Example:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		role := args[0]
 
-		// Resolve agent ID from flag, env var, or error if missing
-		flagValue, _ := cmd.Flags().GetString("agent-id")
-		agentID, err := identity.Resolve(identity.Config{
-			FlagValue: flagValue,
-			Required:  true,
-		})
+		agentID, err := requireAgentID(cmd)
 		if err != nil {
-			return fmt.Errorf("agent ID required: use --agent-id flag or set LIZA_AGENT_ID environment variable")
+			return err
 		}
 
-		// Validate agent ID format and role consistency
 		if err := identity.ValidateRole(agentID, role); err != nil {
 			return err
 		}
+
 		initialTask := ""
 		if len(args) == 2 {
 			initialTask = args[1]
 		}
 
-		// Get project root
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
-		// Validate role
-		validRoles := []string{"coder", "code-reviewer", "planner"}
-		validRole := false
-		for _, r := range validRoles {
-			if r == role {
-				validRole = true
-				break
-			}
-		}
-		if !validRole {
+		if !slices.Contains([]string{"coder", "code-reviewer", "planner"}, role) {
 			return fmt.Errorf("invalid role: %s (must be coder, code-reviewer, or planner)", role)
 		}
 
 		cliName, _ := cmd.Flags().GetString("cli")
 		interactive, _ := cmd.Flags().GetBool("interactive")
 
-		// Validate CLI name
-		validCLIs := []string{"claude", "codex", "gemini", "mistral"}
-		validCLI := false
-		for _, c := range validCLIs {
-			if c == cliName {
-				validCLI = true
-				break
-			}
-		}
-		if !validCLI {
+		if !slices.Contains([]string{"claude", "codex", "gemini", "mistral"}, cliName) {
 			return fmt.Errorf("invalid CLI: %s (must be claude, codex, gemini, or mistral)", cliName)
 		}
 
-		// Detect specs dir (from env or default)
 		specsDir := os.Getenv("LIZA_SPECS")
 		if specsDir == "" {
 			specsDir = filepath.Join(projectRoot, ".liza", "specs")
 		}
 
-		// Build config
 		config := agent.SupervisorConfig{
 			AgentID:     agentID,
 			Role:        role,
@@ -974,9 +878,7 @@ Example:
 			Executor:    &agent.DefaultCLIExecutor{},
 		}
 
-		// Run supervisor
-		ctx := context.Background()
-		return agent.RunSupervisor(ctx, config)
+		return agent.RunSupervisor(context.Background(), config)
 	},
 }
 
@@ -1001,11 +903,9 @@ Example YAML file format:
   depends_on:
     - task-0`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get state and log paths
 		statePath, _ := cmd.Flags().GetString("state")
 		logPath, _ := cmd.Flags().GetString("log")
 
-		// Resolve defaults if not provided
 		if statePath == "" && logPath == "" {
 			statePath = filepath.Join(paths.LizaDirName, paths.StateFileName)
 			logPath = filepath.Join(paths.LizaDirName, paths.LogFileName)
@@ -1015,23 +915,19 @@ Example YAML file format:
 			return fmt.Errorf("if --log is provided, --state must also be provided")
 		}
 
-		// Check if loading from file
 		filePath, _ := cmd.Flags().GetString("file")
 		var input *commands.TaskInput
 
 		if filePath != "" {
-			// Load from file
 			var err error
 			input, err = commands.LoadTaskInputFromFile(filePath)
 			if err != nil {
 				return err
 			}
 		} else {
-			// Create from flags
 			input = &commands.TaskInput{}
 		}
 
-		// Override with CLI flags (if provided)
 		if cmd.Flags().Changed("id") {
 			input.ID, _ = cmd.Flags().GetString("id")
 		}
@@ -1059,12 +955,10 @@ Example YAML file format:
 			}
 		}
 
-		// Set default priority if not set
 		if input.Priority == 0 {
 			input.Priority = 1
 		}
 
-		// Resolve planner ID from flag or env var, default to "planner-1"
 		flagValue, _ := cmd.Flags().GetString("agent-id")
 		plannerID, _ := identity.Resolve(identity.Config{
 			FlagValue:    flagValue,
@@ -1098,13 +992,11 @@ Example:
 		replacementIDsStr := args[1]
 		reason := args[2]
 
-		// Parse replacement IDs
 		replacementIDs := strings.Split(replacementIDsStr, ",")
 		for i := range replacementIDs {
 			replacementIDs[i] = strings.TrimSpace(replacementIDs[i])
 		}
 
-		// Resolve agent ID
 		flagValue, _ := cmd.Flags().GetString("agent-id")
 		agentID, _ := identity.Resolve(identity.Config{
 			FlagValue:    flagValue,
@@ -1112,9 +1004,9 @@ Example:
 			Required:     false,
 		})
 
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 
 		return commands.SupersedeTaskCommand(projectRoot, taskID, replacementIDs, reason, agentID)
@@ -1142,9 +1034,9 @@ current tasks.`,
 		agentID := args[0]
 		force, _ := cmd.Flags().GetBool("force")
 		reason, _ := cmd.Flags().GetString("reason")
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 		return commands.DeleteAgentCommand(projectRoot, agentID, force, reason)
 	},
@@ -1164,12 +1056,42 @@ in MERGED state cannot be deleted by default (as they represent integrated work)
 		force, _ := cmd.Flags().GetBool("force")
 		deleteWorktree, _ := cmd.Flags().GetBool("delete-worktree")
 		reason, _ := cmd.Flags().GetString("reason")
-		projectRoot, err := paths.GetProjectRoot()
+		projectRoot, err := requireProjectRoot()
 		if err != nil {
-			return fmt.Errorf("failed to detect project root: %w", err)
+			return err
 		}
 		return commands.DeleteTaskCommand(projectRoot, taskID, force, deleteWorktree, reason)
 	},
+}
+
+func requireProjectRoot() (string, error) {
+	projectRoot, err := paths.GetProjectRoot()
+	if err != nil {
+		return "", fmt.Errorf("failed to detect project root: %w", err)
+	}
+	return projectRoot, nil
+}
+
+func requireAgentID(cmd *cobra.Command) (string, error) {
+	flagValue, _ := cmd.Flags().GetString("agent-id")
+	agentID, err := identity.Resolve(identity.Config{
+		FlagValue: flagValue,
+		Required:  true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("agent ID required (use --agent-id flag or LIZA_AGENT_ID env var): %w", err)
+	}
+	return agentID, nil
+}
+
+func resolveChangedBy(cmd *cobra.Command) string {
+	flagValue, _ := cmd.Flags().GetString("changed-by")
+	changedBy, _ := identity.Resolve(identity.Config{
+		FlagValue:    flagValue,
+		DefaultValue: "human",
+		Required:     false,
+	})
+	return changedBy
 }
 
 func init() {
@@ -1200,7 +1122,6 @@ func init() {
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(deleteCmd)
 
-	// Register delete subcommands
 	deleteCmd.AddCommand(deleteAgentCmd)
 	deleteCmd.AddCommand(deleteTaskCmd)
 
