@@ -188,18 +188,16 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		var taskID string
 		var claimedTaskID string // Track claimed task for completion logging
 		if config.Role == "coder" {
-			var worktree string
-			taskID, worktree, err = claimCoderTask(config.ProjectRoot, config.AgentID, bb)
+			taskID, _, err = claimCoderTask(config.ProjectRoot, config.AgentID, bb)
 			if err != nil {
 				// Error already logged in claimCoderTask
 				time.Sleep(5 * time.Second)
 				continue
 			}
 			claimedTaskID = taskID
-			_ = worktree // Worktree path captured but not used here
 		} else if config.Role == "code-reviewer" {
-			var worktree, reviewCommit string
-			taskID, worktree, reviewCommit, err = claimReviewerTask(config.AgentID, 1800, bb)
+			var reviewCommit string
+			taskID, _, reviewCommit, err = claimReviewerTask(config.AgentID, 1800, bb)
 			if err != nil {
 				// Error already logged in claimReviewerTask
 				time.Sleep(5 * time.Second)
@@ -211,8 +209,6 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				"agent_id", config.AgentID,
 				"task_id", taskID,
 				"review_commit", reviewCommit)
-
-			_, _ = worktree, reviewCommit // Values captured but not used here
 		}
 
 		// Set planner status to PLANNING
@@ -479,7 +475,7 @@ func waitForWorkEventDriven(
 	}
 
 	// Check for ABORT before checking for work
-	if stopped, reason := isSystemStopped(state, projectRoot); stopped {
+	if stopped, reason := isSystemStopped(state); stopped {
 		logger.Info("ABORT detected", "reason", reason)
 		return false, nil
 	}
@@ -521,7 +517,7 @@ func waitForWorkEventDriven(
 			if err != nil {
 				return false, fmt.Errorf("failed to read state: %w", err)
 			}
-			if stopped, reason := isSystemStopped(state, projectRoot); stopped {
+			if stopped, reason := isSystemStopped(state); stopped {
 				logger.Info("ABORT detected", "reason", reason)
 				return false, nil
 			}
@@ -537,7 +533,7 @@ func waitForWorkEventDriven(
 			}
 
 			// Check for ABORT before checking for work
-			if stopped, reason := isSystemStopped(state, projectRoot); stopped {
+			if stopped, reason := isSystemStopped(state); stopped {
 				logger.Info("ABORT detected", "reason", reason)
 				return false, nil
 			}
@@ -593,7 +589,7 @@ func waitForWorkPolling(
 			}
 
 			// Check for ABORT before checking for work
-			if stopped, reason := isSystemStopped(state, projectRoot); stopped {
+			if stopped, reason := isSystemStopped(state); stopped {
 				logger.Info("ABORT detected", "reason", reason)
 				return false, nil
 			}
@@ -715,24 +711,13 @@ func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, wor
 		return "", "", fmt.Errorf("failed to read state: %w", err)
 	}
 
-	var task *models.Task
-	var highestPriority int = -1 // Track best priority seen (lower number = higher priority)
-
+	var candidates []*models.Task
 	for i := range state.Tasks {
 		if state.Tasks[i].IsClaimable(state.Tasks) {
-			// Lower number = higher priority (1 is highest)
-			if task == nil || state.Tasks[i].Priority < highestPriority {
-				task = &state.Tasks[i]
-				highestPriority = state.Tasks[i].Priority
-			} else if state.Tasks[i].Priority == highestPriority {
-				// Tie-breaker: prefer older task (stable FIFO within priority)
-				if task.Created.After(state.Tasks[i].Created) {
-					task = &state.Tasks[i]
-					highestPriority = state.Tasks[i].Priority
-				}
-			}
+			candidates = append(candidates, &state.Tasks[i])
 		}
 	}
+	task := selectHighestPriorityTask(candidates)
 
 	if task == nil {
 		return "", "", fmt.Errorf("no claimable tasks found")
@@ -768,37 +753,18 @@ func claimReviewerTask(agentID string, leaseDuration int, bb *db.Blackboard) (ta
 
 	err = bb.Modify(func(state *models.State) error {
 		// Find reviewable task with highest priority
-		var task *models.Task
-		var highestPriority int = -1
-
+		var candidates []*models.Task
 		for i := range state.Tasks {
 			t := &state.Tasks[i]
 			if t.Status != models.TaskStatusReadyForReview {
 				continue
 			}
-
-			// Check if available (no reviewer or expired lease)
-			available := false
-			if t.ReviewingBy == nil {
-				available = true
-			} else if t.ReviewLeaseExpires != nil && t.ReviewLeaseExpires.Before(now) {
-				available = true
-			}
-
-			if available {
-				// Lower number = higher priority (1 is highest)
-				if task == nil || t.Priority < highestPriority {
-					task = t
-					highestPriority = t.Priority
-				} else if t.Priority == highestPriority {
-					// Tie-breaker: prefer older task
-					if task.Created.After(t.Created) {
-						task = t
-						highestPriority = t.Priority
-					}
-				}
+			// Available if no reviewer or expired lease
+			if t.ReviewingBy == nil || (t.ReviewLeaseExpires != nil && t.ReviewLeaseExpires.Before(now)) {
+				candidates = append(candidates, t)
 			}
 		}
+		task := selectHighestPriorityTask(candidates)
 
 		if task == nil {
 			return fmt.Errorf("no reviewable tasks found")
@@ -855,14 +821,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 	// Add role-specific context
 	switch config.Role {
 	case "coder":
-		// Find task
-		var task *models.Task
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				task = &state.Tasks[i]
-				break
-			}
-		}
+		task := findTaskByID(state.Tasks, taskID)
 		if task == nil {
 			return "", fmt.Errorf("task not found: %s", taskID)
 		}
@@ -875,14 +834,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 		prompt += prompts.BuildCoderContext(task, coderConfig)
 
 	case "code-reviewer":
-		// Find task
-		var task *models.Task
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				task = &state.Tasks[i]
-				break
-			}
-		}
+		task := findTaskByID(state.Tasks, taskID)
 		if task == nil {
 			return "", fmt.Errorf("task not found: %s", taskID)
 		}
@@ -904,6 +856,30 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 	}
 
 	return prompt, nil
+}
+
+// selectHighestPriorityTask returns the highest-priority task from candidates,
+// using creation time as FIFO tie-breaker. Returns nil if candidates is empty.
+func selectHighestPriorityTask(candidates []*models.Task) *models.Task {
+	var best *models.Task
+	for _, t := range candidates {
+		if best == nil || t.Priority < best.Priority {
+			best = t
+		} else if t.Priority == best.Priority && best.Created.After(t.Created) {
+			best = t
+		}
+	}
+	return best
+}
+
+// findTaskByID finds a task by ID in a task slice
+func findTaskByID(tasks []models.Task, taskID string) *models.Task {
+	for i := range tasks {
+		if tasks[i].ID == taskID {
+			return &tasks[i]
+		}
+	}
+	return nil
 }
 
 // savePrompt saves the prompt to a file and returns the path
@@ -989,8 +965,9 @@ func checkAbort(projectRoot string) bool {
 	statePath := paths.New(projectRoot).StatePath()
 	if bb := db.New(statePath); bb != nil {
 		state, err := bb.Read()
-		if err == nil && state.Config.Mode == models.SystemModeStopped {
-			return true
+		if err == nil {
+			stopped, _ := isSystemStopped(state)
+			return stopped
 		}
 	}
 	return false
@@ -998,7 +975,7 @@ func checkAbort(projectRoot string) bool {
 
 // isSystemStopped checks if system is in STOPPED mode from already-read state
 // Returns (stopped bool, reason string)
-func isSystemStopped(state *models.State, projectRoot string) (bool, string) {
+func isSystemStopped(state *models.State) (bool, string) {
 	if state.Config.Mode == models.SystemModeStopped {
 		return true, "System mode is STOPPED"
 	}

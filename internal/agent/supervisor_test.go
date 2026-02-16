@@ -1139,16 +1139,10 @@ func TestIsSystemStopped(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			lizaDir := filepath.Join(tmpDir, ".liza")
-			if err := os.MkdirAll(lizaDir, 0755); err != nil {
-				t.Fatalf("Failed to create .liza dir: %v", err)
-			}
-
 			state := testhelpers.CreateValidState()
 			state.Config.Mode = tt.stateMode
 
-			stopped, reason := isSystemStopped(state, lizaDir)
+			stopped, reason := isSystemStopped(state)
 
 			if stopped != tt.wantStopped {
 				t.Errorf("isSystemStopped() stopped = %v, want %v", stopped, tt.wantStopped)
