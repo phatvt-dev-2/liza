@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-02-11T12:00:00Z"
+last_updated: "2026-02-16T12:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -13,6 +13,7 @@ file_classification:
   "contracts/CORE.md": {tier: 1, category: "core_contract"}
   "contracts/MULTI_AGENT_MODE.md": {tier: 1, category: "core_contract"}
   "contracts/PAIRING_MODE.md": {tier: 1, category: "core_contract"}
+  "contracts/SUBAGENT_MODE.md": {tier: 1, category: "core_contract", note: "extracted from PAIRING_MODE.md (ADR-0015)"}
   "AGENTS.md": {tier: 1, category: "prompt_compliance", note: "symlink to ~/.liza/"}
   "CLAUDE.md": {tier: 1, category: "prompt_compliance", note: "symlink to ~/.liza/"}
   "scripts/liza-agent.sh": {tier: 1, category: "agent_entry_point", note: "deleted — replaced by liza CLI (ADR-0012)"}
@@ -170,6 +171,46 @@ clusters:
       rationale: "Single binary, type-safe blackboard ops, built-in MCP server, internal locking"
       limitations: "liza handoff command not yet implemented"
     note: "Supersedes ADR-0005. Changes enforcement mechanism of ADR-0011."
+
+  - id: 13
+    title: "Coach and Challenger Collaboration Modes"
+    commit_shas: ["6573b99"]
+    date_range: "2026-02-14"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0013-coach-and-challenger-collaboration-modes.md"
+    user_context:
+      problem: "Agents default to agreeable — WHY questions and pushback on poor ideas require explicit mode support"
+      alternatives: "Rely on existing modes, strengthen Rule 13 prompting"
+      rationale: "Named modes with activation criteria make postures systematic, not occasional"
+      limitations: "Mode is necessary but may not be sufficient to overcome agreeableness training"
+
+  - id: 14
+    title: "Tiered Context Degradation Protocol"
+    commit_shas: ["e7fecbd"]
+    date_range: "2026-02-15"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0014-tiered-context-degradation.md"
+    user_context:
+      problem: "Agents support graceful context compaction but the contract was binary (full or kernel)"
+      alternatives: "Keep binary, automatic summarization"
+      rationale: "Graduated tiers let agents shed weight incrementally while retaining operational capability"
+      limitations: "First attempt — transition thresholds are heuristic. Only one mode contract loaded at a time."
+
+  - id: 15
+    title: "Subagent Mode as First-Class Contract Mode"
+    commit_shas: ["c7c4554", "7c24e33", "b8f7faf"]
+    date_range: "2026-02-15"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0015-subagent-mode-first-class.md"
+    user_context:
+      problem: "Subagent Mode was in PAIRING_MODE.md but applies to all Task-spawned agents — full contract is overkill for read-only research"
+      alternatives: "Keep as Pairing subsection, conditional sections"
+      rationale: "Context control — distinct complementary contracts loaded on demand. Aligns with generic-subagent skill."
+      limitations: "Three modes to maintain; MODE: SUBAGENT marker is convention-enforced"
+    note: "Extends ADR-0004 (Dual-Mode) to three modes. References ADR-0014 (Tiered Context) for subagent exclusion."
 
 processing_cursor:
   step: "ordering"
