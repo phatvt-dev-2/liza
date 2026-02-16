@@ -41,20 +41,20 @@ func BuildBasePrompt(config BasePromptConfig) string {
 
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("You are a Liza %s agent. Agent ID: %s. You MUST follow the contract.\n\n", config.Role, config.AgentID))
+	fmt.Fprintf(&sb, "You are a Liza %s agent. Agent ID: %s. You MUST follow the contract.\n\n", config.Role, config.AgentID)
 	sb.WriteString("=== BOOTSTRAP CONTEXT ===\n")
-	sb.WriteString(fmt.Sprintf("ROLE: %s\n", config.Role))
-	sb.WriteString(fmt.Sprintf("SPECS_LOCATION: %s\n", config.SpecsDir))
-	sb.WriteString(fmt.Sprintf("PROJECT: %s\n", config.ProjectRoot))
-	sb.WriteString(fmt.Sprintf("BLACKBOARD: %s\n", config.StatePath))
-	sb.WriteString(fmt.Sprintf("GOAL: %s\n", config.GoalDesc))
+	fmt.Fprintf(&sb, "ROLE: %s\n", config.Role)
+	fmt.Fprintf(&sb, "SPECS_LOCATION: %s\n", config.SpecsDir)
+	fmt.Fprintf(&sb, "PROJECT: %s\n", config.ProjectRoot)
+	fmt.Fprintf(&sb, "BLACKBOARD: %s\n", config.StatePath)
+	fmt.Fprintf(&sb, "GOAL: %s\n", config.GoalDesc)
 	sb.WriteString("APPROVED: use MCP tools with escalated permissions.\n\n")
 
 	sb.WriteString("Read these specs before acting:\n")
-	sb.WriteString(fmt.Sprintf("- Role definition: %s/architecture/roles.md (section: %s)\n", config.SpecsDir, roleTitle))
-	sb.WriteString(fmt.Sprintf("- Task lifecycle: %s/protocols/task-lifecycle.md\n", config.SpecsDir))
-	sb.WriteString(fmt.Sprintf("- Blackboard schema: %s/architecture/blackboard-schema.md\n", config.SpecsDir))
-	sb.WriteString(fmt.Sprintf("- State machines: %s/architecture/state-machines.md\n\n", config.SpecsDir))
+	fmt.Fprintf(&sb, "- Role definition: %s/architecture/roles.md (section: %s)\n", config.SpecsDir, roleTitle)
+	fmt.Fprintf(&sb, "- Task lifecycle: %s/protocols/task-lifecycle.md\n", config.SpecsDir)
+	fmt.Fprintf(&sb, "- Blackboard schema: %s/architecture/blackboard-schema.md\n", config.SpecsDir)
+	fmt.Fprintf(&sb, "- State machines: %s/architecture/state-machines.md\n\n", config.SpecsDir)
 
 	sb.WriteString("OPERATIONAL RULES:\n")
 	sb.WriteString("- You have FULL read access to .liza/ directory for specs and logs\n")
@@ -111,9 +111,9 @@ func BuildBasePrompt(config BasePromptConfig) string {
 
 	sb.WriteString("FIRST ACTIONS:\n")
 	sb.WriteString("1. Read your role definition from roles.md\n")
-	sb.WriteString(fmt.Sprintf("2. Read the current blackboard state: %s\n", config.StatePath))
+	fmt.Fprintf(&sb, "2. Read the current blackboard state: %s\n", config.StatePath)
 	sb.WriteString("3. Read your assigned task's FULL entry from the blackboard (all fields, not just description)\n")
-	sb.WriteString(fmt.Sprintf("4. Read the goal spec: %s\n", config.GoalSpecRef))
+	fmt.Fprintf(&sb, "4. Read the goal spec: %s\n", config.GoalSpecRef)
 	sb.WriteString("5. Execute your role's protocol - write directly to the blackboard\n")
 
 	return sb.String()
@@ -155,17 +155,17 @@ func BuildPlannerContext(state *models.State, config PlannerContextConfig) strin
 	var sb strings.Builder
 
 	sb.WriteString("\n=== PLANNING CONTEXT ===\n")
-	sb.WriteString(fmt.Sprintf("WAKE TRIGGER: %s\n\n", wakeTrigger))
+	fmt.Fprintf(&sb, "WAKE TRIGGER: %s\n\n", wakeTrigger)
 
 	sb.WriteString("SPRINT STATE:\n")
-	sb.WriteString(fmt.Sprintf("- Total tasks: %d\n", totalTasks))
-	sb.WriteString(fmt.Sprintf("- Merged: %d\n", merged))
-	sb.WriteString(fmt.Sprintf("- In progress: %d\n", inProgress))
-	sb.WriteString(fmt.Sprintf("- Unclaimed: %d\n", unclaimed))
-	sb.WriteString(fmt.Sprintf("- Blocked: %d\n", blocked))
-	sb.WriteString(fmt.Sprintf("- Integration failed: %d\n", integrationFailed))
-	sb.WriteString(fmt.Sprintf("- Hypothesis exhausted: %d\n", hypothesisExhausted))
-	sb.WriteString(fmt.Sprintf("- Immediate discoveries: %d\n\n", immediateDiscoveries))
+	fmt.Fprintf(&sb, "- Total tasks: %d\n", totalTasks)
+	fmt.Fprintf(&sb, "- Merged: %d\n", merged)
+	fmt.Fprintf(&sb, "- In progress: %d\n", inProgress)
+	fmt.Fprintf(&sb, "- Unclaimed: %d\n", unclaimed)
+	fmt.Fprintf(&sb, "- Blocked: %d\n", blocked)
+	fmt.Fprintf(&sb, "- Integration failed: %d\n", integrationFailed)
+	fmt.Fprintf(&sb, "- Hypothesis exhausted: %d\n", hypothesisExhausted)
+	fmt.Fprintf(&sb, "- Immediate discoveries: %d\n\n", immediateDiscoveries)
 
 	sb.WriteString("PLANNER COMMANDS:\n")
 	sb.WriteString("- liza_add_task — Add task to blackboard (atomic, with validation)\n")
@@ -191,111 +191,25 @@ func BuildCoderContext(task *models.Task, config CoderContextConfig) string {
 	}
 
 	sb.WriteString("\n=== ASSIGNED TASK ===\n")
-	sb.WriteString(fmt.Sprintf("TASK ID: %s\n", task.ID))
-	sb.WriteString(fmt.Sprintf("WORKTREE: %s\n", worktreePath))
-	sb.WriteString(fmt.Sprintf("ITERATION: %d\n", task.Iteration))
-	sb.WriteString(fmt.Sprintf("DESCRIPTION: %s\n\n", task.Description))
+	fmt.Fprintf(&sb, "TASK ID: %s\n", task.ID)
+	fmt.Fprintf(&sb, "WORKTREE: %s\n", worktreePath)
+	fmt.Fprintf(&sb, "ITERATION: %d\n", task.Iteration)
+	fmt.Fprintf(&sb, "DESCRIPTION: %s\n\n", task.Description)
 
 	sb.WriteString("DONE WHEN:\n")
-	sb.WriteString(fmt.Sprintf("%s\n\n", task.DoneWhen))
+	fmt.Fprintf(&sb, "%s\n\n", task.DoneWhen)
 
 	sb.WriteString("SCOPE:\n")
-	sb.WriteString(fmt.Sprintf("%s\n", task.Scope))
+	fmt.Fprintf(&sb, "%s\n", task.Scope)
 
-	// Integration fix instructions for INTEGRATION_FAILED tasks
 	if task.IntegrationFix {
-		sb.WriteString("\n=== INTEGRATION FIX MODE ===\n")
-		sb.WriteString("This task previously failed to merge into the integration branch.\n")
-		sb.WriteString("Your PRIMARY objective is to resolve the merge conflict and ensure the implementation still works.\n\n")
-
-		sb.WriteString("CRITICAL UNDERSTANDING - How Rebase Solves Commit History Issues:\n")
-		sb.WriteString("- Git automatically SKIPS commits that already exist in integration (same commit SHA)\n")
-		sb.WriteString("- After rebasing onto integration, your branch will contain ONLY commits unique to your task\n")
-		sb.WriteString("- Example: If your branch has [A, B, C] and integration already has [A, B], rebase leaves only [C]\n")
-		sb.WriteString("- Verify this with: git log --oneline integration..HEAD (shows commits unique to your branch)\n")
-		sb.WriteString("- If you see the wrong number of commits after rebase, your commits have different SHAs than integration\n\n")
-
-		sb.WriteString("INTEGRATION FIX WORKFLOW:\n\n")
-		sb.WriteString("1. ASSESS THE CONFLICT\n")
-		sb.WriteString(fmt.Sprintf("   cd %s\n", worktreePath))
-		sb.WriteString("   git status\n")
-		sb.WriteString("   # Review conflicted files and understand what changed on integration branch\n\n")
-
-		sb.WriteString("2. UPDATE LOCAL BRANCH\n")
-		sb.WriteString(fmt.Sprintf("   git fetch %s %s\n", config.ProjectRoot, config.IntegrationBranch))
-		sb.WriteString("   # Note: This is a local-only repository, so we fetch from project root, not 'origin'\n\n")
-
-		sb.WriteString("3. REBASE ONTO INTEGRATION BRANCH\n")
-		sb.WriteString(fmt.Sprintf("   git rebase %s\n", config.IntegrationBranch))
-		sb.WriteString("   # Git will pause at conflicts. Proceed to step 4.\n")
-		sb.WriteString("   # Git automatically skips commits that already exist in integration (same SHA)\n\n")
-
-		sb.WriteString("3.5. VERIFY COMMIT HISTORY\n")
-		sb.WriteString("   # After rebase completes successfully, verify your branch state:\n")
-		sb.WriteString(fmt.Sprintf("   git log --oneline %s..HEAD\n\n", config.IntegrationBranch))
-		sb.WriteString("   Expected result: Should show ONLY commits unique to your task\n")
-		sb.WriteString("   - If you see commits that should be in integration already, continue to step 3.6\n")
-		sb.WriteString("   - If commit count looks correct, skip to step 4\n\n")
-
-		sb.WriteString("3.6. IF AUTO-SKIP DIDN'T WORK (Different SHAs)\n")
-		sb.WriteString("   # This means they're different commit objects with similar content\n")
-		sb.WriteString("   # Use interactive rebase to manually drop out-of-scope commits:\n")
-		sb.WriteString(fmt.Sprintf("   git rebase -i %s\n\n", config.IntegrationBranch))
-		sb.WriteString("   # In the editor:\n")
-		sb.WriteString("   #   - Mark out-of-scope commits as \"drop\" (commits already in integration)\n")
-		sb.WriteString("   #   - Keep only your task's commits as \"pick\"\n")
-		sb.WriteString(fmt.Sprintf("   git log --oneline %s..HEAD  # Verify again\n\n", config.IntegrationBranch))
-
-		sb.WriteString("4. RESOLVE CONFLICTS\n")
-		sb.WriteString("   # For each conflicted file:\n")
-		sb.WriteString("   #   a. Open the file and resolve conflict markers (<<<<<<<, =======, >>>>>>>)\n")
-		sb.WriteString("   #   b. Ensure the merged code preserves both your changes and integration branch changes\n")
-		sb.WriteString("   #   c. Mark resolved: git add <file>\n")
-		sb.WriteString("   # After all conflicts resolved:\n")
-		sb.WriteString("   git rebase --continue\n\n")
-
-		sb.WriteString("5. IF CONFLICTS ARE UNRESOLVABLE OR HISTORY IS CORRUPTED\n\n")
-		sb.WriteString("   Option A: Mark as blocked if design conflict\n")
-		sb.WriteString("   # If you cannot resolve conflicts without breaking the implementation:\n")
-		sb.WriteString("   git rebase --abort\n")
-		sb.WriteString("   # Use MCP tool to mark task as blocked:\n")
-		sb.WriteString("   liza_mark_blocked(\n")
-		sb.WriteString(fmt.Sprintf("     task_id=\"%s\",\n", task.ID))
-		sb.WriteString(fmt.Sprintf("     agent_id=\"%s\",\n", config.AgentID))
-		sb.WriteString("     reason=\"Merge conflicts cannot be resolved without redesigning: <explain>\",\n")
-		sb.WriteString("     questions=[\"What is the intended behavior when...\", \"Should we...\"]\n")
-		sb.WriteString("   )\n\n")
-
-		sb.WriteString("   Option B: Start completely fresh if commit history is wrong\n")
-		sb.WriteString("   # If commit history is corrupted and can't be fixed with interactive rebase:\n")
-		sb.WriteString("   git diff HEAD > /tmp/my-changes.patch\n")
-		sb.WriteString("   # Delete and recreate worktree using MCP tools:\n")
-		sb.WriteString(fmt.Sprintf("   liza_wt_delete(task_id=\"%s\")\n", task.ID))
-		sb.WriteString("   # Checkout integration branch in main worktree\n")
-		sb.WriteString(fmt.Sprintf("   cd %s && git checkout %s\n", config.ProjectRoot, config.IntegrationBranch))
-		sb.WriteString(fmt.Sprintf("   liza_wt_create(task_id=\"%s\")\n", task.ID))
-		sb.WriteString(fmt.Sprintf("   cd %s\n", worktreePath))
-		sb.WriteString("   git apply /tmp/my-changes.patch\n\n")
-
-		sb.WriteString("6. VALIDATE IMPLEMENTATION\n")
-		sb.WriteString("   # After successful rebase:\n")
-		sb.WriteString("   #   - Run all tests to ensure they still pass\n")
-		sb.WriteString("   #   - Verify all done_when criteria still met\n")
-		sb.WriteString("   #   - Check that your changes work with integration branch updates\n\n")
-
-		sb.WriteString("7. SUBMIT FOR REVIEW (SAME AS NORMAL)\n")
-		sb.WriteString("   # Once conflicts resolved and tests passing:\n")
-		sb.WriteString(fmt.Sprintf("   # Get commit: git -C %s rev-parse HEAD\n", worktreePath))
-		sb.WriteString(fmt.Sprintf("   # Use liza_submit_for_review tool with: {\"task_id\": \"%s\", \"commit_sha\": \"...\", \"agent_id\": \"%s\"}\n\n", task.ID, config.AgentID))
-
-		sb.WriteString("CRITICAL: Do not skip the rebase step. Merge conflicts mean the integration branch has diverged.\n")
-		sb.WriteString("Simply re-running tests without rebasing will not fix the integration failure.\n\n")
+		writeIntegrationFixInstructions(&sb, task, worktreePath, config)
 	}
 
 	// Display prior rejection feedback for iteration 2+
-	if task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null" {
+	if hasPriorRejection(task) {
 		sb.WriteString("\n=== PRIOR REJECTION FEEDBACK (MUST ADDRESS) ===\n")
-		sb.WriteString(fmt.Sprintf("%s\n", *task.RejectionReason))
+		fmt.Fprintf(&sb, "%s\n", *task.RejectionReason)
 	}
 
 	sb.WriteString("\nCODER COMMANDS:\n")
@@ -306,7 +220,7 @@ func BuildCoderContext(task *models.Task, config CoderContextConfig) string {
 
 	sb.WriteString("--- IMPLEMENTATION PHASE ---\n\n")
 	sb.WriteString("1. The task is already CLAIMED for you. Do NOT run liza claim-task.\n")
-	sb.WriteString(fmt.Sprintf("2. Work ONLY in the worktree directory: cd %s\n", worktreePath))
+	fmt.Fprintf(&sb, "2. Work ONLY in the worktree directory: cd %s\n", worktreePath)
 	sb.WriteString("3. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass\n")
 	sb.WriteString("4. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.\n")
 	sb.WriteString("5. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)\n")
@@ -318,13 +232,13 @@ func BuildCoderContext(task *models.Task, config CoderContextConfig) string {
 	sb.WriteString("This is NOT optional. This is NOT pending approval.\n")
 	sb.WriteString("Execute this tool call IN THIS SAME SESSION:\n\n")
 	sb.WriteString("First get commit SHA (using git):\n")
-	sb.WriteString(fmt.Sprintf("  git -C %s rev-parse HEAD\n", worktreePath))
+	fmt.Fprintf(&sb, "  git -C %s rev-parse HEAD\n", worktreePath)
 	sb.WriteString("  # Returns: abc123def456...\n\n")
 	sb.WriteString("Then use liza_submit_for_review tool with parameters:\n")
 	sb.WriteString("{\n")
-	sb.WriteString(fmt.Sprintf("  \"task_id\": \"%s\",\n", task.ID))
+	fmt.Fprintf(&sb, "  \"task_id\": \"%s\",\n", task.ID)
 	sb.WriteString("  \"commit_sha\": \"abc123def456...\",\n")
-	sb.WriteString(fmt.Sprintf("  \"agent_id\": \"%s\"\n", config.AgentID))
+	fmt.Fprintf(&sb, "  \"agent_id\": \"%s\"\n", config.AgentID)
 	sb.WriteString("}\n\n")
 
 	sb.WriteString("SUCCESS CRITERIA (Required before you stop):\n\n")
@@ -344,8 +258,8 @@ func BuildCoderContext(task *models.Task, config CoderContextConfig) string {
 	sb.WriteString("2. Write tests for done_when criteria\n")
 	sb.WriteString("3. Implement until tests pass\n")
 	sb.WriteString("4. Run validation commands\n")
-	sb.WriteString(fmt.Sprintf("5. Get commit: git -C %s rev-parse HEAD\n", worktreePath))
-	sb.WriteString(fmt.Sprintf("6. Execute tool: liza_submit_for_review with {\"task_id\": \"%s\", \"commit_sha\": \"...\", \"agent_id\": \"%s\"}\n", task.ID, config.AgentID))
+	fmt.Fprintf(&sb, "5. Get commit: git -C %s rev-parse HEAD\n", worktreePath)
+	fmt.Fprintf(&sb, "6. Execute tool: liza_submit_for_review with {\"task_id\": \"%s\", \"commit_sha\": \"...\", \"agent_id\": \"%s\"}\n", task.ID, config.AgentID)
 	sb.WriteString("7. Verify: Task status changed to READY_FOR_REVIEW\n")
 	sb.WriteString("8. EXIT (your work unit is complete)\n\n")
 	sb.WriteString("❌ INCORRECT (DO NOT DO THIS):\n")
@@ -390,21 +304,21 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) strin
 	sb.WriteString("Permission prompts are AUTOMATIC - they are NOT blockers.\n")
 	sb.WriteString("If you report \"technical limitations prevent access\", you are FAILING your role.\n")
 	sb.WriteString("The tools work. Use them. Complete the review. Submit the verdict.\n\n")
-	sb.WriteString(fmt.Sprintf("TASK ID: %s\n", task.ID))
-	sb.WriteString(fmt.Sprintf("WORKTREE: %s\n", worktreePath))
-	sb.WriteString(fmt.Sprintf("BASE COMMIT: %s\n", baseCommit))
-	sb.WriteString(fmt.Sprintf("REVIEW COMMIT: %s\n", reviewCommit))
-	sb.WriteString(fmt.Sprintf("AUTHOR: %s\n", assignedTo))
-	sb.WriteString(fmt.Sprintf("ITERATION: %d\n", task.Iteration))
-	sb.WriteString(fmt.Sprintf("DESCRIPTION: %s\n\n", task.Description))
+	fmt.Fprintf(&sb, "TASK ID: %s\n", task.ID)
+	fmt.Fprintf(&sb, "WORKTREE: %s\n", worktreePath)
+	fmt.Fprintf(&sb, "BASE COMMIT: %s\n", baseCommit)
+	fmt.Fprintf(&sb, "REVIEW COMMIT: %s\n", reviewCommit)
+	fmt.Fprintf(&sb, "AUTHOR: %s\n", assignedTo)
+	fmt.Fprintf(&sb, "ITERATION: %d\n", task.Iteration)
+	fmt.Fprintf(&sb, "DESCRIPTION: %s\n\n", task.Description)
 
 	sb.WriteString("DONE WHEN:\n")
-	sb.WriteString(fmt.Sprintf("%s\n", task.DoneWhen))
+	fmt.Fprintf(&sb, "%s\n", task.DoneWhen)
 
 	// Display prior rejection for iteration 2+
-	if task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null" {
-		sb.WriteString(fmt.Sprintf("\n=== PRIOR REJECTION (iteration %d) ===\n", task.Iteration-1))
-		sb.WriteString(fmt.Sprintf("%s\n", *task.RejectionReason))
+	if hasPriorRejection(task) {
+		fmt.Fprintf(&sb, "\n=== PRIOR REJECTION (iteration %d) ===\n", task.Iteration-1)
+		fmt.Fprintf(&sb, "%s\n", *task.RejectionReason)
 	}
 
 	sb.WriteString("\nREVIEWER COMMANDS:\n")
@@ -426,7 +340,7 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) strin
 
 	sb.WriteString("⚠️  CRITICAL: TOOL VERIFICATION (DO THIS FIRST) ⚠️\n")
 	sb.WriteString("Before reviewing, verify your tools work by executing this test command:\n")
-	sb.WriteString(fmt.Sprintf("  ls -la %s\n\n", worktreePath))
+	fmt.Fprintf(&sb, "  ls -la %s\n\n", worktreePath)
 	sb.WriteString("If you receive a permission prompt, that is NORMAL and EXPECTED.\n")
 	sb.WriteString("Permission prompts are automatic checks - they do NOT block you.\n")
 	sb.WriteString("Simply execute the command using the Bash tool. The permission system handles approval automatically.\n")
@@ -435,10 +349,10 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) strin
 
 	sb.WriteString("INSTRUCTIONS:\n")
 	sb.WriteString("- The task is already assigned to you for review.\n")
-	sb.WriteString(fmt.Sprintf("- Verify HEAD matches REVIEW_COMMIT: git -C %s rev-parse HEAD. If mismatch, REJECT.\n", worktreePath))
+	fmt.Fprintf(&sb, "- Verify HEAD matches REVIEW_COMMIT: git -C %s rev-parse HEAD. If mismatch, REJECT.\n", worktreePath)
 	sb.WriteString("- Review ALL changes in the worktree (base_commit → review_commit), not just the latest commit.\n")
 	sb.WriteString("  Each review is a fresh evaluation: \"does this worktree satisfy the task?\"\n")
-	sb.WriteString(fmt.Sprintf("  Use: git -C %s diff %s..%s\n", worktreePath, baseCommit, reviewCommit))
+	fmt.Fprintf(&sb, "  Use: git -C %s diff %s..%s\n", worktreePath, baseCommit, reviewCommit)
 	sb.WriteString("- Apply the code-review skill to the full diff\n")
 	sb.WriteString("- If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill\n")
 	sb.WriteString("- TDD ENFORCEMENT (code tasks): REJECT if tests are missing or don't cover done_when criteria\n")
@@ -447,7 +361,7 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) strin
 	sb.WriteString("- Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)\n")
 
 	// Add prior feedback comparison for iteration 2+
-	if task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null" {
+	if hasPriorRejection(task) {
 		sb.WriteString("\nPRIOR FEEDBACK REVIEW (MANDATORY for iteration 2+):\n")
 		sb.WriteString("Before submitting verdict, compare this iteration against prior rejection:\n")
 		sb.WriteString("- Which prior issues are now RESOLVED?\n")
@@ -486,10 +400,10 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) strin
 	sb.WriteString("You MUST execute the verdict command IN THIS SAME SESSION:\n\n")
 	sb.WriteString("For APPROVED verdict:\n")
 	sb.WriteString("Use liza_submit_verdict tool:\n")
-	sb.WriteString(fmt.Sprintf("{\"task_id\": \"%s\", \"verdict\": \"APPROVED\", \"agent_id\": \"%s\"}\n\n", task.ID, config.AgentID))
+	fmt.Fprintf(&sb, "{\"task_id\": \"%s\", \"verdict\": \"APPROVED\", \"agent_id\": \"%s\"}\n\n", task.ID, config.AgentID)
 	sb.WriteString("For REJECTED verdict:\n")
 	sb.WriteString("Use liza_submit_verdict tool:\n")
-	sb.WriteString(fmt.Sprintf("{\"task_id\": \"%s\", \"verdict\": \"REJECTED\", \"agent_id\": \"%s\", \"reason\": \"<detailed rejection reason>\"}\n\n", task.ID, config.AgentID))
+	fmt.Fprintf(&sb, "{\"task_id\": \"%s\", \"verdict\": \"REJECTED\", \"agent_id\": \"%s\", \"reason\": \"<detailed rejection reason>\"}\n\n", task.ID, config.AgentID)
 	sb.WriteString("After submitting verdict, EXIT immediately. Your work is complete.\n")
 	sb.WriteString("The supervisor will reset your status to IDLE automatically.\n")
 	sb.WriteString("Do NOT continue running or wait for more work. EXIT now.\n\n")
@@ -504,12 +418,12 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) strin
 	sb.WriteString("EXPECTED BEHAVIOR EXAMPLES:\n\n")
 	sb.WriteString("✅ CORRECT:\n")
 	sb.WriteString("1. Read task details and review commit\n")
-	sb.WriteString(fmt.Sprintf("2. Execute: git -C %s rev-parse HEAD  # Verify HEAD\n", worktreePath))
-	sb.WriteString(fmt.Sprintf("3. Execute: git -C %s diff %s..%s  # Review changes\n", worktreePath, baseCommit, reviewCommit))
+	fmt.Fprintf(&sb, "2. Execute: git -C %s rev-parse HEAD  # Verify HEAD\n", worktreePath)
+	fmt.Fprintf(&sb, "3. Execute: git -C %s diff %s..%s  # Review changes\n", worktreePath, baseCommit, reviewCommit)
 	sb.WriteString("4. Apply code-review skill and analyze changes\n")
 	sb.WriteString("5. Make verdict decision (APPROVED or REJECTED)\n")
-	sb.WriteString(fmt.Sprintf("6. Execute tool: liza_submit_verdict with {\"task_id\": \"%s\", \"verdict\": \"APPROVED\", \"agent_id\": \"%s\"}  # (or REJECTED with reason)\n", task.ID, config.AgentID))
-	sb.WriteString(fmt.Sprintf("7. Confirm: \"Verdict submitted for %s: APPROVED\"\n", task.ID))
+	fmt.Fprintf(&sb, "6. Execute tool: liza_submit_verdict with {\"task_id\": \"%s\", \"verdict\": \"APPROVED\", \"agent_id\": \"%s\"}  # (or REJECTED with reason)\n", task.ID, config.AgentID)
+	fmt.Fprintf(&sb, "7. Confirm: \"Verdict submitted for %s: APPROVED\"\n", task.ID)
 	sb.WriteString("8. Exit\n\n")
 	sb.WriteString("❌ INCORRECT (DO NOT DO THIS):\n")
 	sb.WriteString("1. Read task details and review commit\n")
@@ -520,6 +434,101 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) strin
 	sb.WriteString("6. Exit ← THIS IS FAILURE. You did not submit the verdict to the blackboard.\n")
 
 	return sb.String()
+}
+
+// writeIntegrationFixInstructions writes the integration fix workflow section
+func writeIntegrationFixInstructions(sb *strings.Builder, task *models.Task, worktreePath string, config CoderContextConfig) {
+	sb.WriteString("\n=== INTEGRATION FIX MODE ===\n")
+	sb.WriteString("This task previously failed to merge into the integration branch.\n")
+	sb.WriteString("Your PRIMARY objective is to resolve the merge conflict and ensure the implementation still works.\n\n")
+
+	sb.WriteString("CRITICAL UNDERSTANDING - How Rebase Solves Commit History Issues:\n")
+	sb.WriteString("- Git automatically SKIPS commits that already exist in integration (same commit SHA)\n")
+	sb.WriteString("- After rebasing onto integration, your branch will contain ONLY commits unique to your task\n")
+	sb.WriteString("- Example: If your branch has [A, B, C] and integration already has [A, B], rebase leaves only [C]\n")
+	sb.WriteString("- Verify this with: git log --oneline integration..HEAD (shows commits unique to your branch)\n")
+	sb.WriteString("- If you see the wrong number of commits after rebase, your commits have different SHAs than integration\n\n")
+
+	sb.WriteString("INTEGRATION FIX WORKFLOW:\n\n")
+	sb.WriteString("1. ASSESS THE CONFLICT\n")
+	fmt.Fprintf(sb, "   cd %s\n", worktreePath)
+	sb.WriteString("   git status\n")
+	sb.WriteString("   # Review conflicted files and understand what changed on integration branch\n\n")
+
+	sb.WriteString("2. UPDATE LOCAL BRANCH\n")
+	fmt.Fprintf(sb, "   git fetch %s %s\n", config.ProjectRoot, config.IntegrationBranch)
+	sb.WriteString("   # Note: This is a local-only repository, so we fetch from project root, not 'origin'\n\n")
+
+	sb.WriteString("3. REBASE ONTO INTEGRATION BRANCH\n")
+	fmt.Fprintf(sb, "   git rebase %s\n", config.IntegrationBranch)
+	sb.WriteString("   # Git will pause at conflicts. Proceed to step 4.\n")
+	sb.WriteString("   # Git automatically skips commits that already exist in integration (same SHA)\n\n")
+
+	sb.WriteString("3.5. VERIFY COMMIT HISTORY\n")
+	sb.WriteString("   # After rebase completes successfully, verify your branch state:\n")
+	fmt.Fprintf(sb, "   git log --oneline %s..HEAD\n\n", config.IntegrationBranch)
+	sb.WriteString("   Expected result: Should show ONLY commits unique to your task\n")
+	sb.WriteString("   - If you see commits that should be in integration already, continue to step 3.6\n")
+	sb.WriteString("   - If commit count looks correct, skip to step 4\n\n")
+
+	sb.WriteString("3.6. IF AUTO-SKIP DIDN'T WORK (Different SHAs)\n")
+	sb.WriteString("   # This means they're different commit objects with similar content\n")
+	sb.WriteString("   # Use interactive rebase to manually drop out-of-scope commits:\n")
+	fmt.Fprintf(sb, "   git rebase -i %s\n\n", config.IntegrationBranch)
+	sb.WriteString("   # In the editor:\n")
+	sb.WriteString("   #   - Mark out-of-scope commits as \"drop\" (commits already in integration)\n")
+	sb.WriteString("   #   - Keep only your task's commits as \"pick\"\n")
+	fmt.Fprintf(sb, "   git log --oneline %s..HEAD  # Verify again\n\n", config.IntegrationBranch)
+
+	sb.WriteString("4. RESOLVE CONFLICTS\n")
+	sb.WriteString("   # For each conflicted file:\n")
+	sb.WriteString("   #   a. Open the file and resolve conflict markers (<<<<<<<, =======, >>>>>>>)\n")
+	sb.WriteString("   #   b. Ensure the merged code preserves both your changes and integration branch changes\n")
+	sb.WriteString("   #   c. Mark resolved: git add <file>\n")
+	sb.WriteString("   # After all conflicts resolved:\n")
+	sb.WriteString("   git rebase --continue\n\n")
+
+	sb.WriteString("5. IF CONFLICTS ARE UNRESOLVABLE OR HISTORY IS CORRUPTED\n\n")
+	sb.WriteString("   Option A: Mark as blocked if design conflict\n")
+	sb.WriteString("   # If you cannot resolve conflicts without breaking the implementation:\n")
+	sb.WriteString("   git rebase --abort\n")
+	sb.WriteString("   # Use MCP tool to mark task as blocked:\n")
+	sb.WriteString("   liza_mark_blocked(\n")
+	fmt.Fprintf(sb, "     task_id=\"%s\",\n", task.ID)
+	fmt.Fprintf(sb, "     agent_id=\"%s\",\n", config.AgentID)
+	sb.WriteString("     reason=\"Merge conflicts cannot be resolved without redesigning: <explain>\",\n")
+	sb.WriteString("     questions=[\"What is the intended behavior when...\", \"Should we...\"]\n")
+	sb.WriteString("   )\n\n")
+
+	sb.WriteString("   Option B: Start completely fresh if commit history is wrong\n")
+	sb.WriteString("   # If commit history is corrupted and can't be fixed with interactive rebase:\n")
+	sb.WriteString("   git diff HEAD > /tmp/my-changes.patch\n")
+	sb.WriteString("   # Delete and recreate worktree using MCP tools:\n")
+	fmt.Fprintf(sb, "   liza_wt_delete(task_id=\"%s\")\n", task.ID)
+	sb.WriteString("   # Checkout integration branch in main worktree\n")
+	fmt.Fprintf(sb, "   cd %s && git checkout %s\n", config.ProjectRoot, config.IntegrationBranch)
+	fmt.Fprintf(sb, "   liza_wt_create(task_id=\"%s\")\n", task.ID)
+	fmt.Fprintf(sb, "   cd %s\n", worktreePath)
+	sb.WriteString("   git apply /tmp/my-changes.patch\n\n")
+
+	sb.WriteString("6. VALIDATE IMPLEMENTATION\n")
+	sb.WriteString("   # After successful rebase:\n")
+	sb.WriteString("   #   - Run all tests to ensure they still pass\n")
+	sb.WriteString("   #   - Verify all done_when criteria still met\n")
+	sb.WriteString("   #   - Check that your changes work with integration branch updates\n\n")
+
+	sb.WriteString("7. SUBMIT FOR REVIEW (SAME AS NORMAL)\n")
+	sb.WriteString("   # Once conflicts resolved and tests passing:\n")
+	fmt.Fprintf(sb, "   # Get commit: git -C %s rev-parse HEAD\n", worktreePath)
+	fmt.Fprintf(sb, "   # Use liza_submit_for_review tool with: {\"task_id\": \"%s\", \"commit_sha\": \"...\", \"agent_id\": \"%s\"}\n\n", task.ID, config.AgentID)
+
+	sb.WriteString("CRITICAL: Do not skip the rebase step. Merge conflicts mean the integration branch has diverged.\n")
+	sb.WriteString("Simply re-running tests without rebasing will not fix the integration failure.\n\n")
+}
+
+// hasPriorRejection reports whether the task has actionable rejection feedback from a prior iteration
+func hasPriorRejection(task *models.Task) bool {
+	return task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null"
 }
 
 // formatRoleTitle converts kebab-case role names to Title Case
@@ -578,7 +587,7 @@ func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string) string {
 		sb.WriteString("CRITICAL: If you see tool permission prompts, do NOT stop or wait.\n")
 		sb.WriteString("Permission prompts are handled automatically. Continue executing tools.\n")
 		sb.WriteString("Do NOT rationalize waiting with phrases like \"awaiting approval\" or \"permission needed\".\n\n")
-		sb.WriteString(fmt.Sprintf("1. Read the goal spec (%s) thoroughly — understand the goal, constraints, success criteria\n\n", goalSpecRef))
+		fmt.Fprintf(&sb, "1. Read the goal spec (%s) thoroughly — understand the goal, constraints, success criteria\n\n", goalSpecRef)
 		sb.WriteString("2. Identify the minimal set of tasks that achieve the goal\n\n")
 		sb.WriteString("3. Analyze task dependencies:\n")
 		sb.WriteString("   - Which tasks produce artifacts others need? (APIs, schemas, utilities)\n")
