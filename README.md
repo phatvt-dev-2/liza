@@ -148,6 +148,41 @@ liza stop / liza start                              # System control
 liza checkpoint                                     # Sprint checkpoint
 ```
 
+## Installation
+
+**Quick install (macOS/Linux):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | bash
+```
+
+This installs both `liza` (CLI) and `liza-mcp` (MCP server) to `/usr/local/bin`.
+
+**Options:**
+
+```bash
+# Specific version
+curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | VERSION=v1.0.0 bash
+
+# Custom directory
+curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | INSTALL_DIR=~/.local/bin bash
+```
+
+**From source:**
+
+```bash
+git clone https://github.com/liza-mas/liza.git && cd liza
+make install
+```
+
+**Verify:**
+
+```bash
+liza version
+```
+
+See [RELEASE.md](RELEASE.md) for maintainer release workflow.
+
 ## Getting Started
 
 ### Hands-on
@@ -211,7 +246,7 @@ Liza is not autonomous. She is accountable.
 
 - Claude Code or Codex CLI (tested: Claude Opus 4.5, GPT-5.2-Codex)
 - Git 2.5+ (for worktree support)
-- Go 1.25.5+ (for building from source)
+- Go 1.25.5+ (only for building from source — pre-built binaries available via `install.sh`)
 
 ## License
 

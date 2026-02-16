@@ -4,7 +4,57 @@ System configuration, tuning parameters, and environment variables.
 
 ## MCP Server Setup
 
-Liza provides an MCP server for Claude Code integration. `liza init` creates both `.mcp.json` and `.claude/settings.json` automatically.
+Liza provides an MCP server (`liza-mcp`) for Claude Code integration. `liza init` creates both configuration files automatically. If they already exist, `liza init` prompts to merge Liza-specific configuration.
+
+### What Gets Created
+
+**`.mcp.json`** — tells Claude Code how to start the Liza MCP server:
+
+```json
+{
+  "mcpServers": {
+    "liza": {
+      "command": "liza-mcp",
+      "args": ["--project-root", "."]
+    }
+  }
+}
+```
+
+**`.claude/settings.json`** — project-level permissions for MCP tools, file access, and git operations:
+
+```json
+{
+  "additionalDirectories": [ "~/.liza" ],
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(~/.claude/**)",
+      "Read(~/.liza/**)",
+      "mcp__liza__liza_get",
+      "mcp__liza__liza_status",
+      "mcp__liza__liza_add_task",
+      "mcp__liza__liza_submit_for_review",
+      "mcp__liza__liza_submit_verdict",
+      "mcp__liza__liza_handoff",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "WebFetch"
+    ]
+  }
+}
+```
+
+**Key elements:**
+- **`mcp__liza__*`** — grants permission to invoke specific MCP tools (format: `mcp__<server>__<tool>`)
+- **`additionalDirectories`** — allows reading Liza's global config directory (`~/.liza`)
+- **`defaultMode: acceptEdits`** — required for headless agent operation
+
+The repo-root [`claude-settings.json`](../claude-settings.json) and [`mcp.json`](../mcp.json) are reference templates. `liza init` writes the runtime files to `.claude/settings.json` and `.mcp.json` in the project root.
+
+For Pairing mode setup (symlinks, provider-specific config), see [Contract Activation](../contracts/contract-activation.md).
 
 ### Troubleshooting MCP
 
@@ -125,6 +175,19 @@ CIRCUIT_BREAKER_TRIPPED -> RUNNING (liza resume, after fixing root cause)
 | ABANDONED | No | No | **Yes** |
 | SUPERSEDED | No | No | **Yes** |
 | INTEGRATION_FAILED | Yes | No | No |
+
+## Agent Identity
+
+Agent identity can be provided in two ways:
+
+1. **CLI flag** (recommended): `liza agent coder --agent-id coder-1`
+2. **Environment variable**: `export LIZA_AGENT_ID=coder-1`
+
+The `--agent-id` flag takes precedence over `LIZA_AGENT_ID`.
+
+**Agent ID format**: `{role}-{number}` — e.g. `coder-1`, `code-reviewer-1`, `planner-1`.
+
+**System commands** (`pause`, `stop`, `start`, `resume`, `release-claim`) use `--changed-by` for audit trail (defaults to `human`).
 
 ## Environment Variables
 
