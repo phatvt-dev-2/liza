@@ -58,10 +58,10 @@ clean:
 	rm -f internal/embedded/claude-settings.json internal/embedded/mcp.json
 	go clean
 
-# Install the binaries
-install: sync-embedded
-	go install $(LDFLAGS) ./cmd/liza
-	go install $(LDFLAGS) ./cmd/liza-mcp
+# Install the binaries to /usr/local/bin
+install: build
+	sudo install -m 755 $(BINARY_NAME) /usr/local/bin/$(BINARY_NAME)
+	sudo install -m 755 $(MCP_BINARY_NAME) /usr/local/bin/$(MCP_BINARY_NAME)
 
 # Check that testhelpers package is not imported in production code
 # This prevents test utilities from leaking into production binaries and
