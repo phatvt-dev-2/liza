@@ -1,0 +1,13 @@
+{{- define "metrics_value" -}}
+Tasks Done: {{.TasksDone}}
+Tasks In Progress: {{.TasksInProgress}}
+Tasks Blocked: {{.TasksBlocked}}
+Iterations Total: {{.IterationsTotal}}
+Review Cycles Total: {{.ReviewCyclesTotal}}
+Review Verdict Approvals: {{.ReviewVerdictApprovals}}
+Review Verdict Rejections: {{.ReviewVerdictRejections}}
+Review Verdict Count: {{.ReviewVerdictCount}}
+Review Verdict Approval Rate: {{.ReviewVerdictApprovalRatePercent}}%
+Task Submitted For Review Count: {{.TaskSubmittedForReviewCount}}
+Task Outcome Approval Rate: {{.TaskOutcomeApprovalRatePercent}}%
+{{end -}}

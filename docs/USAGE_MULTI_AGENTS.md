@@ -17,19 +17,8 @@ See [DEMO](DEMO.md) for a full example.
 │   ├── CORE.md                    # Universal rules + mode selection gate
 │   ├── PAIRING_MODE.md            # Human-supervised collaboration
 │   └── MULTI_AGENT_MODE.md        # Peer-supervised Liza system
-├── schemas/
-│   └── liza-state.yaml            # Blackboard schema
-└── scripts/
-    ├── liza-init.sh               # Initialize blackboard
-    ├── liza-lock.sh               # Atomic operations
-    ├── liza-validate.sh           # Schema validation
-    ├── liza-watch.sh              # Alarm monitor
-    ├── liza-agent.sh              # Agent supervisor
-    ├── liza-submit-for-review.sh  # Atomic review submission
-    ├── liza-submit-verdict.sh     # Atomic review verdict
-    ├── wt-create.sh               # Create worktree
-    ├── wt-merge.sh                # Merge (supervisor after approval)
-    └── wt-delete.sh               # Clean up worktree
+└── schemas/
+    └── liza-state.yaml            # Blackboard schema
 
 <project>/
 ├── .liza/
@@ -43,45 +32,73 @@ See [DEMO](DEMO.md) for a full example.
 ### Quick Start (Target Usage)
 
 **Prerequisites:**
-- Claude Code CLI, git and `yq` installed
-- `yq` installed (YAML processor):
-  `sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && sudo  chmod +x /usr/local/bin/yq` (dont use snap, codex cannot use it)
+- Claude Code CLI and git installed
+- Go >= 1.25.5 installed
+- `liza` and `liza-mcp` Go binaries in PATH
+
+**Installing the Liza CLI:**
+
+```bash
+# Build
+make build
+
+# Copy to a directory in PATH
+sudo cp liza liza-mcp /usr/local/bin/
+
+# Verify
+liza version
+```
 
 **1. Initialize**
 ```bash
 # Create .liza/ directory with blackboard
-~/.liza/scripts/liza-init.sh "[Goal description]" [spec_ref]
+liza init "[Goal description]" --spec [spec_ref]
 
 # spec_ref: Path to goal specification (default: specs/vision.md)
 # Examples:
-#   liza-init.sh "Implement retry logic"           # uses specs/vision.md
-#   liza-init.sh "Add auth" specs/auth-feature.md  # uses custom spec
+#   liza init "Implement retry logic"                        # uses specs/vision.md
+#   liza init "Add auth" --spec specs/auth-feature.md        # uses custom spec
 
 # Verify
 cat .liza/state.yaml
 ```
 
+`liza init` creates:
+- `.liza/state.yaml` — Blackboard state
+- `.liza/log.yaml` — Activity log
+- `.liza/contracts/` — Embedded agent contracts (CORE.md, PAIRING_MODE.md, MULTI_AGENT_MODE.md, etc.)
+- `.liza/skills/` — Embedded skill definitions (code-review, debugging, testing, etc.)
+- `.liza/specs/` — Embedded system specifications (architecture, protocols, implementation)
+- `.claude/claude-settings.json` — Claude Code permissions (if using Claude Code)
+- `.mcp.json` — MCP server configuration (tells Claude Code how to start liza-mcp)
+- `.worktrees/` — Task worktrees directory
+- `integration` branch — For merging completed work
+
+Embedded files include YAML frontmatter with version metadata (`liza_version`, `liza_git_commit`, `liza_build_date`) to track which version your project is using.
+
 **2. Start Agents (3 terminals)**
+
+Agent identity is provided via the `--agent-id` flag. IDs must follow the pattern `{role}-{number}` (e.g., `coder-1`, `code-reviewer-1`, `planner-1`).
 
 Terminal 1 — Planner:
 ```bash
-LIZA_AGENT_ID=planner-1 ~/.liza/scripts/liza-agent.sh planner
+liza agent planner --agent-id planner-1
 ```
 
 Terminal 2 — Coder:
 ```bash
-LIZA_AGENT_ID=coder-1 ~/.liza/scripts/liza-agent.sh coder
+liza agent coder --agent-id coder-1
 ```
 
 Terminal 3 — Code Reviewer:
 ```bash
-LIZA_AGENT_ID=code-reviewer-1 ~/.liza/scripts/liza-agent.sh code-reviewer
+liza agent code-reviewer --agent-id code-reviewer-1
 ```
 
 **3. Observe**
 ```bash
 # Run the watcher for alerts
-~/.liza/scripts/liza-watch.sh
+liza watch
 ```
 
 ```bash
@@ -92,16 +109,16 @@ watch -n 2 'yq ".tasks[] | pick([\"id\", \"status\", \"description\"])" .liza/st
 **4. Human Interventions**
 ```bash
 # Pause all agents
-touch .liza/PAUSE
+liza pause
 
 # Resume
-rm .liza/PAUSE
+liza resume
 
 # Abort
-touch .liza/ABORT
+liza stop
 
 # Checkpoint (halt + generate summary)
-~/.liza/scripts/liza-checkpoint.sh "End of sprint 1"
+liza checkpoint
 ```
 
 **5. Review Results**
@@ -113,21 +130,67 @@ cat .liza/log.yaml
 git log integration --oneline
 ```
 
-### Helper Scripts
+### CLI Commands
 
-The supervisor (`liza-agent.sh`) uses helper scripts for state transitions:
+The `liza` binary provides all system operations. Key commands:
 
-| Script | Purpose |
-|--------|---------|
-| `liza-claim-task.sh <task-id> <agent-id>` | Atomically claim a task for a coder (creates worktree, updates state) |
-| `liza-validate.sh <state.yaml>` | Validate blackboard state against schema invariants |
-| `liza-watch.sh` | Monitor blackboard and alert on anomalies |
-| `release-claim.sh <task-id> [--role reviewer|coder|both] [--full] [--force] [--reason "..."]` | Manually release reviewer/coder claims on a task (crash recovery) |
-| `liza-checkpoint.sh <message>` | Create a checkpoint (halt + summary) |
-| `liza-init.sh <goal> [spec_ref]` | Initialize .liza/ directory with blackboard (spec_ref defaults to specs/vision.md) |
+| Command | Purpose |
+|---------|---------|
+| `liza init <goal> --spec <spec_ref>` | Initialize .liza/ directory with blackboard (spec_ref defaults to specs/vision.md) |
+| `liza agent <role> --agent-id <id>` | Agent supervisor (start, restart, backoff loop) |
+| `liza claim-task <task-id> <agent-id>` | Atomically claim a task for a coder (creates worktree, updates state) |
+| `liza validate [state.yaml]` | Validate blackboard state against schema invariants |
+| `liza watch` | Monitor blackboard and alert on anomalies |
+| `liza release-claim <task-id> [--role R]` | Release claim on a task (crash recovery) |
+| `liza checkpoint` | Create a checkpoint (halt + summary) |
+| `liza status` | Show system status |
+| `liza pause` / `liza resume` | Pause/resume system |
+| `liza stop` / `liza start` | Stop/start system |
 
-**Important:** The supervisor claims tasks *before* starting the Claude agent. This avoids interactive permission prompts in `-p` (non-interactive) mode. Agents receive their assigned task in the bootstrap prompt and should NOT call claim scripts directly.
-
-**Note on `liza-lock.sh`:** Use `write` only for simple field assignments. For array appends or multi-field updates, use `modify` with `yq -i` and `strenv()`/`env()` for shell variables.
+**Important:** The supervisor claims tasks *before* starting the Claude agent. This avoids interactive permission prompts in `-p` (non-interactive) mode. Agents receive their assigned task in the bootstrap prompt and should NOT call claim commands directly.
 
 See [Architecture Overview](../specs/architecture/overview.md) for detailed component descriptions.
+
+### Configuring Claude Code (MCP)
+
+Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza init` creates the configuration automatically:
+
+**`.mcp.json`** — MCP server configuration:
+```json
+{
+  "mcpServers": {
+    "liza": {
+      "command": "liza-mcp",
+      "args": ["--project-root", "."]
+    }
+  }
+}
+```
+
+**`claude-settings.json`** — Minimal permissions for Claude Code agents:
+```json
+{
+  "additionalDirectories": [ "~/.liza" ],
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(~/.claude/**)",
+      "Read(~/.liza/**)",
+      "mcp__liza__liza_get",
+      "mcp__liza__liza_status",
+      "mcp__liza__liza_add_task",
+      "mcp__liza__liza_submit_for_review",
+      "mcp__liza__liza_submit_verdict",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "WebFetch"
+    ]
+  }
+}
+```
+
+Both CLI commands (e.g., `liza add-task`) and MCP tools (e.g., `liza_add_task`) operate on the same `.liza/state.yaml` file. Claude Code agents use MCP tools for better error handling; the CLI is for manual use.
+
+The root-level `claude-settings.json` and `mcp.json` are templates embedded into the binary. `liza init` writes the active copies to `.claude/claude-settings.json` and `.mcp.json` in the project directory.

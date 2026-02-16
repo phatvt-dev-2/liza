@@ -49,7 +49,7 @@ if iterations >= max_iterations and task.state != APPROVED:
 
 ### Early Warning Thresholds
 
-`liza-watch.sh` alerts before limits are hit (trajectory visibility):
+`liza watch` alerts before limits are hit (trajectory visibility):
 
 | Metric | Warning | Cliff | Condition |
 |--------|---------|-------|-----------|
@@ -139,11 +139,7 @@ When merge fails (INTEGRATION_FAILED):
 
 ```bash
 # Claim integration-fix task
-LEASE=$(date -u -d '+5 minutes' +%Y-%m-%dT%H:%M:%SZ)
-~/.liza/scripts/liza-lock.sh modify \
-  env LEASE="$LEASE" yq -i '(.tasks[] | select(.id == "task-3" and .status == "INTEGRATION_FAILED")) |=
-    (.status = "CLAIMED" | .assigned_to = "coder-2" | .integration_fix = true |
-     .lease_expires = strenv(LEASE))' .liza/state.yaml
+liza claim-task task-3 coder-2
 ```
 
 ---
@@ -270,14 +266,14 @@ Before agents can run, human must initialize the project:
    - Fill in goal context and success criteria
    - Planner cannot decompose goal without this document
 
-2. **Initialize Liza state:** `liza-init.sh "Goal description" [spec_ref]`
+2. **Initialize Liza state:** `liza init "Goal description" --spec [spec_ref]`
    - `spec_ref` defaults to `specs/vision.md` if not provided
    - Requires the spec file to exist at the specified path
    - Creates `.liza/` directory structure
    - Creates `state.yaml` with goal (including `spec_ref`) and sprint initialized
    - Creates `log.yaml`
 
-3. **Start watcher:** `liza-watch.sh` in separate terminal
+3. **Start watcher:** `liza watch` in separate terminal
    - Monitors for CHECKPOINT, anomalies, circuit breaker triggers
 
 4. **Start agents:** Launch Planner, then Coders/Code Reviewers as needed
@@ -310,7 +306,7 @@ Before agents can run, human must initialize the project:
 
 ### Coder Initialization
 
-**Note:** The supervisor (`liza-agent.sh`) claims tasks and creates worktrees BEFORE spawning the coder. The coder receives its assigned task in the bootstrap prompt.
+**Note:** The supervisor (`liza agent`) claims tasks and creates worktrees BEFORE spawning the coder. The coder receives its assigned task in the bootstrap prompt.
 
 1. Extract task ID and worktree path from bootstrap prompt
 2. Verify assignment in state.yaml (status CLAIMED, assigned_to matches self)
@@ -322,7 +318,7 @@ Before agents can run, human must initialize the project:
 
 ### Code Reviewer Initialization
 
-**Note:** The supervisor (`liza-agent.sh`) assigns review tasks BEFORE spawning the reviewer. The reviewer receives its assigned task in the bootstrap prompt.
+**Note:** The supervisor (`liza agent`) assigns review tasks BEFORE spawning the reviewer. The reviewer receives its assigned task in the bootstrap prompt.
 
 1. Extract review task ID and worktree path from bootstrap prompt
 2. Verify assignment in state.yaml (status READY_FOR_REVIEW, reviewing_by matches self)

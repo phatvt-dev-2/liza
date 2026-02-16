@@ -673,7 +673,7 @@ Reads do not require lock (eventual consistency acceptable for reads).
 | Claim review | Supervisor | Lock → verify READY_FOR_REVIEW + no active review lease → write reviewing_by + review_lease_expires → unlock |
 | Extend review lease | Code Reviewer | Lock → update review_lease_expires → unlock |
 | Submit verdict | Code Reviewer | Lock → verify commit SHA matches + reviewing_by matches self → set APPROVED/REJECTED + reason + set approved_by on approval + clear review lease → unlock |
-| Execute merge | Supervisor | After Code Reviewer sets APPROVED → supervisor runs wt-merge.sh → update state to MERGED |
+| Execute merge | Supervisor | After Code Reviewer sets APPROVED → supervisor runs `liza wt-merge` → update state to MERGED |
 | Mark blocked | Any | Lock → set state BLOCKED + diagnosis → unlock |
 | Rescope task | Planner | Lock → set original SUPERSEDED → create new task(s) with reference → unlock |
 | Finalize draft | Planner | Lock → change DRAFT to UNCLAIMED → unlock |
@@ -718,7 +718,7 @@ For detailed definition including edge cases (submodules, untracked files), see 
 | `reviewer_loop` | Code Reviewer | Reviewer stuck in command loop, self-aborted |
 | `system_ambiguity` | Any role | Liza protocol or role definition unclear, escalated to Planner |
 
-**Required Details Fields (validated by liza-validate.sh):**
+**Required Details Fields (validated by `liza validate`):**
 
 | Type | Required Fields | Purpose |
 |------|-----------------|---------|
@@ -767,16 +767,16 @@ invariants:
   - "Anomaly type must be one of: retry_loop, trade_off, spec_ambiguity, external_blocker, assumption_violated, scope_deviation, workaround, debt_created, spec_changed, hypothesis_exhaustion, spec_gap, review_deadlock, review_exhaustion, reviewer_loop, system_ambiguity"
   # Transition invariants (runtime-enforced, not statically validated)
   # These are enforced by agent behavior and atomic operations during state transitions.
-  # liza-validate.sh validates static state invariants; these require history analysis.
+  # `liza validate` validates static state invariants; these require history analysis.
   - "CLAIMED task from REJECTED must have new lease_expires (not stale from prior claim)"
   - "UNCLAIMED task must preserve failed_by if previously BLOCKED"
   - "CLAIMED task with integration_fix:true must have lease_expires set"
 ```
 
-**Enforcement Note:** Static invariants (above the "Transition invariants" comment) are validated by `liza-validate.sh`. Transition invariants are runtime constraints enforced by agents performing atomic operations during state transitions — they cannot be verified post-hoc without history event analysis.
+**Enforcement Note:** Static invariants (above the "Transition invariants" comment) are validated by `liza validate`. Transition invariants are runtime constraints enforced by agents performing atomic operations during state transitions — they cannot be verified post-hoc without history event analysis.
 
 ## Related Documents
 
 - [State Machines](state-machines.md) — state transitions
 - [Task Lifecycle](../protocols/task-lifecycle.md) — operational flow
-- [Tooling](../implementation/tooling.md) — scripts for blackboard operations
+- [Tooling](../implementation/tooling.md) — CLI commands for blackboard operations

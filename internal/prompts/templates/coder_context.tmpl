@@ -1,0 +1,100 @@
+{{- define "coder_context" -}}
+
+=== ASSIGNED TASK ===
+TASK ID: {{.Task.ID}}
+WORKTREE: {{.WorktreePath}}
+ITERATION: {{.Task.Iteration}}
+DESCRIPTION: {{.Task.Description}}
+
+DONE WHEN:
+{{.Task.DoneWhen}}
+
+SCOPE:
+{{.Task.Scope}}
+{{- if .Config.HandoffNote}}
+
+=== HANDOFF RESUME CONTEXT ===
+FROM: {{.Config.HandoffNote.Agent}}
+SUMMARY: {{.Config.HandoffNote.Summary}}
+NEXT ACTION: {{.Config.HandoffNote.NextAction}}
+Resume from this point before starting any new approach.
+{{- end}}
+{{- if .Task.IntegrationFix}}
+{{template "coder_integration_fix" .}}
+{{- end}}
+{{- if .HasPriorRejection}}
+
+=== PRIOR REJECTION FEEDBACK (MUST ADDRESS) ===
+{{deref .Task.RejectionReason}}
+{{- end}}
+
+CODER COMMANDS:
+- liza_submit_for_review — Submit completed work for review
+  Tool parameters: {"task_id": "<task-id>", "commit_sha": "<commit-sha>", "agent_id": "<your-agent-id>"}
+  Atomically sets READY_FOR_REVIEW, review_commit, and appends history entry.
+  Use your agent ID (provided in bootstrap context).
+- liza_handoff — Initiate handoff when context is near exhaustion
+  Tool parameters: {"task_id": "<task-id>", "summary": "<what is done>", "next_action": "<exact next step>", "agent_id": "<your-agent-id>"}
+  Sets handoff_pending=true and agent status HANDOFF so the same coder can resume.
+
+--- IMPLEMENTATION PHASE ---
+
+1. The task is already CLAIMED for you. Do NOT run liza claim-task.
+2. Work ONLY in the worktree directory: cd {{.WorktreePath}}
+3. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
+4. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.
+5. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
+6. Use the clean-code skill at the end of the implementation
+7. Validate ALL done_when criteria are met
+8. If context exhaustion is near (~90%): run liza_handoff with summary + next_action, then exit with code 42
+
+--- SUBMISSION PHASE (MANDATORY - DO NOT SKIP) ---
+
+You MUST now execute liza_submit_for_review to transition the task to READY_FOR_REVIEW.
+This is NOT optional. This is NOT pending approval.
+Execute this tool call IN THIS SAME SESSION:
+
+First get commit SHA (using git):
+  git -C {{.WorktreePath}} rev-parse HEAD
+  # Returns: abc123def456...
+
+Then use liza_submit_for_review tool with parameters:
+{
+  "task_id": "{{.Task.ID}}",
+  "commit_sha": "abc123def456...",
+  "agent_id": "{{.Config.AgentID}}"
+}
+
+SUCCESS CRITERIA (Required before you stop):
+
+You are NOT done until ALL of these are true:
+✓ Implementation complete
+✓ Tests written and passing (for code tasks)
+✓ All done_when criteria validated
+✓ liza_submit_for_review tool executed
+✓ Confirmation message received (status: READY_FOR_REVIEW)
+
+If you complete work and stop WITHOUT executing liza_submit_for_review,
+you have FAILED your role responsibilities. The task will remain stuck
+in CLAIMED status and block dependent tasks.
+
+EXPECTED BEHAVIOR EXAMPLES:
+
+✅ CORRECT:
+1. Read task spec and prior feedback
+2. Write tests for done_when criteria
+3. Implement until tests pass
+4. Run validation commands
+5. Get commit: git -C {{.WorktreePath}} rev-parse HEAD
+6. Execute tool: liza_submit_for_review with {"task_id": "{{.Task.ID}}", "commit_sha": "...", "agent_id": "{{.Config.AgentID}}"}
+7. Verify: Task status changed to READY_FOR_REVIEW
+8. EXIT (your work unit is complete)
+
+❌ INCORRECT (DO NOT DO THIS):
+1. Read task spec and prior feedback
+2. Write tests for done_when criteria
+3. Implement until tests pass
+4. Run validation commands
+5. Say "Implementation complete. Tests passing. Ready for review."
+6. Exit ← THIS IS FAILURE. You did not transition the task state.
+{{- end -}}

@@ -1,0 +1,147 @@
+# GoReleaser configuration for liza
+# See https://goreleaser.com for documentation
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - make sync-embedded
+
+builds:
+  - id: liza
+    main: ./cmd/liza
+    binary: liza
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.GitCommit={{.ShortCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X github.com/liza-mas/liza/internal/embedded.Version={{.Version}}
+      - -X github.com/liza-mas/liza/internal/embedded.GitCommit={{.ShortCommit}}
+      - -X github.com/liza-mas/liza/internal/embedded.BuildDate={{.Date}}
+
+  - id: liza-mcp
+    main: ./cmd/liza-mcp
+    binary: liza-mcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/liza-mas/liza/internal/embedded.Version={{.Version}}
+      - -X github.com/liza-mas/liza/internal/embedded.GitCommit={{.ShortCommit}}
+      - -X github.com/liza-mas/liza/internal/embedded.BuildDate={{.Date}}
+
+archives:
+  - id: liza-archive
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}-
+      {{- .Version }}-
+      {{- .Os }}-
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - typo
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Performance Improvements
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: liza-mas
+    name: liza
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Liza {{.Tag}}
+
+    A multi-agent supervision system built in Go.
+
+    ### Installation
+
+    **Quick install (macOS/Linux):**
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | bash
+    ```
+
+    **Manual download:**
+    Download the appropriate archive for your platform below, extract it, and move the binaries to your PATH.
+
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/liza-mas/liza/compare/{{.PreviousTag}}...{{.Tag}}
+
+    ### Verifying Checksums
+
+    Download `checksums.txt` and verify with:
+    ```bash
+    sha256sum -c checksums.txt 2>&1 | grep OK
+    ```
+
+# Optional: Homebrew tap (uncomment to enable)
+# brews:
+#   - repository:
+#       owner: liza-mas
+#       name: homebrew-tap
+#     folder: Formula
+#     homepage: https://github.com/liza-mas/liza
+#     description: Multi-agent supervision system
+#     license: MIT
+#     install: |
+#       bin.install "liza"
+#       bin.install "liza-mcp"
+#     test: |
+#       system "#{bin}/liza version"

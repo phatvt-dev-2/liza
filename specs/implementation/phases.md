@@ -23,19 +23,19 @@
 
 ## Phase 3: Blackboard Schema & Validation (Day 3)
 
-1. Write `liza-init.sh` (creates state.yaml with goal, sprint, config; requires vision.md)
-2. Write `liza-validate.sh` (enforces schema via invariant checks)
+1. Implement `liza init` (creates state.yaml with goal, sprint, config; requires vision.md)
+2. Implement `liza validate` (enforces schema via invariant checks)
 3. Test: initialize blackboard, validate schema
 4. Test: invalid states rejected
 
-**Note:** Schema enforcement is procedural via `liza-validate.sh`, not declarative via a schema file. The blackboard-schema.md document defines the canonical structure; the validation script enforces invariants.
+**Note:** Schema enforcement is procedural via `liza validate`, not declarative via a schema file. The blackboard-schema.md document defines the canonical structure; the validation command enforces invariants.
 
 ---
 
 ## Phase 4: Locking & Lease Model (Day 4)
 
-1. Write `liza-lock.sh`
-2. Test concurrent access with flock
+1. Implement internal locking (Go flock library)
+2. Test concurrent access
 3. Implement lease extension routine
 4. Test lease expiration detection
 5. Test claim backoff behavior
@@ -44,9 +44,9 @@
 
 ## Phase 5: Worktree Management (Day 5)
 
-1. Write `wt-create.sh`
-2. Write `wt-merge.sh` (with commit SHA verification)
-3. Write `wt-delete.sh`
+1. Implement `liza wt-create`
+2. Implement `liza wt-merge` (with commit SHA verification)
+3. Implement `liza wt-delete`
 4. Test full lifecycle: create → work → merge
 5. Test conflict scenario → INTEGRATION_FAILED
 6. Test Code Reviewer-only merge enforcement
@@ -55,12 +55,12 @@
 
 ## Phase 6: Agent Supervision (Day 6)
 
-1. Write `liza-agent.sh` (agent supervisor)
-2. Write `liza-claim-task.sh` (two-phase task claiming)
+1. Implement `liza agent` (agent supervisor)
+2. Implement `liza claim-task` (two-phase task claiming)
 3. Test graceful abort (exit 42) → restart
 4. Test crash → restart with backoff
-5. Test PAUSE file → wait
-6. Test ABORT file → stop
+5. Test `config.mode: PAUSED` → wait
+6. Test `config.mode: STOPPED` → stop
 7. Test lease verification on restart
 8. Test two-phase claim (validate → worktree → commit)
 
@@ -68,7 +68,7 @@
 
 ## Phase 7: Watcher & Alarms (Day 7)
 
-1. Write `liza-watch.sh`
+1. Implement `liza watch`
 2. Test alarm conditions:
    - Lease expired
    - Blocked task
@@ -108,7 +108,7 @@
 ## Phase 9: Documentation (Day 10)
 
 1. Bootstrap guide (human startup sequence):
-   - liza-init.sh usage
+   - `liza init` usage
    - Writing specs/vision.md
    - Starting watcher
    - Launching agents in order
@@ -122,12 +122,12 @@
 ## Phase 10: Sprint Governance (Day 11)
 
 1. Update blackboard schema with sprint section
-2. Update `liza-init.sh` to initialize sprint
-3. Write `liza-checkpoint.sh`:
-   - Creates CHECKPOINT file
+2. Update `liza init` to initialize sprint
+3. Implement `liza checkpoint`:
+   - Sets `sprint.status: CHECKPOINT`
    - Generates sprint summary
    - Waits for human release
-4. Update `liza-watch.sh` to detect sprint deadline
+4. Update `liza watch` to detect sprint deadline
 5. Update supervisor to respect CHECKPOINT
 6. Write retrospective template generator
 7. Test checkpoint flow: trigger → halt → review → release
@@ -138,7 +138,7 @@
 
 1. Update blackboard schema with anomalies section
 2. Update agent contracts with logging duties
-3. Write `liza-analyze.sh`:
+3. Implement `liza analyze`:
    - Parse anomalies section
    - Apply pattern rules
    - Generate report if triggered
@@ -156,7 +156,7 @@
 
 1. Create vision.md template
 2. Create ADR template
-3. Update `liza-init.sh` to require vision.md:
+3. Update `liza init` to require vision.md:
    - Check `specs/vision.md` exists before initializing
    - If missing: exit with error "vision.md required — copy from templates/vision-template.md"
    - Planner also checks on startup; exits with same message if missing
@@ -211,5 +211,5 @@ Phases 3-4 and 5 can run in parallel. Phases 10-12 can run in parallel after Pha
 
 ## Related Documents
 
-- [Tooling](tooling.md) — script specifications
+- [Tooling](tooling.md) — CLI command specifications
 - [Validation Checklist](validation-checklist.md) — v1 completion criteria

@@ -1,0 +1,690 @@
+package models
+
+import (
+	"testing"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+func TestTaskStatusConstants(t *testing.T) {
+	validStatuses := []TaskStatus{
+		TaskStatusDraft,
+		TaskStatusUnclaimed,
+		TaskStatusClaimed,
+		TaskStatusReadyForReview,
+		TaskStatusRejected,
+		TaskStatusApproved,
+		TaskStatusMerged,
+		TaskStatusBlocked,
+		TaskStatusAbandoned,
+		TaskStatusSuperseded,
+		TaskStatusIntegrationFailed,
+	}
+
+	for _, status := range validStatuses {
+		if !status.IsValid() {
+			t.Errorf("Status %s should be valid", status)
+		}
+	}
+
+	invalidStatus := TaskStatus("INVALID")
+	if invalidStatus.IsValid() {
+		t.Errorf("Status %s should be invalid", invalidStatus)
+	}
+}
+
+func TestTaskTerminalStates(t *testing.T) {
+	terminalStates := []TaskStatus{
+		TaskStatusMerged,
+		TaskStatusAbandoned,
+		TaskStatusSuperseded,
+	}
+
+	for _, status := range terminalStates {
+		if !status.IsTerminal() {
+			t.Errorf("Status %s should be terminal", status)
+		}
+	}
+
+	nonTerminalStates := []TaskStatus{
+		TaskStatusDraft,
+		TaskStatusUnclaimed,
+		TaskStatusClaimed,
+		TaskStatusReadyForReview,
+		TaskStatusRejected,
+		TaskStatusApproved,
+		TaskStatusBlocked,
+		TaskStatusIntegrationFailed,
+	}
+
+	for _, status := range nonTerminalStates {
+		if status.IsTerminal() {
+			t.Errorf("Status %s should not be terminal", status)
+		}
+	}
+}
+
+func TestAgentStatusConstants(t *testing.T) {
+	validStatuses := []AgentStatus{
+		AgentStatusStarting,
+		AgentStatusIdle,
+		AgentStatusWorking,
+		AgentStatusReviewing,
+		AgentStatusWaiting,
+		AgentStatusHandoff,
+		AgentStatusPlanning,
+	}
+
+	for _, status := range validStatuses {
+		if !status.IsValid() {
+			t.Errorf("Agent status %s should be valid", status)
+		}
+	}
+
+	invalidStatus := AgentStatus("INVALID")
+	if invalidStatus.IsValid() {
+		t.Errorf("Agent status %s should be invalid", invalidStatus)
+	}
+}
+
+func TestAgentStatusPlanning(t *testing.T) {
+	// Test that PLANNING constant exists and has correct value
+	if AgentStatusPlanning != "PLANNING" {
+		t.Errorf("AgentStatusPlanning value = %s, want PLANNING", AgentStatusPlanning)
+	}
+
+	// Test that PLANNING is valid
+	if !AgentStatusPlanning.IsValid() {
+		t.Error("AgentStatusPlanning should be valid")
+	}
+
+	// Test string representation
+	status := AgentStatusPlanning
+	if string(status) != "PLANNING" {
+		t.Errorf("String representation = %s, want PLANNING", string(status))
+	}
+}
+
+func TestGoalStatusConstants(t *testing.T) {
+	validStatuses := []GoalStatus{
+		GoalStatusInProgress,
+		GoalStatusCompleted,
+		GoalStatusAborted,
+	}
+
+	for _, status := range validStatuses {
+		if !status.IsValid() {
+			t.Errorf("Goal status %s should be valid", status)
+		}
+	}
+}
+
+func TestSprintStatusConstants(t *testing.T) {
+	validStatuses := []SprintStatus{
+		SprintStatusInProgress,
+		SprintStatusCheckpoint,
+		SprintStatusCompleted,
+		SprintStatusAborted,
+	}
+
+	for _, status := range validStatuses {
+		if !status.IsValid() {
+			t.Errorf("Sprint status %s should be valid", status)
+		}
+	}
+}
+
+func TestTaskYAMLMarshaling(t *testing.T) {
+	created, _ := time.Parse(time.RFC3339, "2025-01-17T14:05:00Z")
+	task := Task{
+		ID:          "task-1",
+		Description: "Test task",
+		Status:      TaskStatusUnclaimed,
+		Priority:    1,
+		Created:     created,
+		SpecRef:     "specs/test.md",
+		DoneWhen:    "Tests pass",
+		DependsOn:   []string{},
+		History: []TaskHistoryEntry{
+			{
+				Time:  created,
+				Event: "created",
+			},
+		},
+	}
+
+	// Marshal to YAML
+	data, err := yaml.Marshal(&task)
+	if err != nil {
+		t.Fatalf("Failed to marshal task: %v", err)
+	}
+
+	// Unmarshal back
+	var unmarshaled Task
+	err = yaml.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal task: %v", err)
+	}
+
+	// Verify fields
+	if unmarshaled.ID != task.ID {
+		t.Errorf("ID mismatch: got %s, want %s", unmarshaled.ID, task.ID)
+	}
+	if unmarshaled.Status != task.Status {
+		t.Errorf("Status mismatch: got %s, want %s", unmarshaled.Status, task.Status)
+	}
+	if unmarshaled.Description != task.Description {
+		t.Errorf("Description mismatch: got %s, want %s", unmarshaled.Description, task.Description)
+	}
+}
+
+func TestAgentYAMLMarshaling(t *testing.T) {
+	heartbeat, _ := time.Parse(time.RFC3339, "2025-01-17T14:50:00Z")
+	leaseExpires, _ := time.Parse(time.RFC3339, "2025-01-17T15:00:00Z")
+
+	agent := Agent{
+		Role:            "coder",
+		Status:          AgentStatusWorking,
+		CurrentTask:     strPtr("task-1"),
+		LeaseExpires:    &leaseExpires,
+		Heartbeat:       heartbeat,
+		Terminal:        "/dev/pts/2",
+		IterationsTotal: 10,
+		ContextPercent:  34,
+	}
+
+	// Marshal to YAML
+	data, err := yaml.Marshal(&agent)
+	if err != nil {
+		t.Fatalf("Failed to marshal agent: %v", err)
+	}
+
+	// Unmarshal back
+	var unmarshaled Agent
+	err = yaml.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal agent: %v", err)
+	}
+
+	// Verify fields
+	if unmarshaled.Role != agent.Role {
+		t.Errorf("Role mismatch: got %s, want %s", unmarshaled.Role, agent.Role)
+	}
+	if unmarshaled.Status != agent.Status {
+		t.Errorf("Status mismatch: got %s, want %s", unmarshaled.Status, agent.Status)
+	}
+	if *unmarshaled.CurrentTask != *agent.CurrentTask {
+		t.Errorf("CurrentTask mismatch: got %s, want %s", *unmarshaled.CurrentTask, *agent.CurrentTask)
+	}
+}
+
+func TestStateYAMLMarshaling(t *testing.T) {
+	created, _ := time.Parse(time.RFC3339, "2025-01-17T14:00:00Z")
+	state := State{
+		Version: 1,
+		Goal: Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "specs/vision.md",
+			Created:     created,
+			Status:      GoalStatusInProgress,
+			AlignmentHistory: []AlignmentHistory{
+				{
+					Timestamp: created,
+					Event:     "initialization",
+					Summary:   "Initial setup",
+				},
+			},
+		},
+		Tasks: []Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      TaskStatusUnclaimed,
+				Priority:    1,
+				Created:     created,
+				SpecRef:     "specs/test.md",
+				DoneWhen:    "Tests pass",
+				History:     []TaskHistoryEntry{},
+			},
+		},
+		Agents: map[string]Agent{
+			"coder-1": {
+				Role:      "coder",
+				Status:    AgentStatusIdle,
+				Heartbeat: created,
+			},
+		},
+		Discovered:  []Discovery{},
+		Handoff:     map[string]HandoffNote{},
+		HumanNotes:  []HumanNote{},
+		SpecChanges: []SpecChange{},
+		Anomalies:   []Anomaly{},
+		Sprint: Sprint{
+			ID:      "sprint-1",
+			GoalRef: "goal-1",
+			Status:  SprintStatusInProgress,
+		},
+		CircuitBreaker: CircuitBreaker{
+			Status: "OK",
+		},
+		Config: Config{
+			MaxCoderIterations: 10,
+			MaxReviewCycles:    5,
+			HeartbeatInterval:  60,
+			LeaseDuration:      1800,
+			CoderPollInterval:  30,
+			CoderMaxWait:       300,
+			IntegrationBranch:  "integration",
+		},
+	}
+
+	// Marshal to YAML
+	data, err := yaml.Marshal(&state)
+	if err != nil {
+		t.Fatalf("Failed to marshal state: %v", err)
+	}
+
+	// Unmarshal back
+	var unmarshaled State
+	err = yaml.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal state: %v", err)
+	}
+
+	// Verify top-level fields
+	if unmarshaled.Version != state.Version {
+		t.Errorf("Version mismatch: got %d, want %d", unmarshaled.Version, state.Version)
+	}
+	if unmarshaled.Goal.ID != state.Goal.ID {
+		t.Errorf("Goal ID mismatch: got %s, want %s", unmarshaled.Goal.ID, state.Goal.ID)
+	}
+	if len(unmarshaled.Tasks) != len(state.Tasks) {
+		t.Errorf("Tasks count mismatch: got %d, want %d", len(unmarshaled.Tasks), len(state.Tasks))
+	}
+	if len(unmarshaled.Agents) != len(state.Agents) {
+		t.Errorf("Agents count mismatch: got %d, want %d", len(unmarshaled.Agents), len(state.Agents))
+	}
+}
+
+func TestTaskClaimability(t *testing.T) {
+	tests := []struct {
+		name      string
+		task      Task
+		claimable bool
+	}{
+		{
+			name: "UNCLAIMED with no dependencies",
+			task: Task{
+				Status:    TaskStatusUnclaimed,
+				DependsOn: []string{},
+			},
+			claimable: true,
+		},
+		{
+			name: "UNCLAIMED with nil dependencies",
+			task: Task{
+				Status: TaskStatusUnclaimed,
+			},
+			claimable: true,
+		},
+		{
+			name: "REJECTED is claimable",
+			task: Task{
+				Status:    TaskStatusRejected,
+				DependsOn: []string{},
+			},
+			claimable: true,
+		},
+		{
+			name: "INTEGRATION_FAILED is claimable",
+			task: Task{
+				Status:    TaskStatusIntegrationFailed,
+				DependsOn: []string{},
+			},
+			claimable: true,
+		},
+		{
+			name: "DRAFT is not claimable",
+			task: Task{
+				Status: TaskStatusDraft,
+			},
+			claimable: false,
+		},
+		{
+			name: "CLAIMED is not claimable",
+			task: Task{
+				Status: TaskStatusClaimed,
+			},
+			claimable: false,
+		},
+		{
+			name: "MERGED is not claimable",
+			task: Task{
+				Status: TaskStatusMerged,
+			},
+			claimable: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.task.IsClaimable(nil) // nil means all dependencies are satisfied
+			if result != tt.claimable {
+				t.Errorf("IsClaimable() = %v, want %v", result, tt.claimable)
+			}
+		})
+	}
+}
+
+func TestTaskClaimabilityWithDependencies(t *testing.T) {
+	// Mock function that checks if dependencies are satisfied
+	allTasks := []Task{
+		{ID: "task-1", Status: TaskStatusMerged},
+		{ID: "task-2", Status: TaskStatusUnclaimed},
+		{ID: "task-3", Status: TaskStatusMerged},
+	}
+
+	tests := []struct {
+		name      string
+		task      Task
+		claimable bool
+	}{
+		{
+			name: "UNCLAIMED with all dependencies MERGED",
+			task: Task{
+				ID:        "task-4",
+				Status:    TaskStatusUnclaimed,
+				DependsOn: []string{"task-1", "task-3"},
+			},
+			claimable: true,
+		},
+		{
+			name: "UNCLAIMED with unmet dependencies",
+			task: Task{
+				ID:        "task-5",
+				Status:    TaskStatusUnclaimed,
+				DependsOn: []string{"task-1", "task-2"}, // task-2 is UNCLAIMED
+			},
+			claimable: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.task.IsClaimable(allTasks)
+			if result != tt.claimable {
+				t.Errorf("IsClaimable() = %v, want %v", result, tt.claimable)
+			}
+		})
+	}
+}
+
+func TestDiscoverySeverity(t *testing.T) {
+	validSeverities := []string{"critical", "high", "medium", "low"}
+	for _, sev := range validSeverities {
+		d := Discovery{Severity: sev}
+		if !d.IsValidSeverity() {
+			t.Errorf("Severity %s should be valid", sev)
+		}
+	}
+
+	d := Discovery{Severity: "invalid"}
+	if d.IsValidSeverity() {
+		t.Error("Invalid severity should not be valid")
+	}
+}
+
+func TestDiscoveryUrgency(t *testing.T) {
+	validUrgencies := []string{"immediate", "deferred"}
+	for _, urg := range validUrgencies {
+		d := Discovery{Urgency: urg}
+		if !d.IsValidUrgency() {
+			t.Errorf("Urgency %s should be valid", urg)
+		}
+	}
+
+	d := Discovery{Urgency: "invalid"}
+	if d.IsValidUrgency() {
+		t.Error("Invalid urgency should not be valid")
+	}
+}
+
+func TestAnomalyTypes(t *testing.T) {
+	validTypes := []string{
+		"retry_loop",
+		"trade_off",
+		"spec_ambiguity",
+		"external_blocker",
+		"assumption_violated",
+		"scope_deviation",
+		"workaround",
+		"debt_created",
+		"spec_changed",
+		"hypothesis_exhaustion",
+		"spec_gap",
+		"review_deadlock",
+		"system_ambiguity",
+	}
+
+	for _, typ := range validTypes {
+		a := Anomaly{Type: typ}
+		if !a.IsValidType() {
+			t.Errorf("Anomaly type %s should be valid", typ)
+		}
+	}
+
+	a := Anomaly{Type: "invalid"}
+	if a.IsValidType() {
+		t.Error("Invalid anomaly type should not be valid")
+	}
+}
+
+func TestCircuitBreakerStatus(t *testing.T) {
+	validStatuses := []string{"OK", "TRIGGERED"}
+	for _, status := range validStatuses {
+		cb := CircuitBreaker{Status: status}
+		if !cb.IsValidStatus() {
+			t.Errorf("CircuitBreaker status %s should be valid", status)
+		}
+	}
+
+	cb := CircuitBreaker{Status: "invalid"}
+	if cb.IsValidStatus() {
+		t.Error("Invalid circuit breaker status should not be valid")
+	}
+}
+
+func TestCircuitBreakerTriggerYAML(t *testing.T) {
+	now := time.Date(2025, 1, 18, 17, 30, 0, 0, time.UTC)
+
+	trigger := CircuitBreakerTrigger{
+		Timestamp:  now,
+		Pattern:    "retry_cluster",
+		Severity:   "ARCHITECTURE_FLAW",
+		ReportFile: ".liza/circuit_breaker_report.md",
+	}
+
+	yamlData, err := yaml.Marshal(&trigger)
+	if err != nil {
+		t.Fatalf("Failed to marshal CircuitBreakerTrigger: %v", err)
+	}
+
+	var unmarshaledTrigger CircuitBreakerTrigger
+	err = yaml.Unmarshal(yamlData, &unmarshaledTrigger)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal CircuitBreakerTrigger: %v", err)
+	}
+
+	if unmarshaledTrigger.Pattern != trigger.Pattern {
+		t.Errorf("Pattern mismatch: got %s, want %s", unmarshaledTrigger.Pattern, trigger.Pattern)
+	}
+
+	if unmarshaledTrigger.Severity != trigger.Severity {
+		t.Errorf("Severity mismatch: got %s, want %s", unmarshaledTrigger.Severity, trigger.Severity)
+	}
+
+	if unmarshaledTrigger.ReportFile != trigger.ReportFile {
+		t.Errorf("ReportFile mismatch: got %s, want %s", unmarshaledTrigger.ReportFile, trigger.ReportFile)
+	}
+}
+
+func TestCircuitBreakerHistoryYAML(t *testing.T) {
+	now := time.Date(2025, 1, 18, 17, 30, 0, 0, time.UTC)
+	resolvedAt := time.Date(2025, 1, 18, 19, 0, 0, 0, time.UTC)
+
+	pattern := "retry_cluster"
+	severity := "ARCHITECTURE_FLAW"
+	resolution := "ADR-003 created, specs updated"
+
+	history := CircuitBreakerHistory{
+		Timestamp:  now,
+		Pattern:    &pattern,
+		Severity:   &severity,
+		Result:     "TRIGGERED",
+		Resolution: &resolution,
+		ResolvedAt: &resolvedAt,
+	}
+
+	yamlData, err := yaml.Marshal(&history)
+	if err != nil {
+		t.Fatalf("Failed to marshal CircuitBreakerHistory: %v", err)
+	}
+
+	var unmarshaledHistory CircuitBreakerHistory
+	err = yaml.Unmarshal(yamlData, &unmarshaledHistory)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal CircuitBreakerHistory: %v", err)
+	}
+
+	if *unmarshaledHistory.Pattern != *history.Pattern {
+		t.Errorf("Pattern mismatch: got %s, want %s", *unmarshaledHistory.Pattern, *history.Pattern)
+	}
+
+	if *unmarshaledHistory.Severity != *history.Severity {
+		t.Errorf("Severity mismatch: got %s, want %s", *unmarshaledHistory.Severity, *history.Severity)
+	}
+
+	if unmarshaledHistory.Result != history.Result {
+		t.Errorf("Result mismatch: got %s, want %s", unmarshaledHistory.Result, history.Result)
+	}
+
+	if *unmarshaledHistory.Resolution != *history.Resolution {
+		t.Errorf("Resolution mismatch: got %s, want %s", *unmarshaledHistory.Resolution, *history.Resolution)
+	}
+}
+
+// Helper function for creating string pointers
+func strPtr(s string) *string {
+	return &s
+}
+
+func TestAgentPIDMarshaling(t *testing.T) {
+	heartbeat, _ := time.Parse(time.RFC3339, "2025-01-17T14:50:00Z")
+
+	tests := []struct {
+		name      string
+		agent     Agent
+		checkPID  bool
+		wantPID   int
+		hasPIDTag bool
+	}{
+		{
+			name: "Agent with PID set",
+			agent: Agent{
+				Role:      "coder",
+				Status:    AgentStatusIdle,
+				Heartbeat: heartbeat,
+				Terminal:  "/dev/pts/1",
+				PID:       12345,
+			},
+			checkPID:  true,
+			wantPID:   12345,
+			hasPIDTag: true,
+		},
+		{
+			name: "Agent with PID zero (not set)",
+			agent: Agent{
+				Role:      "coder",
+				Status:    AgentStatusIdle,
+				Heartbeat: heartbeat,
+				Terminal:  "/dev/pts/1",
+				PID:       0,
+			},
+			checkPID:  true,
+			wantPID:   0,
+			hasPIDTag: false, // omitempty should exclude it
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Marshal to YAML
+			data, err := yaml.Marshal(&tt.agent)
+			if err != nil {
+				t.Fatalf("Failed to marshal agent: %v", err)
+			}
+
+			// Check if PID appears in YAML when expected
+			yamlStr := string(data)
+			hasPID := containsField(yamlStr, "pid:")
+			if hasPID != tt.hasPIDTag {
+				t.Errorf("PID in YAML = %v, want %v\nYAML:\n%s", hasPID, tt.hasPIDTag, yamlStr)
+			}
+
+			// Unmarshal back
+			var unmarshaled Agent
+			err = yaml.Unmarshal(data, &unmarshaled)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal agent: %v", err)
+			}
+
+			// Verify PID field
+			if tt.checkPID && unmarshaled.PID != tt.wantPID {
+				t.Errorf("PID mismatch: got %d, want %d", unmarshaled.PID, tt.wantPID)
+			}
+		})
+	}
+}
+
+func TestAgentBackwardCompatibility(t *testing.T) {
+	// YAML without PID field (backward compatibility test)
+	yamlData := `role: coder
+status: IDLE
+heartbeat: 2025-01-17T14:50:00Z
+terminal: /dev/pts/1
+iterations_total: 0
+context_percent: 0
+`
+
+	var agent Agent
+	err := yaml.Unmarshal([]byte(yamlData), &agent)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal agent without PID: %v", err)
+	}
+
+	// PID should be zero (default value)
+	if agent.PID != 0 {
+		t.Errorf("PID should be 0 for backward compatibility, got %d", agent.PID)
+	}
+
+	// Verify other fields were parsed correctly
+	if agent.Role != "coder" {
+		t.Errorf("Role mismatch: got %s, want coder", agent.Role)
+	}
+	if agent.Status != AgentStatusIdle {
+		t.Errorf("Status mismatch: got %s, want IDLE", agent.Status)
+	}
+}
+
+// Helper function to check if a YAML string contains a field
+func containsField(yamlStr, field string) bool {
+	// Simple check - look for the field name followed by a colon
+	for i := 0; i < len(yamlStr)-len(field); i++ {
+		if yamlStr[i:i+len(field)] == field {
+			return true
+		}
+	}
+	return false
+}

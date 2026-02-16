@@ -1,0 +1,26 @@
+{{- define "planner_context" -}}
+
+=== PLANNING CONTEXT ===
+WAKE TRIGGER: {{.WakeTrigger}}
+
+SPRINT STATE:
+- Total tasks: {{.TotalTasks}}
+- Merged: {{.Merged}}
+- In progress: {{.InProgress}}
+- Unclaimed: {{.Unclaimed}}
+- Blocked: {{.Blocked}}
+- Integration failed: {{.IntegrationFailed}}
+- Hypothesis exhausted: {{.HypothesisExhausted}}
+- Immediate discoveries: {{.ImmediateDiscoveries}}
+
+PLANNER COMMANDS:
+- liza_add_task — Add task to blackboard (atomic, with validation)
+  Tool parameters: {"id": "...", "description": "...", "spec_ref": "...", "done_when": "...", "scope": "...", "priority": N, "depends_on": [...], "agent_id": "planner-1"}
+- liza_supersede_task — Supersede task
+  Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "planner-1"}
+- liza_wt_delete — Delete worktree for abandoned/superseded/blocked tasks
+  Tool parameters: {"task_id": "..."}
+
+INSTRUCTIONS:
+{{.WakeInstructions}}
+{{- end -}}

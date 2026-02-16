@@ -117,10 +117,7 @@ In `~/.claude/settings.json`, configure global permissions for tools used across
       "WebSearch",
       "LSP",
 
-      "Bash(~/.liza/scripts/*)",
-      "Bash(/home/tangi/.liza/scripts/*)",
-      "Bash(~/Workspace/liza/scripts/*)",
-      "Bash(/home/tangi/Workspace/liza/scripts/*)",
+      "Bash(liza:*)",
       "Bash(curl:*)",
       "Bash(wget:*)",
       "Bash(jq:*)",
@@ -178,7 +175,7 @@ In `~/.claude/settings.json`, configure global permissions for tools used across
 **Permission categories:**
 - `"defaultMode": "acceptEdits"` — Required for Liza agents to work headless (preferred to `"bypassPermissions"` aka YOLO mode)
 - `Read(~/.liza/**)` — Access to contract files
-- `Bash(~/.liza/scripts/*)` — Execution of Liza scripts
+- `Bash(liza:*)` — Execution of Liza CLI commands
 - `Skill(...)` — Custom skills from `~/.liza/skills/`
 - `mcp__...` — Your configured MCP tools
 - `WebFetch/WebSearch/LSP` — Built-in Claude tools for web and code navigation

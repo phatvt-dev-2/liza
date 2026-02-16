@@ -1,0 +1,51 @@
+{{- define "status_dashboard" -}}
+=== GOAL ===
+Description: {{.Goal.Description}}
+Status: {{.Goal.Status}}
+Spec: {{.Goal.SpecRef}}
+
+=== SPRINT ===
+ID: {{.Sprint.ID}}
+Status: {{.Sprint.Status}}
+Started: {{.Sprint.StartTime}}
+Progress: {{.Sprint.TasksDone}}/{{.Sprint.TasksTotal}} tasks complete
+
+=== SYSTEM ===
+Mode: {{.Config.Mode}}
+{{- if and (eq .Config.Mode "PAUSED") .Config.PausedBy}}
+Paused By: {{deref .Config.PausedBy}}
+{{- if .Config.PauseReason}}
+Reason: {{deref .Config.PauseReason}}
+{{- end}}
+{{- end}}
+
+{{.TasksSection}}{{.AgentsSection}}=== PLANNER ===
+Wake Trigger: {{.PlannerState.Trigger}}
+{{- if gt .PlannerState.TriggerCount 0}} (count: {{.PlannerState.TriggerCount}}){{end}}
+Explanation: {{.PlannerState.Reason}}
+
+=== WORK QUEUES ===
+Coder: {{.WorkQueues.Coder.Available}} available - {{.WorkQueues.Coder.Reason}}
+Reviewer: {{.WorkQueues.Reviewer.Available}} available - {{.WorkQueues.Reviewer.Reason}}
+
+{{- if and .Anomalies (gt (len .AnomalyList) 0)}}
+
+=== ANOMALIES ===
+{{- range .AnomalyList}}
+⚠  {{.}}
+{{- end}}
+
+{{- end}}
+{{- if .CircuitBreaker}}
+
+=== CIRCUIT BREAKER ===
+Status: {{.CircuitBreaker.Status}}
+{{- if .CircuitBreaker.Triggers}}
+Triggers:
+{{- range .CircuitBreaker.Triggers}}
+  - {{.}}
+{{- end}}
+{{- end}}
+
+{{- end}}
+{{end -}}

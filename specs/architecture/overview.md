@@ -137,7 +137,7 @@ When tasks are rescoped, original task becomes SUPERSEDED with explicit reason. 
 
 ### Supervisor-Assigns-Work
 
-Agents don't discover and claim their own work. Each agent's supervisor (the enclosing bash loop) claims the task BEFORE spawning the agent. The agent receives pre-claimed work in its bootstrap prompt. This eliminates race conditions and simplifies agent logic. See ADR-0006.
+Agents don't discover and claim their own work. Each agent's supervisor (the Go process wrapping the agent CLI) claims the task BEFORE spawning the agent. The agent receives pre-claimed work in its bootstrap prompt. This eliminates race conditions and simplifies agent logic. See ADR-0006 and [Supervision Model](supervision-model.md) for the full responsibility matrix.
 
 ### TDD Enforcement
 
@@ -169,7 +169,6 @@ TDD is mandatory for all code tasks in MAS. Tests must be written first against 
 ├── MULTI_AGENT_MODE.md  → <project>/contracts/MULTI_AGENT_MODE.md
 ├── AGENT_TOOLS.md       → <project>/contracts/AGENT_TOOLS.md
 ├── skills/              → <project>/skills/
-├── scripts/             → <project>/scripts/
 └── specs/               → <project>/specs/
 ```
 
@@ -191,30 +190,34 @@ Therefore, each project creates repo-level symlinks:
 
 Refer to `contracts/contract-activation.md` for activating Liza in a user project. See ADR-0009 for rationale.
 
-### Global Scripts (`~/.liza/scripts/`)
+### Go CLI (`liza`)
 
-```
-~/.liza/scripts/
-    ├── liza-common.sh             # Shared functions sourced by other scripts
-    ├── liza-init.sh               # Initialize blackboard
-    ├── liza-lock.sh               # Atomic operations
-    ├── liza-validate.sh           # Schema validation
-    ├── liza-watch.sh              # Alarm monitor
-    ├── liza-checkpoint.sh         # Create checkpoint
-    ├── liza-analyze.sh            # Circuit breaker analysis
-    ├── liza-agent.sh              # Agent supervisor (spawns agents, handles restarts)
-    ├── liza-add-task.sh           # Add task to backlog
-    ├── liza-claim-task.sh         # Atomically claim task for agent
-    ├── liza-prompt-builders.sh    # Construct agent bootstrap prompts
-    ├── liza-submit-for-review.sh  # Submit work for review
-    ├── liza-submit-verdict.sh     # Record review verdict
-    ├── release-claim.sh           # Release claim on task or review
-    ├── clear-stale-review-claims.sh # Clean up abandoned reviews
-    ├── update-sprint-metrics.sh   # Sprint statistics
-    ├── wt-create.sh               # Create worktree
-    ├── wt-merge.sh                # Merge (supervisor-executed after APPROVED)
-    └── wt-delete.sh               # Clean up worktree
-```
+All system mechanics are provided by the `liza` Go binary (assumed in PATH). See [ADR-0012](ADR/0012-go-cli-replaces-bash-scripts.md).
+
+| Command | Purpose |
+|---------|---------|
+| `liza init "goal" --spec spec` | Initialize blackboard |
+| `liza validate [state]` | Schema validation |
+| `liza watch` | Alarm monitor |
+| `liza checkpoint` | Create checkpoint |
+| `liza analyze` | Circuit breaker analysis |
+| `liza agent <role> --agent-id x` | Agent supervisor |
+| `liza add-task --id X ...` | Add task to backlog |
+| `liza claim-task <task> <agent>` | Atomically claim task for agent |
+| `liza submit-for-review <task> <sha>` | Submit work for review |
+| `liza submit-verdict <task> <V> [reason]` | Record review verdict |
+| `liza release-claim <task> [--role R]` | Release claim on task or review |
+| `liza clear-stale-review-claims` | Clean up abandoned reviews |
+| `liza update-sprint-metrics` | Sprint statistics |
+| `liza wt-create <task> [--fresh]` | Create worktree |
+| `liza wt-merge <task>` | Merge (supervisor-executed after APPROVED) |
+| `liza wt-delete <task>` | Clean up worktree |
+| `liza pause` / `liza resume` | Pause/resume system |
+| `liza stop` / `liza start` | Stop/start system |
+| `liza status` | Show system status |
+| `liza get` | Get blackboard data |
+
+Locking is internal to the binary — no external `flock` wrapper needed.
 
 ### Project Runtime
 
@@ -245,4 +248,5 @@ Merge to main is human-triggered, not part of Liza flow.
 - [Roles](roles.md) — detailed role responsibilities
 - [State Machines](state-machines.md) — task and agent states
 - [Blackboard Schema](blackboard-schema.md) — state.yaml structure
+- [Supervision Model](supervision-model.md) — supervisor vs MCP tool responsibility
 - [Worktree Management](../protocols/worktree-management.md) — worktree lifecycle

@@ -1,0 +1,21 @@
+{{- define "wake_integration_failed" -}}
+Integration failed detected. Act as backstop if needed:
+
+1. Read INTEGRATION_FAILED tasks and check current status
+2. If task already CLAIMED (by a coder for integration fix):
+   - No action needed — coder is handling it
+   - Exit normally — this is the expected flow
+3. If task still INTEGRATION_FAILED (no coder claimed yet):
+   - Check test output logs to understand failure
+   - Determine if this is fixable:
+     * Merge conflict → task remains claimable, coders handle it
+     * Test failure in integration → task remains claimable
+     * Spec gap revealed → update specs, task remains claimable
+     * Task is fundamentally broken → supersede with revised task
+   - Only create new tasks or supersede if problem is structural
+4. If failure reveals spec gap — update specs in this session
+5. All state modifications must be executed before you exit.
+
+Note: Coders claim INTEGRATION_FAILED tasks directly (with integration_fix: true).
+You only intervene if no coder claims or if the task needs rescoping.
+{{- end -}}

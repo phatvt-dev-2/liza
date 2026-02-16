@@ -1,0 +1,895 @@
+package embedded
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestListEmbeddedFiles(t *testing.T) {
+	files, err := ListEmbeddedFiles()
+	if err != nil {
+		t.Fatalf("ListEmbeddedFiles failed: %v", err)
+	}
+
+	// Verify we have a reasonable number of files
+	if len(files) < 20 {
+		t.Errorf("Expected at least 20 files, got %d", len(files))
+	}
+
+	// Verify key files exist
+	requiredFiles := map[string]bool{
+		"contracts/CORE.md":                              false,
+		"contracts/PAIRING_MODE.md":                      false,
+		"contracts/MULTI_AGENT_MODE.md":                  false,
+		"contracts/AGENT_TOOLS.md":                       false,
+		"contracts/COLLABORATION_CONTINUITY.md":          false,
+		"skills/adr-backfill/SKILL.md":                   false,
+		"skills/code-review/SKILL.md":                    false,
+		"skills/debugging/SKILL.md":                      false,
+		"docs/for-agent-eyes/agent-runtime-reference.md": false,
+	}
+
+	for _, file := range files {
+		if _, ok := requiredFiles[file]; ok {
+			requiredFiles[file] = true
+		}
+	}
+
+	for required, found := range requiredFiles {
+		if !found {
+			t.Errorf("Required file not found in embedded files: %s", required)
+		}
+	}
+}
+
+func TestFrontmatter(t *testing.T) {
+	// Set test values
+	Version = "1.2.3"
+	GitCommit = "abc123"
+	BuildDate = "2026-02-03T10:00:00Z"
+
+	fm := frontmatter()
+
+	// Verify frontmatter contains all metadata
+	if !strings.Contains(fm, `liza_version: "1.2.3"`) {
+		t.Errorf("Frontmatter missing version: %s", fm)
+	}
+	if !strings.Contains(fm, `liza_git_commit: "abc123"`) {
+		t.Errorf("Frontmatter missing git commit: %s", fm)
+	}
+	if !strings.Contains(fm, `liza_build_date: "2026-02-03T10:00:00Z"`) {
+		t.Errorf("Frontmatter missing build date: %s", fm)
+	}
+
+	// Verify frontmatter is valid YAML
+	if !strings.HasPrefix(fm, "---\n") {
+		t.Errorf("Frontmatter should start with ---")
+	}
+	if !strings.Contains(fm, "\n---\n") {
+		t.Errorf("Frontmatter should end with ---")
+	}
+
+	// Reset to defaults
+	Version = "dev"
+	GitCommit = "unknown"
+	BuildDate = "unknown"
+}
+
+func TestPrependFrontmatter(t *testing.T) {
+	// Set test values
+	Version = "1.0.0"
+	GitCommit = "test123"
+	BuildDate = "2026-01-01T00:00:00Z"
+
+	originalContent := []byte("# Test Content\n\nThis is a test file.")
+	result := prependFrontmatter(originalContent)
+
+	resultStr := string(result)
+
+	// Verify frontmatter is prepended
+	if !strings.HasPrefix(resultStr, "---\n") {
+		t.Errorf("Result should start with frontmatter")
+	}
+
+	// Verify original content is preserved after frontmatter
+	if !strings.Contains(resultStr, "# Test Content") {
+		t.Errorf("Original content should be preserved")
+	}
+
+	// Verify frontmatter comes before content
+	frontmatterEnd := strings.Index(resultStr, "---\n\n")
+	contentStart := strings.Index(resultStr, "# Test Content")
+	if frontmatterEnd == -1 || contentStart == -1 || frontmatterEnd >= contentStart {
+		t.Errorf("Frontmatter should come before content")
+	}
+
+	// Reset to defaults
+	Version = "dev"
+	GitCommit = "unknown"
+	BuildDate = "unknown"
+}
+
+func TestWriteAllFiles(t *testing.T) {
+	// Create temporary directory for testing (acts as projectRoot)
+	tmpDir := t.TempDir()
+
+	// Write all files
+	err := WriteAllFiles(tmpDir)
+	if err != nil {
+		t.Fatalf("WriteAllFiles failed: %v", err)
+	}
+
+	// Verify directory structure exists
+	lizaDir := filepath.Join(tmpDir, ".liza")
+	expectedDirs := []string{
+		filepath.Join(lizaDir, "contracts"),
+		filepath.Join(lizaDir, "skills"),
+		filepath.Join(tmpDir, "docs"),
+		filepath.Join(tmpDir, "docs", "for-agent-eyes"),
+	}
+
+	for _, dir := range expectedDirs {
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			t.Errorf("Expected directory not created: %s", dir)
+		}
+	}
+
+	// Verify key files exist and have content
+	expectedFiles := []string{
+		filepath.Join(lizaDir, "contracts", "CORE.md"),
+		filepath.Join(lizaDir, "contracts", "PAIRING_MODE.md"),
+		filepath.Join(lizaDir, "skills", "adr-backfill", "SKILL.md"),
+		filepath.Join(lizaDir, "skills", "code-review", "SKILL.md"),
+		filepath.Join(tmpDir, "docs", "for-agent-eyes", "agent-runtime-reference.md"),
+	}
+
+	for _, file := range expectedFiles {
+		info, err := os.Stat(file)
+		if os.IsNotExist(err) {
+			t.Errorf("Expected file not created: %s", file)
+			continue
+		}
+		if info.Size() == 0 {
+			t.Errorf("File is empty: %s", file)
+		}
+
+		// Verify file permissions
+		if info.Mode().Perm() != 0644 {
+			t.Errorf("File %s has wrong permissions: got %o, want 0644", file, info.Mode().Perm())
+		}
+	}
+
+	// Verify contracts and skills directories are non-empty
+	contractFiles, _ := filepath.Glob(filepath.Join(lizaDir, "contracts", "*.md"))
+	if len(contractFiles) == 0 {
+		t.Error("Expected contract files, got none")
+	}
+
+	skillDirs, _ := filepath.Glob(filepath.Join(lizaDir, "skills", "*"))
+	skillDirCount := 0
+	for _, dir := range skillDirs {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			skillDirCount++
+		}
+	}
+	if skillDirCount == 0 {
+		t.Error("Expected skill directories, got none")
+	}
+}
+
+func TestWriteAllFiles_FrontmatterInAllFiles(t *testing.T) {
+	// Create temporary directory for testing (acts as projectRoot)
+	tmpDir := t.TempDir()
+
+	// Set test values for frontmatter
+	Version = "test-version"
+	GitCommit = "test-commit"
+	BuildDate = "test-date"
+
+	// Write all files
+	err := WriteAllFiles(tmpDir)
+	if err != nil {
+		t.Fatalf("WriteAllFiles failed: %v", err)
+	}
+
+	// Check a few sample files for frontmatter
+	lizaDir := filepath.Join(tmpDir, ".liza")
+	sampleFiles := []string{
+		filepath.Join(lizaDir, "contracts", "CORE.md"),
+		filepath.Join(lizaDir, "skills", "code-review", "SKILL.md"),
+		filepath.Join(tmpDir, "docs", "for-agent-eyes", "agent-runtime-reference.md"),
+	}
+
+	for _, file := range sampleFiles {
+		content, err := os.ReadFile(file)
+		if err != nil {
+			t.Errorf("Failed to read file %s: %v", file, err)
+			continue
+		}
+
+		contentStr := string(content)
+
+		// Verify frontmatter is present
+		if !strings.HasPrefix(contentStr, "---\n") {
+			t.Errorf("File %s missing frontmatter", file)
+		}
+
+		// Verify metadata fields are present
+		if !strings.Contains(contentStr, "liza_version:") {
+			t.Errorf("File %s missing liza_version field", file)
+		}
+		if !strings.Contains(contentStr, "liza_git_commit:") {
+			t.Errorf("File %s missing liza_git_commit field", file)
+		}
+		if !strings.Contains(contentStr, "liza_build_date:") {
+			t.Errorf("File %s missing liza_build_date field", file)
+		}
+
+		// Verify test values are present
+		if !strings.Contains(contentStr, "test-version") {
+			t.Errorf("File %s missing test version value", file)
+		}
+		if !strings.Contains(contentStr, "test-commit") {
+			t.Errorf("File %s missing test commit value", file)
+		}
+		if !strings.Contains(contentStr, "test-date") {
+			t.Errorf("File %s missing test date value", file)
+		}
+	}
+
+	// Reset to defaults
+	Version = "dev"
+	GitCommit = "unknown"
+	BuildDate = "unknown"
+}
+
+func TestWriteAllFiles_OverwritesExisting(t *testing.T) {
+	// Create temporary directory for testing (acts as projectRoot)
+	tmpDir := t.TempDir()
+
+	// Write files first time
+	err := WriteAllFiles(tmpDir)
+	if err != nil {
+		t.Fatalf("First WriteAllFiles failed: %v", err)
+	}
+
+	// Modify a file in .liza subdirectory
+	lizaDir := filepath.Join(tmpDir, ".liza")
+	testFile := filepath.Join(lizaDir, "contracts", "CORE.md")
+	originalContent, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("Failed to read test file: %v", err)
+	}
+
+	modifiedContent := []byte("MODIFIED CONTENT")
+	err = os.WriteFile(testFile, modifiedContent, 0644)
+	if err != nil {
+		t.Fatalf("Failed to modify test file: %v", err)
+	}
+
+	// Write files second time
+	err = WriteAllFiles(tmpDir)
+	if err != nil {
+		t.Fatalf("Second WriteAllFiles failed: %v", err)
+	}
+
+	// Verify file was overwritten (frontmatter should be present again)
+	currentContent, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("Failed to read test file after overwrite: %v", err)
+	}
+
+	currentStr := string(currentContent)
+
+	// Should have frontmatter again
+	if !strings.HasPrefix(currentStr, "---\n") {
+		t.Errorf("File was not overwritten - missing frontmatter")
+	}
+
+	// Should not have modified content
+	if strings.Contains(currentStr, "MODIFIED CONTENT") {
+		t.Errorf("File was not overwritten - still contains modified content")
+	}
+
+	// Should have original content (after frontmatter)
+	if !strings.Contains(currentStr, string(originalContent)) {
+		// Note: originalContent already has frontmatter from first write,
+		// so this might not be a perfect test. Let's check for some known content.
+		if !strings.Contains(currentStr, "liza_version:") {
+			t.Errorf("File does not contain expected content after overwrite")
+		}
+	}
+}
+
+// Helper function to mock stdin for tests
+func withMockStdin(t *testing.T, input string, testFunc func()) {
+	t.Helper()
+
+	// Save original stdin
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+
+	// Create pipe for mock input
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stdin = r
+
+	// Write mock input in goroutine
+	go func() {
+		defer w.Close()
+		_, err := w.Write([]byte(input + "\n"))
+		if err != nil {
+			t.Errorf("Failed to write to pipe: %v", err)
+		}
+	}()
+
+	// Run test
+	testFunc()
+}
+
+// Test unionStringArrays helper function
+func TestUnionStringArrays(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        []any
+		b        []any
+		expected []string
+	}{
+		{
+			name:     "empty arrays",
+			a:        []any{},
+			b:        []any{},
+			expected: []string{},
+		},
+		{
+			name:     "no duplicates",
+			a:        []any{"a", "b"},
+			b:        []any{"c", "d"},
+			expected: []string{"a", "b", "c", "d"},
+		},
+		{
+			name:     "with duplicates",
+			a:        []any{"a", "b", "c"},
+			b:        []any{"b", "c", "d"},
+			expected: []string{"a", "b", "c", "d"},
+		},
+		{
+			name:     "all duplicates",
+			a:        []any{"a", "b"},
+			b:        []any{"a", "b"},
+			expected: []string{"a", "b"},
+		},
+		{
+			name:     "first empty",
+			a:        []any{},
+			b:        []any{"a", "b"},
+			expected: []string{"a", "b"},
+		},
+		{
+			name:     "second empty",
+			a:        []any{"a", "b"},
+			b:        []any{},
+			expected: []string{"a", "b"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := unionStringArrays(tt.a, tt.b)
+
+			// Convert result to strings for comparison
+			resultStrs := make([]string, len(result))
+			for i, v := range result {
+				resultStrs[i] = v.(string)
+			}
+
+			// Check length
+			if len(resultStrs) != len(tt.expected) {
+				t.Errorf("Expected %d items, got %d", len(tt.expected), len(resultStrs))
+			}
+
+			// Check all expected items are present
+			resultMap := make(map[string]bool)
+			for _, s := range resultStrs {
+				resultMap[s] = true
+			}
+
+			for _, expected := range tt.expected {
+				if !resultMap[expected] {
+					t.Errorf("Expected item %q not found in result", expected)
+				}
+			}
+		})
+	}
+}
+
+// Test mergePermissions helper function
+func TestMergePermissions(t *testing.T) {
+	tests := []struct {
+		name     string
+		liza     map[string]any
+		existing map[string]any
+		wantMode string
+		wantLen  int // expected length of allow array
+	}{
+		{
+			name: "merge with different defaultMode",
+			liza: map[string]any{
+				"defaultMode": "acceptEdits",
+				"allow":       []any{"Bash(liza:*)"},
+			},
+			existing: map[string]any{
+				"defaultMode": "prompt",
+				"allow":       []any{"Read(**)"},
+			},
+			wantMode: "prompt", // existing takes precedence
+			wantLen:  2,        // union of allows
+		},
+		{
+			name: "merge with overlapping permissions",
+			liza: map[string]any{
+				"defaultMode": "acceptEdits",
+				"allow":       []any{"Bash(liza:*)", "Bash(git:*)"},
+			},
+			existing: map[string]any{
+				"defaultMode": "acceptEdits",
+				"allow":       []any{"Bash(git:*)", "Read(**)"},
+			},
+			wantMode: "acceptEdits",
+			wantLen:  3, // Bash(liza:*), Bash(git:*), Read(**) - deduplicated
+		},
+		{
+			name: "existing has no allow",
+			liza: map[string]any{
+				"defaultMode": "acceptEdits",
+				"allow":       []any{"Bash(liza:*)"},
+			},
+			existing: map[string]any{
+				"defaultMode": "prompt",
+			},
+			wantMode: "prompt",
+			wantLen:  1, // only liza allows
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergePermissions(tt.liza, tt.existing)
+
+			// Check defaultMode
+			if result["defaultMode"] != tt.wantMode {
+				t.Errorf("Expected defaultMode %q, got %q", tt.wantMode, result["defaultMode"])
+			}
+
+			// Check allow array length
+			allow, ok := result["allow"].([]any)
+			if !ok {
+				t.Fatalf("allow is not []any")
+			}
+			if len(allow) != tt.wantLen {
+				t.Errorf("Expected allow length %d, got %d", tt.wantLen, len(allow))
+			}
+		})
+	}
+}
+
+// Test mergeSettings helper function
+func TestMergeSettings(t *testing.T) {
+	tests := []struct {
+		name     string
+		liza     map[string]any
+		existing map[string]any
+		checks   func(t *testing.T, result map[string]any)
+	}{
+		{
+			name: "simple merge - existing overrides",
+			liza: map[string]any{
+				"foo": "liza-value",
+				"bar": "liza-bar",
+			},
+			existing: map[string]any{
+				"foo": "existing-value",
+			},
+			checks: func(t *testing.T, result map[string]any) {
+				if result["foo"] != "existing-value" {
+					t.Errorf("Expected foo=existing-value, got %v", result["foo"])
+				}
+				if result["bar"] != "liza-bar" {
+					t.Errorf("Expected bar=liza-bar, got %v", result["bar"])
+				}
+			},
+		},
+		{
+			name: "permissions are merged specially",
+			liza: map[string]any{
+				"permissions": map[string]any{
+					"defaultMode": "acceptEdits",
+					"allow":       []any{"Bash(liza:*)"},
+				},
+			},
+			existing: map[string]any{
+				"permissions": map[string]any{
+					"defaultMode": "prompt",
+					"allow":       []any{"Read(**)"},
+				},
+			},
+			checks: func(t *testing.T, result map[string]any) {
+				perms, ok := result["permissions"].(map[string]any)
+				if !ok {
+					t.Fatalf("permissions is not map[string]any")
+				}
+
+				// defaultMode should be from existing
+				if perms["defaultMode"] != "prompt" {
+					t.Errorf("Expected defaultMode=prompt, got %v", perms["defaultMode"])
+				}
+
+				// allow should be union
+				allow, ok := perms["allow"].([]any)
+				if !ok {
+					t.Fatalf("allow is not []any")
+				}
+				if len(allow) != 2 {
+					t.Errorf("Expected 2 permissions, got %d", len(allow))
+				}
+			},
+		},
+		{
+			name: "additionalDirectories preserved from existing",
+			liza: map[string]any{
+				"additionalDirectories": []any{},
+			},
+			existing: map[string]any{
+				"additionalDirectories": []any{"/custom/path"},
+			},
+			checks: func(t *testing.T, result map[string]any) {
+				dirs, ok := result["additionalDirectories"].([]any)
+				if !ok {
+					t.Fatalf("additionalDirectories is not []any")
+				}
+				if len(dirs) != 1 || dirs[0] != "/custom/path" {
+					t.Errorf("additionalDirectories not preserved from existing")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeSettings(tt.liza, tt.existing)
+			tt.checks(t, result)
+		})
+	}
+}
+
+// Test WriteClaudeSettings creates new file
+func TestWriteClaudeSettings_NewFile(t *testing.T) {
+	// Set test metadata
+	Version = "1.0.0"
+	GitCommit = "test123"
+	BuildDate = "2026-01-01T00:00:00Z"
+	defer func() {
+		Version = "dev"
+		GitCommit = "unknown"
+		BuildDate = "unknown"
+	}()
+
+	tmpDir := t.TempDir()
+
+	err := WriteClaudeSettings(tmpDir)
+	if err != nil {
+		t.Fatalf("WriteClaudeSettings failed: %v", err)
+	}
+
+	// Verify .claude directory was created
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	if _, err := os.Stat(claudeDir); os.IsNotExist(err) {
+		t.Errorf(".claude directory was not created")
+	}
+
+	// Verify settings.json was created
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	info, err := os.Stat(settingsPath)
+	if os.IsNotExist(err) {
+		t.Fatalf("settings.json was not created")
+	}
+
+	// Verify file permissions
+	if info.Mode().Perm() != 0644 {
+		t.Errorf("File has wrong permissions: got %o, want 0644", info.Mode().Perm())
+	}
+
+	// Read and parse JSON
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("Failed to read settings.json: %v", err)
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal(content, &settings); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	// Verify metadata in _comment field
+	comment, ok := settings["_comment"].([]any)
+	if !ok {
+		t.Fatalf("_comment is not an array")
+	}
+
+	commentStr := ""
+	for _, line := range comment {
+		commentStr += line.(string) + "\n"
+	}
+
+	if !strings.Contains(commentStr, "liza_version: 1.0.0") {
+		t.Errorf("Metadata missing version in _comment")
+	}
+	if !strings.Contains(commentStr, "liza_git_commit: test123") {
+		t.Errorf("Metadata missing git commit in _comment")
+	}
+	if !strings.Contains(commentStr, "liza_build_date: 2026-01-01T00:00:00Z") {
+		t.Errorf("Metadata missing build date in _comment")
+	}
+
+	// Verify permissions exist
+	perms, ok := settings["permissions"].(map[string]any)
+	if !ok {
+		t.Fatalf("permissions field missing or invalid")
+	}
+
+	allow, ok := perms["allow"].([]any)
+	if !ok {
+		t.Fatalf("permissions.allow missing or invalid")
+	}
+
+	// Verify allow array is not empty
+	if len(allow) == 0 {
+		t.Errorf("Expected non-empty permissions.allow array")
+	}
+
+	// Verify liza MCP tools are in allow array (explicit tool format)
+	foundLizaMCP := false
+	for _, perm := range allow {
+		permStr, ok := perm.(string)
+		if !ok {
+			continue
+		}
+		// Check for explicit tool format: mcp__liza__liza_add_task
+		if strings.HasPrefix(permStr, "mcp__liza__") {
+			foundLizaMCP = true
+			break
+		}
+	}
+	if !foundLizaMCP {
+		t.Errorf("Expected liza MCP tools in allow array (e.g., mcp__liza__liza_add_task)")
+	}
+}
+
+// Test WriteClaudeSettings with existing file - merge accepted
+func TestWriteClaudeSettings_MergeAccepted(t *testing.T) {
+	tmpDir := t.TempDir()
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+
+	// Create .claude directory and existing settings file
+	if err := os.MkdirAll(claudeDir, 0755); err != nil {
+		t.Fatalf("Failed to create .claude dir: %v", err)
+	}
+
+	existingSettings := map[string]any{
+		"_comment": []any{
+			"Existing settings",
+		},
+		"permissions": map[string]any{
+			"defaultMode": "prompt",
+			"allow": []any{
+				"Read(**)",
+				"Bash(git:*)",
+			},
+		},
+		"additionalDirectories": []any{"/custom/path"},
+	}
+
+	existingJSON, _ := json.MarshalIndent(existingSettings, "", "  ")
+	if err := os.WriteFile(settingsPath, existingJSON, 0644); err != nil {
+		t.Fatalf("Failed to write existing file: %v", err)
+	}
+
+	// Mock stdin to accept merge
+	withMockStdin(t, "y", func() {
+		// Capture stdout to verify prompt
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := WriteClaudeSettings(tmpDir)
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Read captured output
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		if err != nil {
+			t.Fatalf("WriteClaudeSettings failed: %v", err)
+		}
+
+		// Verify prompt was shown
+		if !strings.Contains(output, "merge") {
+			t.Errorf("Expected merge prompt in output, got: %s", output)
+		}
+	})
+
+	// Read and verify merged file
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("Failed to read merged file: %v", err)
+	}
+
+	var merged map[string]any
+	if err := json.Unmarshal(content, &merged); err != nil {
+		t.Fatalf("Failed to parse merged JSON: %v", err)
+	}
+
+	// Verify existing defaultMode is preserved
+	perms, ok := merged["permissions"].(map[string]any)
+	if !ok {
+		t.Fatalf("permissions missing")
+	}
+	if perms["defaultMode"] != "prompt" {
+		t.Errorf("Expected defaultMode=prompt (from existing), got %v", perms["defaultMode"])
+	}
+
+	// Verify permissions are unioned
+	allow, ok := perms["allow"].([]any)
+	if !ok {
+		t.Fatalf("allow missing")
+	}
+
+	allowMap := make(map[string]bool)
+	for _, perm := range allow {
+		allowMap[perm.(string)] = true
+	}
+
+	// Should have permissions from both existing and embedded
+	expectedPerms := []string{"Read(**)", "Bash(git:*)"}
+	for _, expected := range expectedPerms {
+		if !allowMap[expected] {
+			t.Errorf("Expected permission %q not found after merge", expected)
+		}
+	}
+
+	// Verify additionalDirectories preserved
+	dirs, ok := merged["additionalDirectories"].([]any)
+	if !ok || len(dirs) != 1 || dirs[0] != "/custom/path" {
+		t.Errorf("additionalDirectories not preserved from existing")
+	}
+
+	// Verify metadata was added to _comment
+	comment, ok := merged["_comment"].([]any)
+	if !ok {
+		t.Fatalf("_comment missing")
+	}
+
+	commentStr := ""
+	for _, line := range comment {
+		commentStr += line.(string) + "\n"
+	}
+
+	if !strings.Contains(commentStr, "Existing settings") {
+		t.Errorf("Original comment not preserved")
+	}
+	if !strings.Contains(commentStr, "liza_version:") {
+		t.Errorf("Metadata not added to comment")
+	}
+}
+
+// Test WriteClaudeSettings with existing file - merge declined
+func TestWriteClaudeSettings_MergeDeclined(t *testing.T) {
+	tmpDir := t.TempDir()
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+
+	// Create .claude directory and existing settings file
+	if err := os.MkdirAll(claudeDir, 0755); err != nil {
+		t.Fatalf("Failed to create .claude dir: %v", err)
+	}
+
+	existingSettings := map[string]any{
+		"_comment": []any{
+			"Existing settings - do not change",
+		},
+		"permissions": map[string]any{
+			"defaultMode": "prompt",
+			"allow": []any{
+				"Read(**)",
+			},
+		},
+	}
+
+	existingJSON, _ := json.MarshalIndent(existingSettings, "", "  ")
+	originalContent := string(existingJSON)
+
+	if err := os.WriteFile(settingsPath, existingJSON, 0644); err != nil {
+		t.Fatalf("Failed to write existing file: %v", err)
+	}
+
+	// Mock stdin to decline merge
+	withMockStdin(t, "n", func() {
+		err := WriteClaudeSettings(tmpDir)
+		if err != nil {
+			t.Fatalf("WriteClaudeSettings failed: %v", err)
+		}
+	})
+
+	// Read file and verify it's unchanged
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+
+	if string(content) != originalContent {
+		t.Errorf("File was modified despite declining merge")
+	}
+
+	// Verify it still has original content (not merged)
+	var settings map[string]any
+	if err := json.Unmarshal(content, &settings); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	comment, ok := settings["_comment"].([]any)
+	if !ok {
+		t.Fatalf("_comment missing")
+	}
+
+	// Should NOT have metadata (merge was declined)
+	commentStr := ""
+	for _, line := range comment {
+		commentStr += line.(string) + "\n"
+	}
+
+	if strings.Contains(commentStr, "liza_version:") {
+		t.Errorf("Metadata was added despite declining merge")
+	}
+	if !strings.Contains(commentStr, "do not change") {
+		t.Errorf("Original comment was modified")
+	}
+}
+
+// Test WriteClaudeSettings JSON validity
+func TestWriteClaudeSettings_JSONValidity(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	err := WriteClaudeSettings(tmpDir)
+	if err != nil {
+		t.Fatalf("WriteClaudeSettings failed: %v", err)
+	}
+
+	settingsPath := filepath.Join(tmpDir, ".claude", "settings.json")
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+
+	// Verify JSON is valid and properly formatted
+	var settings map[string]any
+	if err := json.Unmarshal(content, &settings); err != nil {
+		t.Fatalf("Generated JSON is invalid: %v", err)
+	}
+
+	// Verify JSON can be re-marshaled (no special characters that break JSON)
+	_, err = json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		t.Errorf("Generated JSON cannot be re-marshaled: %v", err)
+	}
+}

@@ -105,7 +105,7 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 | `done_when` | Falsifiable statement describing observable outcome. Must be something that could be proven wrong. | `"GET /users returns 200 with JSON array containing user objects"` |
 
 **`spec_ref` Validation:**
-- Required: Field must be present (enforced by `liza-validate.sh`)
+- Required: Field must be present (enforced by `liza validate`)
 - Required: File must exist (enforced by default; skip with `SKIP_SPEC_FILE_CHECK=true`)
 - Anchors (`#section`) are not validated (human responsibility to maintain)
 - Missing file is an ERROR, not warning — fail fast prevents cascade of blocked tasks at runtime
@@ -194,7 +194,7 @@ Include a one-sentence root cause in the `hypothesis_exhaustion` log entry.
 - Cannot claim under-specified work (triggers BLOCKED, not guessing)
 
 **Task Assignment:**
-The supervisor (`liza-agent.sh`) claims tasks on behalf of coders before spawning the agent. This avoids permission prompts in non-interactive mode. The coder receives its assigned task in the bootstrap prompt and should NOT attempt to claim tasks directly.
+The supervisor (`liza agent`) claims tasks on behalf of coders before spawning the agent. This avoids permission prompts in non-interactive mode. The coder receives its assigned task in the bootstrap prompt and should NOT attempt to claim tasks directly.
 
 If multiple coders contend for tasks, the supervisor handles backoff:
 1. Log `claim_failed` to activity log
@@ -278,7 +278,7 @@ Coder MUST log to anomalies section:
 
 ### Review Assignment
 
-The supervisor (`liza-agent.sh`) assigns review tasks to Code Reviewers before spawning the agent, similar to Coder task assignment. This avoids permission prompts in non-interactive mode.
+The supervisor (`liza agent`) assigns review tasks to Code Reviewers before spawning the agent, similar to Coder task assignment. This avoids permission prompts in non-interactive mode.
 
 The supervisor sets:
 - `reviewing_by` field on the task
@@ -304,7 +304,7 @@ If 2 different Code Reviewers fail to issue a verdict on the same task (exit wit
 2. Set task BLOCKED with `blocked_reason: "review_exhaustion: 2 reviewers unable to complete review"`
 3. Planner evaluates: task spec unclear? done_when untestable? missing context?
 
-**"Failed to issue verdict" means:** Agent exited (crash, timeout, loop detection) without calling `liza-submit-verdict.sh`.
+**"Failed to issue verdict" means:** Agent exited (crash, timeout, loop detection) without calling `liza submit-verdict`.
 
 **Tracking:** Supervisor tracks review attempts via task history events. Two `review_started` events without corresponding `approved` or `rejected` event triggers this protocol.
 
@@ -404,7 +404,7 @@ Prior Feedback Status:  # Required for iteration 2+
 | Planner | Neither (no code changes) |
 | Supervisor | Integration branch (executes merge after APPROVED) |
 
-**Merge Execution:** The supervisor (`liza-agent.sh`) executes `wt-merge.sh` after Code Reviewer sets status to APPROVED. This keeps agents permission-free in non-interactive mode while preserving the Code Reviewer approval gate.
+**Merge Execution:** The supervisor (`liza agent`) executes `liza wt-merge` after Code Reviewer sets status to APPROVED. This keeps agents permission-free in non-interactive mode while preserving the Code Reviewer approval gate.
 
 ## Agent Identity Protocol
 
@@ -414,7 +414,7 @@ Agents do not self-identify. Identity is **assigned by the supervisor** and pass
 
 ```bash
 # Supervisor spawns agent with explicit identity
-LIZA_AGENT_ID=coder-1 liza-agent.sh coder
+liza agent coder --agent-id coder-1
 ```
 
 | Env Variable | Required | Format | Example |

@@ -1,0 +1,823 @@
+package commands
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/log"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+func TestCheckExpiredLeases(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		state      *models.State
+		wantAlerts int
+		validate   func(*testing.T, []alert)
+	}{
+		{
+			name: "expired coder lease",
+			state: &models.State{
+				Tasks: []models.Task{
+					func() models.Task {
+						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+						return task
+					}(),
+				},
+				Agents: map[string]models.Agent{
+					"coder-1": {
+						Status:      models.AgentStatusWorking,
+						CurrentTask: testhelpers.StringPtr("task-1"),
+						// Expired lease (past grace period)
+						LeaseExpires: testhelpers.TimePtr(now.Add(-3 * time.Minute)),
+					},
+				},
+			},
+			wantAlerts: 1,
+			validate: func(t *testing.T, alerts []alert) {
+				if alerts[0].Category != "LEASE EXPIRED" {
+					t.Errorf("Category = %q, want %q", alerts[0].Category, "LEASE EXPIRED")
+				}
+				if alerts[0].Level != alertLevelWarning {
+					t.Errorf("Level = %q, want %q", alerts[0].Level, alertLevelWarning)
+				}
+			},
+		},
+		{
+			name: "expired reviewer lease",
+			state: &models.State{
+				Tasks: []models.Task{
+					func() models.Task {
+						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+						reviewer := "reviewer-1"
+						task.ReviewingBy = &reviewer
+						// Expired lease (past grace period)
+						expiredTime := now.Add(-3 * time.Minute)
+						task.ReviewLeaseExpires = &expiredTime
+						return task
+					}(),
+				},
+				Agents: map[string]models.Agent{},
+			},
+			wantAlerts: 1,
+			validate: func(t *testing.T, alerts []alert) {
+				if alerts[0].Category != "REVIEW LEASE EXPIRED" {
+					t.Errorf("Category = %q, want %q", alerts[0].Category, "REVIEW LEASE EXPIRED")
+				}
+			},
+		},
+		{
+			name: "lease within grace period",
+			state: &models.State{
+				Tasks: []models.Task{
+					func() models.Task {
+						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+						return task
+					}(),
+				},
+				Agents: map[string]models.Agent{
+					"coder-1": {
+						Status:      models.AgentStatusWorking,
+						CurrentTask: testhelpers.StringPtr("task-1"),
+						// Expired but within grace period
+						LeaseExpires: testhelpers.TimePtr(now.Add(-1 * time.Minute)),
+					},
+				},
+			},
+			wantAlerts: 0,
+		},
+		{
+			name: "valid lease",
+			state: &models.State{
+				Tasks: []models.Task{
+					func() models.Task {
+						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+						return task
+					}(),
+				},
+				Agents: map[string]models.Agent{
+					"coder-1": {
+						Status:       models.AgentStatusWorking,
+						CurrentTask:  testhelpers.StringPtr("task-1"),
+						LeaseExpires: testhelpers.TimePtr(now.Add(30 * time.Minute)),
+					},
+				},
+			},
+			wantAlerts: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			alerts := checkExpiredLeases(tt.state)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+
+			if tt.validate != nil && len(alerts) > 0 {
+				tt.validate(t, alerts)
+			}
+		})
+	}
+}
+
+func TestCheckBlockedTasks(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		tasks      []models.Task
+		cache      map[string]time.Time
+		wantAlerts int
+		wantCached bool
+	}{
+		{
+			name: "blocked task - first time",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+					return task
+				}(),
+			},
+			cache:      make(map[string]time.Time),
+			wantAlerts: 1,
+			wantCached: true,
+		},
+		{
+			name: "blocked task - already seen",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+					return task
+				}(),
+			},
+			cache: map[string]time.Time{
+				"blocked:task-1": now.Add(-5 * time.Minute),
+			},
+			wantAlerts: 0,
+			wantCached: true,
+		},
+		{
+			name: "no blocked tasks",
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+			},
+			cache:      make(map[string]time.Time),
+			wantAlerts: 0,
+			wantCached: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{Tasks: tt.tasks}
+			alerts := checkBlockedTasks(state, tt.cache)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+
+			if tt.wantCached {
+				if _, cached := tt.cache["blocked:task-1"]; !cached {
+					t.Error("Expected task to be cached but it wasn't")
+				}
+			}
+		})
+	}
+}
+
+func TestCheckOrphanedRejected(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		tasks      []models.Task
+		agents     map[string]models.Agent
+		cache      map[string]time.Time
+		wantAlerts int
+	}{
+		{
+			name: "orphaned rejected - agent missing",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					return task
+				}(),
+			},
+			agents: map[string]models.Agent{},
+			cache: map[string]time.Time{
+				// Already past grace period
+				"orphaned:task-1": now.Add(-1 * time.Minute),
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "orphaned rejected - agent idle",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					return task
+				}(),
+			},
+			agents: map[string]models.Agent{
+				"coder-1": {
+					Status: models.AgentStatusIdle,
+				},
+			},
+			cache: map[string]time.Time{
+				"orphaned:task-1": now.Add(-1 * time.Minute),
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "not orphaned - agent working",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					return task
+				}(),
+			},
+			agents: map[string]models.Agent{
+				"coder-1": {
+					Status: models.AgentStatusWorking,
+				},
+			},
+			cache:      make(map[string]time.Time),
+			wantAlerts: 0,
+		},
+		{
+			name: "within grace period",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					return task
+				}(),
+			},
+			agents: map[string]models.Agent{},
+			cache: map[string]time.Time{
+				// Just added to cache (within grace period)
+				"orphaned:task-1": now.Add(-5 * time.Second),
+			},
+			wantAlerts: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{
+				Tasks:  tt.tasks,
+				Agents: tt.agents,
+			}
+			alerts := checkOrphanedRejected(state, tt.cache)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+		})
+	}
+}
+
+func TestCheckReviewLoops(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		tasks      []models.Task
+		wantAlerts int
+	}{
+		{
+			name: "at review cycle limit",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					task.ReviewCyclesCurrent = 5
+					return task
+				}(),
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "above review cycle limit",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					task.ReviewCyclesCurrent = 6
+					return task
+				}(),
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "below limit",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					task.ReviewCyclesCurrent = 3
+					return task
+				}(),
+			},
+			wantAlerts: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{Tasks: tt.tasks}
+			alerts := checkReviewLoops(state)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+		})
+	}
+}
+
+func TestCheckIntegrationFailures(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		tasks      []models.Task
+		wantAlerts int
+	}{
+		{
+			name: "integration failed task",
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "no integration failures",
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+			},
+			wantAlerts: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{Tasks: tt.tasks}
+			alerts := checkIntegrationFailures(state)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+		})
+	}
+}
+
+func TestCheckHypothesisExhaustion(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		tasks      []models.Task
+		wantAlerts int
+	}{
+		{
+			name: "two failed coders",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+					task.FailedBy = []string{"coder-1", "coder-2"}
+					return task
+				}(),
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "one failed coder",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+					task.FailedBy = []string{"coder-1"}
+					return task
+				}(),
+			},
+			wantAlerts: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{Tasks: tt.tasks}
+			alerts := checkHypothesisExhaustion(state)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+		})
+	}
+}
+
+func TestCheckReassigned(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		tasks      []models.Task
+		cache      map[string]time.Time
+		wantAlerts int
+	}{
+		{
+			name: "task reassigned to different coder",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+					assignee := "coder-2"
+					task.AssignedTo = &assignee
+					// Add history showing first claimer was different
+					firstClaimer := "coder-1"
+					task.History = []models.TaskHistoryEntry{
+						{
+							Time:  now.Add(-1 * time.Hour),
+							Event: "claimed",
+							Agent: &firstClaimer,
+						},
+					}
+					return task
+				}(),
+			},
+			cache:      make(map[string]time.Time),
+			wantAlerts: 1,
+		},
+		{
+			name: "same coder - no reassignment",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+					assignee := "coder-1"
+					task.AssignedTo = &assignee
+					task.History = []models.TaskHistoryEntry{
+						{
+							Time:  now.Add(-1 * time.Hour),
+							Event: "claimed",
+							Agent: &assignee,
+						},
+					}
+					return task
+				}(),
+			},
+			cache:      make(map[string]time.Time),
+			wantAlerts: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{Tasks: tt.tasks}
+			alerts := checkReassigned(state, tt.cache)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+		})
+	}
+}
+
+func TestCheckApproachingLimits(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		tasks      []models.Task
+		wantAlerts int
+	}{
+		{
+			name: "approaching iteration limit",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+					task.Iteration = 8
+					return task
+				}(),
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "at iteration cliff",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+					task.Iteration = 10
+					return task
+				}(),
+			},
+			wantAlerts: 0, // Don't warn at cliff, only approaching
+		},
+		{
+			name: "approaching review cycle limit",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					task.ReviewCyclesCurrent = 3
+					return task
+				}(),
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "one failure + high review cycles",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+					task.FailedBy = []string{"coder-1"}
+					task.ReviewCyclesCurrent = 3
+					return task
+				}(),
+			},
+			wantAlerts: 2, // Both review cycle and failure+cycle warnings fire
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{Tasks: tt.tasks}
+			alerts := checkApproachingLimits(state)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+		})
+	}
+}
+
+func TestCheckStalled(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		setupLog   func(string) error
+		wantAlerts int
+	}{
+		{
+			name: "stalled - no activity for 31 minutes",
+			setupLog: func(logPath string) error {
+				logger := log.New(logPath)
+				return logger.Append(log.Entry{
+					Timestamp: now.Add(-31 * time.Minute),
+					Agent:     "test-agent",
+					Action:    "test_action",
+					Detail:    "test",
+				})
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "not stalled - recent activity",
+			setupLog: func(logPath string) error {
+				logger := log.New(logPath)
+				return logger.Append(log.Entry{
+					Timestamp: now.Add(-5 * time.Minute),
+					Agent:     "test-agent",
+					Action:    "test_action",
+					Detail:    "test",
+				})
+			},
+			wantAlerts: 0,
+		},
+		{
+			name: "no log file",
+			setupLog: func(logPath string) error {
+				return nil // Don't create log
+			},
+			wantAlerts: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			logPath := filepath.Join(tmpDir, "log.yaml")
+
+			if err := tt.setupLog(logPath); err != nil {
+				t.Fatalf("Failed to setup log: %v", err)
+			}
+
+			cache := make(map[string]time.Time)
+			alerts := checkStalled(logPath, cache)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+		})
+	}
+}
+
+func TestCheckStalledThrottling(t *testing.T) {
+	now := time.Now().UTC()
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "log.yaml")
+
+	// Setup log with stale timestamp (31 minutes old)
+	logger := log.New(logPath)
+	if err := logger.Append(log.Entry{
+		Timestamp: now.Add(-31 * time.Minute),
+		Agent:     "test-agent",
+		Action:    "test_action",
+		Detail:    "test",
+	}); err != nil {
+		t.Fatalf("Failed to setup log: %v", err)
+	}
+
+	cache := make(map[string]time.Time)
+
+	// First call - should generate alert
+	alerts := checkStalled(logPath, cache)
+	if len(alerts) != 1 {
+		t.Errorf("First call: len(alerts) = %d, want 1", len(alerts))
+	}
+
+	// Second call immediately after - should be throttled
+	alerts = checkStalled(logPath, cache)
+	if len(alerts) != 0 {
+		t.Errorf("Second call (throttled): len(alerts) = %d, want 0", len(alerts))
+	}
+
+	// Simulate 5 minutes passing by updating cache to 5+ minutes ago
+	cache["stalled:alert"] = now.Add(-6 * time.Minute)
+
+	// Third call after 5 minutes - should generate alert again
+	alerts = checkStalled(logPath, cache)
+	if len(alerts) != 1 {
+		t.Errorf("Third call (after 5 min): len(alerts) = %d, want 1", len(alerts))
+	}
+}
+
+func TestCheckStaleDrafts(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		tasks      []models.Task
+		wantAlerts int
+	}{
+		{
+			name: "stale draft - 31 minutes old",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraft, now)
+					task.Created = now.Add(-31 * time.Minute)
+					return task
+				}(),
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "fresh draft",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraft, now)
+					task.Created = now.Add(-5 * time.Minute)
+					return task
+				}(),
+			},
+			wantAlerts: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{Tasks: tt.tasks}
+			alerts := checkStaleDrafts(state)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+		})
+	}
+}
+
+func TestCheckImmediateDiscoveries(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		discovered []models.Discovery
+		wantAlerts int
+	}{
+		{
+			name: "immediate discovery not converted",
+			discovered: []models.Discovery{
+				{
+					ID:          "disc-1",
+					Description: "Critical bug found",
+					Urgency:     "immediate",
+					Created:     now,
+				},
+			},
+			wantAlerts: 1,
+		},
+		{
+			name: "immediate discovery already converted",
+			discovered: []models.Discovery{
+				{
+					ID:              "disc-1",
+					Description:     "Critical bug found",
+					Urgency:         "immediate",
+					Created:         now,
+					ConvertedToTask: testhelpers.StringPtr("task-1"),
+				},
+			},
+			wantAlerts: 0,
+		},
+		{
+			name: "deferred urgency discovery",
+			discovered: []models.Discovery{
+				{
+					ID:          "disc-1",
+					Description: "Minor improvement",
+					Urgency:     "deferred",
+					Created:     now,
+				},
+			},
+			wantAlerts: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{Discovered: tt.discovered}
+			alerts := checkImmediateDiscoveries(state)
+
+			if len(alerts) != tt.wantAlerts {
+				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+		})
+	}
+}
+
+func TestWatchCommand(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name      string
+		setupFunc func(*testing.T, string) *models.State
+		runTime   time.Duration
+		wantErr   bool
+	}{
+		{
+			name: "basic watch - single check cycle",
+			setupFunc: func(t *testing.T, tmpDir string) *models.State {
+				state := testhelpers.CreateValidState()
+				// Add a task that will trigger an alert
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
+				}
+				return state
+			},
+			runTime: 100 * time.Millisecond,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			alertsLog := paths.New(tmpDir).AlertsLogPath()
+
+			state := tt.setupFunc(t, tmpDir)
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			// Create context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), tt.runTime)
+			defer cancel()
+
+			config := WatchConfig{
+				ProjectRoot:   tmpDir,
+				CheckInterval: 50 * time.Millisecond,
+				AlertsLog:     alertsLog,
+				StateCache:    make(map[string]time.Time),
+			}
+
+			err := WatchCommand(ctx, config)
+
+			// Should get context.DeadlineExceeded or context.Canceled
+			if tt.wantErr && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.wantErr && err != nil && err != context.DeadlineExceeded && err != context.Canceled {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			// Check that alerts were written
+			if _, err := os.Stat(alertsLog); err == nil {
+				data, _ := os.ReadFile(alertsLog)
+				if len(data) == 0 {
+					t.Error("Expected alerts to be written but file is empty")
+				}
+			}
+		})
+	}
+}

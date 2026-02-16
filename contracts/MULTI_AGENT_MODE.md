@@ -159,14 +159,11 @@ The blackboard (`state.yaml`) is the coordination mechanism.
 
 **Read Before Act:** Always read current state before any action.
 
-**Atomic Updates:** Use `flock` for concurrent access:
-```bash
-flock -x "$STATE.lock" yq -i '...' "$STATE"
-```
+**Atomic Updates:** Use the `liza` CLI for concurrent access — locking is handled internally by the binary.
 
 **History is Immutable:** Never delete history entries. Append only.
 
-**State Validation:** Run `liza-validate.sh` after updates.
+**State Validation:** Run `liza validate` after updates.
 
 See [specs/architecture/blackboard-schema.md](~/.liza/specs/architecture/blackboard-schema.md) for schema.
 
@@ -231,7 +228,7 @@ blocked_questions:
 At ~90% context (heuristic: many tool calls, re-reading files, difficulty holding state):
 1. STOP at next safe point
 2. Commit pending changes
-3. Run `liza-handoff.sh <task-id> "<summary>" "<next_action>"` (sets handoff_pending, agent status HANDOFF)
+3. Run `liza handoff <task-id> "<summary>" "<next_action>"` (sets handoff_pending, agent status HANDOFF) *(Note: `liza handoff` command pending Go implementation — data model exists)*
 4. Exit with code 42
 
 Supervisor spawns replacement Coder with handoff context from task history.
@@ -332,14 +329,16 @@ anomalies:
 
 Humans intervene via files, not conversation.
 
-| File | Effect |
-|------|--------|
-| `.liza/PAUSE` | All agents pause at next check |
-| `.liza/ABORT` | All agents exit gracefully |
-| `.liza/CHECKPOINT` | Halt and generate summary |
+| Command | Effect |
+|---------|--------|
+| `liza pause` | All agents pause at next check (`config.mode: PAUSED`) |
+| `liza stop` | All agents exit gracefully (`config.mode: STOPPED`) |
+| `liza checkpoint` | Halt and generate summary (`sprint.status: CHECKPOINT`) |
+| `liza resume` | Resume from PAUSED state |
+| `liza start` | Resume from STOPPED state |
 | `human_notes` in state.yaml | Planner reads on wake |
 
-**Kill Switch Priority:** ABORT > PAUSE > normal operation
+**Kill Switch Priority:** STOPPED > PAUSED > normal operation
 
 ---
 

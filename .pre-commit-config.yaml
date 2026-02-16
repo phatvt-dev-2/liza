@@ -55,11 +55,51 @@ repos:
     hooks:
       - id: jscpd  # a useful one to counter the tendency of coding agents to duplicate code
         name: jscpd (duplicate code detection)
-        entry: npx jscpd . --min-lines 10 --min-tokens 50 --threshold 5 --noSymlinks --ignore "**/tests/**,**/.venv/**,**/_archive/**,**/.idea/**"
+        entry: npx jscpd . --min-lines 10 --min-tokens 50 --threshold 5 --noSymlinks --ignore "**/tests/**,**/.venv/**,**/_archive/**,**/.idea/**,**/internal/embedded/**"
         language: system
-        files: \.py$  # trigger when Python files are staged
+        files: \.(py|go)$  # trigger when Python or Go files are staged
         pass_filenames: false  # but scan full directory (dupes are cross-file)
         stages: [pre-commit, pre-push]
+
+      - id: go-fmt
+        name: go fmt (formatting)
+        entry: /usr/local/go/bin/gofmt -w -l
+        language: system
+        files: \.go$
+
+      - id: goimports
+        name: goimports (format + imports)
+        entry: bash -c 'export PATH="/usr/local/go/bin:$PATH"; export GOPATH="${HOME}/.cache/go" GOMODCACHE="${HOME}/.cache/go/pkg/mod" GOCACHE="${HOME}/.cache/go/build"; mkdir -p "$GOPATH" "$GOMODCACHE" "$GOCACHE"; go run golang.org/x/tools/cmd/goimports@latest -w "$@"' --
+        language: system
+        files: \.go$
+
+      - id: go-vet
+        name: go vet (static analysis)
+        entry: bash -c 'export PATH="/usr/local/go/bin:$PATH" && make sync-embedded && go vet ./...'
+        language: system
+        files: \.go$
+        pass_filenames: false
+
+      - id: staticcheck
+        name: staticcheck (advanced static analysis)
+        entry: bash -c 'export PATH="/usr/local/go/bin:$PATH"; export GOPATH="${HOME}/.cache/go" GOMODCACHE="${HOME}/.cache/go/pkg/mod" GOCACHE="${HOME}/.cache/go/build"; mkdir -p "$GOPATH" "$GOMODCACHE" "$GOCACHE"; make sync-embedded && go run honnef.co/go/tools/cmd/staticcheck@latest ./...'
+        language: system
+        files: \.go$
+        pass_filenames: false
+
+      - id: check-testhelpers
+        name: check testhelpers not in production code
+        entry: make check-testhelpers
+        language: system
+        files: \.go$
+        pass_filenames: false
+
+      - id: go-mod-tidy
+        name: go mod tidy (dependency cleanup)
+        entry: bash -c 'export PATH="/usr/local/go/bin:$PATH"; export GOPATH="${HOME}/.cache/go" GOMODCACHE="${HOME}/.cache/go/pkg/mod" GOCACHE="${HOME}/.cache/go/build"; mkdir -p "$GOPATH" "$GOMODCACHE" "$GOCACHE"; make sync-embedded && go mod tidy'
+        language: system
+        files: ^(go\.mod|go\.sum|.*\.go)$
+        pass_filenames: false
 
   - repo: meta
     hooks:

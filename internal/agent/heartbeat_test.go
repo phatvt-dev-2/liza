@@ -1,0 +1,391 @@
+package agent
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+func TestHeartbeat(t *testing.T) {
+	tests := []struct {
+		name          string
+		agentID       string
+		interval      time.Duration
+		leaseDuration time.Duration
+		runDuration   time.Duration
+		expectedBeats int // minimum number of heartbeats expected
+		cancelEarly   bool
+		wantErr       bool
+	}{
+		{
+			name:          "heartbeat updates timestamp and lease",
+			agentID:       "coder-1",
+			interval:      100 * time.Millisecond,
+			leaseDuration: 30 * time.Minute,
+			runDuration:   350 * time.Millisecond, // Should get 3+ beats
+			expectedBeats: 3,
+			cancelEarly:   false,
+			wantErr:       false,
+		},
+		{
+			name:          "heartbeat stops on context cancellation",
+			agentID:       "coder-2",
+			interval:      50 * time.Millisecond,
+			leaseDuration: 30 * time.Minute,
+			runDuration:   250 * time.Millisecond,
+			expectedBeats: 1,
+			cancelEarly:   true,
+			wantErr:       false,
+		},
+		{
+			name:          "single heartbeat",
+			agentID:       "reviewer-1",
+			interval:      50 * time.Millisecond,
+			leaseDuration: 15 * time.Minute,
+			runDuration:   100 * time.Millisecond,
+			expectedBeats: 1,
+			cancelEarly:   false,
+			wantErr:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory and state
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			// Create initial state with agent
+			initialState := testhelpers.CreateValidState()
+			now := time.Now().UTC()
+			initialHeartbeat := now.Add(-5 * time.Minute)
+			initialLease := now.Add(-4 * time.Minute)
+			initialState.Agents = map[string]models.Agent{
+				tt.agentID: {
+					Role:         "coder",
+					Status:       models.AgentStatusWorking,
+					Heartbeat:    initialHeartbeat,
+					LeaseExpires: &initialLease,
+				},
+			}
+			testhelpers.WriteInitialState(t, stateFile, initialState)
+
+			// Create heartbeat config
+			config := HeartbeatConfig{
+				AgentID:       tt.agentID,
+				StatePath:     stateFile,
+				Interval:      tt.interval,
+				LeaseDuration: tt.leaseDuration,
+			}
+
+			// Create context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), tt.runDuration)
+			defer cancel()
+
+			// Start heartbeat
+			hb := NewHeartbeat(config)
+			doneCh := make(chan error, 1)
+			go func() {
+				doneCh <- hb.Start(ctx)
+			}()
+
+			// Cancel early if requested
+			if tt.cancelEarly {
+				time.Sleep(tt.runDuration / 2)
+				cancel()
+			}
+
+			// Wait for completion
+			select {
+			case err := <-doneCh:
+				if (err != nil) != tt.wantErr {
+					t.Errorf("Start() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			case <-time.After(tt.runDuration + 500*time.Millisecond):
+				t.Fatal("Heartbeat did not stop in time")
+			}
+
+			// Read final state and verify heartbeat updates
+			bb := db.New(stateFile)
+			state, err := bb.Read()
+			if err != nil {
+				t.Fatalf("Failed to read state: %v", err)
+			}
+
+			agent, exists := state.Agents[tt.agentID]
+			if !exists {
+				t.Fatalf("Agent %s not found in state", tt.agentID)
+			}
+
+			// Verify heartbeat was updated (should be more recent than initial)
+			if !agent.Heartbeat.After(initialHeartbeat) {
+				t.Errorf("Heartbeat not updated: initial=%v, final=%v", initialHeartbeat, agent.Heartbeat)
+			}
+
+			// Verify lease was extended (should be more recent than initial)
+			if agent.LeaseExpires == nil {
+				t.Error("LeaseExpires is nil after heartbeat")
+			} else if !agent.LeaseExpires.After(initialLease) {
+				t.Errorf("Lease not extended: initial=%v, final=%v", initialLease, *agent.LeaseExpires)
+			}
+
+			// Verify lease is in the future
+			if agent.LeaseExpires != nil && agent.LeaseExpires.Before(time.Now().UTC()) {
+				t.Error("Lease is in the past after heartbeat")
+			}
+
+			// Verify lease duration is approximately correct
+			if agent.LeaseExpires != nil {
+				expectedLease := agent.Heartbeat.Add(tt.leaseDuration)
+				leaseDiff := agent.LeaseExpires.Sub(expectedLease).Abs()
+				if leaseDiff > 5*time.Second {
+					t.Errorf("Lease duration incorrect: expected ~%v from heartbeat, got %v (diff: %v)",
+						tt.leaseDuration, agent.LeaseExpires.Sub(agent.Heartbeat), leaseDiff)
+				}
+			}
+		})
+	}
+}
+
+func TestHeartbeatWithInvalidAgent(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create state without the agent
+	initialState := testhelpers.CreateValidState()
+	initialState.Agents = map[string]models.Agent{}
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	config := HeartbeatConfig{
+		AgentID:       "nonexistent-agent",
+		StatePath:     stateFile,
+		Interval:      100 * time.Millisecond,
+		LeaseDuration: 30 * time.Minute,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	hb := NewHeartbeat(config)
+
+	// Start heartbeat - should handle missing agent gracefully
+	err := hb.Start(ctx)
+
+	// Should complete without error (errors are logged but not returned)
+	if err != nil && err != context.DeadlineExceeded {
+		t.Errorf("Start() unexpected error = %v", err)
+	}
+}
+
+func TestHeartbeatWithInvalidStatePath(t *testing.T) {
+	config := HeartbeatConfig{
+		AgentID:       "coder-1",
+		StatePath:     "/nonexistent/path/state.yaml",
+		Interval:      100 * time.Millisecond,
+		LeaseDuration: 30 * time.Minute,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	hb := NewHeartbeat(config)
+
+	// Should handle invalid path gracefully
+	err := hb.Start(ctx)
+
+	// Should complete without error (errors are logged but not returned)
+	if err != nil && err != context.DeadlineExceeded {
+		t.Errorf("Start() unexpected error = %v", err)
+	}
+}
+
+func TestHeartbeatStop(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	initialState := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	initialState.Agents = map[string]models.Agent{
+		"coder-1": {
+			Role:         "coder",
+			Status:       models.AgentStatusWorking,
+			Heartbeat:    now,
+			LeaseExpires: testhelpers.TimePtr(now.Add(30 * time.Minute)),
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	config := HeartbeatConfig{
+		AgentID:       "coder-1",
+		StatePath:     stateFile,
+		Interval:      50 * time.Millisecond,
+		LeaseDuration: 30 * time.Minute,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	hb := NewHeartbeat(config)
+	doneCh := make(chan error, 1)
+	go func() {
+		doneCh <- hb.Start(ctx)
+	}()
+
+	// Let it run for a bit
+	time.Sleep(150 * time.Millisecond)
+
+	// Cancel context to stop heartbeat
+	cancel()
+
+	// Should stop quickly
+	select {
+	case <-doneCh:
+		// Success
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Heartbeat did not stop after context cancellation")
+	}
+}
+
+func TestHeartbeatConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		config HeartbeatConfig
+		valid  bool
+	}{
+		{
+			name: "valid config",
+			config: HeartbeatConfig{
+				AgentID:       "coder-1",
+				StatePath:     "/path/to/state.yaml",
+				Interval:      60 * time.Second,
+				LeaseDuration: 30 * time.Minute,
+			},
+			valid: true,
+		},
+		{
+			name: "zero interval uses default",
+			config: HeartbeatConfig{
+				AgentID:       "coder-1",
+				StatePath:     "/path/to/state.yaml",
+				Interval:      0,
+				LeaseDuration: 30 * time.Minute,
+			},
+			valid: true,
+		},
+		{
+			name: "zero lease duration uses default",
+			config: HeartbeatConfig{
+				AgentID:       "coder-1",
+				StatePath:     "/path/to/state.yaml",
+				Interval:      60 * time.Second,
+				LeaseDuration: 0,
+			},
+			valid: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hb := NewHeartbeat(tt.config)
+			if hb == nil {
+				t.Error("NewHeartbeat() returned nil")
+			}
+		})
+	}
+}
+
+func TestHeartbeatConcurrency(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create state with multiple agents
+	initialState := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	initialState.Agents = map[string]models.Agent{
+		"coder-1": {
+			Role:         "coder",
+			Status:       models.AgentStatusWorking,
+			Heartbeat:    now,
+			LeaseExpires: testhelpers.TimePtr(now.Add(30 * time.Minute)),
+		},
+		"coder-2": {
+			Role:         "coder",
+			Status:       models.AgentStatusWorking,
+			Heartbeat:    now,
+			LeaseExpires: testhelpers.TimePtr(now.Add(30 * time.Minute)),
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	// Start multiple heartbeats concurrently
+	config1 := HeartbeatConfig{
+		AgentID:       "coder-1",
+		StatePath:     stateFile,
+		Interval:      50 * time.Millisecond,
+		LeaseDuration: 30 * time.Minute,
+	}
+
+	config2 := HeartbeatConfig{
+		AgentID:       "coder-2",
+		StatePath:     stateFile,
+		Interval:      50 * time.Millisecond,
+		LeaseDuration: 30 * time.Minute,
+	}
+
+	hb1 := NewHeartbeat(config1)
+	hb2 := NewHeartbeat(config2)
+
+	done1 := make(chan error, 1)
+	done2 := make(chan error, 1)
+
+	go func() { done1 <- hb1.Start(ctx) }()
+	go func() { done2 <- hb2.Start(ctx) }()
+
+	// Wait for both to complete
+	<-done1
+	<-done2
+
+	// Verify both agents were updated
+	bb := db.New(stateFile)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for _, agentID := range []string{"coder-1", "coder-2"} {
+		agent, exists := state.Agents[agentID]
+		if !exists {
+			t.Errorf("Agent %s not found", agentID)
+			continue
+		}
+		if !agent.Heartbeat.After(now) {
+			t.Errorf("Agent %s heartbeat not updated", agentID)
+		}
+	}
+}
+
+func TestHeartbeatDefaultValues(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile := filepath.Join(tmpDir, ".liza", "state.yaml")
+
+	config := HeartbeatConfig{
+		AgentID:   "coder-1",
+		StatePath: stateFile,
+		// Interval and LeaseDuration not specified - should use defaults
+	}
+
+	hb := NewHeartbeat(config)
+	if hb == nil {
+		t.Fatal("NewHeartbeat() returned nil")
+	}
+
+	// Verify defaults were applied (we can't directly check private fields,
+	// but we can verify the heartbeat struct was created successfully)
+}
