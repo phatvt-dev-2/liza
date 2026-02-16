@@ -130,8 +130,8 @@ func formatTable(headers []string, rows [][]string) string {
 // dashboardSection represents one section of a dashboard
 type dashboardSection struct {
 	Title   string
-	Content any // Can be map[string]any or table data
-	Format  string      // "kv", "table", or "text"
+	Content any    // Can be map[string]any or table data
+	Format  string // "kv", "table", or "text"
 }
 
 // formatDashboard renders a multi-section dashboard layout

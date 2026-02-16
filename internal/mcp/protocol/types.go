@@ -20,9 +20,9 @@ type JSONRPCResponse struct {
 
 // JSONRPCError represents a JSON-RPC 2.0 error object
 type JSONRPCError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    any `json:"data,omitempty"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // Tool represents an MCP tool definition
@@ -41,10 +41,10 @@ type InputSchema struct {
 
 // Property represents a JSON schema property
 type Property struct {
-	Type        string      `json:"type"`
-	Description string      `json:"description,omitempty"`
-	Enum        []string    `json:"enum,omitempty"`
-	Default     any `json:"default,omitempty"`
+	Type        string   `json:"type"`
+	Description string   `json:"description,omitempty"`
+	Enum        []string `json:"enum,omitempty"`
+	Default     any      `json:"default,omitempty"`
 }
 
 // Resource represents an MCP resource definition
@@ -57,9 +57,9 @@ type Resource struct {
 
 // InitializeParams represents the parameters for the initialize request
 type InitializeParams struct {
-	ProtocolVersion string                 `json:"protocolVersion"`
+	ProtocolVersion string         `json:"protocolVersion"`
 	Capabilities    map[string]any `json:"capabilities"`
-	ClientInfo      ClientInfo             `json:"clientInfo"`
+	ClientInfo      ClientInfo     `json:"clientInfo"`
 }
 
 // ClientInfo represents information about the client
@@ -70,7 +70,7 @@ type ClientInfo struct {
 
 // ToolCallParams represents the parameters for the tools/call request
 type ToolCallParams struct {
-	Name      string                 `json:"name"`
+	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
