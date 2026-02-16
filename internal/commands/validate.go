@@ -19,18 +19,15 @@ const (
 // ValidateCommand validates the state.yaml file against all schema rules.
 // Returns an error with detailed description if validation fails.
 func ValidateCommand(statePath string, skipSpecFileCheck bool) error {
-	// Get project root from state path
 	lizaDir := filepath.Dir(statePath)
 	projectRoot := filepath.Dir(lizaDir)
 
-	// Read state
 	bb := db.New(statePath)
 	state, err := bb.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read state file: %w", err)
 	}
 
-	// Run all validation checks
 	validators := []func(*models.State, string, bool) error{
 		validateRequiredFields,
 		validateTaskStates,
@@ -52,7 +49,6 @@ func ValidateCommand(statePath string, skipSpecFileCheck bool) error {
 	return nil
 }
 
-// validateRequiredFields checks that all required top-level fields are present
 func validateRequiredFields(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 	if state.Version == 0 {
 		return fmt.Errorf("missing required field 'version'")
@@ -78,22 +74,15 @@ func validateRequiredFields(state *models.State, projectRoot string, skipSpecFil
 		return fmt.Errorf("missing required field 'sprint'")
 	}
 
-	// Validate goal spec_ref file exists (unless skipped)
 	if !skipSpecFileCheck && state.Goal.SpecRef != "" {
-		specFile := state.Goal.SpecRef
-		if idx := strings.Index(specFile, "#"); idx != -1 {
-			specFile = specFile[:idx]
-		}
-		specPath := filepath.Join(projectRoot, specFile)
-		if _, err := os.Stat(specPath); os.IsNotExist(err) {
-			return fmt.Errorf("goal spec_ref file not found: %s", specFile)
+		if err := checkSpecFileExists(projectRoot, state.Goal.SpecRef); err != nil {
+			return fmt.Errorf("goal %w", err)
 		}
 	}
 
 	return nil
 }
 
-// validateTaskStates checks that all task statuses are valid
 func validateTaskStates(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 	for _, task := range state.Tasks {
 		if !task.Status.IsValid() {
@@ -103,7 +92,6 @@ func validateTaskStates(state *models.State, projectRoot string, skipSpecFileChe
 	return nil
 }
 
-// validateTaskInvariants checks task-specific state invariants
 func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 	// Track agent assignments to prevent duplicates
 	assignments := make(map[string][]string) // agent ID -> task IDs
@@ -183,32 +171,18 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 		}
 
-		// Non-DRAFT tasks must have done_when
-		if task.Status != models.TaskStatusDraft &&
-			task.Status != models.TaskStatusSuperseded &&
-			task.Status != models.TaskStatusAbandoned &&
-			task.DoneWhen == "" {
-			return fmt.Errorf("non-DRAFT task missing done_when: %s", task.ID)
-		}
-
-		// Non-DRAFT tasks must have spec_ref
-		if task.Status != models.TaskStatusDraft &&
-			task.Status != models.TaskStatusSuperseded &&
-			task.Status != models.TaskStatusAbandoned &&
-			task.SpecRef == "" {
-			return fmt.Errorf("non-DRAFT task missing spec_ref: %s", task.ID)
-		}
-
-		// Validate spec_ref file exists (unless skipped)
-		if !skipSpecFileCheck && task.SpecRef != "" {
-			// Strip anchor if present
-			specFile := task.SpecRef
-			if idx := strings.Index(specFile, "#"); idx != -1 {
-				specFile = specFile[:idx]
+		if requiresCompletionFields(task.Status) {
+			if task.DoneWhen == "" {
+				return fmt.Errorf("non-DRAFT task missing done_when: %s", task.ID)
 			}
-			specPath := filepath.Join(projectRoot, specFile)
-			if _, err := os.Stat(specPath); os.IsNotExist(err) {
-				return fmt.Errorf("spec_ref file not found: %s (task: %s)", specFile, task.ID)
+			if task.SpecRef == "" {
+				return fmt.Errorf("non-DRAFT task missing spec_ref: %s", task.ID)
+			}
+		}
+
+		if !skipSpecFileCheck && task.SpecRef != "" {
+			if err := checkSpecFileExists(projectRoot, task.SpecRef); err != nil {
+				return fmt.Errorf("%w (task: %s)", err, task.ID)
 			}
 		}
 
@@ -248,15 +222,9 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 	return nil
 }
 
-// validateDependencies checks task dependencies
 func validateDependencies(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-	// Build task ID set
-	taskIDs := make(map[string]bool)
-	for _, task := range state.Tasks {
-		taskIDs[task.ID] = true
-	}
+	taskIDs := buildTaskIDSet(state.Tasks)
 
-	// Check each task's dependencies
 	for _, task := range state.Tasks {
 		if len(task.DependsOn) == 0 {
 			continue
@@ -271,7 +239,7 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 
 		// CLAIMED tasks must have all dependencies MERGED
 		if task.Status == models.TaskStatusClaimed {
-			unmet := []string{}
+			var unmet []string
 			for _, depID := range task.DependsOn {
 				depTask := findTask(state.Tasks, depID)
 				if depTask != nil && depTask.Status != models.TaskStatusMerged {
@@ -284,7 +252,6 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 		}
 	}
 
-	// Check for circular dependencies
 	for _, task := range state.Tasks {
 		if len(task.DependsOn) == 0 {
 			continue
@@ -299,7 +266,6 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 	return nil
 }
 
-// checkCircular recursively checks for circular dependencies
 func checkCircular(start, current string, visited map[string]bool, tasks []models.Task) error {
 	task := findTask(tasks, current)
 	if task == nil || len(task.DependsOn) == 0 {
@@ -321,7 +287,6 @@ func checkCircular(start, current string, visited map[string]bool, tasks []model
 	return nil
 }
 
-// validateAgentInvariants checks agent-specific invariants
 func validateAgentInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 	now := time.Now().Unix()
 
@@ -350,7 +315,6 @@ func validateAgentInvariants(state *models.State, projectRoot string, skipSpecFi
 	return nil
 }
 
-// validateHandoff checks handoff entries
 func validateHandoff(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 	for taskID, handoff := range state.Handoff {
 		if handoff.Summary == "" {
@@ -363,7 +327,6 @@ func validateHandoff(state *models.State, projectRoot string, skipSpecFileCheck 
 	return nil
 }
 
-// validateDiscovered checks discovered items
 func validateDiscovered(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 	for i, disc := range state.Discovered {
 		if disc.Urgency != "" && disc.Urgency != "deferred" && disc.Urgency != "immediate" {
@@ -373,7 +336,6 @@ func validateDiscovered(state *models.State, projectRoot string, skipSpecFileChe
 	return nil
 }
 
-// validateAnomalies checks anomaly entries
 func validateAnomalies(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 	for i, anomaly := range state.Anomalies {
 		// Check type is valid
@@ -408,7 +370,6 @@ func validateAnomalies(state *models.State, projectRoot string, skipSpecFileChec
 	return nil
 }
 
-// validateSprint checks sprint-specific invariants
 func validateSprint(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 	// Sprint status must be valid
 	if !state.Sprint.Status.IsValid() {
@@ -420,11 +381,7 @@ func validateSprint(state *models.State, projectRoot string, skipSpecFileCheck b
 		return fmt.Errorf("sprint.goal_ref (%s) does not match goal.id (%s)", state.Sprint.GoalRef, state.Goal.ID)
 	}
 
-	// Build task ID set
-	taskIDs := make(map[string]bool)
-	for _, task := range state.Tasks {
-		taskIDs[task.ID] = true
-	}
+	taskIDs := buildTaskIDSet(state.Tasks)
 
 	// Sprint scope.planned tasks must exist
 	for _, taskID := range state.Sprint.Scope.Planned {
@@ -448,7 +405,32 @@ func validateSprint(state *models.State, projectRoot string, skipSpecFileCheck b
 	return nil
 }
 
-// Helper function to find a task by ID
+func checkSpecFileExists(projectRoot, specRef string) error {
+	specFile := specRef
+	if idx := strings.Index(specFile, "#"); idx != -1 {
+		specFile = specFile[:idx]
+	}
+	specPath := filepath.Join(projectRoot, specFile)
+	if _, err := os.Stat(specPath); os.IsNotExist(err) {
+		return fmt.Errorf("spec_ref file not found: %s", specFile)
+	}
+	return nil
+}
+
+func buildTaskIDSet(tasks []models.Task) map[string]bool {
+	ids := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
+		ids[task.ID] = true
+	}
+	return ids
+}
+
+func requiresCompletionFields(status models.TaskStatus) bool {
+	return status != models.TaskStatusDraft &&
+		status != models.TaskStatusSuperseded &&
+		status != models.TaskStatusAbandoned
+}
+
 func findTask(tasks []models.Task, taskID string) *models.Task {
 	for i := range tasks {
 		if tasks[i].ID == taskID {
