@@ -31,14 +31,9 @@ func NewServer(projectRoot, logPath string) *Server {
 		handlers:    make(map[string]ToolHandler),
 	}
 
-	// Register read-only tools (Phase 1)
 	s.registerReadOnlyTools()
 	s.registerReadOnlyResources()
-
-	// Register mutation tools (Phase 2)
 	s.registerMutationTools()
-
-	// Register complex operations (Phase 3)
 	s.registerComplexOperations()
 
 	return s
@@ -137,13 +132,11 @@ func (s *Server) handleToolCall(req *protocol.JSONRPCRequest) *protocol.JSONRPCR
 		return rpcError(req, protocol.NewError(protocol.NotFound, "Tool not found: "+toolName, nil))
 	}
 
-	// Extract arguments
 	args, _ := params["arguments"].(map[string]any)
 	if args == nil {
 		args = make(map[string]any)
 	}
 
-	// Call handler
 	result, err := handler(args)
 	if err != nil {
 		return rpcError(req, s.classifyError(err))
@@ -169,7 +162,6 @@ func (s *Server) handleResourceRead(req *protocol.JSONRPCRequest) *protocol.JSON
 		return rpcError(req, protocol.NewInvalidParamsError("uri must be a string"))
 	}
 
-	// Handle resource read (will implement in handlers.go)
 	result, err := s.handleResourceReadInternal(uri)
 	if err != nil {
 		return rpcError(req, s.classifyError(err))

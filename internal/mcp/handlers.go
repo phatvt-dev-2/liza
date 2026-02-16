@@ -27,6 +27,33 @@ func textResult(msg string) (any, error) {
 	}, nil
 }
 
+// resourceContent builds a standard MCP resource content response.
+func resourceContent(uri, mimeType, text string) any {
+	return map[string]any{
+		"contents": []any{
+			map[string]any{
+				"uri":      uri,
+				"mimeType": mimeType,
+				"text":     text,
+			},
+		},
+	}
+}
+
+// inspectResource reads a Liza resource via the inspect command.
+func (s *Server) inspectResource(uri string, args ...string) (any, error) {
+	opts := commands.InspectOptions{
+		Format:      "json",
+		ProjectRoot: s.projectRoot,
+		Internal:    false,
+	}
+	result, err := commands.InspectCommand(args, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", uri, err)
+	}
+	return resourceContent(uri, "application/json", result), nil
+}
+
 // requireString extracts a required non-empty string parameter.
 func requireString(params map[string]any, key string) (string, error) {
 	v, ok := params[key].(string)
@@ -57,20 +84,17 @@ func (s *Server) handleGet(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Get format (default: json)
 	format := "json"
 	if f, ok := params["format"].(string); ok && f != "" {
 		format = f
 	}
 
-	// Build inspect options
 	opts := commands.InspectOptions{
 		Format:      format,
 		ProjectRoot: s.projectRoot,
 		Internal:    false, // Get formatted output
 	}
 
-	// Call existing inspect command
 	result, err := commands.InspectCommand([]string{query}, opts)
 	if err != nil {
 		return nil, fmt.Errorf("inspect command failed: %w", err)
@@ -82,12 +106,10 @@ func (s *Server) handleGet(params map[string]any) (any, error) {
 // handleStatus implements the liza_status tool
 // Maps to: liza status
 func (s *Server) handleStatus(params map[string]any) (any, error) {
-	// Build status options
 	opts := commands.StatusOptions{
 		ProjectRoot: s.projectRoot,
 	}
 
-	// Call existing status command
 	result, err := commands.StatusCommand(opts)
 	if err != nil {
 		return nil, fmt.Errorf("status command failed: %w", err)
@@ -101,13 +123,11 @@ func (s *Server) handleStatus(params map[string]any) (any, error) {
 func (s *Server) handleValidate(params map[string]any) (any, error) {
 	statePath := paths.New(s.projectRoot).StatePath()
 
-	// Get skipSpecFileCheck parameter (default: false)
 	skipSpecFileCheck := false
 	if skip, ok := params["skip_spec_file_check"].(bool); ok {
 		skipSpecFileCheck = skip
 	}
 
-	// Call existing validate command
 	err := commands.ValidateCommand(statePath, skipSpecFileCheck)
 
 	var resultText string
@@ -117,7 +137,6 @@ func (s *Server) handleValidate(params map[string]any) (any, error) {
 		resultText = "Validation passed: workspace state is consistent"
 	}
 
-	// Return MCP-formatted response (includes isError flag)
 	return map[string]any{
 		"content": []any{
 			map[string]any{
@@ -141,15 +160,14 @@ func (s *Server) handleResourceReadInternal(uri string) (any, error) {
 	case "liza://state":
 		return s.readStateResource()
 	case "liza://tasks":
-		return s.readTasksResource()
+		return s.inspectResource(uri, "tasks")
 	case "liza://agents":
-		return s.readAgentsResource()
+		return s.inspectResource(uri, "agents")
 	default:
-		// Check for specific task resource: liza://tasks/{id}
 		const taskPrefix = "liza://tasks/"
 		if len(uri) > len(taskPrefix) && uri[:len(taskPrefix)] == taskPrefix {
 			taskID := uri[len(taskPrefix):]
-			return s.readSpecificTaskResource(taskID)
+			return s.inspectResource(uri, "tasks", taskID)
 		}
 		return nil, fmt.Errorf("unknown resource URI: %s", uri)
 	}
@@ -164,93 +182,8 @@ func (s *Server) readStateResource() (any, error) {
 		return nil, fmt.Errorf("failed to read state file: %w", err)
 	}
 
-	return map[string]any{
-		"contents": []any{
-			map[string]any{
-				"uri":      "liza://state",
-				"mimeType": "application/x-yaml",
-				"text":     string(data),
-			},
-		},
-	}, nil
+	return resourceContent("liza://state", "application/x-yaml", string(data)), nil
 }
-
-// readTasksResource returns all tasks as JSON
-func (s *Server) readTasksResource() (any, error) {
-	opts := commands.InspectOptions{
-		Format:      "json",
-		ProjectRoot: s.projectRoot,
-		Internal:    false,
-	}
-
-	result, err := commands.InspectCommand([]string{"tasks"}, opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read tasks: %w", err)
-	}
-
-	return map[string]any{
-		"contents": []any{
-			map[string]any{
-				"uri":      "liza://tasks",
-				"mimeType": "application/json",
-				"text":     result,
-			},
-		},
-	}, nil
-}
-
-// readSpecificTaskResource returns a specific task as JSON
-func (s *Server) readSpecificTaskResource(taskID string) (any, error) {
-	opts := commands.InspectOptions{
-		Format:      "json",
-		ProjectRoot: s.projectRoot,
-		Internal:    false,
-	}
-
-	result, err := commands.InspectCommand([]string{"tasks", taskID}, opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read task %s: %w", taskID, err)
-	}
-
-	uri := fmt.Sprintf("liza://tasks/%s", taskID)
-	return map[string]any{
-		"contents": []any{
-			map[string]any{
-				"uri":      uri,
-				"mimeType": "application/json",
-				"text":     result,
-			},
-		},
-	}, nil
-}
-
-// readAgentsResource returns all agents as JSON
-func (s *Server) readAgentsResource() (any, error) {
-	opts := commands.InspectOptions{
-		Format:      "json",
-		ProjectRoot: s.projectRoot,
-		Internal:    false,
-	}
-
-	result, err := commands.InspectCommand([]string{"agents"}, opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read agents: %w", err)
-	}
-
-	return map[string]any{
-		"contents": []any{
-			map[string]any{
-				"uri":      "liza://agents",
-				"mimeType": "application/json",
-				"text":     result,
-			},
-		},
-	}, nil
-}
-
-// ============================================================================
-// Phase 2: Mutation Tool Handlers
-// ============================================================================
 
 // handleAddTask implements the liza_add_task tool
 // Maps to: liza add-task
@@ -285,7 +218,6 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 		agentID = "planner-1"
 	}
 
-	// Optional parameters
 	priority := 1
 	if p, ok := params["priority"].(float64); ok {
 		priority = int(p)
@@ -302,7 +234,6 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 		}
 	}
 
-	// Build task input
 	input := &commands.TaskInput{
 		ID:          id,
 		Description: description,
@@ -313,7 +244,6 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 		DependsOn:   dependsOn,
 	}
 
-	// Call existing command
 	statePath := paths.New(s.projectRoot).StatePath()
 	if err := commands.AddTaskCommand(statePath, s.logPath, input, agentID); err != nil {
 		return nil, fmt.Errorf("add task failed: %w", err)
@@ -330,7 +260,6 @@ func (s *Server) handleClaimTask(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Call existing command (uses three-phase commit pattern)
 	if err := commands.ClaimTaskCommand(s.projectRoot, taskID, agentID); err != nil {
 		return nil, fmt.Errorf("claim task failed: %w", err)
 	}
@@ -356,7 +285,6 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Call existing command
 	if err := commands.SubmitForReviewCommand(s.projectRoot, taskID, commitSHA, agentID); err != nil {
 		return nil, fmt.Errorf("submit for review failed: %w", err)
 	}
@@ -382,10 +310,8 @@ func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Optional reason
 	reason, _ := params["reason"].(string)
 
-	// Call existing command
 	if err := commands.SubmitVerdictCommand(s.projectRoot, taskID, verdict, reason, agentID); err != nil {
 		return nil, fmt.Errorf("submit verdict failed: %w", err)
 	}
@@ -406,7 +332,6 @@ func (s *Server) handleMarkBlocked(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Extract questions array
 	var questions []string
 	if questionsRaw, ok := params["questions"].([]any); ok {
 		for _, q := range questionsRaw {
@@ -419,7 +344,6 @@ func (s *Server) handleMarkBlocked(params map[string]any) (any, error) {
 		return nil, fmt.Errorf("questions parameter required (1-3 questions)")
 	}
 
-	// Call existing command
 	if err := commands.MarkBlockedCommand(s.projectRoot, taskID, reason, questions, agentID); err != nil {
 		return nil, fmt.Errorf("mark blocked failed: %w", err)
 	}
@@ -445,11 +369,9 @@ func (s *Server) handleReleaseClaim(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Optional parameters
 	reason, _ := params["reason"].(string)
 	force, _ := params["force"].(bool)
 
-	// Call existing command
 	if err := commands.ReleaseClaimCommand(s.projectRoot, taskID, role, force, reason, agentID); err != nil {
 		return nil, fmt.Errorf("release claim failed: %w", err)
 	}
@@ -470,7 +392,6 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Extract replacement IDs
 	var replacementIDs []string
 	if ids, ok := params["replacement_ids"].([]any); ok {
 		for _, id := range ids {
@@ -480,17 +401,12 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 		}
 	}
 
-	// Call existing command
 	if err := commands.SupersedeTaskCommand(s.projectRoot, taskID, replacementIDs, reason, agentID); err != nil {
 		return nil, fmt.Errorf("supersede task failed: %w", err)
 	}
 
 	return textResult(fmt.Sprintf("Task %s superseded", taskID))
 }
-
-// ============================================================================
-// Phase 3: Worktree Operation Handlers
-// ============================================================================
 
 // handleWtCreate implements the liza_wt_create tool
 // Maps to: liza wt-create
@@ -500,10 +416,8 @@ func (s *Server) handleWtCreate(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Optional fresh flag
 	fresh, _ := params["fresh"].(bool)
 
-	// Call existing command
 	if err := commands.WtCreateCommand(s.projectRoot, taskID, fresh); err != nil {
 		return nil, fmt.Errorf("wt-create failed: %w", err)
 	}
@@ -519,7 +433,6 @@ func (s *Server) handleWtDelete(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Call existing command
 	if err := commands.WtDeleteCommand(s.projectRoot, taskID); err != nil {
 		return nil, fmt.Errorf("wt-delete failed: %w", err)
 	}
@@ -535,7 +448,6 @@ func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Call existing command
 	if err := commands.WtMergeCommand(s.projectRoot, taskID, agentID); err != nil {
 		return nil, fmt.Errorf("wt-merge failed: %w", err)
 	}
@@ -543,14 +455,9 @@ func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 	return textResult(fmt.Sprintf("Task %s merged to integration branch", taskID))
 }
 
-// ============================================================================
-// Phase 3: Analysis & Utility Handlers
-// ============================================================================
-
 // handleAnalyze implements the liza_analyze tool
 // Maps to: liza analyze
 func (s *Server) handleAnalyze(params map[string]any) (any, error) {
-	// Call existing command
 	if err := commands.AnalyzeCommand(s.projectRoot); err != nil {
 		return nil, fmt.Errorf("analyze failed: %w", err)
 	}
@@ -561,7 +468,6 @@ func (s *Server) handleAnalyze(params map[string]any) (any, error) {
 // handleUpdateSprintMetrics implements the liza_update_sprint_metrics tool
 // Maps to: liza update-sprint-metrics
 func (s *Server) handleUpdateSprintMetrics(params map[string]any) (any, error) {
-	// Call existing command
 	if err := commands.UpdateSprintMetricsCommand(s.projectRoot); err != nil {
 		return nil, fmt.Errorf("update sprint metrics failed: %w", err)
 	}
@@ -572,7 +478,6 @@ func (s *Server) handleUpdateSprintMetrics(params map[string]any) (any, error) {
 // handleClearStaleReviews implements the liza_clear_stale_review_claims tool
 // Maps to: liza clear-stale-review-claims
 func (s *Server) handleClearStaleReviews(params map[string]any) (any, error) {
-	// Call existing command
 	count, err := commands.ClearStaleReviewClaimsCommand(s.projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("clear stale review claims failed: %w", err)
@@ -594,10 +499,8 @@ func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Optional force flag
 	force, _ := params["force"].(bool)
 
-	// Call existing command
 	if err := commands.DeleteAgentCommand(s.projectRoot, agentID, force, reason); err != nil {
 		return nil, fmt.Errorf("delete agent failed: %w", err)
 	}
