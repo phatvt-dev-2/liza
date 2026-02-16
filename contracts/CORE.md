@@ -740,6 +740,19 @@ Never leave repository in inconsistent partial-change state without acknowledgme
 
 **Merge Conflicts:** Never auto-resolve. Present conflict, require explicit resolution approval.
 
+**Unrelated Working Tree Changes:**
+Changes to files outside the current task scope are not owned by the agent —
+even if they break the build or interfere with validation.
+
+When encountered:
+1. Surface: `"⚠️ Unrelated change detected in [file] — [impact on current task]"`
+2. Do NOT revert, stash, or modify — these are someone else's in-progress work
+3. Await direction
+
+`git checkout -- <file>` on files not modified by the current task is a
+destructive operation on unowned state. Same approval requirements as
+`git reset --hard` or `rm`.
+
 ---
 
 ## Exploratory Operations Protocol
