@@ -1,0 +1,15 @@
+{{- define "wake_hypothesis_exhausted" -}}
+Multiple coders failed on same task. Re-evaluate and act NOW:
+
+1. Read task history — understand what was tried and why it failed
+2. Determine if:
+   - Task is impossible as specified → supersede with revised tasks:
+     First: Use liza_add_task tool with {...} (create new tasks)
+     Then: Use liza_supersede_task tool with {"task_id": "<old-id>", "replacement_ids": ["<new-ids>"], "reason": "<reason>", "agent_id": "planner-1"}
+   - Missing context/docs → add to task description (update NOW)
+   - Needs different approach → update scope/guidance (execute NOW)
+   - Spec is wrong → fix spec first (update NOW)
+3. Execute changes: update task and reassign, or supersede with new approach
+4. If breaking into smaller tasks — create them all in this session
+5. All state modifications must be executed before you exit.
+{{- end -}}

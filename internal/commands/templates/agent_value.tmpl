@@ -1,0 +1,27 @@
+{{- define "agent_value" -}}
+ID: {{.ID}}
+Role: {{.Role}}
+Status: {{.Status}}
+{{- if .CurrentTask}}
+Current Task: {{deref .CurrentTask}}
+{{- else}}
+Current Task: -
+{{- end}}
+{{- if .TimeOnTask}}
+Time on Task: {{.TimeOnTask}}
+{{- end}}
+Last Heartbeat: {{.TimeSinceHeartbeat}} ago
+{{- if .LeaseExpires}}
+Lease Expires: in {{deref .LeaseExpires}}
+{{- end}}
+Terminal: {{.Terminal}}
+{{- if eq .PID 0}}
+PID: n/a
+Process Status: n/a
+{{- else}}
+PID: {{.PID}}
+Process Status: {{.ProcessStatus}}
+{{- end}}
+Iterations Total: {{.IterationsTotal}}
+Context Usage: {{.ContextPercent}}%
+{{end -}}

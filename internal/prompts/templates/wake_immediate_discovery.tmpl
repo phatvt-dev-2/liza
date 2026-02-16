@@ -1,0 +1,12 @@
+{{- define "wake_immediate_discovery" -}}
+Urgent discoveries need immediate action:
+
+1. Read discovered[] entries with urgency=immediate
+2. For each, execute decision NOW:
+   - Convert to task → execute liza_add_task tool NOW, then set converted_to_task=<new-task-id> via fallback state edit + liza_validate
+   - Defer → set converted_to_task="deferred" with rationale via fallback state edit + liza_validate
+   - Dismiss → set converted_to_task="dismissed" via fallback state edit + liza_validate
+3. Prioritize new tasks appropriately (may be high priority)
+4. Check if discoveries invalidate existing tasks — update them if needed
+5. All discovered items must be processed and all tools executed in this session.
+{{- end -}}

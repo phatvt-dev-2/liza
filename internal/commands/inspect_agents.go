@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/errors"
@@ -241,41 +240,5 @@ func formatAgentsTable(agents []agentInfo) string {
 
 // formatAgentValue formats a single agent as key-value pairs
 func formatAgentValue(agent agentInfo) string {
-	var result strings.Builder
-
-	fmt.Fprintf(&result, "ID: %s\n", agent.ID)
-	fmt.Fprintf(&result, "Role: %s\n", agent.Role)
-	fmt.Fprintf(&result, "Status: %s\n", agent.Status)
-
-	if agent.CurrentTask != nil {
-		fmt.Fprintf(&result, "Current Task: %s\n", *agent.CurrentTask)
-	} else {
-		result.WriteString("Current Task: -\n")
-	}
-
-	if agent.TimeOnTask != "" {
-		fmt.Fprintf(&result, "Time on Task: %s\n", agent.TimeOnTask)
-	}
-
-	fmt.Fprintf(&result, "Last Heartbeat: %s ago\n", agent.TimeSinceHeartbeat)
-
-	if agent.LeaseExpires != nil {
-		fmt.Fprintf(&result, "Lease Expires: in %s\n", *agent.LeaseExpires)
-	}
-
-	fmt.Fprintf(&result, "Terminal: %s\n", agent.Terminal)
-
-	// Add PID and Process Status
-	if agent.PID == 0 {
-		result.WriteString("PID: n/a\n")
-		result.WriteString("Process Status: n/a\n")
-	} else {
-		fmt.Fprintf(&result, "PID: %d\n", agent.PID)
-		fmt.Fprintf(&result, "Process Status: %s\n", agent.ProcessStatus)
-	}
-
-	fmt.Fprintf(&result, "Iterations Total: %d\n", agent.IterationsTotal)
-	fmt.Fprintf(&result, "Context Usage: %d%%\n", agent.ContextPercent)
-
-	return result.String()
+	return executeCommandTemplate("agent_value", agent)
 }

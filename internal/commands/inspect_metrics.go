@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
 )
@@ -200,21 +199,7 @@ func formatAgentMetricsOutput(metrics []AgentmetricsInfo, format string) (string
 
 // formatMetricsValue formats sprint metrics as key-value pairs
 func formatMetricsValue(metrics metricsInfo) string {
-	var result strings.Builder
-
-	fmt.Fprintf(&result, "Tasks Done: %d\n", metrics.TasksDone)
-	fmt.Fprintf(&result, "Tasks In Progress: %d\n", metrics.TasksInProgress)
-	fmt.Fprintf(&result, "Tasks Blocked: %d\n", metrics.TasksBlocked)
-	fmt.Fprintf(&result, "Iterations Total: %d\n", metrics.IterationsTotal)
-	fmt.Fprintf(&result, "Review Cycles Total: %d\n", metrics.ReviewCyclesTotal)
-	fmt.Fprintf(&result, "Review Verdict Approvals: %d\n", metrics.ReviewVerdictApprovals)
-	fmt.Fprintf(&result, "Review Verdict Rejections: %d\n", metrics.ReviewVerdictRejections)
-	fmt.Fprintf(&result, "Review Verdict Count: %d\n", metrics.ReviewVerdictCount)
-	fmt.Fprintf(&result, "Review Verdict Approval Rate: %d%%\n", metrics.ReviewVerdictApprovalRatePercent)
-	fmt.Fprintf(&result, "Task Submitted For Review Count: %d\n", metrics.TaskSubmittedForReviewCount)
-	fmt.Fprintf(&result, "Task Outcome Approval Rate: %d%%\n", metrics.TaskOutcomeApprovalRatePercent)
-
-	return result.String()
+	return executeCommandTemplate("metrics_value", metrics)
 }
 
 // formatAgentMetricsTable formats per-agent metrics as a table

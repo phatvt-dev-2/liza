@@ -48,9 +48,13 @@ func InitCommand(description string, specRef string) error {
 	// cleanupInit removes all artifacts created during init.
 	// Needed because WriteAllFiles writes both inside .liza/ and outside (docs/).
 	runtimeRefPath := filepath.Join(lizaPaths.ProjectRoot(), "docs", "for-agent-eyes", "agent-runtime-reference.md")
+	_, statErr := os.Stat(runtimeRefPath)
+	runtimeRefPreExisted := statErr == nil
 	cleanupInit := func() {
 		os.RemoveAll(lizaPaths.LizaDir())
-		os.Remove(runtimeRefPath)
+		if !runtimeRefPreExisted {
+			os.Remove(runtimeRefPath)
+		}
 	}
 
 	// Write embedded files (contracts, skills, runtime reference)

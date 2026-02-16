@@ -433,74 +433,31 @@ func writeAgentsSection(b *strings.Builder, agents []agentStatus) {
 	b.WriteString("\n\n")
 }
 
+// statusDashboardData is the template data for status_dashboard.tmpl
+type statusDashboardData struct {
+	statusData
+	TasksSection  string
+	AgentsSection string
+	AnomalyList   []string
+}
+
 // formatStatusDashboard renders the status as a dashboard
 func formatStatusDashboard(data statusData) (string, error) {
-	var b strings.Builder
+	// Pre-render imperative sections (table formatters stay as-is)
+	var tasksBuf, agentsBuf strings.Builder
+	writeTasksSection(&tasksBuf, data.Tasks)
+	writeAgentsSection(&agentsBuf, data.Agents)
 
-	// Goal section
-	b.WriteString("=== GOAL ===\n")
-	b.WriteString(fmt.Sprintf("Description: %s\n", data.Goal.Description))
-	b.WriteString(fmt.Sprintf("Status: %s\n", data.Goal.Status))
-	b.WriteString(fmt.Sprintf("Spec: %s\n\n", data.Goal.SpecRef))
-
-	// Sprint section
-	b.WriteString("=== SPRINT ===\n")
-	b.WriteString(fmt.Sprintf("ID: %s\n", data.Sprint.ID))
-	b.WriteString(fmt.Sprintf("Status: %s\n", data.Sprint.Status))
-	b.WriteString(fmt.Sprintf("Started: %s\n", data.Sprint.StartTime))
-	b.WriteString(fmt.Sprintf("Progress: %d/%d tasks complete\n\n",
-		data.Sprint.TasksDone, data.Sprint.TasksTotal))
-
-	// System section
-	b.WriteString("=== SYSTEM ===\n")
-	b.WriteString(fmt.Sprintf("Mode: %s\n", data.Config.Mode))
-	if data.Config.Mode == "PAUSED" && data.Config.PausedBy != nil {
-		b.WriteString(fmt.Sprintf("Paused By: %s\n", *data.Config.PausedBy))
-		if data.Config.PauseReason != nil {
-			b.WriteString(fmt.Sprintf("Reason: %s\n", *data.Config.PauseReason))
-		}
-	}
-	b.WriteString("\n")
-
-	writeTasksSection(&b, data.Tasks)
-	writeAgentsSection(&b, data.Agents)
-
-	// Planner section
-	b.WriteString("=== PLANNER ===\n")
-	b.WriteString(fmt.Sprintf("Wake Trigger: %s", data.PlannerState.Trigger))
-	if data.PlannerState.TriggerCount > 0 {
-		b.WriteString(fmt.Sprintf(" (count: %d)", data.PlannerState.TriggerCount))
-	}
-	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("Explanation: %s\n\n", data.PlannerState.Reason))
-
-	// Work queues section
-	b.WriteString("=== WORK QUEUES ===\n")
-	b.WriteString(fmt.Sprintf("Coder: %d available - %s\n",
-		data.WorkQueues.Coder.Available, data.WorkQueues.Coder.Reason))
-	b.WriteString(fmt.Sprintf("Reviewer: %d available - %s\n\n",
-		data.WorkQueues.Reviewer.Available, data.WorkQueues.Reviewer.Reason))
-
-	// Optional detailed sections
-	if data.Anomalies != nil && len(*data.Anomalies) > 0 {
-		b.WriteString("=== ANOMALIES ===\n")
-		for _, anomaly := range *data.Anomalies {
-			b.WriteString(fmt.Sprintf("⚠  %s\n", anomaly))
-		}
-		b.WriteString("\n")
+	var anomalyList []string
+	if data.Anomalies != nil {
+		anomalyList = *data.Anomalies
 	}
 
-	if data.CircuitBreaker != nil {
-		b.WriteString("=== CIRCUIT BREAKER ===\n")
-		b.WriteString(fmt.Sprintf("Status: %s\n", data.CircuitBreaker.Status))
-		if len(data.CircuitBreaker.Triggers) > 0 {
-			b.WriteString("Triggers:\n")
-			for _, trigger := range data.CircuitBreaker.Triggers {
-				b.WriteString(fmt.Sprintf("  - %s\n", trigger))
-			}
-		}
-		b.WriteString("\n")
+	tmplData := statusDashboardData{
+		statusData:    data,
+		TasksSection:  tasksBuf.String(),
+		AgentsSection: agentsBuf.String(),
+		AnomalyList:   anomalyList,
 	}
-
-	return b.String(), nil
+	return executeCommandTemplate("status_dashboard", tmplData), nil
 }

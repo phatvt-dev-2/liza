@@ -437,7 +437,7 @@ func TestBuildCoderContext(t *testing.T) {
 				"git rebase --continue",
 				"5. IF CONFLICTS ARE UNRESOLVABLE",
 				"git rebase --abort",
-				"liza_mark_blocked(",
+				"liza_mark_blocked tool",
 				"6. VALIDATE IMPLEMENTATION",
 				"Run all tests to ensure they still pass",
 				"7. SUBMIT FOR REVIEW (SAME AS NORMAL)",
@@ -493,7 +493,7 @@ func TestBuildCoderContext(t *testing.T) {
 				"Option A: Mark as blocked if design conflict",
 				"Option B: Start completely fresh if commit history is wrong",
 				"git diff HEAD > /tmp/my-changes.patch",
-				"liza_wt_delete(",
+				"liza_wt_delete tool",
 				"git apply /tmp/my-changes.patch",
 			},
 		},
@@ -512,15 +512,15 @@ func TestBuildCoderContext(t *testing.T) {
 				IntegrationBranch: "integration",
 			},
 			wantContains: []string{
-				// MCP tool syntax for mark-blocked
-				"liza_mark_blocked(",
-				"task_id=",
-				"agent_id=",
-				"reason=",
-				"questions=",
-				// MCP tool syntax for worktree operations
-				"liza_wt_delete(task_id=",
-				"liza_wt_create(task_id=",
+				// JSON params syntax for mark-blocked
+				"liza_mark_blocked tool",
+				"\"task_id\":",
+				"\"agent_id\":",
+				"\"reason\":",
+				"\"questions\":",
+				// JSON params syntax for worktree operations
+				"liza_wt_delete tool",
+				"liza_wt_create tool",
 			},
 		},
 	}
