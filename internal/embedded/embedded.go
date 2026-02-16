@@ -43,17 +43,12 @@ var mcpSettingsContent []byte
 func WriteAllFiles(projectRoot string) error {
 	lizaPaths := paths.New(projectRoot)
 
-	// Write contracts
 	if err := writeEmbeddedFS(contractsFS, lizaPaths.ContractsDir()); err != nil {
 		return fmt.Errorf("failed to write contracts: %w", err)
 	}
-
-	// Write skills
 	if err := writeEmbeddedFS(skillsFS, lizaPaths.SkillsDir()); err != nil {
 		return fmt.Errorf("failed to write skills: %w", err)
 	}
-
-	// Write specs
 	if err := writeEmbeddedFS(specsFS, lizaPaths.SpecsDir()); err != nil {
 		return fmt.Errorf("failed to write specs: %w", err)
 	}
@@ -68,45 +63,34 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string) error {
 			return err
 		}
 
-		// Skip root directory
 		if path == "." {
 			return nil
 		}
 
-		// Calculate target path - path from embed includes prefix like "contracts/",
-		// but targetDir already points to the contracts directory, so we need to
-		// strip the first path component
-		// embed.FS always uses forward slashes
+		// embed.FS paths include the top-level dir (e.g. "contracts/CORE.md"),
+		// but targetDir already points there — strip the first component.
 		parts := strings.Split(path, "/")
 		if len(parts) == 1 {
-			// This is the root directory of the embedded FS (e.g., "contracts")
-			// Skip it since targetDir already points to this location
 			return nil
 		}
-		// Remove first component (e.g., "contracts/CORE.md" -> "CORE.md")
 		relativePath := filepath.Join(parts[1:]...)
 		targetPath := filepath.Join(targetDir, relativePath)
 
 		if d.IsDir() {
-			// Create directory
 			return os.MkdirAll(targetPath, 0755)
 		}
 
-		// Read embedded file
 		content, err := embeddedFS.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("failed to read embedded file %s: %w", path, err)
 		}
 
-		// Prepend frontmatter
 		contentWithFrontmatter := prependFrontmatter(content)
 
-		// Ensure parent directory exists
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 			return fmt.Errorf("failed to create directory for %s: %w", targetPath, err)
 		}
 
-		// Write file
 		if err := os.WriteFile(targetPath, contentWithFrontmatter, 0644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", targetPath, err)
 		}
@@ -135,50 +119,29 @@ liza_build_date: "%s"
 // ListEmbeddedFiles returns a list of all embedded file paths (for testing).
 func ListEmbeddedFiles() ([]string, error) {
 	var files []string
-
-	// Walk contracts
-	err := fs.WalkDir(contractsFS, ".", func(path string, d fs.DirEntry, err error) error {
+	for _, fsys := range []embed.FS{contractsFS, skillsFS, specsFS} {
+		collected, err := collectFiles(fsys)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if !d.IsDir() && path != "." {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		files = append(files, collected...)
 	}
-
-	// Walk skills
-	err = fs.WalkDir(skillsFS, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() && path != "." {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Walk specs
-	err = fs.WalkDir(specsFS, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() && path != "." {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	return files, nil
+}
+
+// collectFiles returns all file paths from an embedded filesystem.
+func collectFiles(fsys embed.FS) ([]string, error) {
+	var files []string
+	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && path != "." {
+			files = append(files, path)
+		}
+		return nil
+	})
+	return files, err
 }
 
 // WriteClaudeSettings writes the embedded claude-settings.json to .claude/settings.json.
@@ -189,10 +152,8 @@ func WriteClaudeSettings(projectRoot string) error {
 	claudeDir := lizaPaths.ClaudeDir()
 	settingsPath := lizaPaths.ClaudeSettingsPath()
 
-	// Check if file already exists
 	var existingSettings map[string]any
 	if existingData, err := os.ReadFile(settingsPath); err == nil {
-		// File exists - prompt user for merge
 		fmt.Print("Should the Liza claude settings be merged into the existing settings file? (y/n): ")
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
@@ -202,38 +163,30 @@ func WriteClaudeSettings(projectRoot string) error {
 
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "y" && response != "yes" {
-			// User declined merge - return without error
 			return nil
 		}
 
-		// Parse existing file
 		if err := json.Unmarshal(existingData, &existingSettings); err != nil {
 			return fmt.Errorf("failed to parse existing claude-settings.json: %w", err)
 		}
 	}
 
-	// Create .claude directory if needed
 	if err := os.MkdirAll(claudeDir, 0755); err != nil {
 		return fmt.Errorf("failed to create .claude directory: %w", err)
 	}
 
-	// Parse embedded (liza) settings
 	var lizaSettings map[string]any
 	if err := json.Unmarshal(claudeSettingsContent, &lizaSettings); err != nil {
 		return fmt.Errorf("failed to parse embedded claude-settings.json: %w", err)
 	}
 
-	// Merge or use liza settings
 	var finalSettings map[string]any
 	if existingSettings != nil {
-		// Merge: existing settings take precedence
 		finalSettings = mergeSettings(lizaSettings, existingSettings)
 	} else {
-		// New file: use liza settings
 		finalSettings = lizaSettings
 	}
 
-	// Inject metadata into _comment field
 	existingComment, ok := finalSettings["_comment"].([]any)
 	if !ok {
 		existingComment = []any{}
@@ -252,13 +205,11 @@ func WriteClaudeSettings(projectRoot string) error {
 	}
 	finalSettings["_comment"] = existingComment
 
-	// Marshal back to JSON with indentation
 	output, err := json.MarshalIndent(finalSettings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal claude-settings.json: %w", err)
 	}
 
-	// Write file
 	if err := os.WriteFile(settingsPath, output, 0644); err != nil {
 		return fmt.Errorf("failed to write claude-settings.json: %w", err)
 	}
@@ -271,27 +222,22 @@ func WriteClaudeSettings(projectRoot string) error {
 // Special handling for permissions.allow array (union of both).
 func mergeSettings(liza, existing map[string]any) map[string]any {
 	result := make(map[string]any)
-
-	// Start with liza settings as base
 	for k, v := range liza {
 		result[k] = v
 	}
 
-	// Override with existing settings (preserve user customizations)
+	// Existing settings override liza defaults (preserve user customizations),
+	// except "permissions" which gets deep-merged to union allow lists.
 	for k, v := range existing {
 		if k == "permissions" {
-			// Special handling: merge permissions
 			lizaPerms, lizaOk := liza[k].(map[string]any)
 			existingPerms, existingOk := v.(map[string]any)
-
 			if lizaOk && existingOk {
 				result[k] = mergePermissions(lizaPerms, existingPerms)
 			} else {
-				// If one is invalid, use existing
 				result[k] = v
 			}
 		} else {
-			// Direct override
 			result[k] = v
 		}
 	}
@@ -300,31 +246,23 @@ func mergeSettings(liza, existing map[string]any) map[string]any {
 }
 
 // mergePermissions merges permission objects.
-// Keeps existing defaultMode, but unions the allow arrays.
+// Existing values override liza defaults, except "allow" which is unioned.
 func mergePermissions(liza, existing map[string]any) map[string]any {
 	result := make(map[string]any)
-
-	// Start with liza permissions
 	for k, v := range liza {
 		result[k] = v
 	}
 
-	// Override with existing (except for "allow" which we union)
 	for k, v := range existing {
 		if k == "allow" {
-			// Union of allow arrays
 			lizaAllow, lizaOk := liza[k].([]any)
 			existingAllow, existingOk := v.([]any)
-
 			if lizaOk && existingOk {
 				result[k] = unionStringArrays(lizaAllow, existingAllow)
 			} else if existingOk {
-				// If liza doesn't have allow, use existing
 				result[k] = v
 			}
-			// If neither has valid allow, result keeps lizaAllow from earlier copy
 		} else {
-			// Direct override (e.g., defaultMode)
 			result[k] = v
 		}
 	}
@@ -368,10 +306,8 @@ func unionStringArrays(a, b []any) []any {
 func WriteMCPSettings(projectRoot string) error {
 	mcpSettingsPath := filepath.Join(projectRoot, ".mcp.json")
 
-	// Check if file already exists
 	var existingSettings map[string]any
 	if existingData, err := os.ReadFile(mcpSettingsPath); err == nil {
-		// File exists - prompt user for merge
 		fmt.Print("Should the Liza MCP server configuration be merged into the existing .mcp.json file? (y/n): ")
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
@@ -381,33 +317,26 @@ func WriteMCPSettings(projectRoot string) error {
 
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "y" && response != "yes" {
-			// User declined merge - return without error
 			return nil
 		}
 
-		// Parse existing file
 		if err := json.Unmarshal(existingData, &existingSettings); err != nil {
 			return fmt.Errorf("failed to parse existing .mcp.json: %w", err)
 		}
 	}
 
-	// Parse embedded (liza) settings
 	var lizaMCPSettings map[string]any
 	if err := json.Unmarshal(mcpSettingsContent, &lizaMCPSettings); err != nil {
 		return fmt.Errorf("failed to parse embedded mcp.json: %w", err)
 	}
 
-	// Merge or use liza settings
 	var finalSettings map[string]any
 	if existingSettings != nil {
-		// Merge: merge mcpServers maps
 		finalSettings = mergeMCPSettings(lizaMCPSettings, existingSettings)
 	} else {
-		// New file: use liza settings
 		finalSettings = lizaMCPSettings
 	}
 
-	// Inject metadata into _comment field
 	existingComment, ok := finalSettings["_comment"].([]any)
 	if !ok {
 		existingComment = []any{}
@@ -426,13 +355,11 @@ func WriteMCPSettings(projectRoot string) error {
 	}
 	finalSettings["_comment"] = existingComment
 
-	// Marshal back to JSON with indentation
 	output, err := json.MarshalIndent(finalSettings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal .mcp.json: %w", err)
 	}
 
-	// Write file
 	if err := os.WriteFile(mcpSettingsPath, output, 0644); err != nil {
 		return fmt.Errorf("failed to write .mcp.json: %w", err)
 	}
@@ -441,38 +368,31 @@ func WriteMCPSettings(projectRoot string) error {
 }
 
 // mergeMCPSettings merges liza MCP settings into existing settings.
-// Special handling for mcpServers map (merge server entries).
+// Existing values override liza defaults, except "mcpServers" which is deep-merged
+// (individual server entries merged, existing takes precedence per server name).
 func mergeMCPSettings(liza, existing map[string]any) map[string]any {
 	result := make(map[string]any)
-
-	// Start with liza settings as base
 	for k, v := range liza {
 		result[k] = v
 	}
 
-	// Override with existing settings
 	for k, v := range existing {
 		if k == "mcpServers" {
-			// Special handling: merge mcpServers maps
 			lizaServers, lizaOk := liza[k].(map[string]any)
 			existingServers, existingOk := v.(map[string]any)
-
 			if lizaOk && existingOk {
-				// Merge server entries (existing takes precedence)
 				mergedServers := make(map[string]any)
-				for serverName, serverConfig := range lizaServers {
-					mergedServers[serverName] = serverConfig
+				for name, cfg := range lizaServers {
+					mergedServers[name] = cfg
 				}
-				for serverName, serverConfig := range existingServers {
-					mergedServers[serverName] = serverConfig
+				for name, cfg := range existingServers {
+					mergedServers[name] = cfg
 				}
 				result[k] = mergedServers
 			} else {
-				// If one is invalid, use existing
 				result[k] = v
 			}
 		} else {
-			// Direct override
 			result[k] = v
 		}
 	}
