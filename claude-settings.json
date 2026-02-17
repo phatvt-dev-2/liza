@@ -1,24 +1,4 @@
 {
-  "_comment": [
-    "Claude Code project-level settings for Liza.",
-    "",
-    "This file is the master template embedded into the liza binary.",
-    "liza init writes it to <project>/.claude/settings.json automatically.",
-    "",
-    "It grants Claude Code the permissions needed to:",
-    "  - Execute liza MCP tools for task and agent management",
-    "  - Read Liza state files from .liza/ directories",
-    "  - Perform git operations and run development tools",
-    "  - Make code edits as agents work on tasks",
-    "",
-    "For more information, see:",
-    "  - docs/CONFIGURATION.md section 'MCP Server Setup'",
-    "  - contracts/contract-activation.md section 'Two-Layer Settings Architecture'",
-    "",
-    "Security note: defaultMode 'acceptEdits' automatically approves file",
-    "edits. Change to 'prompt' if you prefer manual approval for each change."
-  ],
-
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": ["liza"],
   "additionalDirectories": [],

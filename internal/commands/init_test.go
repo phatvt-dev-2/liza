@@ -540,27 +540,6 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 		t.Fatalf("settings.json is not valid JSON: %v", err)
 	}
 
-	// Verify _comment field contains metadata
-	comment, ok := settings["_comment"].([]any)
-	if !ok {
-		t.Fatalf("_comment field is missing or not an array")
-	}
-
-	commentStr := ""
-	for _, line := range comment {
-		commentStr += line.(string) + "\n"
-	}
-
-	if !strings.Contains(commentStr, "liza_version:") {
-		t.Errorf("Metadata missing liza_version in _comment")
-	}
-	if !strings.Contains(commentStr, "liza_git_commit:") {
-		t.Errorf("Metadata missing liza_git_commit in _comment")
-	}
-	if !strings.Contains(commentStr, "liza_build_date:") {
-		t.Errorf("Metadata missing liza_build_date in _comment")
-	}
-
 	// Verify permissions structure exists
 	perms, ok := settings["permissions"].(map[string]any)
 	if !ok {

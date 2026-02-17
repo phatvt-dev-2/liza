@@ -748,27 +748,6 @@ func TestWriteClaudeSettings_NewFile(t *testing.T) {
 		t.Fatalf("Failed to parse JSON: %v", err)
 	}
 
-	// Verify metadata in _comment field
-	comment, ok := settings["_comment"].([]any)
-	if !ok {
-		t.Fatalf("_comment is not an array")
-	}
-
-	commentStr := ""
-	for _, line := range comment {
-		commentStr += line.(string) + "\n"
-	}
-
-	if !strings.Contains(commentStr, "liza_version: 1.0.0") {
-		t.Errorf("Metadata missing version in _comment")
-	}
-	if !strings.Contains(commentStr, "liza_git_commit: test123") {
-		t.Errorf("Metadata missing git commit in _comment")
-	}
-	if !strings.Contains(commentStr, "liza_build_date: 2026-01-01T00:00:00Z") {
-		t.Errorf("Metadata missing build date in _comment")
-	}
-
 	// Verify permissions exist
 	perms, ok := settings["permissions"].(map[string]any)
 	if !ok {
@@ -815,9 +794,6 @@ func TestWriteClaudeSettings_MergeAccepted(t *testing.T) {
 	}
 
 	existingSettings := map[string]any{
-		"_comment": []any{
-			"Existing settings",
-		},
 		"permissions": map[string]any{
 			"defaultMode": "prompt",
 			"allow": []any{
@@ -905,23 +881,6 @@ func TestWriteClaudeSettings_MergeAccepted(t *testing.T) {
 		t.Errorf("additionalDirectories not preserved from existing")
 	}
 
-	// Verify metadata was added to _comment
-	comment, ok := merged["_comment"].([]any)
-	if !ok {
-		t.Fatalf("_comment missing")
-	}
-
-	commentStr := ""
-	for _, line := range comment {
-		commentStr += line.(string) + "\n"
-	}
-
-	if !strings.Contains(commentStr, "Existing settings") {
-		t.Errorf("Original comment not preserved")
-	}
-	if !strings.Contains(commentStr, "liza_version:") {
-		t.Errorf("Metadata not added to comment")
-	}
 }
 
 // Test WriteClaudeSettings with existing file - merge declined
@@ -936,9 +895,6 @@ func TestWriteClaudeSettings_MergeDeclined(t *testing.T) {
 	}
 
 	existingSettings := map[string]any{
-		"_comment": []any{
-			"Existing settings - do not change",
-		},
 		"permissions": map[string]any{
 			"defaultMode": "prompt",
 			"allow": []any{
@@ -978,23 +934,6 @@ func TestWriteClaudeSettings_MergeDeclined(t *testing.T) {
 		t.Fatalf("Failed to parse JSON: %v", err)
 	}
 
-	comment, ok := settings["_comment"].([]any)
-	if !ok {
-		t.Fatalf("_comment missing")
-	}
-
-	// Should NOT have metadata (merge was declined)
-	commentStr := ""
-	for _, line := range comment {
-		commentStr += line.(string) + "\n"
-	}
-
-	if strings.Contains(commentStr, "liza_version:") {
-		t.Errorf("Metadata was added despite declining merge")
-	}
-	if !strings.Contains(commentStr, "do not change") {
-		t.Errorf("Original comment was modified")
-	}
 }
 
 // Test WriteClaudeSettings JSON validity
