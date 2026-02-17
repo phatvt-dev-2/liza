@@ -27,14 +27,12 @@ __pycache__/
 .coverage
 *.lcov
 
-# Go build artifacts
-internal/embedded/contracts/
-internal/embedded/skills/
-internal/embedded/docs/
-internal/embedded/claude-settings.json
-internal/embedded/mcp.json
+# Go build artifacts — sync-embedded output (only *.go is source)
+internal/embedded/*
+!internal/embedded/*.go
 /liza
 /liza-mcp
+dist/
 
 # Symlinks to the contract
 CLAUDE.md
