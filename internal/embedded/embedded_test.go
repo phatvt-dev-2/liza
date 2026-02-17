@@ -115,12 +115,85 @@ func TestPrependFrontmatter(t *testing.T) {
 	BuildDate = "unknown"
 }
 
+func TestPrependFrontmatter_ReplacesExisting(t *testing.T) {
+	Version = "2.0.0"
+	GitCommit = "new456"
+	BuildDate = "2026-02-01T00:00:00Z"
+	defer func() {
+		Version = "dev"
+		GitCommit = "unknown"
+		BuildDate = "unknown"
+	}()
+
+	// Content that already has frontmatter
+	input := []byte("---\nliza_version: \"1.0.0\"\nliza_git_commit: \"old123\"\nliza_build_date: \"2026-01-01T00:00:00Z\"\n---\n\n# Real Content\n\nBody text.")
+	result := prependFrontmatter(input)
+	resultStr := string(result)
+
+	// Should have exactly one frontmatter block with the NEW values
+	if strings.Count(resultStr, "liza_version:") != 1 {
+		t.Errorf("Expected exactly one liza_version, got:\n%s", resultStr)
+	}
+	if !strings.Contains(resultStr, `liza_version: "2.0.0"`) {
+		t.Error("Expected new version in frontmatter")
+	}
+	if strings.Contains(resultStr, "old123") {
+		t.Error("Old frontmatter values should be stripped")
+	}
+
+	// Original content should be preserved
+	if !strings.Contains(resultStr, "# Real Content") {
+		t.Error("Original content lost")
+	}
+	if !strings.Contains(resultStr, "Body text.") {
+		t.Error("Body text lost")
+	}
+}
+
+func TestStripFrontmatter(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no frontmatter",
+			input:    "# Title\n\nBody",
+			expected: "# Title\n\nBody",
+		},
+		{
+			name:     "with frontmatter",
+			input:    "---\nkey: value\n---\n\n# Title\n\nBody",
+			expected: "# Title\n\nBody",
+		},
+		{
+			name:     "malformed frontmatter (no closing)",
+			input:    "---\nkey: value\n# Title",
+			expected: "---\nkey: value\n# Title",
+		},
+		{
+			name:     "empty after frontmatter",
+			input:    "---\nkey: value\n---\n\n",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := string(stripFrontmatter([]byte(tt.input)))
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
 func TestWriteGlobalFiles(t *testing.T) {
 	// Create temporary directory for testing (acts as ~/.liza/)
 	tmpDir := t.TempDir()
 
 	// Write global files
-	written, err := WriteGlobalFiles(tmpDir)
+	written, err := WriteGlobalFiles(tmpDir, nil)
 	if err != nil {
 		t.Fatalf("WriteGlobalFiles failed: %v", err)
 	}
@@ -213,7 +286,7 @@ func TestWriteGlobalFiles_FrontmatterInAllFiles(t *testing.T) {
 	BuildDate = "test-date"
 
 	// Write global files
-	_, err := WriteGlobalFiles(tmpDir)
+	_, err := WriteGlobalFiles(tmpDir, nil)
 	if err != nil {
 		t.Fatalf("WriteGlobalFiles failed: %v", err)
 	}
@@ -271,7 +344,7 @@ func TestWriteGlobalFiles_OverwritesExisting(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Write files first time
-	_, err := WriteGlobalFiles(tmpDir)
+	_, err := WriteGlobalFiles(tmpDir, nil)
 	if err != nil {
 		t.Fatalf("First WriteGlobalFiles failed: %v", err)
 	}
@@ -290,7 +363,7 @@ func TestWriteGlobalFiles_OverwritesExisting(t *testing.T) {
 	}
 
 	// Write files second time
-	_, err = WriteGlobalFiles(tmpDir)
+	_, err = WriteGlobalFiles(tmpDir, nil)
 	if err != nil {
 		t.Fatalf("Second WriteGlobalFiles failed: %v", err)
 	}

@@ -92,6 +92,125 @@ func TestSetupCommand_ExistingWithForce(t *testing.T) {
 	if string(content) == "old content" {
 		t.Error("CORE.md was not overwritten with --force")
 	}
+
+	// Verify .bak backup was created
+	bakContent, err := os.ReadFile(filepath.Join(tmpDir, "CORE.md.bak"))
+	if err != nil {
+		t.Fatal("CORE.md.bak not created")
+	}
+	if string(bakContent) != "old content" {
+		t.Errorf("CORE.md.bak has wrong content: %q", string(bakContent))
+	}
+}
+
+func TestSetupCommand_CustomizableFileSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Pre-create CORE.md and AGENT_TOOLS.md
+	if err := os.WriteFile(filepath.Join(tmpDir, "CORE.md"), []byte("old core"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT_TOOLS.md"), []byte("my custom tools"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Provide "y\n" for bulk overwrite, then "n\n" to skip AGENT_TOOLS.md
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.WriteString("y\nn\n"); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	err = SetupCommand(tmpDir, true)
+	if err != nil {
+		t.Fatalf("SetupCommand failed: %v", err)
+	}
+
+	// CORE.md should be overwritten
+	coreContent, err := os.ReadFile(filepath.Join(tmpDir, "CORE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(coreContent) == "old core" {
+		t.Error("CORE.md was not overwritten")
+	}
+
+	// AGENT_TOOLS.md should be preserved (user declined)
+	toolsContent, err := os.ReadFile(filepath.Join(tmpDir, "AGENT_TOOLS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(toolsContent) != "my custom tools" {
+		t.Error("AGENT_TOOLS.md was overwritten despite user declining")
+	}
+
+	// AGENT_TOOLS.md.bak should NOT exist (file was skipped, not overwritten)
+	if _, err := os.Stat(filepath.Join(tmpDir, "AGENT_TOOLS.md.bak")); err == nil {
+		t.Error("AGENT_TOOLS.md.bak should not exist when file was skipped")
+	}
+
+	// CORE.md.bak should exist
+	bakContent, err := os.ReadFile(filepath.Join(tmpDir, "CORE.md.bak"))
+	if err != nil {
+		t.Fatal("CORE.md.bak not created")
+	}
+	if string(bakContent) != "old core" {
+		t.Errorf("CORE.md.bak has wrong content: %q", string(bakContent))
+	}
+}
+
+func TestSetupCommand_CustomizableFileOverwritten(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Pre-create CORE.md and AGENT_TOOLS.md
+	if err := os.WriteFile(filepath.Join(tmpDir, "CORE.md"), []byte("old core"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENT_TOOLS.md"), []byte("my custom tools"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Provide "y\n" for bulk overwrite, then "y\n" to also overwrite AGENT_TOOLS.md
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.WriteString("y\ny\n"); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	err = SetupCommand(tmpDir, true)
+	if err != nil {
+		t.Fatalf("SetupCommand failed: %v", err)
+	}
+
+	// AGENT_TOOLS.md should be overwritten (user accepted)
+	toolsContent, err := os.ReadFile(filepath.Join(tmpDir, "AGENT_TOOLS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(toolsContent) == "my custom tools" {
+		t.Error("AGENT_TOOLS.md was not overwritten despite user accepting")
+	}
+
+	// AGENT_TOOLS.md.bak should exist with original content
+	bakContent, err := os.ReadFile(filepath.Join(tmpDir, "AGENT_TOOLS.md.bak"))
+	if err != nil {
+		t.Fatal("AGENT_TOOLS.md.bak not created")
+	}
+	if string(bakContent) != "my custom tools" {
+		t.Errorf("AGENT_TOOLS.md.bak has wrong content: %q", string(bakContent))
+	}
 }
 
 func TestSetupCommand_ExistingWithForceDeclined(t *testing.T) {

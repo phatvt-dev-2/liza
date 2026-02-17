@@ -4,6 +4,7 @@ package embedded
 
 import (
 	"bufio"
+	"bytes"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -66,16 +67,17 @@ func PlanGlobalFiles(targetDir string) []string {
 // WriteGlobalFiles writes contracts and skills to the global Liza directory (~/.liza/).
 // Contracts are written flat into targetDir/ and skills into targetDir/skills/.
 // Each file is prepended with YAML frontmatter containing version metadata.
+// Files whose absolute path appears in skipFiles are silently skipped.
 // Returns the list of absolute paths written.
-func WriteGlobalFiles(targetDir string) ([]string, error) {
+func WriteGlobalFiles(targetDir string, skipFiles map[string]bool) ([]string, error) {
 	var written []string
-	contractPaths, err := writeEmbeddedFS(contractsFS, targetDir)
+	contractPaths, err := writeEmbeddedFS(contractsFS, targetDir, skipFiles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write contracts: %w", err)
 	}
 	written = append(written, contractPaths...)
 
-	skillPaths, err := writeEmbeddedFS(skillsFS, filepath.Join(targetDir, "skills"))
+	skillPaths, err := writeEmbeddedFS(skillsFS, filepath.Join(targetDir, "skills"), skipFiles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write skills: %w", err)
 	}
@@ -94,8 +96,9 @@ func WriteRuntimeReference(lizaDir string) error {
 }
 
 // writeEmbeddedFS writes an entire embedded filesystem to the target directory.
+// Files whose absolute path appears in skipFiles are silently skipped.
 // Returns the list of absolute paths of files written (directories excluded).
-func writeEmbeddedFS(embeddedFS embed.FS, targetDir string) ([]string, error) {
+func writeEmbeddedFS(embeddedFS embed.FS, targetDir string, skipFiles map[string]bool) ([]string, error) {
 	var written []string
 	err := fs.WalkDir(embeddedFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -117,6 +120,10 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string) ([]string, error) {
 
 		if d.IsDir() {
 			return os.MkdirAll(targetPath, 0755)
+		}
+
+		if skipFiles[targetPath] {
+			return nil
 		}
 
 		content, err := embeddedFS.ReadFile(path)
@@ -155,10 +162,31 @@ func writeEmbeddedFile(content []byte, targetPath string) error {
 	return nil
 }
 
-// prependFrontmatter adds YAML frontmatter with version metadata to file content.
+// prependFrontmatter replaces any existing YAML frontmatter with fresh version metadata.
+// If the content already starts with "---\n", the old frontmatter block is stripped first.
 func prependFrontmatter(content []byte) []byte {
 	fm := frontmatter()
-	return append([]byte(fm), content...)
+	return append([]byte(fm), stripFrontmatter(content)...)
+}
+
+// stripFrontmatter removes a leading YAML frontmatter block ("---\n...---\n") if present.
+func stripFrontmatter(content []byte) []byte {
+	prefix := []byte("---\n")
+	if !bytes.HasPrefix(content, prefix) {
+		return content
+	}
+	// Find the closing "---" delimiter
+	rest := content[len(prefix):]
+	idx := bytes.Index(rest, []byte("\n---\n"))
+	if idx == -1 {
+		return content // malformed frontmatter, leave as-is
+	}
+	// Skip past closing "---\n" and any single trailing blank line
+	after := rest[idx+len("\n---\n"):]
+	if len(after) > 0 && after[0] == '\n' {
+		after = after[1:]
+	}
+	return after
 }
 
 // frontmatter generates YAML frontmatter string from build-time variables.
