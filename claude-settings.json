@@ -48,6 +48,7 @@
       "mcp__liza__liza_analyze",
       "mcp__liza__liza_update_sprint_metrics",
       "mcp__liza__liza_clear_stale_review_claims",
+      "mcp__liza__liza_checkpoint",
       "mcp__liza__liza_delete_agent",
 
       "Skill(adr-backfill)",

@@ -295,6 +295,8 @@ func buildPlannerStatus(state *models.State) plannerStatus {
 		ps.Reason = fmt.Sprintf("%d task(s) exhausted hypotheses (2+ failures)", count)
 	case "IMMEDIATE_DISCOVERY":
 		ps.Reason = fmt.Sprintf("%d immediate discovery(ies) need to be converted to tasks", count)
+	case "SPRINT_COMPLETE":
+		ps.Reason = fmt.Sprintf("All %d planned task(s) reached terminal state; sprint complete", count)
 	case "NONE":
 		ps.Reason = "No triggers; planner is idle"
 	default:
@@ -318,7 +320,7 @@ func detectPlannerWakeTriggers(state *models.State) (trigger string, count int) 
 		case models.TaskStatusIntegrationFailed:
 			integrationFailed++
 		}
-		if len(task.FailedBy) >= 2 {
+		if len(task.FailedBy) >= 2 && !task.Status.IsTerminal() {
 			hypothesisExhausted++
 		}
 	}
@@ -341,6 +343,10 @@ func detectPlannerWakeTriggers(state *models.State) (trigger string, count int) 
 	}
 	if immediateDiscoveries > 0 {
 		return "IMMEDIATE_DISCOVERY", immediateDiscoveries
+	}
+
+	if state.AllPlannedTasksTerminal() {
+		return "SPRINT_COMPLETE", len(state.Sprint.Scope.Planned)
 	}
 
 	return "NONE", 0

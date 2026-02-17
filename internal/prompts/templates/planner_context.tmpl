@@ -20,6 +20,10 @@ PLANNER COMMANDS:
   Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "planner-1"}
 - liza_wt_delete — Delete worktree for abandoned/superseded/blocked tasks
   Tool parameters: {"task_id": "..."}
+- liza_checkpoint — Create sprint checkpoint for human review (pauses all agents)
+  Tool parameters: {}
+- liza_update_sprint_metrics — Recompute sprint metrics from current state
+  Tool parameters: {}
 
 INSTRUCTIONS:
 {{.WakeInstructions}}

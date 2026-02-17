@@ -13,6 +13,7 @@ const (
 	WakeTriggerIntegrationFailed   PlannerWakeTrigger = "INTEGRATION_FAILED"
 	WakeTriggerHypothesisExhausted PlannerWakeTrigger = "HYPOTHESIS_EXHAUSTED"
 	WakeTriggerImmediateDiscovery  PlannerWakeTrigger = "IMMEDIATE_DISCOVERY"
+	WakeTriggerSprintComplete      PlannerWakeTrigger = "SPRINT_COMPLETE"
 	WakeTriggerNone                PlannerWakeTrigger = "NONE"
 )
 
@@ -24,12 +25,13 @@ type PlannerWakeResult struct {
 
 // DetectPlannerWakeTriggers detects conditions that should wake the planner
 // Returns the highest-priority trigger and count of items for that trigger
-// Priority order (per bash script):
+// Priority order:
 // 1. No tasks (initial planning)
 // 2. Blocked tasks
 // 3. Integration failed
 // 4. Hypothesis exhausted (2+ failed_by)
 // 5. Immediate discoveries (not yet converted to tasks)
+// 6. Sprint complete (all planned tasks terminal)
 func DetectPlannerWakeTriggers(state *models.State) PlannerWakeResult {
 	// Check for initial planning
 	if len(state.Tasks) == 0 {
@@ -92,6 +94,18 @@ func DetectPlannerWakeTriggers(state *models.State) PlannerWakeResult {
 		return PlannerWakeResult{
 			Trigger: WakeTriggerImmediateDiscovery,
 			Count:   immediateDiscoveries,
+		}
+	}
+
+	// Check for sprint completion — all planned tasks in terminal state.
+	// This is the lowest-priority trigger: problem triggers (BLOCKED, INTEGRATION_FAILED,
+	// etc.) take precedence. In practice they're mutually exclusive — terminal tasks can't
+	// be blocked — but mid-sprint replacement tasks (not in planned list) could be blocked
+	// while all planned tasks are terminal.
+	if state.AllPlannedTasksTerminal() {
+		return PlannerWakeResult{
+			Trigger: WakeTriggerSprintComplete,
+			Count:   len(state.Sprint.Scope.Planned),
 		}
 	}
 

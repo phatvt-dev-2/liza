@@ -654,6 +654,15 @@ func (s *Server) registerComplexOperations() {
 		},
 	}, s.handleUpdateSprintMetrics)
 
+	// liza_checkpoint tool
+	s.registerTool(protocol.Tool{
+		Name:        "liza_checkpoint",
+		Description: "Create sprint checkpoint for human review. Pauses all agents and generates a sprint summary report.",
+		InputSchema: protocol.InputSchema{
+			Type: "object",
+		},
+	}, s.handleCheckpoint)
+
 	// liza_clear_stale_review_claims tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_clear_stale_review_claims",

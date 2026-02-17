@@ -79,7 +79,7 @@ func BuildPlannerContext(state *models.State, config PlannerContextConfig) strin
 
 	hypothesisExhausted := 0
 	for _, task := range state.Tasks {
-		if len(task.FailedBy) >= 2 {
+		if len(task.FailedBy) >= 2 && !task.Status.IsTerminal() {
 			hypothesisExhausted++
 		}
 	}
@@ -91,7 +91,7 @@ func BuildPlannerContext(state *models.State, config PlannerContextConfig) strin
 		}
 	}
 
-	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries)
+	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, state.AllPlannedTasksTerminal())
 
 	data := plannerContextData{
 		WakeTrigger:          wakeTrigger,
@@ -198,7 +198,7 @@ func countTasksByStatus(tasks []models.Task, status models.TaskStatus) int {
 }
 
 // determineWakeTrigger determines what triggered the planner to wake
-func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries int) string {
+func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries int, sprintComplete bool) string {
 	if totalTasks == 0 {
 		return "INITIAL_PLANNING"
 	}
@@ -213,6 +213,9 @@ func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExha
 	}
 	if immediateDiscoveries > 0 {
 		return "IMMEDIATE_DISCOVERY"
+	}
+	if sprintComplete {
+		return "SPRINT_COMPLETE"
 	}
 	return "UNKNOWN"
 }
@@ -235,6 +238,8 @@ func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string) string {
 		return executeTemplate("wake_hypothesis_exhausted", nil)
 	case "IMMEDIATE_DISCOVERY":
 		return executeTemplate("wake_immediate_discovery", nil)
+	case "SPRINT_COMPLETE":
+		return executeTemplate("wake_sprint_complete", nil)
 	default:
 		return ""
 	}

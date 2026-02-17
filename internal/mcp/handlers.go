@@ -490,6 +490,16 @@ func (s *Server) handleAnalyze(params map[string]any) (any, error) {
 	return textResult("Circuit breaker analysis complete")
 }
 
+// handleCheckpoint implements the liza_checkpoint tool
+// Maps to: liza checkpoint
+func (s *Server) handleCheckpoint(params map[string]any) (any, error) {
+	if err := commands.CheckpointCommand(s.projectRoot); err != nil {
+		return nil, fmt.Errorf("checkpoint failed: %w", err)
+	}
+
+	return textResult("Sprint checkpoint created. Agents will pause at their next check.")
+}
+
 // handleUpdateSprintMetrics implements the liza_update_sprint_metrics tool
 // Maps to: liza update-sprint-metrics
 func (s *Server) handleUpdateSprintMetrics(params map[string]any) (any, error) {

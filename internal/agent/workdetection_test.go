@@ -387,6 +387,75 @@ func TestDetectPlannerWakeTriggers(t *testing.T) {
 			wantTrigger: WakeTriggerNone,
 			wantCount:   0,
 		},
+		{
+			name: "sprint complete (all planned tasks merged)",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerSprintComplete,
+			wantCount:   2,
+		},
+		{
+			name: "sprint complete (mixed terminal states)",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2", "task-3"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusAbandoned, now),
+					testhelpers.BuildTaskByStatus("task-3", models.TaskStatusSuperseded, now),
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerSprintComplete,
+			wantCount:   3,
+		},
+		{
+			name: "sprint not complete (some tasks in progress)",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, now),
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
+		},
+		{
+			name: "sprint not complete (planned task not in task list)",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
+		},
+		{
+			name: "empty planned list does not trigger sprint complete",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -542,6 +611,19 @@ func TestHasPlannerWork(t *testing.T) {
 				return state
 			}(),
 			want: false,
+		},
+		{
+			name: "sprint complete triggers planner work",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
+				}
+				return state
+			}(),
+			want: true,
 		},
 	}
 

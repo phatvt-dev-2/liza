@@ -166,6 +166,31 @@ func (s *State) ReleaseAgent(agentID string) {
 	}
 }
 
+// AllPlannedTasksTerminal returns true if the sprint has planned tasks and all of
+// them are in a terminal state (MERGED, ABANDONED, SUPERSEDED). Returns false if
+// the planned list is empty or any planned task is not found/not terminal.
+func (s *State) AllPlannedTasksTerminal() bool {
+	if len(s.Sprint.Scope.Planned) == 0 {
+		return false
+	}
+	for _, taskID := range s.Sprint.Scope.Planned {
+		found := false
+		for i := range s.Tasks {
+			if s.Tasks[i].ID == taskID {
+				if !s.Tasks[i].Status.IsTerminal() {
+					return false
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
 // Agent represents an agent (coder, reviewer, planner) in the system
 type Agent struct {
 	Role            string      `yaml:"role"`

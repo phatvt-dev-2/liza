@@ -258,6 +258,27 @@ func TestBuildPlannerContext(t *testing.T) {
 				"- Unclaimed: 1",
 			},
 		},
+		{
+			name: "sprint complete trigger",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
+				}
+				return state
+			}(),
+			config: PlannerContextConfig{},
+			wantContains: []string{
+				"WAKE TRIGGER: SPRINT_COMPLETE",
+				"- Total tasks: 2",
+				"- Merged: 2",
+				"All planned sprint tasks have reached terminal state",
+				"liza_checkpoint",
+				"liza_update_sprint_metrics",
+			},
+		},
 	}
 
 	for _, tt := range tests {

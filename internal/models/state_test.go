@@ -690,3 +690,74 @@ func containsField(yamlStr, field string) bool {
 	}
 	return false
 }
+
+func TestAllPlannedTasksTerminal(t *testing.T) {
+	now := time.Now().UTC()
+	mkTask := func(id string, status TaskStatus) Task {
+		return Task{ID: id, Status: status, Created: now, Priority: 1, Iteration: 1}
+	}
+
+	tests := []struct {
+		name    string
+		planned []string
+		tasks   []Task
+		want    bool
+	}{
+		{
+			name:    "empty planned list",
+			planned: []string{},
+			tasks:   []Task{mkTask("task-1", TaskStatusMerged)},
+			want:    false,
+		},
+		{
+			name:    "all merged",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusMerged), mkTask("task-2", TaskStatusMerged)},
+			want:    true,
+		},
+		{
+			name:    "mixed terminal states",
+			planned: []string{"task-1", "task-2", "task-3"},
+			tasks: []Task{
+				mkTask("task-1", TaskStatusMerged),
+				mkTask("task-2", TaskStatusAbandoned),
+				mkTask("task-3", TaskStatusSuperseded),
+			},
+			want: true,
+		},
+		{
+			name:    "one still in progress",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusMerged), mkTask("task-2", TaskStatusImplementing)},
+			want:    false,
+		},
+		{
+			name:    "planned task missing from task list",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusMerged)},
+			want:    false,
+		},
+		{
+			name:    "extra non-planned tasks don't affect result",
+			planned: []string{"task-1"},
+			tasks: []Task{
+				mkTask("task-1", TaskStatusMerged),
+				mkTask("task-2", TaskStatusImplementing),
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &State{
+				Sprint: Sprint{Scope: SprintScope{Planned: tt.planned}},
+				Tasks:  tt.tasks,
+			}
+			got := state.AllPlannedTasksTerminal()
+			if got != tt.want {
+				t.Errorf("AllPlannedTasksTerminal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -160,6 +160,50 @@ func TestBuildStatusData(t *testing.T) {
 			},
 		},
 		{
+			name: "sprint complete trigger",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
+				}
+				return state
+			}(),
+			detailed: false,
+			validate: func(t *testing.T, data statusData) {
+				if data.PlannerState.Trigger != "SPRINT_COMPLETE" {
+					t.Errorf("expected SPRINT_COMPLETE trigger, got %s", data.PlannerState.Trigger)
+				}
+				if data.PlannerState.TriggerCount != 2 {
+					t.Errorf("expected trigger count 2, got %d", data.PlannerState.TriggerCount)
+				}
+				if data.PlannerState.Reason != "All 2 planned task(s) reached terminal state; sprint complete" {
+					t.Errorf("unexpected reason: %s", data.PlannerState.Reason)
+				}
+			},
+		},
+		{
+			name: "hypothesis exhaustion ignores terminal tasks",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				// Terminal task with 2+ failures should NOT trigger HYPOTHESIS_EXHAUSTED
+				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				task1.FailedBy = []string{"coder-1", "coder-2"}
+				state.Tasks = []models.Task{task1}
+				return state
+			}(),
+			detailed: false,
+			validate: func(t *testing.T, data statusData) {
+				if data.PlannerState.Trigger == "HYPOTHESIS_EXHAUSTED" {
+					t.Error("terminal task with 2+ failures should not trigger HYPOTHESIS_EXHAUSTED")
+				}
+				if data.PlannerState.Trigger != "NONE" {
+					t.Errorf("expected NONE trigger, got %s", data.PlannerState.Trigger)
+				}
+			},
+		},
+		{
 			name: "work queues status",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()

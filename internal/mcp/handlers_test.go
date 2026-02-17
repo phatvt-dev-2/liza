@@ -1256,3 +1256,43 @@ func TestHandleDeleteAgentWithMissingParams(t *testing.T) {
 		t.Errorf("Expected 'reason parameter required' error, got: %v", err)
 	}
 }
+
+// TestHandleCheckpoint verifies liza_checkpoint tool
+func TestHandleCheckpoint(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	result, err := server.handleCheckpoint(map[string]any{})
+
+	if err != nil {
+		t.Fatalf("handleCheckpoint failed: %v", err)
+	}
+
+	// Verify result format
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+
+	// Verify sprint status changed to CHECKPOINT
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	if state.Sprint.Status != models.SprintStatusCheckpoint {
+		t.Errorf("Expected sprint status CHECKPOINT, got %s", state.Sprint.Status)
+	}
+
+	if state.Sprint.Timeline.CheckpointAt == nil {
+		t.Error("Expected checkpoint_at to be set")
+	}
+}

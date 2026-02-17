@@ -1,0 +1,10 @@
+{{- define "wake_sprint_complete" -}}
+All planned sprint tasks have reached terminal state. Complete the sprint:
+
+1. Read blackboard to confirm all planned tasks are MERGED, ABANDONED, or SUPERSEDED
+2. Update sprint metrics: execute liza_update_sprint_metrics tool
+3. Create checkpoint for human review: execute liza_checkpoint tool
+4. The checkpoint will pause all agents and generate a sprint summary
+
+Do NOT create new tasks or start new work. The sprint is complete.
+{{- end -}}

@@ -1376,6 +1376,16 @@ func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) err
 			return fmt.Errorf("planner completed with IMMEDIATE_DISCOVERY trigger but unconverted count didn't decrease (before: %d, after: %d)", immediateBefore, immediateAfter)
 		}
 		logger.Info("Planner handled immediate discoveries", "before", immediateBefore, "after", immediateAfter)
+
+	case WakeTriggerSprintComplete:
+		// SPRINT_COMPLETE: expect sprint status to be CHECKPOINT (or COMPLETED)
+		if stateAfter.Sprint.Status != models.SprintStatusCheckpoint && stateAfter.Sprint.Status != models.SprintStatusCompleted {
+			return fmt.Errorf("planner completed with SPRINT_COMPLETE trigger but sprint status is %s (expected CHECKPOINT or COMPLETED)", stateAfter.Sprint.Status)
+		}
+		if stateAfter.Sprint.Timeline.CheckpointAt == nil {
+			return fmt.Errorf("planner completed with SPRINT_COMPLETE trigger but checkpoint_at is not set")
+		}
+		logger.Info("Planner completed sprint", "status", stateAfter.Sprint.Status)
 	}
 
 	return nil
