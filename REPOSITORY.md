@@ -161,7 +161,6 @@ User-facing documentation.
 | `release_notes/`        | Version changelogs |
 | `demo-benchmark/`       | Multi-agent demo traces and comparisons |
 | `agent-testimony/`      | Agent session transcripts and observations |
-| `for-agent-eyes/`       | Agent-specific runtime references |
 
 Contract activation guide: `contracts/contract-activation.md`
 

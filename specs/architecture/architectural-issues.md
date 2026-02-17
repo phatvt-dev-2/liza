@@ -329,6 +329,19 @@ Long-term concerns about system evolution.
 - Prune history older than N days
 - Split blackboard by concern (tasks, agents, anomalies)
 
+### Anomaly Detail Validation Incomplete
+
+**Skill:** code-review
+**Category:** FRAGILITY
+
+**Issue:** `liza validate` enforces required detail fields for 5 of 15 anomaly types (`retry_loop`, `trade_off`, `external_blocker`, `assumption_violated`, `system_ambiguity`). The remaining 10 types — including `reviewer_loop` (requires `count`, `command_pattern`) and `review_exhaustion` (requires `reviewers_failed`, `common_blocker`) — pass validation with empty details. The spec (`blackboard-schema.md:770`) and prompt templates (`shared_reference.tmpl`) both declare required fields for all types.
+
+**Implication:** Agents can write structurally valid but informationally empty anomalies. Circuit breaker pattern detection and retrospective analysis degrade when detail fields are missing.
+
+**Future options:**
+- Add cases for all 10 missing types in `validateAnomalies()` (`internal/commands/validate.go:360`)
+- Generate validation from a single type→fields declaration (eliminate spec/code/template as three separate lists)
+
 ---
 
 ## Accepted v1 Limitations

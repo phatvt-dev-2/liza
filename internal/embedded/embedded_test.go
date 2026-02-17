@@ -32,7 +32,6 @@ func TestListEmbeddedFiles(t *testing.T) {
 		"skills/code-review/SKILL.md":           false,
 		"skills/debugging/SKILL.md":             false,
 		"skills/clean-code/languages/go.md":     false,
-		"agent-runtime-reference.md":            false,
 	}
 
 	for _, file := range files {
@@ -244,36 +243,6 @@ func TestWriteGlobalFiles(t *testing.T) {
 	}
 	if skillDirCount == 0 {
 		t.Error("Expected skill directories, got none")
-	}
-}
-
-func TestWriteRuntimeReference(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	err := WriteRuntimeReference(tmpDir)
-	if err != nil {
-		t.Fatalf("WriteRuntimeReference failed: %v", err)
-	}
-
-	runtimeRefPath := filepath.Join(tmpDir, "agent-runtime-reference.md")
-	info, err := os.Stat(runtimeRefPath)
-	if os.IsNotExist(err) {
-		t.Fatal("Runtime reference not created")
-	}
-	if info.Size() == 0 {
-		t.Error("Runtime reference is empty")
-	}
-	if info.Mode().Perm() != 0644 {
-		t.Errorf("File has wrong permissions: got %o, want 0644", info.Mode().Perm())
-	}
-
-	// Verify frontmatter is present
-	content, err := os.ReadFile(runtimeRefPath)
-	if err != nil {
-		t.Fatalf("Failed to read file: %v", err)
-	}
-	if !strings.HasPrefix(string(content), "---\n") {
-		t.Error("Runtime reference missing frontmatter")
 	}
 }
 

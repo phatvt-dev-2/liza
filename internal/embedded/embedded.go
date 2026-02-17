@@ -1,4 +1,4 @@
-// Package embedded provides embedded resource files (contracts, skills, runtime reference)
+// Package embedded provides embedded resource files (contracts, skills, settings)
 // used during workspace initialization.
 package embedded
 
@@ -28,9 +28,6 @@ var contractsFS embed.FS
 
 //go:embed skills
 var skillsFS embed.FS
-
-//go:embed "docs/for-agent-eyes/agent-runtime-reference.md"
-var runtimeReferenceContent []byte
 
 //go:embed "claude-settings.json"
 var claudeSettingsContent []byte
@@ -86,15 +83,6 @@ func WriteGlobalFiles(targetDir string, skipFiles map[string]bool) ([]string, er
 	return written, nil
 }
 
-// WriteRuntimeReference writes the agent runtime reference to .liza/agent-runtime-reference.md.
-func WriteRuntimeReference(lizaDir string) error {
-	runtimeRefPath := filepath.Join(lizaDir, "agent-runtime-reference.md")
-	if err := writeEmbeddedFile(runtimeReferenceContent, runtimeRefPath); err != nil {
-		return fmt.Errorf("failed to write runtime reference: %w", err)
-	}
-	return nil
-}
-
 // writeEmbeddedFS writes an entire embedded filesystem to the target directory.
 // Files whose absolute path appears in skipFiles are silently skipped.
 // Returns the list of absolute paths of files written (directories excluded).
@@ -147,21 +135,6 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string, skipFiles map[string
 	return written, err
 }
 
-// writeEmbeddedFile writes a single embedded file to the target path.
-func writeEmbeddedFile(content []byte, targetPath string) error {
-	contentWithFrontmatter := prependFrontmatter(content)
-
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-		return fmt.Errorf("failed to create directory for %s: %w", targetPath, err)
-	}
-
-	if err := os.WriteFile(targetPath, contentWithFrontmatter, 0644); err != nil {
-		return fmt.Errorf("failed to write %s: %w", targetPath, err)
-	}
-
-	return nil
-}
-
 // prependFrontmatter replaces any existing YAML frontmatter with fresh version metadata.
 // If the content already starts with "---\n", the old frontmatter block is stripped first.
 func prependFrontmatter(content []byte) []byte {
@@ -210,7 +183,6 @@ func ListEmbeddedFiles() ([]string, error) {
 		}
 		files = append(files, collected...)
 	}
-	files = append(files, "agent-runtime-reference.md")
 	return files, nil
 }
 

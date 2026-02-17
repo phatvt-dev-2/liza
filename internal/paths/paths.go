@@ -133,11 +133,6 @@ func (p LizaPaths) ClaudeSettingsPath() string {
 	return filepath.Join(p.ClaudeDir(), ClaudeSettingsFile)
 }
 
-// RuntimeReferencePath returns the path to the agent runtime reference file.
-func (p LizaPaths) RuntimeReferencePath() string {
-	return p.get("agent-runtime-reference.md")
-}
-
 // GlobalLizaDir returns the path to the global ~/.liza directory.
 func GlobalLizaDir() (string, error) {
 	homeDir, err := os.UserHomeDir()

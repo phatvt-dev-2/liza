@@ -12,7 +12,7 @@ In Multi-Agent Mode, the blackboard is the source of truth.
 
 - No human in the loop for routine approvals — peer agents review work
 - Blackboard state (`state.yaml`) defines current reality
-- Specifications (`specs/`) define requirements and constraints
+- Specifications define requirements and constraints
 - Deviations from spec are violations, not judgment calls
 
 **Override Hierarchy:**
@@ -28,14 +28,11 @@ Human is not "in the loop" for normal flow, but IS the exception handler:
 - Merge conflicts requiring judgment → human resolves in integration branch
 - Spec ambiguities that Planner cannot resolve → human clarifies via `human_notes`
 
-The system runs autonomously until it can't. Human resolves specific blockages, then system resumes.
-
 ---
 
 ## Role Execution
 
 Each agent has a defined role with specific capabilities and constraints.
-See [specs/architecture/roles.md](~/.liza/specs/architecture/roles.md) for full definitions.
 
 | Role | Primary Function | Approval Authority |
 |------|------------------|-------------------|
@@ -88,8 +85,6 @@ The Code Reviewer verifies:
 3. Validation was executed as planned
 4. Assumptions were valid
 
-Misalignment between checkpoint and implementation triggers rejection.
-
 ---
 
 ## Gate Semantics (Multi-Agent)
@@ -99,60 +94,16 @@ The Execution State Machine is defined in [CORE.md](~/.liza/CORE.md). In Multi-A
 - **Gate artifact** = Pre-execution checkpoint written to blackboard (above)
 - **Gate cleared** = Checkpoint written (self-clearing — forces thinking, then proceed)
 
-The checkpoint is the gate artifact. Writing it satisfies the gate. Code Reviewer later verifies checkpoint-to-implementation alignment.
-
 ## CORE Rule Overrides (Multi-Agent)
 
 The following CORE.md rules have modified behavior in Multi-Agent Mode:
 
-| CORE Rule | Pairing Behavior | Multi-Agent Behavior |
-|-----------|------------------|---------------------|
-| **Rule 1 Struggle Protocol** | Interactive mode switch prompt | Log anomaly → set BLOCKED |
-| **Rule 4 FAST PATH** | Lightweight approval to human | Reduced checkpoint: intent + files only (no assumptions/risks/validation — FAST PATH eligibility guarantees these are trivial) |
-| **Debugging Protocol** | Read skill, debug with human | Do NOT debug autonomously (see below) |
-| **Context degradation** | Offer checkpoint/reset options | Auto-checkpoint to blackboard, self-terminate |
-
-**Debugging Override:** CORE.md mandates reading the debugging skill. In MAM, agents do NOT debug autonomously beyond quick hypothesis.
-Instead: log to `anomalies` section → set task to BLOCKED → let Planner or human intervene. Rationale: Autonomous debugging in MAM risks cascading errors across agents.
-
-## Task State Machine
-
-Task states in the blackboard track the workflow lifecycle:
-
-| State | Description | Next States |
-|-------|-------------|-------------|
-| DRAFT | Planner defining | READY |
-| READY | Ready for claim | IMPLEMENTING |
-| IMPLEMENTING | Coder working | READY_FOR_REVIEW, BLOCKED |
-| READY_FOR_REVIEW | Awaiting review | REVIEWING |
-| REVIEWING | Reviewer active | APPROVED, REJECTED, READY_FOR_REVIEW (stale lease) |
-| REJECTED | Feedback provided | IMPLEMENTING |
-| APPROVED | Merge eligible | MERGED, INTEGRATION_FAILED |
-| BLOCKED | Awaiting escalation | READY, SUPERSEDED, ABANDONED |
-| INTEGRATION_FAILED | Merge failed | IMPLEMENTING |
-| MERGED | Terminal | — |
-| SUPERSEDED | Terminal | — |
-| ABANDONED | Terminal | — |
-
-**Forbidden Task Transitions:**
-- DRAFT → IMPLEMENTING (coders cannot claim drafts)
-- IMPLEMENTING → MERGED (skipping review)
-- IMPLEMENTING → APPROVED (self-approval)
-- READY_FOR_REVIEW → APPROVED (must go through REVIEWING)
-- READY_FOR_REVIEW → REJECTED (must go through REVIEWING)
-- Any terminal → Any state
-
-**Stop Triggers:**
-- Spec ambiguity discovered → BLOCKED (escalate to Planner)
-- Assumption budget exceeded → BLOCKED
-- Same rejection reason twice → BLOCKED (escalate)
-- Integration conflict → INTEGRATION_FAILED
-
-**Claimability Rule:**
-```
-claimable = (status in [READY, REJECTED, INTEGRATION_FAILED])
-            AND (depends_on is empty OR all depends_on are MERGED)
-```
+| CORE Rule | Multi-Agent Behavior |
+|-----------|---------------------|
+| **Rule 1 Struggle Protocol** | Log anomaly → set BLOCKED |
+| **Rule 4 FAST PATH** | Reduced checkpoint: intent + files only |
+| **Debugging Protocol** | Do NOT debug autonomously beyond quick hypothesis. Log anomaly → BLOCKED. Rationale: autonomous debugging risks cascading errors across agents. |
+| **Context degradation** | Auto-checkpoint to blackboard, self-terminate |
 
 ---
 
@@ -162,44 +113,7 @@ The blackboard (`state.yaml`) is the coordination mechanism.
 
 **Read Before Act:** Always read current state before any action.
 
-**Atomic Updates:** Use the `liza` CLI for concurrent access — locking is handled internally by the binary.
-
 **History is Immutable:** Never delete history entries. Append only.
-
-**State Validation:** Run `liza validate` after updates.
-
-See [specs/architecture/blackboard-schema.md](~/.liza/specs/architecture/blackboard-schema.md) for schema.
-
----
-
-## Worktree Protocol
-
-Each task gets an isolated worktree.
-
-**Creation:** Supervisor creates worktree before agent starts:
-```bash
-git worktree add .worktrees/task-1 -b task/task-1 $BASE_COMMIT
-```
-
-**Work Isolation:**
-- All work happens in assigned worktree
-- Never modify files outside worktree
-- Never commit to integration branch directly
-
-**Merge Flow:**
-1. Coder commits to task branch in worktree
-2. Code Reviewer merges task branch to integration
-3. Worktree preserved until task archived
-
-**Merge Conflict Resolution:**
-On integration conflict (INTEGRATION_FAILED):
-1. Code Reviewer MAY resolve trivial conflicts (whitespace, import order, non-overlapping additions)
-2. Code Reviewer MUST NOT resolve logic conflicts (overlapping changes to same function, conflicting implementations)
-3. For logic conflicts: set task to BLOCKED, log to anomalies with conflict details, escalate to human via `human_notes`
-4. Human resolves in integration branch, adds note to `human_notes`: "Conflict resolved for task-X"
-5. Code Reviewer retries merge after human resolution
-
-See [specs/protocols/worktree-protocol.md](~/.liza/specs/protocols/worktree-protocol.md) for details.
 
 ---
 
@@ -216,25 +130,15 @@ Coders iterate until approved or blocked.
 2. Update checkpoint with new approach
 3. Implement fix
 4. Re-submit for review
-5. Increment `iteration` counter
 
-**On Max Iterations:**
-```yaml
-status: BLOCKED
-blocked_reason: "Max iterations (10) reached without approval"
-blocked_questions:
-  - "Is the spec clear enough?"
-  - "Should task be decomposed?"
-```
+**On Max Iterations:** Set task to BLOCKED with reason "Max iterations reached without approval" and questions about whether the spec is clear enough or task should be decomposed.
 
 **Context Exhaustion Handoff (Coder only):**
 At ~90% context (heuristic: many tool calls, re-reading files, difficulty holding state):
 1. STOP at next safe point
 2. Commit pending changes
-3. Run `liza handoff <task-id> "<summary>" "<next_action>"` (sets handoff_pending, agent status HANDOFF) *(Note: `liza handoff` command pending Go implementation — data model exists)*
+3. Use `liza_handoff` MCP tool with summary + next_action
 4. Exit with code 42
-
-Supervisor spawns replacement Coder with handoff context from task history.
 
 **Review Exhaustion:**
 If 2 different Code Reviewers fail to issue a verdict on the same task (exit without APPROVED/REJECTED):
@@ -251,13 +155,8 @@ If 2 different Code Reviewers fail to issue a verdict on the same task (exit wit
 - No refactoring outside task scope
 
 **done_when is the Contract:**
-```yaml
-done_when: |
-  - `python -m hello` prints "Hello, World!"
-  - `python -m hello --name Alice` prints "Hello, Alice!"
-```
-
 Each criterion is a test. All must pass. No more, no less.
+Example: `app greet` prints "Hello, World!", `app greet --name Alice` prints "Hello, Alice!"
 
 **TDD Enforcement (MANDATORY for code tasks):**
 - Each code task MUST include tests — Planner does NOT create separate "add tests" tasks
@@ -267,95 +166,7 @@ Each criterion is a test. All must pass. No more, no less.
 - Rationale: Coder can't validate their work without tests; separate test tasks break TDD flow
 
 **scope Defines Boundaries:**
-```yaml
-scope: |
-  IN: hello/__init__.py, hello/__main__.py, tests/test_hello.py
-  OUT: packaging, CI/CD, documentation
-```
-
-Touching OUT-scope files is a violation.
-
----
-
-## Communication Protocol
-
-Agents communicate via blackboard, not direct interaction.
-
-**Structured Fields:**
-- `blocked_reason`: Why progress stopped
-- `blocked_questions`: What would unblock (1-3 specific questions)
-- `rejection_reason`: Why Code Reviewer rejected
-- `rejection_feedback`: Specific changes needed
-
-**Anomaly Logging:**
-When encountering protocol ambiguity or unexpected situations:
-```yaml
-anomalies:
-  - id: anomaly-1
-    type: system_ambiguity
-    task_id: task-2
-    logged_by: coder-1
-    timestamp: "2026-01-20T14:52:53Z"
-    details:
-      question: "Spec says X but protocol implies Y"
-```
-
----
-
-## Session Initialization (Liza)
-
-**Agent receives bootstrap prompt from supervisor with:**
-1. Role assignment (coder, reviewer, planner)
-2. Specs location (`SPECS_LOCATION` — where to find `architecture/roles.md`)
-3. Project root and blackboard path (`BLACKBOARD` — always `.liza/state.yaml` in project)
-4. Assigned task (if coder/reviewer)
-
-**First Actions:**
-1. Read role definition from `{SPECS_LOCATION}/architecture/roles.md`
-2. Read current blackboard state from `{BLACKBOARD}`
-3. Read `lessons/agents/README.md` (if it exists — project-specific operational lessons)
-4. Read assigned task details (if any)
-5. Execute role-specific protocol
-
-**If bootstrap is incomplete:** Report BLOCKED — cannot initialize without SPECS_LOCATION, BLACKBOARD, and role assignment.
-
-**Planner Additional Actions:**
-- Read `anomalies` section — factor systemic issues into planning
-- Read `human_notes` — resolve BLOCKED tasks per human guidance
-- Clear processed anomalies and human_notes after addressing
-
-**No Greetings:** Agents work silently. Output is blackboard updates, not conversation.
-
----
-
-## Human Intervention Points
-
-Humans intervene via files, not conversation.
-
-| Command | Effect |
-|---------|--------|
-| `liza pause` | All agents pause at next check (`config.mode: PAUSED`) |
-| `liza stop` | All agents exit gracefully (`config.mode: STOPPED`) |
-| `liza checkpoint` | Halt and generate summary (`sprint.status: CHECKPOINT`) |
-| `liza resume` | Resume from PAUSED state |
-| `liza start` | Resume from STOPPED state |
-| `human_notes` in state.yaml | Planner reads on wake |
-
-**Kill Switch Priority:** STOPPED > PAUSED > normal operation
-
----
-
-## Differences from Pairing Mode
-
-| Aspect | Pairing Mode | Multi-Agent Mode |
-|--------|--------------|------------------|
-| Approval | Human approves | Peer agent approves |
-| Gates | Approval request → wait | Pre-execution checkpoint → proceed |
-| Communication | Conversation | Blackboard |
-| Iteration | Human feedback | Code Reviewer feedback |
-| Debugging | Debugging skill | Log anomaly, BLOCKED |
-| Magic Phrases | Active | Not applicable |
-| Session Init | Greet user | Silent execution |
+IN-scope items specify what may be touched. Touching OUT-scope files is a violation.
 
 ---
 
@@ -365,7 +176,7 @@ When transitioning to Working Set tier (see CORE.md Context Management), re-read
 
 **MAM-specific re-read list:**
 - Pre-Execution Checkpoint format (this file, "Pre-Execution Checkpoint")
-- Current role's constraints from `{SPECS_LOCATION}/architecture/roles.md`
+- Current role's constraints from your role section in the agent prompt
 - Active task from blackboard (re-read `state.yaml`)
 
 Combined with CORE.md universal items (Runtime Kernel, Tier 1 summary, current task intent).
@@ -379,9 +190,6 @@ Automatic halt conditions:
 | Condition | Action |
 |-----------|--------|
 | Same task rejected 3× | BLOCKED, escalate |
-| Agent crash loop (3× in 5min) | Supervisor stops |
-| Blackboard validation fails | All agents pause |
-| Integration branch conflict | INTEGRATION_FAILED |
 
 **Loop Detection Self-Abort:**
 If an agent observes itself running:
@@ -399,5 +207,3 @@ WITHOUT meaningful progress → **STOP IMMEDIATELY**
 | Planner | `spec_gap` | Pause for human input |
 
 Exit with code 42 after logging.
-
-See [specs/protocols/circuit-breaker.md](~/.liza/specs/protocols/circuit-breaker.md) for details.

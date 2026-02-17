@@ -24,6 +24,27 @@ DONE WHEN:
 {{deref .Task.RejectionReason}}
 {{- end}}
 
+LOGGING DUTIES:
+| Observation | Log As |
+|-------------|--------|
+| Coder retry loop visible | retry_loop |
+| Implementation differs from spec | scope_deviation |
+| Workaround taken | workaround |
+| Technical debt introduced | debt_created |
+| Spec assumption contradicted | assumption_violated |
+| Spec changed since task creation | spec_changed |
+| Own review stuck in command loop | reviewer_loop |
+
+REVIEW SCOPE:
+Evaluate: matches task def, matches spec, tests validate behavior, obvious defects, commit SHA.
+Do NOT evaluate: style preferences, alternative approaches (unless defective), scope expansion.
+Review full worktree (base_commit → review_commit), not just latest changes.
+Spec currency: validate against current spec version, not version at task creation.
+
+APPROVAL SEMANTICS:
+Approval = matches requirements + spec + tests + no defects.
+Does NOT mean: perfect, no improvements possible, or production-ready.
+
 REVIEWER COMMANDS:
 For APPROVED verdict:
 Use liza_submit_verdict tool with parameters:

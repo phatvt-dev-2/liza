@@ -467,6 +467,8 @@ func TestAnomalyTypes(t *testing.T) {
 		"hypothesis_exhaustion",
 		"spec_gap",
 		"review_deadlock",
+		"review_exhaustion",
+		"reviewer_loop",
 		"system_ambiguity",
 	}
 

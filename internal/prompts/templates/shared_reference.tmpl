@@ -1,0 +1,137 @@
+{{- define "shared_reference" -}}
+
+=== OPERATIONAL REFERENCE ===
+
+TASK STATE MACHINE:
+
+| State | Description | Next States |
+|-------|-------------|-------------|
+| DRAFT | Planner defining | READY |
+| READY | Ready for claim | IMPLEMENTING |
+| IMPLEMENTING | Coder working | READY_FOR_REVIEW, BLOCKED |
+| READY_FOR_REVIEW | Awaiting review | REVIEWING |
+| REVIEWING | Reviewer active | APPROVED, REJECTED, READY_FOR_REVIEW (stale lease) |
+| REJECTED | Feedback provided | IMPLEMENTING |
+| APPROVED | Merge eligible | MERGED, INTEGRATION_FAILED |
+| BLOCKED | Awaiting escalation | READY, SUPERSEDED, ABANDONED |
+| INTEGRATION_FAILED | Merge failed | IMPLEMENTING |
+| MERGED | Terminal | — |
+| SUPERSEDED | Terminal | — |
+| ABANDONED | Terminal | — |
+
+Forbidden transitions:
+- DRAFT → IMPLEMENTING (coders cannot claim drafts)
+- IMPLEMENTING → MERGED (skipping review)
+- IMPLEMENTING → APPROVED (self-approval)
+- READY_FOR_REVIEW → APPROVED (must go through REVIEWING)
+- READY_FOR_REVIEW → REJECTED (must go through REVIEWING)
+- Any terminal → Any state
+
+Stop triggers:
+- Spec ambiguity discovered → BLOCKED (escalate to Planner)
+- Assumption budget exceeded → BLOCKED
+- Same rejection reason twice → BLOCKED (escalate)
+- Integration conflict → INTEGRATION_FAILED
+
+Claimability rule:
+  claimable = (status in [READY, REJECTED, INTEGRATION_FAILED])
+              AND (depends_on is empty OR all depends_on are MERGED)
+
+COMMUNICATION:
+- Agents communicate via blackboard only, not direct interaction
+- Structured fields: blocked_reason, blocked_questions, rejection_reason
+- Anomaly logging format:
+  anomalies:
+    - id: anomaly-1
+      type: <anomaly_type>
+      task: <task-id>
+      reporter: <agent-id>
+      timestamp: "<ISO 8601>"
+      details:
+        <type-specific fields>
+
+BLACKBOARD FIELDS:
+
+Task fields:
+| Field | Type | Set By | Description |
+|-------|------|--------|-------------|
+| id | string | Planner | Unique task identifier (kebab-case) |
+| description | string | Planner | What to build (1-2 sentences) |
+| status | enum | CLI/MCP | Current state (see Task State Machine) |
+| priority | int | Planner | 1 (highest) to 5 (lowest) |
+| spec_ref | string | Planner | Path to spec, optionally with #anchor |
+| done_when | string | Planner | Falsifiable completion criteria |
+| scope | string | Planner | Functional area and boundaries |
+| depends_on | array | Planner | Task IDs that must be MERGED first |
+| assigned_to | string | Supervisor | Agent ID of assigned coder |
+| worktree | string | Supervisor | Path to task worktree |
+| base_commit | string | Supervisor | Integration HEAD at claim time |
+| iteration | int | System | Current coder iteration (1-based) |
+| review_commit | string | Coder | Commit SHA submitted for review |
+| rejection_reason | string | Reviewer | Structured rejection feedback |
+| reviewing_by | string | Supervisor | Agent ID of assigned reviewer |
+| review_lease_expires | timestamp | System | Reviewer lease expiry |
+| approved_by | string | Reviewer | Agent ID who approved |
+| blocked_reason | string | Coder | What is blocking progress |
+| blocked_questions | array | Coder | 1-3 questions that would unblock |
+| failed_by | array | System | Coders who failed this task |
+| integration_fix | bool | Supervisor | True if fixing INTEGRATION_FAILED |
+| handoff_pending | bool | Coder | True during context exhaustion handoff |
+
+Agent fields:
+| Field | Type | Description |
+|-------|------|-------------|
+| role | enum | coder, code-reviewer, planner |
+| status | enum | STARTING, IDLE, WORKING, REVIEWING, WAITING, HANDOFF, PLANNING |
+| current_task | string | Task ID currently assigned |
+| lease_expires | timestamp | When lease expires |
+| heartbeat | timestamp | Last heartbeat time |
+
+Discovery fields:
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Discovery identifier |
+| by | string | Agent who discovered |
+| during | string | Task ID when discovered |
+| description | string | What was discovered |
+| severity | enum | critical, high, medium, low |
+| urgency | enum | immediate (wakes Planner), deferred |
+| recommendation | string | Suggested action |
+| converted_to_task | string | Task ID if converted |
+
+ANOMALY TYPES:
+| Type | Logged By | Required Fields |
+|------|-----------|-----------------|
+| retry_loop | Coder, Reviewer | count, error_pattern |
+| trade_off | Coder | what, why, debt_created |
+| spec_ambiguity | Coder | — |
+| external_blocker | Coder | blocker_service |
+| assumption_violated | Coder, Reviewer | assumption, reality |
+| scope_deviation | Reviewer | — |
+| workaround | Reviewer | — |
+| debt_created | Reviewer | — |
+| spec_changed | Reviewer | — |
+| reviewer_loop | Reviewer | count, command_pattern |
+| hypothesis_exhaustion | Planner | — |
+| spec_gap | Planner | — |
+| review_deadlock | Planner | — |
+| review_exhaustion | Planner | reviewers_failed, common_blocker |
+| system_ambiguity | Any | protocol_section, question |
+
+LEASE MODEL:
+- Lease duration: 5 minutes (default)
+- Heartbeat interval: 60 seconds
+- Extend lease before long operations
+- If lease expires, task becomes reclaimable
+
+EXIT CODES:
+| Code | Meaning | Supervisor Action |
+|------|---------|-------------------|
+| 0 | Role complete (no more work) | Stop agent |
+| 42 | Graceful abort (handoff, loop detected) | Restart immediately |
+| Other | Crash | Restart with backoff |
+
+TIMESTAMPS:
+Format: YYYY-MM-DDTHH:MM:SSZ (ISO 8601 UTC)
+Generate: date -u +%Y-%m-%dT%H:%M:%SZ
+{{- end -}}

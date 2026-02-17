@@ -102,17 +102,26 @@ See [Vision](<build/0 - Vision.md>) for the design philosophy and cost gradient.
 
 ## Maintenance Notes
 
-### Agent Runtime Reference
+### Agent Prompt Templates
 
-`agent-runtime-reference.md` is a consolidated reference for agents at runtime. It distills operational content from multiple specs into a single doc agents read during bootstrap. The source lives at [`docs/for-agent-eyes/agent-runtime-reference.md`](../docs/for-agent-eyes/agent-runtime-reference.md); `liza init` copies it to `.liza/agent-runtime-reference.md` in each project.
+Operational reference content (blackboard fields, state machine, anomaly types, etc.) is inlined directly into agent prompts via Go templates in `internal/prompts/templates/`. The key templates are:
 
-**Sync requirement:** When updating these specs, check if the agent runtime reference needs corresponding updates:
+| Template | Content |
+|----------|---------|
+| `shared_reference.tmpl` | Shared operational content (state machine, blackboard fields, anomaly types, lease model, exit codes) |
+| `planner_context.tmpl` | Planner logging duties, self-validation gates, field format guidelines |
+| `coder_context.tmpl` | Coder logging duties, blocking protocol |
+| `reviewer_context.tmpl` | Reviewer logging duties, review scope, approval semantics |
 
-| Spec | Agent reference sections affected |
-|------|-----------------------------------|
-| `roles.md` | Role-specific sections (capabilities, constraints, protocols) |
-| `blackboard-schema.md` | Field reference tables |
-| `state-machines.md` | State transitions tables |
-| `task-lifecycle.md` | Iteration protocol, blocking protocol, handoff |
+**Sync requirement:** When updating these specs, check if the prompt templates need corresponding updates:
 
-The specs contain rationale and design context; the runtime reference contains only what agents need to act.
+| Spec | Templates affected |
+|------|-------------------|
+| `roles.md` | Role-specific templates (planner/coder/reviewer_context.tmpl) |
+| `blackboard-schema.md` | `shared_reference.tmpl` field tables |
+| `state-machines.md` | `shared_reference.tmpl` state transitions |
+| `task-lifecycle.md` | `shared_reference.tmpl` + role templates |
+
+The specs contain rationale and design context; the templates contain only what agents need to act.
+
+**Trade-off:** Templates are compiled into the binary. Updating operational content requires `make build` → reinstall → restart agents. This higher deployment friction was accepted to eliminate the failure mode where agents skip reading a deployed reference file.

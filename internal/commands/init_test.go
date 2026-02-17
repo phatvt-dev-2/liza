@@ -355,7 +355,7 @@ func verifyInitialization(t *testing.T, tmpDir, description, specRef string) {
 	}
 }
 
-func TestInitCommand_WritesRuntimeReference(t *testing.T) {
+func TestInitCommand_CreatesContractSymlinks(t *testing.T) {
 	// Create temporary git repo
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
@@ -379,18 +379,6 @@ func TestInitCommand_WritesRuntimeReference(t *testing.T) {
 	err = InitCommand("Test goal", "specs/vision.md")
 	if err != nil {
 		t.Fatalf("InitCommand failed: %v", err)
-	}
-
-	// Verify runtime reference was written to .liza/ (not docs/)
-	runtimeRefPath := filepath.Join(gitDir, ".liza", "agent-runtime-reference.md")
-	if _, err := os.Stat(runtimeRefPath); os.IsNotExist(err) {
-		t.Errorf("Runtime reference not created at .liza/agent-runtime-reference.md")
-	}
-
-	// Verify old location does NOT exist
-	oldPath := filepath.Join(gitDir, "docs", "for-agent-eyes", "agent-runtime-reference.md")
-	if _, err := os.Stat(oldPath); err == nil {
-		t.Errorf("Runtime reference should NOT be at old path docs/for-agent-eyes/")
 	}
 
 	// Verify contract symlinks point to absolute global path
@@ -494,58 +482,6 @@ func TestInitCommand_DoesNotOverwriteWithoutConsent(t *testing.T) {
 		if _, err := os.Readlink(linkPath); err != nil {
 			t.Errorf("Symlink %s not created: %v", name, err)
 		}
-	}
-}
-
-func TestInitCommand_FrontmatterPresent(t *testing.T) {
-	// Create temporary git repo
-	gitDir := setupGitRepo(t)
-	defer os.RemoveAll(gitDir)
-
-	setupGlobalLiza(t)
-
-	// Change to temp directory
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chdir(originalDir)
-	if err := os.Chdir(gitDir); err != nil {
-		t.Fatal(err)
-	}
-
-	// Setup
-	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
-
-	// Run init
-	err = InitCommand("Test goal", "specs/vision.md")
-	if err != nil {
-		t.Fatalf("InitCommand failed: %v", err)
-	}
-
-	// Read the runtime reference file (contracts are no longer in .liza/)
-	runtimeRefFile := filepath.Join(gitDir, ".liza", "agent-runtime-reference.md")
-	content, err := os.ReadFile(runtimeRefFile)
-	if err != nil {
-		t.Fatalf("Failed to read agent-runtime-reference.md: %v", err)
-	}
-
-	contentStr := string(content)
-
-	// Verify frontmatter is present
-	if !strings.HasPrefix(contentStr, "---\n") {
-		t.Errorf("agent-runtime-reference.md missing frontmatter prefix")
-	}
-
-	// Verify frontmatter fields
-	if !strings.Contains(contentStr, "liza_version:") {
-		t.Errorf("agent-runtime-reference.md missing liza_version field")
-	}
-	if !strings.Contains(contentStr, "liza_git_commit:") {
-		t.Errorf("agent-runtime-reference.md missing liza_git_commit field")
-	}
-	if !strings.Contains(contentStr, "liza_build_date:") {
-		t.Errorf("agent-runtime-reference.md missing liza_build_date field")
 	}
 }
 

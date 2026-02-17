@@ -36,8 +36,6 @@ func TestBuildBasePrompt(t *testing.T) {
 				"BLACKBOARD: /project/.liza/state.yaml",
 				"GOAL: Build a web API",
 				"APPROVED: use MCP tools with escalated permissions",
-				"Read before acting",
-				"- Agent runtime reference: /project/.liza/agent-runtime-reference.md (section: Code Coder)",
 				"You have FULL read access to .liza/ directory for specs and logs",
 				"For READING state: use liza_get MCP tool",
 				"For MODIFYING state: use role-specific MCP tools",
@@ -59,10 +57,18 @@ func TestBuildBasePrompt(t *testing.T) {
 				"FORBIDDEN:",
 				"Do NOT attempt to claim tasks",
 				"FIRST ACTIONS:",
-				"Read the agent runtime reference (your role section)",
 				"Read the current blackboard state",
 				"Read your assigned task's FULL entry",
 				"Read the goal spec: specs/vision.md",
+				// shared_reference content
+				"=== OPERATIONAL REFERENCE ===",
+				"TASK STATE MACHINE:",
+				"BLACKBOARD FIELDS:",
+				"ANOMALY TYPES:",
+				"LEASE MODEL:",
+				"EXIT CODES:",
+				// FIRST ACTIONS includes lessons
+				"lessons/agents/README.md",
 			},
 		},
 		{
@@ -78,7 +84,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			},
 			wantContains: []string{
 				"You are a Liza code-reviewer agent",
-				"- Agent runtime reference: /project/.liza/agent-runtime-reference.md (section: Code Reviewer)",
+				"=== OPERATIONAL REFERENCE ===",
 			},
 		},
 		{
@@ -94,7 +100,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			},
 			wantContains: []string{
 				"You are a Liza planner agent",
-				"- Agent runtime reference: /project/.liza/agent-runtime-reference.md (section: Planner)",
+				"=== OPERATIONAL REFERENCE ===",
 			},
 		},
 	}
@@ -726,27 +732,6 @@ func TestBuildReviewerContext(t *testing.T) {
 				if strings.Contains(result, "PRIOR FEEDBACK REVIEW") {
 					t.Errorf("BuildReviewerContext() should not contain prior feedback review for iteration 1")
 				}
-			}
-		})
-	}
-}
-
-func TestRoleTitleFormatting(t *testing.T) {
-	tests := []struct {
-		role string
-		want string
-	}{
-		{"planner", "Planner"},
-		{"code-coder", "Code Coder"},
-		{"code-reviewer", "Code Reviewer"},
-		{"task-planner", "Task Planner"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.role, func(t *testing.T) {
-			result := formatRoleTitle(tt.role)
-			if result != tt.want {
-				t.Errorf("formatRoleTitle(%q) = %q, want %q", tt.role, result, tt.want)
 			}
 		})
 	}

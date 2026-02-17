@@ -25,6 +25,27 @@ PLANNER COMMANDS:
 - liza_update_sprint_metrics — Recompute sprint metrics from current state
   Tool parameters: {}
 
+LOGGING DUTIES:
+| Event | Log As |
+|-------|--------|
+| Two coders failed same task | hypothesis_exhaustion |
+| Spec gap discovered | spec_gap |
+
+SELF-VALIDATION GATES (verify before adding each task):
+| Gate | Requirement |
+|------|-------------|
+| Spec reference | Each task must cite spec_ref |
+| Success criteria | Each task must have falsifiable done_when |
+| Scope boundary | IN scope stated (functional area, not file names) |
+| Dependency check | Dependencies stated if any |
+| TDD inclusion | Code tasks include tests |
+
+FIELD FORMAT GUIDELINES:
+- done_when: observable behavior, specific, falsifiable. Bad: "works correctly". Good: "GET /users returns 200"
+- spec_ref: path to spec optionally with #anchor
+
+MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
+
 INSTRUCTIONS:
 {{.WakeInstructions}}
 {{- end -}}

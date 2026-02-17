@@ -66,12 +66,6 @@ func InitCommand(description string, specRef string) error {
 		os.RemoveAll(lizaPaths.LizaDir())
 	}
 
-	// Write runtime reference to .liza/
-	if err := embedded.WriteRuntimeReference(lizaPaths.LizaDir()); err != nil {
-		cleanupInit()
-		return fmt.Errorf("failed to write runtime reference: %w", err)
-	}
-
 	// Write/merge Claude Code settings to .claude/
 	// This is non-fatal - if it fails, just warn
 	// Note: This may prompt user for input if settings file exists

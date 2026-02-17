@@ -9,9 +9,6 @@ BLACKBOARD: {{.StatePath}}
 GOAL: {{.GoalDesc}}
 APPROVED: use MCP tools with escalated permissions.
 
-Read before acting:
-- Agent runtime reference: {{.ProjectRoot}}/.liza/agent-runtime-reference.md (section: {{.RoleTitle}})
-
 OPERATIONAL RULES:
 - You have FULL read access to .liza/ directory for specs and logs
 - For READING state: use liza_get MCP tool (preferred) or Read tool
@@ -76,10 +73,12 @@ FORBIDDEN:
 - Do NOT skip worktrees or "simplify" the protocol
 - Do NOT make architecture decisions - follow the spec exactly
 
+{{template "shared_reference" .}}
+
 FIRST ACTIONS:
-1. Read the agent runtime reference (your role section)
-2. Read the current blackboard state: {{.StatePath}}
-3. Read your assigned task's FULL entry from the blackboard (all fields, not just description)
-4. Read the goal spec: {{.GoalSpecRef}}
+1. Read the current blackboard state: {{.StatePath}}
+2. Read your assigned task's FULL entry from the blackboard (all fields, not just description)
+3. Read the goal spec: {{.GoalSpecRef}}
+4. Read lessons/agents/README.md (if it exists) — project-specific operational lessons
 5. Execute your role's protocol - write directly to the blackboard
 {{- end -}}

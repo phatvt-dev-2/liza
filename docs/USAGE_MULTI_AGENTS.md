@@ -74,14 +74,13 @@ cat .liza/state.yaml
 `liza init` creates:
 - `.liza/state.yaml` — Blackboard state
 - `.liza/log.yaml` — Activity log
-- `.liza/agent-runtime-reference.md` — Agent runtime reference
 - `.claude/settings.json` — Claude Code project permissions (Liza MCP tools, skills, git/build commands)
 - `.mcp.json` — MCP server configuration (tells Claude Code how to start liza-mcp)
 - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` — Symlinks to `~/.liza/CORE.md`
 - `integration` branch — For merging completed work
 
 Contracts and skills live in `~/.liza/` (global, from `liza setup`), not in the project.
-The runtime reference includes YAML frontmatter with version metadata (`liza_version`, `liza_git_commit`, `liza_build_date`).
+Operational reference content (blackboard fields, anomaly types, etc.) is inlined directly into agent prompts.
 
 **3. Start Agents (3 terminals)**
 
@@ -201,3 +200,25 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
 Both CLI commands (e.g., `liza add-task`) and MCP tools (e.g., `liza_add_task`) operate on the same `.liza/state.yaml` file. Claude Code agents use MCP tools for better error handling; the CLI is for manual use.
 
 The root-level `claude-settings.json` and `mcp.json` are templates embedded into the binary. `liza init` writes the active copies to `.claude/settings.json` and `.mcp.json` in the project directory.
+
+### Differences from Pairing Mode
+
+| Aspect | Pairing Mode | Multi-Agent Mode |
+|--------|--------------|------------------|
+| Approval | Human approves | Peer agent approves |
+| Gates | Approval request → wait | Pre-execution checkpoint → proceed |
+| Communication | Conversation | Blackboard |
+| Iteration | Human feedback | Code Reviewer feedback |
+| Debugging | Debugging skill | Log anomaly, BLOCKED |
+| Magic Phrases | Active | Not applicable |
+| Session Init | Greet user | Silent execution |
+
+### Supervisor Circuit Breaker
+
+The supervisor automatically handles these conditions (transparent to agents):
+
+| Condition | Action |
+|-----------|--------|
+| Agent crash loop (3× in 5min) | Supervisor stops the agent |
+| Blackboard validation fails | All agents pause |
+| Integration branch conflict | Task set to INTEGRATION_FAILED |

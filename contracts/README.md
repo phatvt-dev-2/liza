@@ -73,17 +73,15 @@ See [COntract Activation](contract-activation.md)
 
 ### MULTI_AGENT_MODE.md — Peer-supervised Liza system
 - Contract Authority (blackboard as source of truth)
-- Role Definitions (links to specs)
+- Role Definitions
 - **Pre-Execution Checkpoint** (gate artifact for MAM)
 - Gate Semantics (Multi-Agent): checkpoint written = gate cleared
-- Task State Machine (blackboard workflow lifecycle)
+- CORE Rule Overrides (Multi-Agent)
 - Blackboard Protocol
-- Worktree Protocol
 - Iteration Protocol
 - Scope Discipline (spec is law)
-- Communication Protocol
+- Context Recovery
 - Circuit Breaker
-- Human Intervention Points
 
 **Key Insight:** The Execution State Machine in CORE.md is universal — it forces structured thinking before action. The "gate" is the mechanism:
 - **Pairing**: Gate = human approval (agent waits)

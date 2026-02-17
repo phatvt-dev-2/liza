@@ -2,7 +2,6 @@ package prompts
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
 )
@@ -36,19 +35,9 @@ type ReviewerContextConfig struct {
 	AgentID     string
 }
 
-// basePromptData is the template data for base_prompt.tmpl
-type basePromptData struct {
-	BasePromptConfig
-	RoleTitle string
-}
-
 // BuildBasePrompt creates the base bootstrap prompt for all agents
 func BuildBasePrompt(config BasePromptConfig) string {
-	data := basePromptData{
-		BasePromptConfig: config,
-		RoleTitle:        formatRoleTitle(config.Role),
-	}
-	return executeTemplate("base_prompt", data)
+	return executeTemplate("base_prompt", config)
 }
 
 // plannerContextData is the template data for planner_context.tmpl
@@ -173,17 +162,6 @@ func derefString(s *string) string {
 // hasPriorRejection reports whether the task has actionable rejection feedback from a prior iteration
 func hasPriorRejection(task *models.Task) bool {
 	return task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null"
-}
-
-// formatRoleTitle converts kebab-case role names to Title Case
-func formatRoleTitle(role string) string {
-	words := strings.Split(role, "-")
-	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(word[:1]) + word[1:]
-		}
-	}
-	return strings.Join(words, " ")
 }
 
 // countTasksByStatus counts tasks with a specific status
