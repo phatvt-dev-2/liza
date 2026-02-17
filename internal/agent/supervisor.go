@@ -35,6 +35,9 @@ type SupervisorConfig struct {
 // CLIExecutor interface for testing (mock vs real CLI)
 type CLIExecutor interface {
 	Execute(ctx context.Context, cliName string, prompt string, projectRoot string) (exitCode int, err error)
+	// ExecuteInteractive launches the CLI without a prompt arg, with stdin connected,
+	// so the user can paste the prompt manually. Used by -i (interactive) mode.
+	ExecuteInteractive(ctx context.Context, cliName string, projectRoot string) (exitCode int, err error)
 }
 
 // DefaultCLIExecutor implements real CLI execution
@@ -72,6 +75,38 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, prompt
 	// Inheriting stdin causes the subprocess to block indefinitely waiting for EOF,
 	// preventing clean exit after work completion.
 	cmd.Stdin = nil
+
+	err := cmd.Run()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode(), nil
+		}
+		return 0, err
+	}
+
+	return 0, nil
+}
+
+func (d *DefaultCLIExecutor) ExecuteInteractive(ctx context.Context, cliName string, projectRoot string) (int, error) {
+	// Map CLI names (mistral -> vibe)
+	actualCLI := cliName
+	if cliName == "mistral" {
+		actualCLI = "vibe"
+	}
+
+	// Launch CLI without prompt arg — user pastes prompt manually
+	var cmd *exec.Cmd
+	switch actualCLI {
+	case "codex":
+		cmd = exec.CommandContext(ctx, "codex")
+	default:
+		cmd = exec.CommandContext(ctx, actualCLI)
+	}
+
+	cmd.Dir = projectRoot
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
 
 	err := cmd.Run()
 	if err != nil {
@@ -1073,12 +1108,12 @@ func savePrompt(promptDir, agentID, prompt string) (string, error) {
 // executeAgent executes the CLI with heartbeat and timeout
 func executeAgent(ctx context.Context, config SupervisorConfig, prompt string) (int, error) {
 	logger := GetLogger()
-	// Interactive mode: print prompt location and return
+	// Interactive mode: launch CLI without -p so user can paste the prompt
 	if config.Interactive {
 		fmt.Println("=== INTERACTIVE MODE ===")
-		fmt.Println("Prompt ready. In non-interactive mode, would execute:")
-		fmt.Printf("  %s -p <prompt>\n", config.CLIName)
-		return 0, nil
+		fmt.Println("Paste the prompt from the file above into the CLI session.")
+		fmt.Printf("Launching: %s\n", config.CLIName)
+		return config.Executor.ExecuteInteractive(ctx, config.CLIName, config.ProjectRoot)
 	}
 
 	// Create timeout context for CLI execution

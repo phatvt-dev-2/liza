@@ -16,10 +16,11 @@ import (
 
 // MockCLIExecutor for testing CLI execution
 type MockCLIExecutor struct {
-	mu        sync.Mutex
-	Calls     []MockCLICall
-	ExitCode  int
-	ExitError error
+	mu               sync.Mutex
+	Calls            []MockCLICall
+	InteractiveCalls []MockCLICall
+	ExitCode         int
+	ExitError        error
 }
 
 type MockCLICall struct {
@@ -34,12 +35,28 @@ func (m *MockCLIExecutor) Execute(ctx context.Context, cliName string, prompt st
 	return m.ExitCode, m.ExitError
 }
 
+func (m *MockCLIExecutor) ExecuteInteractive(ctx context.Context, cliName string, projectRoot string) (int, error) {
+	m.mu.Lock()
+	m.InteractiveCalls = append(m.InteractiveCalls, MockCLICall{CLIName: cliName})
+	m.mu.Unlock()
+	return m.ExitCode, m.ExitError
+}
+
 // GetCalls returns a copy of the calls slice in a thread-safe manner
 func (m *MockCLIExecutor) GetCalls() []MockCLICall {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	calls := make([]MockCLICall, len(m.Calls))
 	copy(calls, m.Calls)
+	return calls
+}
+
+// GetInteractiveCalls returns a copy of the interactive calls slice in a thread-safe manner
+func (m *MockCLIExecutor) GetInteractiveCalls() []MockCLICall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	calls := make([]MockCLICall, len(m.InteractiveCalls))
+	copy(calls, m.InteractiveCalls)
 	return calls
 }
 
@@ -931,7 +948,7 @@ func TestSupervisorBasicLoop(t *testing.T) {
 	}
 }
 
-// TestInteractiveMode tests that interactive mode doesn't execute CLI
+// TestInteractiveMode tests that interactive mode launches CLI interactively (no -p)
 func TestInteractiveMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -957,16 +974,23 @@ func TestInteractiveMode(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	// In interactive mode, should print prompt location and exit
+	// In interactive mode, should launch CLI via ExecuteInteractive (not Execute)
 	err := RunSupervisor(ctx, config)
 
-	// Should exit cleanly (no error) and not call executor
+	// Should exit cleanly (no error) or timeout waiting for next planner wake
 	if err != nil && err != context.DeadlineExceeded {
 		t.Errorf("RunSupervisor() error = %v, want nil or DeadlineExceeded", err)
 	}
 
 	if len(mock.GetCalls()) > 0 {
-		t.Error("Interactive mode should not execute CLI")
+		t.Error("Interactive mode should not call Execute (non-interactive)")
+	}
+
+	interactiveCalls := mock.GetInteractiveCalls()
+	if len(interactiveCalls) == 0 {
+		t.Error("Interactive mode should call ExecuteInteractive")
+	} else if interactiveCalls[0].CLIName != "claude" {
+		t.Errorf("ExecuteInteractive called with CLI %q, want %q", interactiveCalls[0].CLIName, "claude")
 	}
 }
 
