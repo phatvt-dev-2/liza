@@ -2,10 +2,12 @@
 package commands
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -17,6 +19,8 @@ import (
 // InitCommand initializes a new Liza workspace.
 // It creates the .liza directory structure, generates initial state.yaml,
 // validates the spec file exists, and creates the integration branch.
+//
+// Prerequisite: 'liza setup' must have been run to populate ~/.liza/.
 func InitCommand(description string, specRef string) error {
 	// Get project paths
 	lizaPaths, err := paths.LizaPathsFromGit()
@@ -35,6 +39,19 @@ func InitCommand(description string, specRef string) error {
 		return fmt.Errorf("spec file does not exist: %s\nCreate spec document first. See templates/vision-template.md", specRef)
 	}
 
+	// Validate global config exists (liza setup must have been run)
+	globalDir, err := paths.GlobalLizaDir()
+	if err != nil {
+		return fmt.Errorf("failed to determine global config path: %w", err)
+	}
+	globalCoreFile := filepath.Join(globalDir, "CORE.md")
+	if _, err := os.Stat(globalCoreFile); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("global config not found at %s\nRun 'liza setup' first to install contracts and skills", globalDir)
+		}
+		return fmt.Errorf("cannot access global config at %s: %w\nCheck permissions on %s", globalCoreFile, err, globalDir)
+	}
+
 	// Create directory structure
 	if err := os.MkdirAll(lizaPaths.LizaDir(), 0755); err != nil {
 		return fmt.Errorf("failed to create .liza directory: %w", err)
@@ -45,22 +62,14 @@ func InitCommand(description string, specRef string) error {
 		return fmt.Errorf("failed to create archive directory: %w", err)
 	}
 
-	// cleanupInit removes all artifacts created during init.
-	// Needed because WriteAllFiles writes both inside .liza/ and outside (docs/).
-	runtimeRefPath := filepath.Join(lizaPaths.ProjectRoot(), "docs", "for-agent-eyes", "agent-runtime-reference.md")
-	_, statErr := os.Stat(runtimeRefPath)
-	runtimeRefPreExisted := statErr == nil
 	cleanupInit := func() {
 		os.RemoveAll(lizaPaths.LizaDir())
-		if !runtimeRefPreExisted {
-			os.Remove(runtimeRefPath)
-		}
 	}
 
-	// Write embedded files (contracts, skills, runtime reference)
-	if err := embedded.WriteAllFiles(lizaPaths.ProjectRoot()); err != nil {
+	// Write runtime reference to .liza/
+	if err := embedded.WriteRuntimeReference(lizaPaths.LizaDir()); err != nil {
 		cleanupInit()
-		return fmt.Errorf("failed to write embedded files: %w", err)
+		return fmt.Errorf("failed to write runtime reference: %w", err)
 	}
 
 	// Write/merge Claude Code settings to .claude/
@@ -75,6 +84,60 @@ func InitCommand(description string, specRef string) error {
 	// Note: This may prompt user for input if settings file exists
 	if err := embedded.WriteMCPSettings(lizaPaths.ProjectRoot()); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write .mcp.json: %v\n", err)
+	}
+
+	// Create contract symlinks pointing to the global ~/.liza/CORE.md.
+	contractTarget := filepath.Join(globalDir, "CORE.md")
+	var reader *bufio.Reader
+	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+		linkPath := filepath.Join(lizaPaths.ProjectRoot(), name)
+
+		fi, lstatErr := os.Lstat(linkPath)
+		if lstatErr != nil {
+			if !os.IsNotExist(lstatErr) {
+				fmt.Fprintf(os.Stderr, "Warning: cannot stat %s: %v\n", name, lstatErr)
+				continue
+			}
+			// File doesn't exist — fall through to create symlink.
+		} else {
+			// Already a correct symlink — nothing to do.
+			if fi.Mode()&os.ModeSymlink != 0 {
+				target, err := os.Readlink(linkPath)
+				if err == nil && target == contractTarget {
+					continue
+				}
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: cannot read symlink %s: %v\n", name, err)
+				}
+			}
+
+			// Exists but is not the correct symlink — ask permission.
+			if reader == nil {
+				reader = bufio.NewReader(os.Stdin)
+			}
+			fmt.Fprintf(os.Stderr, "Warning: %s already exists but does not point to %s.\n", name, contractTarget)
+			fmt.Fprintf(os.Stderr, "Without this symlink, liza agents will not use liza's contracts.\n")
+			fmt.Fprintf(os.Stderr, "Overwrite %s with symlink to %s? (y/n): ", name, contractTarget)
+
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", name)
+				continue
+			}
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response != "y" && response != "yes" {
+				continue
+			}
+
+			if err := os.Remove(linkPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to remove existing %s: %v\n", name, err)
+				continue
+			}
+		}
+
+		if err := os.Symlink(contractTarget, linkPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", name, err)
+		}
 	}
 
 	// Generate IDs and timestamps
@@ -194,6 +257,8 @@ func InitCommand(description string, specRef string) error {
 
 	fmt.Printf("Liza initialized at %s\n", lizaPaths.LizaDir())
 	fmt.Println("Integration branch: integration")
+	fmt.Println("\nNote: MCP tools and personal permissions belong in ~/.claude/settings.json (global).")
+	fmt.Println("See: contracts/contract-activation.md § Global settings")
 
 	return nil
 }

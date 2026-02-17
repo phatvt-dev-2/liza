@@ -37,7 +37,7 @@ func TestBuildBasePrompt(t *testing.T) {
 				"GOAL: Build a web API",
 				"APPROVED: use MCP tools with escalated permissions",
 				"Read before acting",
-				"- Agent runtime reference: /project/docs/for-agent-eyes/agent-runtime-reference.md (section: Code Coder)",
+				"- Agent runtime reference: /project/.liza/agent-runtime-reference.md (section: Code Coder)",
 				"You have FULL read access to .liza/ directory for specs and logs",
 				"For READING state: use liza_get MCP tool",
 				"For MODIFYING state: use role-specific MCP tools",
@@ -78,7 +78,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			},
 			wantContains: []string{
 				"You are a Liza code-reviewer agent",
-				"- Agent runtime reference: /project/docs/for-agent-eyes/agent-runtime-reference.md (section: Code Reviewer)",
+				"- Agent runtime reference: /project/.liza/agent-runtime-reference.md (section: Code Reviewer)",
 			},
 		},
 		{
@@ -94,7 +94,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			},
 			wantContains: []string{
 				"You are a Liza planner agent",
-				"- Agent runtime reference: /project/docs/for-agent-eyes/agent-runtime-reference.md (section: Planner)",
+				"- Agent runtime reference: /project/.liza/agent-runtime-reference.md (section: Planner)",
 			},
 		},
 	}

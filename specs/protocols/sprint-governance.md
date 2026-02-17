@@ -70,29 +70,21 @@ Checkpoints are **mandatory human review points**. No work proceeds until human 
 | Sprint tasks complete | Yes | Normal completion |
 | Sprint deadline reached | Yes | Time box enforced |
 | Circuit breaker fired | Yes | Systemic issue detected |
-| Human creates `.liza/CHECKPOINT` | Manual | Human-initiated review |
+| `liza checkpoint` | Manual | Human-initiated review |
 
 ### Checkpoint Timeout Behavior
 
-CHECKPOINT files are not auto-cleared. If human does not respond:
+Checkpoints are not auto-cleared. If human does not respond:
 
 | Duration | Watcher Action | Escalation |
 |----------|----------------|------------|
 | 30 min | `⚠️ CHECKPOINT STALE` | Log only |
-| 2 hours | `🚨 CHECKPOINT STUCK` | Write to `.liza/ESCALATION` |
-| 8 hours | `🚨 CHECKPOINT ABANDONED?` | Write to `.liza/ESCALATION`, suggest abort |
-
-**Escalation File (`.liza/ESCALATION`):**
-```
-CHECKPOINT_STUCK since 2025-01-17T14:00:00Z (2h 15m)
-Sprint: sprint-1
-Tasks waiting: 3 (task-2 READY_FOR_REVIEW, task-3 IMPLEMENTING, task-4 READY)
-Action required: rm .liza/CHECKPOINT to resume, or touch .liza/ABORT to stop
-```
+| 2 hours | `🚨 CHECKPOINT STUCK` | Log anomaly |
+| 8 hours | `🚨 CHECKPOINT ABANDONED?` | Log anomaly, suggest abort |
 
 **External Notification (v1.1 — not implemented in v1):**
 
-Webhook escalation is planned for v1.1. The `config.escalation_webhook` field in state.yaml is reserved but not yet functional. v1 relies on file-based escalation (`.liza/ESCALATION`) only.
+Webhook escalation is planned for v1.1. The `config.escalation_webhook` field in state.yaml is reserved but not yet functional.
 
 When implemented, watcher will post to webhook at 2h and 8h thresholds:
 ```json
@@ -111,7 +103,7 @@ When implemented, watcher will post to webhook at 2h and 8h thresholds:
 **Design Principle:**
 - Agents remain paused indefinitely — no automatic resume or abort
 - Escalation is notification only, not action
-- Human must explicitly act (remove CHECKPOINT or create ABORT)
+- Human must explicitly act (`liza resume` or `liza stop`)
 - Unattended checkpoints are not errors; they're paused work awaiting decision
 
 **v1 Assumption: Human Availability**
@@ -129,8 +121,8 @@ This is acceptable for v1 because:
 **Not Supported (v1):** Automatic timeout-based abort, delegation to backup human, or SLA-based escalation paths. These require organizational context Liza doesn't have.
 
 **Manual Override Path:**
-- To resume: `rm .liza/CHECKPOINT`
-- To abort: `touch .liza/ABORT`
+- To resume: `liza resume`
+- To abort: `liza stop`
 
 **CHECKPOINT File Format:**
 ```

@@ -1,4 +1,4 @@
-// Package testhelpers provides shared test utilities for the liza-go test suite.
+// Package testhelpers provides shared test utilities for the liza test suite.
 //
 // This package consolidates duplicated test setup code found across multiple test files,
 // improving maintainability and consistency. It includes helpers for:

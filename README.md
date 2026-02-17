@@ -136,6 +136,7 @@ DRAFT → UNCLAIMED → CLAIMED → READY_FOR_REVIEW → APPROVED → MERGED
 ### Common Commands
 
 ```bash
+liza setup                                          # One-time global setup
 liza init "Project goal" --spec specs/vision.md   # Initialize blackboard
 liza add-task --id t1 --desc "..." --done "..."    # Add tasks
 liza agent coder --agent-id coder-1                # Start agent supervisor

@@ -104,7 +104,7 @@ See [Vision](<build/0 - Vision.md>) for the design philosophy and cost gradient.
 
 ### Agent Runtime Reference
 
-[`docs/for-agent-eyes/agent-runtime-reference.md`](../docs/for-agent-eyes/agent-runtime-reference.md) is a consolidated reference for agents at runtime. It distills operational content from multiple specs into a single doc agents read during bootstrap.
+`agent-runtime-reference.md` is a consolidated reference for agents at runtime. It distills operational content from multiple specs into a single doc agents read during bootstrap. The source lives at [`docs/for-agent-eyes/agent-runtime-reference.md`](../docs/for-agent-eyes/agent-runtime-reference.md); `liza init` copies it to `.liza/agent-runtime-reference.md` in each project.
 
 **Sync requirement:** When updating these specs, check if the agent runtime reference needs corresponding updates:
 

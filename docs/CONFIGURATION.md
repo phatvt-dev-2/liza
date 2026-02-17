@@ -21,40 +21,28 @@ Liza provides an MCP server (`liza-mcp`) for Claude Code integration. `liza init
 }
 ```
 
-**`.claude/settings.json`** — project-level permissions for MCP tools, file access, and git operations:
+**`.claude/settings.json`** — project-level permissions for Liza MCP tools, skills, git operations, and build commands.
 
-```json
-{
-  "additionalDirectories": [ "~/.liza" ],
-  "permissions": {
-    "defaultMode": "acceptEdits",
-    "allow": [
-      "Read(~/.claude/**)",
-      "Read(~/.liza/**)",
-      "mcp__liza__liza_get",
-      "mcp__liza__liza_status",
-      "mcp__liza__liza_add_task",
-      "mcp__liza__liza_submit_for_review",
-      "mcp__liza__liza_submit_verdict",
-      "mcp__liza__liza_handoff",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git status:*)",
-      "Bash(git diff:*)",
-      "WebFetch"
-    ]
-  }
-}
-```
+`liza init` writes this file automatically from the master [`claude-settings.json`](../claude-settings.json). The master defines all Liza MCP tools, skills, and the full set of bash permissions agents need. **Do not hand-craft a subset** — agents will be blocked on any missing permission.
 
 **Key elements:**
+- **`enableAllProjectMcpServers`** / **`enabledMcpjsonServers`** — enables the Liza MCP server defined in `.mcp.json`
 - **`mcp__liza__*`** — grants permission to invoke specific MCP tools (format: `mcp__<server>__<tool>`)
-- **`additionalDirectories`** — allows reading Liza's global config directory (`~/.liza`)
+- **`Skill(...)`** — contract skills from `~/.liza/skills/` (installed by `liza setup`)
 - **`defaultMode: acceptEdits`** — required for headless agent operation
 
-The repo-root [`claude-settings.json`](../claude-settings.json) and [`mcp.json`](../mcp.json) are reference templates. `liza init` writes the runtime files to `.claude/settings.json` and `.mcp.json` in the project root.
+### Two-Layer Architecture
 
-For Pairing mode setup (symlinks, provider-specific config), see [Contract Activation](../contracts/contract-activation.md).
+Claude Code unions permissions from global and project settings:
+
+| Layer | File | Managed by | Contains |
+|-------|------|-----------|----------|
+| **Project** | `<project>/.claude/settings.json` | `liza init` (automatic) | Liza MCP tools, skills, git/build commands |
+| **Global** | `~/.claude/settings.json` | Manual (one-time) | Personal MCP tools (IDE, search, etc.), `additionalDirectories`, `Read(~/.liza/**)` |
+
+The project layer is portable (team-shared). The global layer is machine-specific (personal tools and paths). Neither alone is sufficient — both are needed.
+
+For global settings setup and provider-specific config (Claude, Codex, Gemini), see [Contract Activation](../contracts/contract-activation.md).
 
 ### Troubleshooting MCP
 

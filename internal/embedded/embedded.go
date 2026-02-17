@@ -25,7 +25,7 @@ var (
 //go:embed contracts/*.md
 var contractsFS embed.FS
 
-//go:embed skills/*/SKILL.md
+//go:embed skills
 var skillsFS embed.FS
 
 //go:embed "docs/for-agent-eyes/agent-runtime-reference.md"
@@ -37,31 +37,67 @@ var claudeSettingsContent []byte
 //go:embed "mcp.json"
 var mcpSettingsContent []byte
 
-// WriteAllFiles writes embedded files for initialization.
-// Contracts and skills are written to .liza/, and the runtime reference
-// is written to docs/for-agent-eyes/ in the project root.
+// PlanGlobalFiles returns the list of absolute paths that WriteGlobalFiles would create,
+// without actually writing anything. Useful for pre-flight checks and verbose output.
+func PlanGlobalFiles(targetDir string) []string {
+	var paths []string
+	for _, pair := range []struct {
+		fs      embed.FS
+		destDir string
+	}{
+		{contractsFS, targetDir},
+		{skillsFS, filepath.Join(targetDir, "skills")},
+	} {
+		_ = fs.WalkDir(pair.fs, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || path == "." {
+				return nil
+			}
+			parts := strings.Split(path, "/")
+			if len(parts) <= 1 {
+				return nil
+			}
+			paths = append(paths, filepath.Join(pair.destDir, filepath.Join(parts[1:]...)))
+			return nil
+		})
+	}
+	return paths
+}
+
+// WriteGlobalFiles writes contracts and skills to the global Liza directory (~/.liza/).
+// Contracts are written flat into targetDir/ and skills into targetDir/skills/.
 // Each file is prepended with YAML frontmatter containing version metadata.
-func WriteAllFiles(projectRoot string) error {
-	lizaPaths := paths.New(projectRoot)
-
-	if err := writeEmbeddedFS(contractsFS, lizaPaths.ContractsDir()); err != nil {
-		return fmt.Errorf("failed to write contracts: %w", err)
+// Returns the list of absolute paths written.
+func WriteGlobalFiles(targetDir string) ([]string, error) {
+	var written []string
+	contractPaths, err := writeEmbeddedFS(contractsFS, targetDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write contracts: %w", err)
 	}
-	if err := writeEmbeddedFS(skillsFS, lizaPaths.SkillsDir()); err != nil {
-		return fmt.Errorf("failed to write skills: %w", err)
-	}
+	written = append(written, contractPaths...)
 
-	runtimeRefPath := filepath.Join(projectRoot, "docs", "for-agent-eyes", "agent-runtime-reference.md")
+	skillPaths, err := writeEmbeddedFS(skillsFS, filepath.Join(targetDir, "skills"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to write skills: %w", err)
+	}
+	written = append(written, skillPaths...)
+
+	return written, nil
+}
+
+// WriteRuntimeReference writes the agent runtime reference to .liza/agent-runtime-reference.md.
+func WriteRuntimeReference(lizaDir string) error {
+	runtimeRefPath := filepath.Join(lizaDir, "agent-runtime-reference.md")
 	if err := writeEmbeddedFile(runtimeReferenceContent, runtimeRefPath); err != nil {
 		return fmt.Errorf("failed to write runtime reference: %w", err)
 	}
-
 	return nil
 }
 
 // writeEmbeddedFS writes an entire embedded filesystem to the target directory.
-func writeEmbeddedFS(embeddedFS embed.FS, targetDir string) error {
-	return fs.WalkDir(embeddedFS, ".", func(path string, d fs.DirEntry, err error) error {
+// Returns the list of absolute paths of files written (directories excluded).
+func writeEmbeddedFS(embeddedFS embed.FS, targetDir string) ([]string, error) {
+	var written []string
+	err := fs.WalkDir(embeddedFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -98,8 +134,10 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string) error {
 			return fmt.Errorf("failed to write %s: %w", targetPath, err)
 		}
 
+		written = append(written, targetPath)
 		return nil
 	})
+	return written, err
 }
 
 // writeEmbeddedFile writes a single embedded file to the target path.
@@ -144,7 +182,7 @@ func ListEmbeddedFiles() ([]string, error) {
 		}
 		files = append(files, collected...)
 	}
-	files = append(files, "docs/for-agent-eyes/agent-runtime-reference.md")
+	files = append(files, "agent-runtime-reference.md")
 	return files, nil
 }
 

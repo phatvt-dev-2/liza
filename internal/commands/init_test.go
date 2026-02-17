@@ -15,12 +15,29 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+// setupGlobalLiza creates a fake ~/.liza/CORE.md so init's prereq check passes.
+// It overrides $HOME via t.Setenv (auto-reverted on cleanup).
+func setupGlobalLiza(t *testing.T) string {
+	t.Helper()
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	globalLiza := filepath.Join(fakeHome, ".liza")
+	if err := os.MkdirAll(globalLiza, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(globalLiza, "CORE.md"), []byte("# CORE\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return fakeHome
+}
+
 func TestInitCommand(t *testing.T) {
 	tests := []struct {
 		name        string
 		description string
 		specRef     string
 		setup       func(t *testing.T, tmpDir string)
+		skipGlobal  bool // if true, don't set up global liza
 		wantErr     bool
 		errContains string
 	}{
@@ -56,6 +73,17 @@ func TestInitCommand(t *testing.T) {
 			wantErr:     true,
 			errContains: "spec file does not exist",
 		},
+		{
+			name:        "global config not found",
+			description: "Test goal",
+			specRef:     "specs/vision.md",
+			skipGlobal:  true,
+			setup: func(t *testing.T, tmpDir string) {
+				testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+			},
+			wantErr:     true,
+			errContains: "Run 'liza setup' first",
+		},
 	}
 
 	for _, tt := range tests {
@@ -63,6 +91,15 @@ func TestInitCommand(t *testing.T) {
 			// Create temporary git repo
 			tmpDir := setupGitRepo(t)
 			defer os.RemoveAll(tmpDir)
+
+			// Set up global liza unless test skips it
+			if !tt.skipGlobal {
+				setupGlobalLiza(t)
+			} else {
+				// Point HOME to an empty dir so global check fails
+				emptyHome := t.TempDir()
+				t.Setenv("HOME", emptyHome)
+			}
 
 			// Change to temp directory
 			originalDir, err := os.Getwd()
@@ -102,6 +139,8 @@ func TestInitCommand(t *testing.T) {
 func TestInitCommandDirectoryStructure(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)
+
+	setupGlobalLiza(t)
 
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -150,6 +189,8 @@ func TestInitCommandDirectoryStructure(t *testing.T) {
 func TestInitCommandIntegrationBranch(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)
+
+	setupGlobalLiza(t)
 
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -314,10 +355,12 @@ func verifyInitialization(t *testing.T, tmpDir, description, specRef string) {
 	}
 }
 
-func TestInitCommand_WritesEmbeddedFiles(t *testing.T) {
+func TestInitCommand_WritesRuntimeReference(t *testing.T) {
 	// Create temporary git repo
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
+
+	fakeHome := setupGlobalLiza(t)
 
 	// Change to temp directory
 	originalDir, err := os.Getwd()
@@ -338,39 +381,119 @@ func TestInitCommand_WritesEmbeddedFiles(t *testing.T) {
 		t.Fatalf("InitCommand failed: %v", err)
 	}
 
-	// Verify contracts directory and files
-	contractsDir := filepath.Join(gitDir, ".liza", "contracts")
-	if _, err := os.Stat(contractsDir); os.IsNotExist(err) {
-		t.Errorf("contracts directory not created: %s", contractsDir)
-	}
-
-	contractFiles := []string{"CORE.md", "PAIRING_MODE.md", "MULTI_AGENT_MODE.md", "AGENT_TOOLS.md", "COLLABORATION_CONTINUITY.md"}
-	for _, file := range contractFiles {
-		filePath := filepath.Join(contractsDir, file)
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			t.Errorf("Contract file not created: %s", file)
-		}
-	}
-
-	// Verify skills directory and files
-	skillsDir := filepath.Join(gitDir, ".liza", "skills")
-	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
-		t.Errorf("skills directory not created: %s", skillsDir)
-	}
-
-	skillDirs := []string{"clean-code", "code-review", "debugging",
-		"software-architecture-review", "spec-review", "systemic-thinking", "testing"}
-	for _, dir := range skillDirs {
-		skillFile := filepath.Join(skillsDir, dir, "SKILL.md")
-		if _, err := os.Stat(skillFile); os.IsNotExist(err) {
-			t.Errorf("Skill file not created: %s/SKILL.md", dir)
-		}
-	}
-
-	// Verify runtime reference was written to project docs
-	runtimeRefPath := filepath.Join(gitDir, "docs", "for-agent-eyes", "agent-runtime-reference.md")
+	// Verify runtime reference was written to .liza/ (not docs/)
+	runtimeRefPath := filepath.Join(gitDir, ".liza", "agent-runtime-reference.md")
 	if _, err := os.Stat(runtimeRefPath); os.IsNotExist(err) {
-		t.Errorf("Runtime reference not created: %s", runtimeRefPath)
+		t.Errorf("Runtime reference not created at .liza/agent-runtime-reference.md")
+	}
+
+	// Verify old location does NOT exist
+	oldPath := filepath.Join(gitDir, "docs", "for-agent-eyes", "agent-runtime-reference.md")
+	if _, err := os.Stat(oldPath); err == nil {
+		t.Errorf("Runtime reference should NOT be at old path docs/for-agent-eyes/")
+	}
+
+	// Verify contract symlinks point to absolute global path
+	globalDir := filepath.Join(fakeHome, ".liza")
+	expectedTarget := filepath.Join(globalDir, "CORE.md")
+	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+		linkPath := filepath.Join(gitDir, name)
+		target, err := os.Readlink(linkPath)
+		if err != nil {
+			t.Errorf("Symlink %s not created: %v", name, err)
+			continue
+		}
+		if target != expectedTarget {
+			t.Errorf("Symlink %s target = %q, want %q", name, target, expectedTarget)
+		}
+	}
+}
+
+func TestInitCommand_SkipsCorrectSymlinks(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(gitDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
+
+	// Pre-create CLAUDE.md as the correct symlink (absolute to global)
+	globalDir := filepath.Join(fakeHome, ".liza")
+	correctTarget := filepath.Join(globalDir, "CORE.md")
+	claudePath := filepath.Join(gitDir, "CLAUDE.md")
+	if err := os.Symlink(correctTarget, claudePath); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run init
+	if err := InitCommand("Test goal", "specs/vision.md"); err != nil {
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+
+	// CLAUDE.md should still point to the same target (untouched)
+	target, err := os.Readlink(claudePath)
+	if err != nil {
+		t.Fatalf("CLAUDE.md is no longer a symlink: %v", err)
+	}
+	if target != correctTarget {
+		t.Errorf("CLAUDE.md target changed; got %q, want %q", target, correctTarget)
+	}
+}
+
+func TestInitCommand_DoesNotOverwriteWithoutConsent(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(gitDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
+
+	// Pre-create CLAUDE.md as a regular file
+	existingContent := "# Custom contract\n"
+	claudePath := filepath.Join(gitDir, "CLAUDE.md")
+	if err := os.WriteFile(claudePath, []byte(existingContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run init — stdin is not interactive in tests, so the prompt
+	// will fail to read and the file should be left untouched.
+	if err := InitCommand("Test goal", "specs/vision.md"); err != nil {
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+
+	// CLAUDE.md should be untouched (no consent given)
+	content, err := os.ReadFile(claudePath)
+	if err != nil {
+		t.Fatalf("Failed to read CLAUDE.md: %v", err)
+	}
+	if string(content) != existingContent {
+		t.Errorf("CLAUDE.md was modified without consent; got %q, want %q", string(content), existingContent)
+	}
+
+	// AGENTS.md and GEMINI.md should still be created as symlinks
+	for _, name := range []string{"AGENTS.md", "GEMINI.md"} {
+		linkPath := filepath.Join(gitDir, name)
+		if _, err := os.Readlink(linkPath); err != nil {
+			t.Errorf("Symlink %s not created: %v", name, err)
+		}
 	}
 }
 
@@ -379,6 +502,8 @@ func TestInitCommand_FrontmatterPresent(t *testing.T) {
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
+	setupGlobalLiza(t)
+
 	// Change to temp directory
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -398,29 +523,29 @@ func TestInitCommand_FrontmatterPresent(t *testing.T) {
 		t.Fatalf("InitCommand failed: %v", err)
 	}
 
-	// Read a sample embedded file
-	coreFile := filepath.Join(gitDir, ".liza", "contracts", "CORE.md")
-	content, err := os.ReadFile(coreFile)
+	// Read the runtime reference file (contracts are no longer in .liza/)
+	runtimeRefFile := filepath.Join(gitDir, ".liza", "agent-runtime-reference.md")
+	content, err := os.ReadFile(runtimeRefFile)
 	if err != nil {
-		t.Fatalf("Failed to read CORE.md: %v", err)
+		t.Fatalf("Failed to read agent-runtime-reference.md: %v", err)
 	}
 
 	contentStr := string(content)
 
 	// Verify frontmatter is present
 	if !strings.HasPrefix(contentStr, "---\n") {
-		t.Errorf("CORE.md missing frontmatter prefix")
+		t.Errorf("agent-runtime-reference.md missing frontmatter prefix")
 	}
 
 	// Verify frontmatter fields
 	if !strings.Contains(contentStr, "liza_version:") {
-		t.Errorf("CORE.md missing liza_version field")
+		t.Errorf("agent-runtime-reference.md missing liza_version field")
 	}
 	if !strings.Contains(contentStr, "liza_git_commit:") {
-		t.Errorf("CORE.md missing liza_git_commit field")
+		t.Errorf("agent-runtime-reference.md missing liza_git_commit field")
 	}
 	if !strings.Contains(contentStr, "liza_build_date:") {
-		t.Errorf("CORE.md missing liza_build_date field")
+		t.Errorf("agent-runtime-reference.md missing liza_build_date field")
 	}
 }
 
@@ -428,6 +553,8 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 	// Create temporary git repo
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
+
+	setupGlobalLiza(t)
 
 	// Change to temp directory
 	originalDir, err := os.Getwd()

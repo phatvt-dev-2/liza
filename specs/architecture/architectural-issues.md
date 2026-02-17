@@ -91,7 +91,7 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 **Issue:** The Go CLI migration (ADR-0012) replaced the entire operational layer (18 bash scripts → Go CLI) but only partially updated the documents that agents and humans read as operational truth. This creates runtime failures, not cosmetic drift:
 - `MULTI_AGENT_MODE.md` instructs agents to run `liza handoff` (doesn't exist yet)
 - `DEMO.md` and `USAGE_MULTI_AGENTS.md` told users to run `liza agent code_reviewer` (underscore) — the CLI validates `code-reviewer` (hyphen) and rejects the documented form *(fixed)*
-- `state-machines.md` and `circuit-breaker.md` still describe signal file creation (`touch .liza/CHECKPOINT`, `rm .liza/ABORT`) as the mechanism for system control, while the Go CLI uses state field mutations
+- `state-machines.md` and `circuit-breaker.md` still describe signal file creation (`touch .liza/CHECKPOINT`, `rm .liza/ABORT`) as the mechanism for system control, while the Go CLI uses state field mutations *(fixed)*
 - `DEMO.md` contains `yq` commands as monitoring instructions that assume a dependency the Go CLI eliminated
 
 **Implication:** For a system whose core value proposition is agents reading specs as source of truth, a partially-migrated documentation layer is a systemic correctness risk — agents follow instructions that produce errors, then waste cycles debugging phantom issues.
@@ -351,7 +351,7 @@ Long-term concerns about system evolution.
 
 **Why accept:** Per-task kills add complexity. Rare failure mode.
 
-**Future option:** `.liza/PAUSE-task-{id}` for task-specific pause.
+**Future option:** Per-task pause via `liza pause --task task-{id}`.
 
 ---
 

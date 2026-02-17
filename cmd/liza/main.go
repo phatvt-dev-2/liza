@@ -43,6 +43,29 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+var setupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "One-time global setup of Liza contracts and skills",
+	Long: `Write Liza contracts and skills to ~/.liza/ for global access.
+
+This is a one-time setup step that populates the global config directory.
+Contracts are written flat (e.g., ~/.liza/CORE.md) and skills are written
+to ~/.liza/skills/.
+
+After running setup, use 'liza init' in each project to create the
+project-local blackboard and symlinks.
+
+Use --force to overwrite an existing global config.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		targetDir, err := paths.GlobalLizaDir()
+		if err != nil {
+			return err
+		}
+		force, _ := cmd.Flags().GetBool("force")
+		return commands.SetupCommand(targetDir, force)
+	},
+}
+
 var initCmd = &cobra.Command{
 	Use:   "init [description]",
 	Short: "Initialize a new Liza workspace",
@@ -444,7 +467,7 @@ Detects the following patterns:
 If a pattern is detected:
   - Updates circuit_breaker.status to TRIGGERED
   - Generates .liza/circuit_breaker_report.md with evidence
-  - Creates .liza/CHECKPOINT file to halt agents
+  - Sets sprint.status to CHECKPOINT (equivalent to 'liza checkpoint')
   - Requires human review and resolution
 
 If no patterns are detected:
@@ -1131,6 +1154,7 @@ func resolveChangedBy(cmd *cobra.Command) string {
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(addTaskCmd)
@@ -1160,6 +1184,9 @@ func init() {
 
 	deleteCmd.AddCommand(deleteAgentCmd)
 	deleteCmd.AddCommand(deleteTaskCmd)
+
+	// Setup command flags
+	setupCmd.Flags().Bool("force", false, "overwrite existing global config")
 
 	// Init command flags
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")

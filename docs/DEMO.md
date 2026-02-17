@@ -115,6 +115,7 @@ git commit -m "Initial commit: vision spec and dev tooling"
 ## Step 5: Initialize Liza
 
 ```bash
+liza setup  # one-time: installs contracts + skills to ~/.liza/
 liza init "Build hello CLI" --spec specs/vision.md
 ```
 

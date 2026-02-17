@@ -11,14 +11,16 @@ See [DEMO](DEMO.md) for a full example.
 ### Project Structure
 
 ```
-~/.liza/
-├── CORE.md                        → contracts/CORE.md (symlink)
-├── contracts/
-│   ├── CORE.md                    # Universal rules + mode selection gate
-│   ├── PAIRING_MODE.md            # Human-supervised collaboration
-│   └── MULTI_AGENT_MODE.md        # Peer-supervised Liza system
-└── schemas/
-    └── liza-state.yaml            # Blackboard schema
+~/.liza/                               # Created by `liza setup`
+├── CORE.md                            # Universal rules + mode selection gate
+├── PAIRING_MODE.md                    # Human-supervised collaboration
+├── MULTI_AGENT_MODE.md                # Peer-supervised Liza system
+├── AGENT_TOOLS.md                     # Agent tool contracts
+├── COLLABORATION_CONTINUITY.md        # Session continuity
+└── skills/                            # Skill definitions
+    ├── code-review/SKILL.md
+    ├── debugging/SKILL.md
+    └── ...
 
 <project>/
 ├── .liza/
@@ -49,7 +51,13 @@ sudo cp liza liza-mcp /usr/local/bin/
 liza version
 ```
 
-**1. Initialize**
+**1. Global Setup (one-time)**
+```bash
+liza setup          # installs contracts + skills to ~/.liza/
+liza setup --force  # overwrite existing (e.g., after liza upgrade)
+```
+
+**2. Initialize Project**
 ```bash
 # Create .liza/ directory with blackboard
 liza init "[Goal description]" --spec [spec_ref]
@@ -66,17 +74,16 @@ cat .liza/state.yaml
 `liza init` creates:
 - `.liza/state.yaml` — Blackboard state
 - `.liza/log.yaml` — Activity log
-- `.liza/contracts/` — Embedded agent contracts (CORE.md, PAIRING_MODE.md, MULTI_AGENT_MODE.md, etc.)
-- `.liza/skills/` — Embedded skill definitions (code-review, debugging, testing, etc.)
-- `.liza/specs/` — Embedded system specifications (architecture, protocols, implementation)
-- `.claude/claude-settings.json` — Claude Code permissions (if using Claude Code)
+- `.liza/agent-runtime-reference.md` — Agent runtime reference
+- `.claude/settings.json` — Claude Code project permissions (Liza MCP tools, skills, git/build commands)
 - `.mcp.json` — MCP server configuration (tells Claude Code how to start liza-mcp)
-- `.worktrees/` — Task worktrees directory
+- `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` — Symlinks to `~/.liza/CORE.md`
 - `integration` branch — For merging completed work
 
-Embedded files include YAML frontmatter with version metadata (`liza_version`, `liza_git_commit`, `liza_build_date`) to track which version your project is using.
+Contracts and skills live in `~/.liza/` (global, from `liza setup`), not in the project.
+The runtime reference includes YAML frontmatter with version metadata (`liza_version`, `liza_git_commit`, `liza_build_date`).
 
-**2. Start Agents (3 terminals)**
+**3. Start Agents (3 terminals)**
 
 Agent identity is provided via the `--agent-id` flag. IDs must follow the pattern `{role}-{number}` (e.g., `coder-1`, `code-reviewer-1`, `planner-1`).
 
@@ -193,4 +200,4 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
 
 Both CLI commands (e.g., `liza add-task`) and MCP tools (e.g., `liza_add_task`) operate on the same `.liza/state.yaml` file. Claude Code agents use MCP tools for better error handling; the CLI is for manual use.
 
-The root-level `claude-settings.json` and `mcp.json` are templates embedded into the binary. `liza init` writes the active copies to `.claude/claude-settings.json` and `.mcp.json` in the project directory.
+The root-level `claude-settings.json` and `mcp.json` are templates embedded into the binary. `liza init` writes the active copies to `.claude/settings.json` and `.mcp.json` in the project directory.

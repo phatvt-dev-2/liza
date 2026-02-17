@@ -15,7 +15,7 @@ circuit_breaker:
   identity: observer
   permissions:
     read: [.liza/state.yaml (anomalies), .liza/log.yaml, sprint.metrics]
-    write: [.liza/circuit_breaker_report.md, .liza/CHECKPOINT]
+    write: [.liza/circuit_breaker_report.md, sprint.status → CHECKPOINT]
     execute: NOTHING
   prohibitions:
     - NEVER propose solutions
@@ -166,9 +166,9 @@ The pattern conditions use pseudo-functions for matching:
 
 ```
 1. TRIGGER — Pattern rule matches, classify severity, log to blackboard
-2. HALT — Create .liza/CHECKPOINT, agents stop, supervisors wait
+2. HALT — Set sprint.status to CHECKPOINT, agents stop, supervisors wait
 3. GENERATE REPORT — Write .liza/circuit_breaker_report.md
-4. WAIT FOR HUMAN — Human reviews, decides, documents, releases
+4. WAIT FOR HUMAN — Human reviews, decides, documents, releases (`liza resume` or `liza stop`)
 ```
 
 ---
@@ -278,7 +278,7 @@ When circuit breaker is triggered:
    yq -i '.circuit_breaker.current_trigger = null |
      .circuit_breaker.status = "OK"' .liza/state.yaml
    ```
-4. **Human removes checkpoint:** `rm .liza/CHECKPOINT`
+4. **Human resumes:** `liza resume`
 5. **Agents resume**
 
 **Resolution field:** Human-written summary of corrective action taken (free text, should reference ADRs/specs if applicable).

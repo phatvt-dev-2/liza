@@ -304,7 +304,7 @@ Either way: claim the task, fix in worktree, resubmit for review. The resolution
 
 **Solutions:**
 1. **Continue with existing state** — just start the agents.
-2. **Reset completely:** `rm -rf .liza .worktrees && liza init "New goal"`
+2. **Reset completely:** `rm -rf .liza .worktrees && liza init "New goal"` (requires prior `liza setup`)
 
 ### Error: specs/vision.md required
 
@@ -425,6 +425,7 @@ EOF
 ```bash
 cp -r .liza .liza.backup.$(date +%Y%m%d-%H%M%S)
 rm -rf .liza
+liza setup          # skip if ~/.liza/ already exists
 liza init "Goal description"
 # Manually migrate in-progress work from backup if needed
 ```

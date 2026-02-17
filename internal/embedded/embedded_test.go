@@ -23,15 +23,16 @@ func TestListEmbeddedFiles(t *testing.T) {
 
 	// Verify key files exist
 	requiredFiles := map[string]bool{
-		"contracts/CORE.md":                              false,
-		"contracts/PAIRING_MODE.md":                      false,
-		"contracts/MULTI_AGENT_MODE.md":                  false,
-		"contracts/AGENT_TOOLS.md":                       false,
-		"contracts/COLLABORATION_CONTINUITY.md":          false,
-		"skills/adr-backfill/SKILL.md":                   false,
-		"skills/code-review/SKILL.md":                    false,
-		"skills/debugging/SKILL.md":                      false,
-		"docs/for-agent-eyes/agent-runtime-reference.md": false,
+		"contracts/CORE.md":                     false,
+		"contracts/PAIRING_MODE.md":             false,
+		"contracts/MULTI_AGENT_MODE.md":         false,
+		"contracts/AGENT_TOOLS.md":              false,
+		"contracts/COLLABORATION_CONTINUITY.md": false,
+		"skills/adr-backfill/SKILL.md":          false,
+		"skills/code-review/SKILL.md":           false,
+		"skills/debugging/SKILL.md":             false,
+		"skills/clean-code/languages/go.md":     false,
+		"agent-runtime-reference.md":            false,
 	}
 
 	for _, file := range files {
@@ -114,38 +115,28 @@ func TestPrependFrontmatter(t *testing.T) {
 	BuildDate = "unknown"
 }
 
-func TestWriteAllFiles(t *testing.T) {
-	// Create temporary directory for testing (acts as projectRoot)
+func TestWriteGlobalFiles(t *testing.T) {
+	// Create temporary directory for testing (acts as ~/.liza/)
 	tmpDir := t.TempDir()
 
-	// Write all files
-	err := WriteAllFiles(tmpDir)
+	// Write global files
+	written, err := WriteGlobalFiles(tmpDir)
 	if err != nil {
-		t.Fatalf("WriteAllFiles failed: %v", err)
+		t.Fatalf("WriteGlobalFiles failed: %v", err)
 	}
 
-	// Verify directory structure exists
-	lizaDir := filepath.Join(tmpDir, ".liza")
-	expectedDirs := []string{
-		filepath.Join(lizaDir, "contracts"),
-		filepath.Join(lizaDir, "skills"),
-		filepath.Join(tmpDir, "docs"),
-		filepath.Join(tmpDir, "docs", "for-agent-eyes"),
+	// Verify returned file list is non-empty
+	if len(written) == 0 {
+		t.Error("WriteGlobalFiles returned empty file list")
 	}
 
-	for _, dir := range expectedDirs {
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			t.Errorf("Expected directory not created: %s", dir)
-		}
-	}
-
-	// Verify key files exist and have content
+	// Verify key files exist and have content (contracts flat in targetDir)
 	expectedFiles := []string{
-		filepath.Join(lizaDir, "contracts", "CORE.md"),
-		filepath.Join(lizaDir, "contracts", "PAIRING_MODE.md"),
-		filepath.Join(lizaDir, "skills", "adr-backfill", "SKILL.md"),
-		filepath.Join(lizaDir, "skills", "code-review", "SKILL.md"),
-		filepath.Join(tmpDir, "docs", "for-agent-eyes", "agent-runtime-reference.md"),
+		filepath.Join(tmpDir, "CORE.md"),
+		filepath.Join(tmpDir, "PAIRING_MODE.md"),
+		filepath.Join(tmpDir, "skills", "adr-backfill", "SKILL.md"),
+		filepath.Join(tmpDir, "skills", "code-review", "SKILL.md"),
+		filepath.Join(tmpDir, "skills", "clean-code", "languages", "go.md"),
 	}
 
 	for _, file := range expectedFiles {
@@ -164,13 +155,14 @@ func TestWriteAllFiles(t *testing.T) {
 		}
 	}
 
-	// Verify contracts and skills directories are non-empty
-	contractFiles, _ := filepath.Glob(filepath.Join(lizaDir, "contracts", "*.md"))
+	// Verify contracts are flat in targetDir (not in a contracts/ subdir)
+	contractFiles, _ := filepath.Glob(filepath.Join(tmpDir, "*.md"))
 	if len(contractFiles) == 0 {
-		t.Error("Expected contract files, got none")
+		t.Error("Expected contract files flat in targetDir, got none")
 	}
 
-	skillDirs, _ := filepath.Glob(filepath.Join(lizaDir, "skills", "*"))
+	// Verify skills directory has subdirectories
+	skillDirs, _ := filepath.Glob(filepath.Join(tmpDir, "skills", "*"))
 	skillDirCount := 0
 	for _, dir := range skillDirs {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
@@ -182,8 +174,37 @@ func TestWriteAllFiles(t *testing.T) {
 	}
 }
 
-func TestWriteAllFiles_FrontmatterInAllFiles(t *testing.T) {
-	// Create temporary directory for testing (acts as projectRoot)
+func TestWriteRuntimeReference(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	err := WriteRuntimeReference(tmpDir)
+	if err != nil {
+		t.Fatalf("WriteRuntimeReference failed: %v", err)
+	}
+
+	runtimeRefPath := filepath.Join(tmpDir, "agent-runtime-reference.md")
+	info, err := os.Stat(runtimeRefPath)
+	if os.IsNotExist(err) {
+		t.Fatal("Runtime reference not created")
+	}
+	if info.Size() == 0 {
+		t.Error("Runtime reference is empty")
+	}
+	if info.Mode().Perm() != 0644 {
+		t.Errorf("File has wrong permissions: got %o, want 0644", info.Mode().Perm())
+	}
+
+	// Verify frontmatter is present
+	content, err := os.ReadFile(runtimeRefPath)
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+	if !strings.HasPrefix(string(content), "---\n") {
+		t.Error("Runtime reference missing frontmatter")
+	}
+}
+
+func TestWriteGlobalFiles_FrontmatterInAllFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set test values for frontmatter
@@ -191,18 +212,16 @@ func TestWriteAllFiles_FrontmatterInAllFiles(t *testing.T) {
 	GitCommit = "test-commit"
 	BuildDate = "test-date"
 
-	// Write all files
-	err := WriteAllFiles(tmpDir)
+	// Write global files
+	_, err := WriteGlobalFiles(tmpDir)
 	if err != nil {
-		t.Fatalf("WriteAllFiles failed: %v", err)
+		t.Fatalf("WriteGlobalFiles failed: %v", err)
 	}
 
-	// Check a few sample files for frontmatter
-	lizaDir := filepath.Join(tmpDir, ".liza")
+	// Check a few sample files for frontmatter (contracts flat in targetDir)
 	sampleFiles := []string{
-		filepath.Join(lizaDir, "contracts", "CORE.md"),
-		filepath.Join(lizaDir, "skills", "code-review", "SKILL.md"),
-		filepath.Join(tmpDir, "docs", "for-agent-eyes", "agent-runtime-reference.md"),
+		filepath.Join(tmpDir, "CORE.md"),
+		filepath.Join(tmpDir, "skills", "code-review", "SKILL.md"),
 	}
 
 	for _, file := range sampleFiles {
@@ -248,19 +267,17 @@ func TestWriteAllFiles_FrontmatterInAllFiles(t *testing.T) {
 	BuildDate = "unknown"
 }
 
-func TestWriteAllFiles_OverwritesExisting(t *testing.T) {
-	// Create temporary directory for testing (acts as projectRoot)
+func TestWriteGlobalFiles_OverwritesExisting(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Write files first time
-	err := WriteAllFiles(tmpDir)
+	_, err := WriteGlobalFiles(tmpDir)
 	if err != nil {
-		t.Fatalf("First WriteAllFiles failed: %v", err)
+		t.Fatalf("First WriteGlobalFiles failed: %v", err)
 	}
 
-	// Modify a file in .liza subdirectory
-	lizaDir := filepath.Join(tmpDir, ".liza")
-	testFile := filepath.Join(lizaDir, "contracts", "CORE.md")
+	// Modify a file (contracts are flat in targetDir now)
+	testFile := filepath.Join(tmpDir, "CORE.md")
 	originalContent, err := os.ReadFile(testFile)
 	if err != nil {
 		t.Fatalf("Failed to read test file: %v", err)
@@ -273,9 +290,9 @@ func TestWriteAllFiles_OverwritesExisting(t *testing.T) {
 	}
 
 	// Write files second time
-	err = WriteAllFiles(tmpDir)
+	_, err = WriteGlobalFiles(tmpDir)
 	if err != nil {
-		t.Fatalf("Second WriteAllFiles failed: %v", err)
+		t.Fatalf("Second WriteGlobalFiles failed: %v", err)
 	}
 
 	// Verify file was overwritten (frontmatter should be present again)
@@ -298,8 +315,6 @@ func TestWriteAllFiles_OverwritesExisting(t *testing.T) {
 
 	// Should have original content (after frontmatter)
 	if !strings.Contains(currentStr, string(originalContent)) {
-		// Note: originalContent already has frontmatter from first write,
-		// so this might not be a perfect test. Let's check for some known content.
 		if !strings.Contains(currentStr, "liza_version:") {
 			t.Errorf("File does not contain expected content after overwrite")
 		}

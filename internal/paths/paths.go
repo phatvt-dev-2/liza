@@ -5,6 +5,7 @@ package paths
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -130,6 +131,20 @@ func (p LizaPaths) ClaudeDir() string {
 // ClaudeSettingsPath returns the path to the Claude settings.json file.
 func (p LizaPaths) ClaudeSettingsPath() string {
 	return filepath.Join(p.ClaudeDir(), ClaudeSettingsFile)
+}
+
+// RuntimeReferencePath returns the path to the agent runtime reference file.
+func (p LizaPaths) RuntimeReferencePath() string {
+	return p.get("agent-runtime-reference.md")
+}
+
+// GlobalLizaDir returns the path to the global ~/.liza directory.
+func GlobalLizaDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(homeDir, LizaDirName), nil
 }
 
 // GetProjectRoot returns the main project root directory.

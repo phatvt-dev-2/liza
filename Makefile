@@ -22,6 +22,7 @@ sync-embedded:
 	@mkdir -p internal/embedded/contracts internal/embedded/skills internal/embedded/docs/for-agent-eyes
 	@cp contracts/*.md internal/embedded/contracts/
 	@cp -r skills/* internal/embedded/skills/
+	@find internal/embedded/skills/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 	@cp docs/for-agent-eyes/agent-runtime-reference.md internal/embedded/docs/for-agent-eyes/
 	@cp claude-settings.json internal/embedded/
 	@cp mcp.json internal/embedded/
