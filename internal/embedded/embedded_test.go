@@ -149,6 +149,80 @@ func TestPrependFrontmatter_ReplacesExisting(t *testing.T) {
 	}
 }
 
+func TestPrependFrontmatter_PreservesNonLizaFields(t *testing.T) {
+	Version = "2.0.0"
+	GitCommit = "new456"
+	BuildDate = "2026-02-01T00:00:00Z"
+	defer func() {
+		Version = "dev"
+		GitCommit = "unknown"
+		BuildDate = "unknown"
+	}()
+
+	// Skill-style frontmatter with name/description
+	input := []byte("---\nname: testing\ndescription: Test Protocol\n---\n\nTests are the immune system.")
+	result := prependFrontmatter(input)
+	resultStr := string(result)
+
+	// Original fields must survive
+	if !strings.Contains(resultStr, "name: testing") {
+		t.Error("Skill name field was lost")
+	}
+	if !strings.Contains(resultStr, "description: Test Protocol") {
+		t.Error("Skill description field was lost")
+	}
+
+	// Version metadata must be present
+	if !strings.Contains(resultStr, `liza_version: "2.0.0"`) {
+		t.Error("Version metadata missing")
+	}
+	if !strings.Contains(resultStr, `liza_git_commit: "new456"`) {
+		t.Error("Git commit metadata missing")
+	}
+
+	// Body must be preserved
+	if !strings.Contains(resultStr, "Tests are the immune system.") {
+		t.Error("Body content lost")
+	}
+
+	// Should have exactly one frontmatter block
+	if strings.Count(resultStr, "---\n") != 2 {
+		t.Errorf("Expected exactly one frontmatter block (2 delimiters), got:\n%s", resultStr)
+	}
+}
+
+func TestPrependFrontmatter_ReplacesOldLizaFieldsInMixed(t *testing.T) {
+	Version = "3.0.0"
+	GitCommit = "fresh789"
+	BuildDate = "2026-03-01T00:00:00Z"
+	defer func() {
+		Version = "dev"
+		GitCommit = "unknown"
+		BuildDate = "unknown"
+	}()
+
+	// Simulate re-running setup on an already-merged skill file
+	input := []byte("---\nname: testing\ndescription: Test Protocol\nliza_version: \"2.0.0\"\nliza_git_commit: \"old456\"\nliza_build_date: \"2026-02-01T00:00:00Z\"\n---\n\nBody.")
+	result := prependFrontmatter(input)
+	resultStr := string(result)
+
+	// Non-liza fields preserved
+	if !strings.Contains(resultStr, "name: testing") {
+		t.Error("Skill name field was lost")
+	}
+
+	// Old liza values replaced
+	if strings.Contains(resultStr, "old456") {
+		t.Error("Old liza_git_commit should be replaced")
+	}
+	if strings.Count(resultStr, "liza_version:") != 1 {
+		t.Errorf("Expected exactly one liza_version, got:\n%s", resultStr)
+	}
+	if !strings.Contains(resultStr, `liza_version: "3.0.0"`) {
+		t.Error("New version not present")
+	}
+}
+
 func TestStripFrontmatter(t *testing.T) {
 	tests := []struct {
 		name     string

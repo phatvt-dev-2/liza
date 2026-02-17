@@ -135,11 +135,49 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string, skipFiles map[string
 	return written, err
 }
 
-// prependFrontmatter replaces any existing YAML frontmatter with fresh version metadata.
-// If the content already starts with "---\n", the old frontmatter block is stripped first.
+// prependFrontmatter merges version metadata into existing YAML frontmatter,
+// or prepends a new frontmatter block if none exists.
+// Existing non-liza fields (e.g., skill name/description) are preserved;
+// old liza_* fields are replaced with current build values.
 func prependFrontmatter(content []byte) []byte {
-	fm := frontmatter()
-	return append([]byte(fm), stripFrontmatter(content)...)
+	prefix := []byte("---\n")
+	if !bytes.HasPrefix(content, prefix) {
+		return append([]byte(frontmatter()), content...)
+	}
+
+	rest := content[len(prefix):]
+	idx := bytes.Index(rest, []byte("\n---\n"))
+	if idx == -1 {
+		return append([]byte(frontmatter()), content...) // malformed, prepend fresh
+	}
+
+	existingBlock := string(rest[:idx])
+	after := rest[idx+len("\n---\n"):]
+
+	// Keep non-liza fields, drop old liza_* fields
+	var kept []string
+	for _, line := range strings.Split(existingBlock, "\n") {
+		if !strings.HasPrefix(line, "liza_") {
+			kept = append(kept, line)
+		}
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("---\n")
+	for _, line := range kept {
+		buf.WriteString(line)
+		buf.WriteByte('\n')
+	}
+	buf.WriteString(versionFields())
+	buf.WriteString("---\n")
+
+	// Preserve blank line between frontmatter and body
+	if len(after) > 0 && after[0] != '\n' {
+		buf.WriteByte('\n')
+	}
+	buf.Write(after)
+
+	return buf.Bytes()
 }
 
 // stripFrontmatter removes a leading YAML frontmatter block ("---\n...---\n") if present.
@@ -162,15 +200,15 @@ func stripFrontmatter(content []byte) []byte {
 	return after
 }
 
-// frontmatter generates YAML frontmatter string from build-time variables.
-func frontmatter() string {
-	return fmt.Sprintf(`---
-liza_version: "%s"
-liza_git_commit: "%s"
-liza_build_date: "%s"
----
+// versionFields returns the liza_* key-value lines without YAML delimiters.
+func versionFields() string {
+	return fmt.Sprintf("liza_version: \"%s\"\nliza_git_commit: \"%s\"\nliza_build_date: \"%s\"\n",
+		Version, GitCommit, BuildDate)
+}
 
-`, Version, GitCommit, BuildDate)
+// frontmatter generates a complete YAML frontmatter block from build-time variables.
+func frontmatter() string {
+	return "---\n" + versionFields() + "---\n\n"
 }
 
 // ListEmbeddedFiles returns a list of all embedded file paths (for testing).
