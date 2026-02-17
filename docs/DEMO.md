@@ -166,7 +166,7 @@ liza agent planner --agent-id planner-1
 The Planner will:
 1. Read `specs/vision.md`
 2. Decompose the goal into tasks
-3. Create DRAFT tasks, then finalize to UNCLAIMED
+3. Create DRAFT tasks, then finalize to READY
 
 Watch the blackboard update:
 ```bash
@@ -184,7 +184,7 @@ Expected tasks (Planner decides, but likely):
 
 ## Step 8: Start the Coder (Terminal 3)
 
-Once UNCLAIMED tasks appear:
+Once READY tasks appear:
 
 ```bash
 cd hello-cli
@@ -192,7 +192,7 @@ liza agent coder --agent-id coder-1
 ```
 
 The Coder will:
-1. Claim an UNCLAIMED task
+1. Claim an READY task
 2. Create a worktree (`.worktrees/task-N/`)
 3. Implement the task
 4. Run tests
@@ -254,16 +254,16 @@ watch -n 10 'git log integration --oneline 2>/dev/null || echo "No merges yet"'
 └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
        │                   │                   │
        │ Create tasks      │                   │
-       │ DRAFT → UNCLAIMED │                   │
+       │ DRAFT → READY │                   │
        │───────────────────>                   │
        │                   │                   │
        │                   │ Claim task        │
-       │                   │ UNCLAIMED→CLAIMED │
+       │                   │ READY→IMPLEMENTING │
        │                   │                   │
        │                   │ Implement...      │
        │                   │                   │
        │                   │ Submit            │
-       │                   │ CLAIMED→READY     │
+       │                   │ IMPLEMENTING→READY     │
        │                   │───────────────────>
        │                   │                   │
        │                   │                   │ Review
@@ -430,7 +430,7 @@ liza stop
 
 **Coder stuck?**
 - Check worktree exists: `ls .worktrees/`
-- Check task status: `yq '.tasks[] | select(.status == "CLAIMED")' .liza/state.yaml`
+- Check task status: `yq '.tasks[] | select(.status == "IMPLEMENTING")' .liza/state.yaml`
 - Look for BLOCKED status with `blocked_reason`
 
 **Review taking too long?**

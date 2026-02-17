@@ -192,7 +192,7 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	}
 
 	// Validation errors (status checks, preconditions)
-	if strings.Contains(msg, "not CLAIMED") || strings.Contains(msg, "not READY_FOR_REVIEW") ||
+	if strings.Contains(msg, "not IMPLEMENTING") || strings.Contains(msg, "not REVIEWING") || strings.Contains(msg, "not READY_FOR_REVIEW") ||
 		strings.Contains(msg, "not APPROVED") || strings.Contains(msg, "must be") ||
 		strings.Contains(msg, "is required") || strings.Contains(msg, "invalid task ID") {
 		return protocol.NewError(protocol.ValidationError, "validation failed: precondition not met", nil)

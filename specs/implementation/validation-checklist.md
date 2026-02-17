@@ -75,7 +75,7 @@ Review concludes when ANY of:
 ## Roles
 
 - [ ] Planner reads specs before decomposition
-- [ ] Planner can decompose goal (DRAFT → UNCLAIMED)
+- [ ] Planner can decompose goal (DRAFT → READY)
 - [ ] Planner verifies specs exist for tasks
 - [ ] Planner can rescope with audit trail
 - [ ] Coder reads specs before work

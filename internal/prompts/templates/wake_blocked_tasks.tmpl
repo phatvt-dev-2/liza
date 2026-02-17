@@ -8,7 +8,7 @@ Tasks are BLOCKED. Analyze and resolve immediately:
    - External dependency → document, possibly supersede task
    - Wrong approach → supersede task, create alternative (execute tools NOW)
 3. For each blocked task, decide action:
-   - To unblock: Set status → UNCLAIMED via fallback state edit, then run liza_validate
+   - To unblock: Set status → READY via fallback state edit, then run liza_validate
    - To supersede: First create replacement tasks, then use liza_supersede_task tool
    Example supersede workflow:
    - Execute tool: liza_add_task with {"id": "task-4", ...} (create replacement tasks)

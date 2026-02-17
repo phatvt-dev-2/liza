@@ -4,17 +4,18 @@
 
 | State | Description | Valid Transitions |
 |-------|-------------|-------------------|
-| DRAFT | Task being defined by planner | → UNCLAIMED |
-| UNCLAIMED | Task ready, no agent assigned | → CLAIMED |
-| CLAIMED | Coder assigned, work in progress | → READY_FOR_REVIEW, BLOCKED |
-| READY_FOR_REVIEW | Coder done, awaiting Code Reviewer | → APPROVED, REJECTED |
-| REJECTED | Code Reviewer rejected, feedback provided | → CLAIMED (supervisor reclaims for coder) |
+| DRAFT | Task being defined by planner | → READY |
+| READY | Task ready, no agent assigned | → IMPLEMENTING |
+| IMPLEMENTING | Coder assigned, work in progress | → READY_FOR_REVIEW, BLOCKED |
+| READY_FOR_REVIEW | Coder done, awaiting Code Reviewer | → REVIEWING |
+| REVIEWING | Reviewer assigned, review in progress | → APPROVED, REJECTED, READY_FOR_REVIEW (stale lease) |
+| REJECTED | Code Reviewer rejected, feedback provided | → IMPLEMENTING (supervisor reclaims for coder) |
 | APPROVED | Code Reviewer approved, merge eligible | → MERGED, INTEGRATION_FAILED |
 | MERGED | Successfully merged to integration | Terminal |
-| BLOCKED | Cannot proceed, awaiting escalation | → UNCLAIMED (rescoped), SUPERSEDED, ABANDONED |
+| BLOCKED | Cannot proceed, awaiting escalation | → READY (rescoped), SUPERSEDED, ABANDONED |
 | SUPERSEDED | Replaced by rescoped task(s) | Terminal |
 | ABANDONED | Planner killed task | Terminal |
-| INTEGRATION_FAILED | Merge conflict or integration test failure | → CLAIMED (integration-fix scope) |
+| INTEGRATION_FAILED | Merge conflict or integration test failure | → IMPLEMENTING (integration-fix scope) |
 
 ### Task State Diagram
 
@@ -26,13 +27,13 @@
                         │ finalize
                         ▼
      ┌──────────────────────────────────────────┐
-     │             UNCLAIMED                    │
+     │              READY                       │
      │       (Available for claim)              │
      └──────────────────┬───────────────────────┘
                         │ claim
                         ▼
      ┌──────────────────────────────────────────┐
-     │              CLAIMED                     │
+     │           IMPLEMENTING                   │
      │       (Coder working)                    │
      └─────────┬────────────────────┬───────────┘
                │                    │
@@ -43,17 +44,24 @@
      │ READY_FOR_REVIEW│    │   BLOCKED    │
      └────────┬────────┘    └──────┬───────┘
               │                    │
-       ┌──────┴──────┐      ┌──────┴──────┐
-       │             │      │             │
-    approve       reject  rescope     abandon
-       │             │      │             │
-       ▼             ▼      ▼             ▼
-┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
-│ APPROVED │  │ REJECTED │  │SUPERSEDED│  │ABANDONED │
-└────┬─────┘  └────┬─────┘  └──────────┘  └──────────┘
-     │             │              Terminal      Terminal
+       assign_reviewer       ┌──────┴──────┐
+              │               │             │
+              ▼             rescope     abandon
+     ┌─────────────────┐     │             │
+     │   REVIEWING     │     ▼             ▼
+     │ (Reviewer active)│  ┌──────────┐  ┌──────────┐
+     └────────┬────────┘  │SUPERSEDED│  │ABANDONED │
+              │           └──────────┘  └──────────┘
+       ┌──────┴──────┐     Terminal      Terminal
+       │             │
+    approve       reject
+       │             │
+       ▼             ▼
+┌──────────┐  ┌──────────┐
+│ APPROVED │  │ REJECTED │
+└────┬─────┘  └────┬─────┘
      │             │
-     │      resume (CLAIMED)
+     │      resume (IMPLEMENTING)
      │
      ├─────────────┐
      │             │
@@ -67,14 +75,18 @@
                    claim (integration-fix)
                         │
                         ▼
-                    CLAIMED
+                    IMPLEMENTING
+
+Note: REVIEWING → READY_FOR_REVIEW (stale lease recovery, not shown)
 ```
 
 ### Forbidden Transitions
 
-- DRAFT → CLAIMED (coders cannot claim drafts)
-- CLAIMED → MERGED (skipping review)
-- CLAIMED → APPROVED (self-approval)
+- DRAFT → IMPLEMENTING (coders cannot claim drafts)
+- IMPLEMENTING → MERGED (skipping review)
+- IMPLEMENTING → APPROVED (self-approval)
+- READY_FOR_REVIEW → APPROVED (must go through REVIEWING)
+- READY_FOR_REVIEW → REJECTED (must go through REVIEWING)
 - REJECTED → APPROVED (without addressing feedback)
 - Any terminal state → Any other state (MERGED, ABANDONED, SUPERSEDED are final)
 
@@ -82,11 +94,15 @@
 
 | Transition | Must Set | Must Preserve | Notes |
 |------------|----------|---------------|-------|
-| REJECTED → CLAIMED (same coder) | `lease_expires` (new) | `worktree`, `review_cycles_current`, `review_cycles_total` | Supervisor reclaims for same coder to address feedback |
-| REJECTED → CLAIMED (different coder) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `review_cycles_total` | Worktree reset: delete old, create fresh |
-| INTEGRATION_FAILED → CLAIMED | `lease_expires`, `integration_fix: true` | `worktree` | Any coder may claim; keeps worktree for conflict resolution |
-| BLOCKED → UNCLAIMED | — | `failed_by` | Preserves failure history; worktree deleted |
-| UNCLAIMED → CLAIMED (reassignment) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `failed_by`, `review_cycles_total` | Fresh worktree created |
+| READY_FOR_REVIEW → REVIEWING | `reviewing_by`, `review_lease_expires`, status=REVIEWING | `review_commit`, `assigned_to`, `worktree` | Supervisor assigns reviewer |
+| REVIEWING → APPROVED | `approved_by`, status=APPROVED | `review_commit` | Clear `reviewing_by`, `review_lease_expires` |
+| REVIEWING → REJECTED | `rejection_reason`, status=REJECTED | `review_commit` | Clear `reviewing_by`, `review_lease_expires`; increment review cycles |
+| REVIEWING → READY_FOR_REVIEW | status=READY_FOR_REVIEW | `review_commit`, `assigned_to`, `worktree` | Stale lease recovery: clear `reviewing_by`, `review_lease_expires` |
+| REJECTED → IMPLEMENTING (same coder) | `lease_expires` (new) | `worktree`, `review_cycles_current`, `review_cycles_total` | Supervisor reclaims for same coder to address feedback |
+| REJECTED → IMPLEMENTING (different coder) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `review_cycles_total` | Worktree reset: delete old, create fresh |
+| INTEGRATION_FAILED → IMPLEMENTING | `lease_expires`, `integration_fix: true` | `worktree` | Any coder may claim; keeps worktree for conflict resolution |
+| BLOCKED → READY | — | `failed_by` | Preserves failure history; worktree deleted |
+| READY → IMPLEMENTING (reassignment) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `failed_by`, `review_cycles_total` | Fresh worktree created |
 | Any → MERGED | — | — | Must clear `worktree` (cleanup) |
 
 **Review Cycles on Reassignment:**
@@ -100,7 +116,7 @@
 - Rationale: salvaging failed work often costs more than restarting from spec (see vision.md)
 - Exception: INTEGRATION_FAILED keeps worktree (conflict resolution requires seeing the failed merge state)
 
-**Validation Note:** `liza validate` should verify that CLAIMED tasks always have valid `lease_expires`, regardless of prior state.
+**Validation Note:** `liza validate` should verify that IMPLEMENTING tasks always have valid `lease_expires`, regardless of prior state.
 
 ---
 
@@ -270,7 +286,7 @@ Exit 0 signals "this agent type has no more work to do." Supervisor should stop 
 | Role | Exit 0 When |
 |------|-------------|
 | Planner | All tasks in terminal state, no blocked tasks, goal complete |
-| Coder | No UNCLAIMED tasks AND no REJECTED tasks assigned to this agent |
+| Coder | No READY tasks AND no REJECTED tasks assigned to this agent |
 | Code Reviewer | No READY_FOR_REVIEW tasks |
 
 **Note:** Exit 0 does NOT mean "task done" (use state transitions for that). It means "role complete for this goal/sprint."
@@ -286,9 +302,9 @@ if agent_exit_code == 0 and count(DRAFT tasks) > 0:
     restart_agent()  # Re-check after Planner may have finalized
 ```
 
-**Rationale:** DRAFT tasks will become UNCLAIMED when the Planner finalizes them. Rather than stopping the supervisor (exit 0 behavior), we wait briefly and re-check. This avoids a race where:
-1. Coder sees no UNCLAIMED tasks → exit 0
-2. Planner finalizes DRAFT → UNCLAIMED
+**Rationale:** DRAFT tasks will become READY when the Planner finalizes them. Rather than stopping the supervisor (exit 0 behavior), we wait briefly and re-check. This avoids a race where:
+1. Coder sees no READY tasks → exit 0
+2. Planner finalizes DRAFT → READY
 3. No Coder running to claim the newly-available task
 
 The delay is configurable via `config.coder_poll_interval` (default 30s) — long enough for Planner to finalize without busy-waiting, short enough for reasonable responsiveness.
@@ -335,9 +351,10 @@ When exit 42 is triggered by context exhaustion:
 task_states:
   valid:
     - DRAFT
-    - UNCLAIMED
-    - CLAIMED
+    - READY
+    - IMPLEMENTING
     - READY_FOR_REVIEW
+    - REVIEWING
     - REJECTED
     - APPROVED
     - MERGED
@@ -360,10 +377,13 @@ agent_states:
 
 invariants:
   - "DRAFT task cannot have assigned_to"
-  - "CLAIMED task must have assigned_to"
-  - "CLAIMED task must have worktree"
-  - "CLAIMED task must have valid lease_expires"
+  - "IMPLEMENTING task must have assigned_to"
+  - "IMPLEMENTING task must have worktree"
+  - "IMPLEMENTING task must have valid lease_expires"
   - "READY_FOR_REVIEW task must have review_commit"
+  - "REVIEWING task must have reviewing_by"
+  - "REVIEWING task must have review_lease_expires"
+  - "REVIEWING task must have review_commit"
   - "REJECTED task must have rejection_reason"
   - "BLOCKED task must have blocked_reason"
   - "SUPERSEDED task must have superseded_by and rescope_reason"

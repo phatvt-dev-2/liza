@@ -35,7 +35,7 @@ func TestGetField(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "Implement feature X",
-				Status:      models.TaskStatusClaimed,
+				Status:      models.TaskStatusImplementing,
 				Priority:    1,
 				Created:     now.Add(-1 * time.Hour),
 			},
@@ -135,10 +135,10 @@ func TestGetComputedField(t *testing.T) {
 			{ID: "task-3", Status: models.TaskStatusMerged},
 			{ID: "task-4", Status: models.TaskStatusMerged},
 			{ID: "task-5", Status: models.TaskStatusMerged},
-			{ID: "task-6", Status: models.TaskStatusClaimed},
-			{ID: "task-7", Status: models.TaskStatusClaimed},
-			{ID: "task-8", Status: models.TaskStatusClaimed},
-			{ID: "task-9", Status: models.TaskStatusUnclaimed},
+			{ID: "task-6", Status: models.TaskStatusImplementing},
+			{ID: "task-7", Status: models.TaskStatusImplementing},
+			{ID: "task-8", Status: models.TaskStatusImplementing},
+			{ID: "task-9", Status: models.TaskStatusReady},
 		},
 		Agents: map[string]models.Agent{
 			"coder-1": {
@@ -252,7 +252,7 @@ func TestGetComputedFieldAgentSpecific(t *testing.T) {
 		Tasks: []models.Task{
 			{
 				ID:     "task-1",
-				Status: models.TaskStatusClaimed,
+				Status: models.TaskStatusImplementing,
 				History: []models.TaskHistoryEntry{
 					{
 						Time:  now.Add(-15 * time.Minute),
@@ -302,7 +302,7 @@ func TestGetComputedFieldTaskSpecific(t *testing.T) {
 		Tasks: []models.Task{
 			{
 				ID:      "task-1",
-				Status:  models.TaskStatusClaimed,
+				Status:  models.TaskStatusImplementing,
 				Created: now.Add(-2 * time.Hour),
 				History: []models.TaskHistoryEntry{
 					{

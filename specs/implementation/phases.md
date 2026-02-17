@@ -84,7 +84,7 @@
 ## Phase 8: Integration Testing (Day 8-9)
 
 1. Manual walkthrough: Planner → Coder → Code Reviewer → Merge
-2. Test DRAFT → UNCLAIMED flow
+2. Test DRAFT → READY flow
 3. Test rescoping with SUPERSEDED state
 4. Test spec-driven workflow:
    - Planner verifies specs exist

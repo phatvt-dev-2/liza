@@ -111,7 +111,7 @@ state := testhelpers.CreateValidState()
 // Customize as needed
 state.Goal.Description = "Custom goal"
 state.Tasks = []models.Task{
-    testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, time.Now().UTC()),
+    testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()),
 }
 
 // Write state to blackboard
@@ -126,8 +126,8 @@ bb := testhelpers.WriteInitialState(t, statePath, state)
 now := time.Now().UTC()
 
 // BuildTaskByStatus sets all required fields for the given status
-task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
-// CLAIMED task has AssignedTo, LeaseExpires, BaseCommit, Worktree set
+task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+// IMPLEMENTING task has AssignedTo, LeaseExpires, BaseCommit, Worktree set
 
 task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusBlocked, now)
 // BLOCKED task has BlockedReason, BlockedQuestions set

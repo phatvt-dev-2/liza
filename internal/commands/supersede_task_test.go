@@ -61,9 +61,9 @@ func TestSupersedeTaskCommand(t *testing.T) {
 			wantReason:       "Revised approach needed",
 		},
 		{
-			name:             "supersede from UNCLAIMED status",
+			name:             "supersede from READY status",
 			taskID:           "task-1",
-			taskStatus:       models.TaskStatusUnclaimed,
+			taskStatus:       models.TaskStatusReady,
 			replacementIDs:   []string{"task-2"},
 			reason:           "Requirements changed",
 			wantErr:          false,
@@ -81,9 +81,9 @@ func TestSupersedeTaskCommand(t *testing.T) {
 			errContains:    "task not found",
 		},
 		{
-			name:           "error: invalid status CLAIMED",
+			name:           "error: invalid status IMPLEMENTING",
 			taskID:         "task-1",
-			taskStatus:     models.TaskStatusClaimed,
+			taskStatus:     models.TaskStatusImplementing,
 			replacementIDs: []string{"task-2"},
 			reason:         "test",
 			wantErr:        true,

@@ -73,8 +73,8 @@ func TestConcurrentClaimSameTask_MCPvsMCP(t *testing.T) {
 	}
 
 	task := state.Tasks[0]
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Expected task status CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected task status IMPLEMENTING, got %s", task.Status)
 	}
 
 	if task.AssignedTo == nil {
@@ -262,7 +262,7 @@ func TestNoDeadlocks(t *testing.T) {
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
 		for i := 2; i <= 5; i++ {
-			task := testhelpers.BuildTaskByStatus(fmt.Sprintf("task-%d", i), models.TaskStatusUnclaimed, time.Now().UTC())
+			task := testhelpers.BuildTaskByStatus(fmt.Sprintf("task-%d", i), models.TaskStatusReady, time.Now().UTC())
 			state.Tasks = append(state.Tasks, task)
 		}
 		return nil

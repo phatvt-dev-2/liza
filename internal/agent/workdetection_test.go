@@ -19,7 +19,7 @@ func TestCountClaimableTasks(t *testing.T) {
 		{
 			name: "single unclaimed task with no dependencies",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 			},
 			want: 1,
 		},
@@ -28,7 +28,7 @@ func TestCountClaimableTasks(t *testing.T) {
 			tasks: []models.Task{
 				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now)
 					task.DependsOn = []string{"task-1"}
 					return task
 				}(),
@@ -38,9 +38,9 @@ func TestCountClaimableTasks(t *testing.T) {
 		{
 			name: "unclaimed task with unsatisfied dependencies",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now)
 					task.DependsOn = []string{"task-1"}
 					return task
 				}(),
@@ -64,7 +64,7 @@ func TestCountClaimableTasks(t *testing.T) {
 		{
 			name: "claimed task is not claimable",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 			},
 			want: 0,
 		},
@@ -81,17 +81,17 @@ func TestCountClaimableTasks(t *testing.T) {
 				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
 				testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusUnclaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReady, now)
 					task.DependsOn = []string{"task-1"}
 					return task
 				}(),
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-4", models.TaskStatusUnclaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-4", models.TaskStatusReady, now)
 					task.DependsOn = []string{"task-1", "task-2"}
 					return task
 				}(),
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-5", models.TaskStatusUnclaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-5", models.TaskStatusReady, now)
 					task.DependsOn = []string{"task-3"} // task-3 not merged yet
 					return task
 				}(),
@@ -147,12 +147,10 @@ func TestCountReviewableTasks(t *testing.T) {
 			want: 1,
 		},
 		{
-			name: "ready_for_review with valid lease",
+			name: "reviewing with valid lease",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-					reviewer := "reviewer-1"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
 					futureTime := now.Add(30 * time.Minute)
 					task.ReviewLeaseExpires = &futureTime
 					return task
@@ -161,51 +159,57 @@ func TestCountReviewableTasks(t *testing.T) {
 			want: 0,
 		},
 		{
-			name: "ready_for_review with reviewer but no lease (malformed)",
+			name: "reviewing with reviewer but no lease (malformed)",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-					reviewer := "reviewer-1"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
 					task.ReviewLeaseExpires = nil
 					return task
 				}(),
 			},
-			want: 0, // Not reviewable - malformed state
+			want: 0, // Not reviewable - malformed state (no lease to check expiry)
 		},
 		{
-			name: "mixed reviewable and non-reviewable",
+			name: "reviewing with expired lease not counted (needs stale claim clearing first)",
 			tasks: []models.Task{
-				// Reviewable
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now),
-				// Reviewable (expired)
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now)
-					reviewer := "reviewer-1"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
 					expiredTime := now.Add(-1 * time.Hour)
 					task.ReviewLeaseExpires = &expiredTime
 					return task
 				}(),
-				// Not reviewable (valid lease)
+			},
+			want: 0,
+		},
+		{
+			name: "mixed reviewable and non-reviewable",
+			tasks: []models.Task{
+				// Reviewable (READY_FOR_REVIEW, unassigned)
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now),
+				// Not reviewable (REVIEWING with expired lease — needs stale claim clearing)
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReadyForReview, now)
-					reviewer := "reviewer-2"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReviewing, now)
+					expiredTime := now.Add(-1 * time.Hour)
+					task.ReviewLeaseExpires = &expiredTime
+					return task
+				}(),
+				// Not reviewable (REVIEWING with valid lease)
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReviewing, now)
 					futureTime := now.Add(30 * time.Minute)
 					task.ReviewLeaseExpires = &futureTime
 					return task
 				}(),
-				// Not reviewable (claimed)
-				testhelpers.BuildTaskByStatus("task-4", models.TaskStatusClaimed, now),
+				// Not reviewable (IMPLEMENTING)
+				testhelpers.BuildTaskByStatus("task-4", models.TaskStatusImplementing, now),
 			},
-			want: 2,
+			want: 1,
 		},
 		{
 			name: "no ready_for_review tasks",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
-				testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+				testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
 			},
 			want: 0,
 		},
@@ -276,7 +280,7 @@ func TestDetectPlannerWakeTriggers(t *testing.T) {
 			name: "hypothesis exhaustion trigger",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 				task.FailedBy = []string{"coder-1", "coder-2"}
 				state.Tasks = []models.Task{task}
 				return state
@@ -289,7 +293,7 @@ func TestDetectPlannerWakeTriggers(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 				}
 				state.Discovered = []models.Discovery{
 					{
@@ -313,7 +317,7 @@ func TestDetectPlannerWakeTriggers(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now),
 				}
 				return state
@@ -338,7 +342,7 @@ func TestDetectPlannerWakeTriggers(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 				}
 				state.Discovered = []models.Discovery{
 					{
@@ -362,7 +366,7 @@ func TestDetectPlannerWakeTriggers(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 				}
 				taskID := "task-2"
 				state.Discovered = []models.Discovery{
@@ -411,7 +415,7 @@ func TestHasCoderWork(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 				}
 				return state
 			}(),
@@ -422,7 +426,7 @@ func TestHasCoderWork(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 				}
 				return state
 			}(),
@@ -473,7 +477,7 @@ func TestHasReviewerWork(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 				}
 				return state
 			}(),
@@ -533,7 +537,7 @@ func TestHasPlannerWork(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 				}
 				return state
 			}(),
@@ -573,9 +577,9 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			name: "tasks blocked by dependencies",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 				task1.DependsOn = []string{"task-0"}
-				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now)
+				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now)
 				task2.DependsOn = []string{"task-0"}
 				state.Tasks = []models.Task{task1, task2}
 				return state
@@ -587,7 +591,7 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now),
 				}
 				return state
@@ -599,7 +603,7 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusRejected, now),
 				}
 				return state
@@ -610,9 +614,9 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			name: "mixed: blocked and in progress",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 				task1.DependsOn = []string{"task-0"}
-				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusClaimed, now)
+				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, now)
 				state.Tasks = []models.Task{task1, task2}
 				return state
 			}(),
@@ -633,8 +637,8 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			name: "mixed: some claimable, some blocked",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
-				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now)
+				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now)
 				task2.DependsOn = []string{"task-0"}
 				state.Tasks = []models.Task{task1, task2}
 				return state
@@ -666,7 +670,7 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 				}
 				return state
 			}(),
@@ -682,46 +686,38 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 				}
 				return state
 			}(),
-			wantMsg: "Found 2 reviewable task(s): 2 unassigned",
+			wantMsg: "Found 2 reviewable task(s)",
 		},
 		{
-			name: "tasks with expired leases",
+			name: "tasks with expired leases only",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-				reviewer := "reviewer-1"
-				task1.ReviewingBy = &reviewer
+				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
 				expiredTime := now.Add(-1 * time.Hour)
 				task1.ReviewLeaseExpires = &expiredTime
 				state.Tasks = []models.Task{task1}
 				return state
 			}(),
-			wantMsg: "Found 1 reviewable task(s): 1 with expired leases",
+			wantMsg: "No reviewable tasks; 1 with stale leases (pending reclamation)",
 		},
 		{
 			name: "mixed unassigned and expired leases",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now)
-				reviewer := "reviewer-1"
-				task2.ReviewingBy = &reviewer
+				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReviewing, now)
 				expiredTime := now.Add(-1 * time.Hour)
 				task2.ReviewLeaseExpires = &expiredTime
 				state.Tasks = []models.Task{task1, task2}
 				return state
 			}(),
-			wantMsg: "Found 2 reviewable task(s): 1 unassigned, 1 with expired leases",
+			wantMsg: "Found 1 reviewable task(s); 1 with stale leases (pending reclamation)",
 		},
 		{
 			name: "actively being reviewed",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-				reviewer := "reviewer-1"
-				task1.ReviewingBy = &reviewer
-				futureTime := now.Add(30 * time.Minute)
-				task1.ReviewLeaseExpires = &futureTime
+				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
 				state.Tasks = []models.Task{task1}
 				return state
 			}(),
@@ -731,18 +727,8 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			name: "multiple actively being reviewed",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-				reviewer1 := "reviewer-1"
-				task1.ReviewingBy = &reviewer1
-				futureTime1 := now.Add(30 * time.Minute)
-				task1.ReviewLeaseExpires = &futureTime1
-
-				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now)
-				reviewer2 := "reviewer-2"
-				task2.ReviewingBy = &reviewer2
-				futureTime2 := now.Add(45 * time.Minute)
-				task2.ReviewLeaseExpires = &futureTime2
-
+				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReviewing, now)
 				state.Tasks = []models.Task{task1, task2}
 				return state
 			}(),
@@ -753,8 +739,8 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
-					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, now),
 					testhelpers.BuildTaskByStatus("task-3", models.TaskStatusMerged, now),
 				}
 				return state

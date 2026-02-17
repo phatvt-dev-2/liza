@@ -61,7 +61,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 
 	// Check task status is claimable
 	switch task.Status {
-	case models.TaskStatusUnclaimed:
+	case models.TaskStatusReady:
 		// Check dependencies are satisfied
 		if len(task.DependsOn) > 0 {
 			var unmet []string
@@ -87,7 +87,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 			previousAssignee = *task.AssignedTo
 		}
 	default:
-		return fmt.Errorf("task %s is %s (not UNCLAIMED, REJECTED, or INTEGRATION_FAILED)", taskID, task.Status)
+		return fmt.Errorf("task %s is %s (not READY, REJECTED, or INTEGRATION_FAILED)", taskID, task.Status)
 	}
 
 	// Check agent isn't already working on another task
@@ -118,7 +118,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 	var worktreeDeleted bool
 
 	switch taskStatus {
-	case models.TaskStatusUnclaimed:
+	case models.TaskStatusReady:
 		// New claim - create worktree
 		branchName := "task/" + taskID
 
@@ -134,7 +134,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 		}
 
 		if _, err := os.Stat(worktreeDir); err == nil {
-			return fmt.Errorf("worktree %s already exists for UNCLAIMED task - another claim may be in progress", worktreeRel)
+			return fmt.Errorf("worktree %s already exists for READY task - another claim may be in progress", worktreeRel)
 		}
 
 		// Create worktree
@@ -197,15 +197,15 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 		}
 
 		// Verify worktree exists on disk before committing state
-		if taskStatus == models.TaskStatusUnclaimed && worktreeCreated {
+		if taskStatus == models.TaskStatusReady && worktreeCreated {
 			worktreePath := filepath.Join(lp.ProjectRoot(), worktreeRel)
 			if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
 				return fmt.Errorf("worktree directory does not exist: %s", worktreePath)
 			}
 		}
 
-		// For UNCLAIMED: re-check dependencies
-		if taskStatus == models.TaskStatusUnclaimed {
+		// For READY: re-check dependencies
+		if taskStatus == models.TaskStatusReady {
 			if len(task.DependsOn) > 0 {
 				var unmet []string
 				for _, depID := range task.DependsOn {
@@ -245,7 +245,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 		}
 
 		// Update task
-		task.Status = models.TaskStatusClaimed
+		task.Status = models.TaskStatusImplementing
 		task.AssignedTo = &agentID
 		task.LeaseExpires = &leaseExpires
 
@@ -264,7 +264,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 		} else if taskStatus == models.TaskStatusRejected && previousAssignee == agentID {
 			// Same coder: preserve base_commit and worktree (already set)
 		} else {
-			// UNCLAIMED: new claim with fresh worktree and base_commit
+			// READY: new claim with fresh worktree and base_commit
 			task.Worktree = &worktreeRel
 			task.BaseCommit = &baseCommit
 		}
@@ -307,7 +307,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 	}
 
 	// Success
-	fmt.Printf("CLAIMED: %s by %s (from %s)\n", taskID, agentID, taskStatus)
+	fmt.Printf("IMPLEMENTING: %s by %s (from %s)\n", taskID, agentID, taskStatus)
 	fmt.Printf("  worktree: %s\n", worktreeRel)
 	fmt.Printf("  base_commit: %s\n", baseCommit)
 	fmt.Printf("  lease_expires: %s\n", leaseExpires.Format(time.RFC3339))

@@ -167,9 +167,9 @@ func checkExpiredLeases(state *models.State) []alert {
 		}
 	}
 
-	// Check reviewer leases (READY_FOR_REVIEW tasks)
+	// Check reviewer leases (REVIEWING tasks with expired leases)
 	for _, task := range state.Tasks {
-		if task.Status != models.TaskStatusReadyForReview {
+		if task.Status != models.TaskStatusReviewing {
 			continue
 		}
 		if task.ReviewingBy == nil {
@@ -321,7 +321,7 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []alert {
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
-		if task.Status != models.TaskStatusClaimed {
+		if task.Status != models.TaskStatusImplementing {
 			continue
 		}
 		if task.AssignedTo == nil {
@@ -361,7 +361,7 @@ func checkApproachingLimits(state *models.State) []alert {
 
 	for _, task := range state.Tasks {
 		// Coder iterations: warn at 8, cliff at 10
-		if task.Status == models.TaskStatusClaimed && task.Iteration >= 8 && task.Iteration < 10 {
+		if task.Status == models.TaskStatusImplementing && task.Iteration >= 8 && task.Iteration < 10 {
 			alerts = append(alerts, alert{
 				Timestamp: now,
 				Level:     alertLevelWarning,

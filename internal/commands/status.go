@@ -220,7 +220,7 @@ func buildTaskStatus(state *models.State) taskStatus {
 		}
 
 		// Check if blocked by dependencies
-		if task.Status == models.TaskStatusUnclaimed ||
+		if task.Status == models.TaskStatusReady ||
 			task.Status == models.TaskStatusRejected ||
 			task.Status == models.TaskStatusIntegrationFailed {
 			hasUnsatisfiedDeps := false

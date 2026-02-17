@@ -40,13 +40,13 @@ These are workflow actions that only the agent can trigger — they represent th
 
 | Action | MCP Tool | State Transition |
 |--------|----------|------------------|
-| Submit work for review | `liza_submit_for_review` | task: CLAIMED -> READY_FOR_REVIEW, agent: WORKING -> WAITING |
-| Submit review verdict | `liza_submit_verdict` | task: -> APPROVED or -> CLAIMED (rejection), agent: REVIEWING -> IDLE |
+| Submit work for review | `liza_submit_for_review` | task: IMPLEMENTING -> READY_FOR_REVIEW, agent: WORKING -> WAITING |
+| Submit review verdict | `liza_submit_verdict` | task: -> APPROVED or -> IMPLEMENTING (rejection), agent: REVIEWING -> IDLE |
 | Initiate handoff | `liza_handoff` | task: sets `handoff_pending`, agent: WORKING -> HANDOFF |
 | Mark task blocked | `liza_mark_blocked` | task: -> BLOCKED |
 | Add task | `liza_add_task` | Creates new task (planner) |
 | Supersede task | `liza_supersede_task` | task: -> SUPERSEDED (planner) |
-| Release claim | `liza_release_claim` | task: -> UNCLAIMED, agent: -> IDLE |
+| Release claim | `liza_release_claim` | task: -> READY, agent: -> IDLE |
 
 ### Administrative (MCP tools, not part of normal flow)
 

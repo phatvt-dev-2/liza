@@ -49,13 +49,13 @@ func TestDeleteTaskCommand(t *testing.T) {
 			},
 		},
 		{
-			name:           "successfully delete UNCLAIMED task",
+			name:           "successfully delete READY task",
 			taskID:         "task-2",
 			force:          false,
 			deleteWorktree: false,
 			reason:         "not needed",
 			setupState: func(state *models.State) {
-				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, time.Now().UTC()))
+				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, time.Now().UTC()))
 			},
 			wantErr: false,
 			validateState: func(t *testing.T, state *models.State) {
@@ -123,13 +123,13 @@ func TestDeleteTaskCommand(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:           "error when deleting CLAIMED task with valid lease",
+			name:           "error when deleting IMPLEMENTING task with valid lease",
 			taskID:         "task-8",
 			force:          false,
 			deleteWorktree: false,
 			reason:         "test",
 			setupState: func(state *models.State) {
-				task := testhelpers.BuildTaskByStatus("task-8", models.TaskStatusClaimed, time.Now().UTC())
+				task := testhelpers.BuildTaskByStatus("task-8", models.TaskStatusImplementing, time.Now().UTC())
 				validLease := time.Now().UTC().Add(1 * time.Hour)
 				task.LeaseExpires = &validLease
 				state.Tasks = append(state.Tasks, task)
@@ -145,6 +145,18 @@ func TestDeleteTaskCommand(t *testing.T) {
 			reason:         "test",
 			setupState: func(state *models.State) {
 				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-9", models.TaskStatusReadyForReview, time.Now().UTC()))
+			},
+			wantErr:    true,
+			wantErrMsg: "cannot delete task",
+		},
+		{
+			name:           "error when deleting REVIEWING task",
+			taskID:         "task-9b",
+			force:          false,
+			deleteWorktree: false,
+			reason:         "test",
+			setupState: func(state *models.State) {
+				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-9b", models.TaskStatusReviewing, time.Now().UTC()))
 			},
 			wantErr:    true,
 			wantErrMsg: "cannot delete task",
@@ -169,8 +181,8 @@ func TestDeleteTaskCommand(t *testing.T) {
 			deleteWorktree: false,
 			reason:         "test",
 			setupState: func(state *models.State) {
-				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-11", models.TaskStatusUnclaimed, time.Now().UTC()))
-				dependentTask := testhelpers.BuildTaskByStatus("task-12", models.TaskStatusUnclaimed, time.Now().UTC())
+				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-11", models.TaskStatusReady, time.Now().UTC()))
+				dependentTask := testhelpers.BuildTaskByStatus("task-12", models.TaskStatusReady, time.Now().UTC())
 				dependentTask.DependsOn = []string{"task-11"}
 				state.Tasks = append(state.Tasks, dependentTask)
 			},
@@ -184,8 +196,8 @@ func TestDeleteTaskCommand(t *testing.T) {
 			deleteWorktree: false,
 			reason:         "forced",
 			setupState: func(state *models.State) {
-				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-13", models.TaskStatusUnclaimed, time.Now().UTC()))
-				dependentTask := testhelpers.BuildTaskByStatus("task-14", models.TaskStatusUnclaimed, time.Now().UTC())
+				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-13", models.TaskStatusReady, time.Now().UTC()))
+				dependentTask := testhelpers.BuildTaskByStatus("task-14", models.TaskStatusReady, time.Now().UTC())
 				dependentTask.DependsOn = []string{"task-13"}
 				state.Tasks = append(state.Tasks, dependentTask)
 			},
@@ -218,7 +230,7 @@ func TestDeleteTaskCommand(t *testing.T) {
 			deleteWorktree: false,
 			reason:         "test",
 			setupState: func(state *models.State) {
-				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-15", models.TaskStatusUnclaimed, time.Now().UTC()))
+				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-15", models.TaskStatusReady, time.Now().UTC()))
 				state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, "task-15")
 			},
 			wantErr: false,
@@ -237,7 +249,7 @@ func TestDeleteTaskCommand(t *testing.T) {
 			deleteWorktree: false,
 			reason:         "test",
 			setupState: func(state *models.State) {
-				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-16", models.TaskStatusUnclaimed, time.Now().UTC()))
+				state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-16", models.TaskStatusReady, time.Now().UTC()))
 				state.Sprint.Scope.Stretch = append(state.Sprint.Scope.Stretch, "task-16")
 			},
 			wantErr: false,

@@ -42,8 +42,8 @@ func HandoffCommand(projectRoot, taskID, summary, nextAction, agentID string) er
 			return fmt.Errorf("task not found: %s", taskID)
 		}
 
-		if task.Status != models.TaskStatusClaimed {
-			return fmt.Errorf("task %s is not CLAIMED (current status: %s)", taskID, task.Status)
+		if task.Status != models.TaskStatusImplementing {
+			return fmt.Errorf("task %s is not IMPLEMENTING (current status: %s)", taskID, task.Status)
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {

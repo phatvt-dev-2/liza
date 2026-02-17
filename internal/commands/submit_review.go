@@ -52,9 +52,9 @@ func SubmitForReviewCommand(projectRoot, taskID, commitSHA, agentID string) erro
 		return fmt.Errorf("task not found: %s", taskID)
 	}
 
-	// Validate task is in CLAIMED status
-	if task.Status != models.TaskStatusClaimed {
-		return fmt.Errorf("task %s is not CLAIMED (current status: %s)", taskID, task.Status)
+	// Validate task is in IMPLEMENTING status
+	if task.Status != models.TaskStatusImplementing {
+		return fmt.Errorf("task %s is not IMPLEMENTING (current status: %s)", taskID, task.Status)
 	}
 
 	// Validate task is assigned to this agent
@@ -148,9 +148,9 @@ Alternatively, abort the rebase and ask for help:
 			return fmt.Errorf("task not found: %s", taskID)
 		}
 
-		// Validate task is in CLAIMED status
-		if task.Status != models.TaskStatusClaimed {
-			return fmt.Errorf("task %s is not CLAIMED (current status: %s)", taskID, task.Status)
+		// Validate task is in IMPLEMENTING status
+		if task.Status != models.TaskStatusImplementing {
+			return fmt.Errorf("task %s is not IMPLEMENTING (current status: %s)", taskID, task.Status)
 		}
 
 		// Validate task is assigned to this agent

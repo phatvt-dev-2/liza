@@ -70,7 +70,7 @@ func TestCheckpointCommand(t *testing.T) {
 				},
 				{
 					ID:          "task-2",
-					Status:      models.TaskStatusClaimed,
+					Status:      models.TaskStatusImplementing,
 					Description: "In progress task",
 					Created:     time.Now(),
 					SpecRef:     "spec.md",

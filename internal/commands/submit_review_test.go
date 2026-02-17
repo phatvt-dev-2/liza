@@ -23,7 +23,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 		wantErrMsg    string
 		validateState func(*testing.T, *models.State)
 	}{
-		// NOTE: The "successful submission from CLAIMED" test is now covered by
+		// NOTE: The "successful submission from IMPLEMENTING" test is now covered by
 		// TestSubmitForReview_RebaseSuccess which properly sets up git repository and worktree
 		{
 			name:       "missing task ID",
@@ -61,18 +61,18 @@ func TestSubmitForReviewCommand(t *testing.T) {
 			},
 		},
 		{
-			name:       "task not in CLAIMED status",
+			name:       "task not in IMPLEMENTING status",
 			taskID:     "t1",
 			commitSHA:  "abc123",
 			agentID:    "coder-1",
 			wantErr:    true,
-			wantErrMsg: "task t1 is not CLAIMED",
+			wantErrMsg: "task t1 is not IMPLEMENTING",
 			setupState: func(s *models.State) {
 				s.Tasks = []models.Task{
 					{
 						ID:          "t1",
 						Description: "Test task",
-						Status:      models.TaskStatusUnclaimed,
+						Status:      models.TaskStatusReady,
 						Created:     time.Now().UTC(),
 						History:     []models.TaskHistoryEntry{},
 					},
@@ -93,7 +93,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 					{
 						ID:           "t1",
 						Description:  "Test task",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &differentAgent,
 						LeaseExpires: &leaseExpires,
 						Created:      time.Now().UTC(),
@@ -116,7 +116,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 					{
 						ID:           "t1",
 						Description:  "Test task",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &agentID,
 						LeaseExpires: &leaseExpires,
 						Created:      time.Now().UTC(),
@@ -213,7 +213,7 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 	testhelpers.MustGit(t, tmpDir, "add", "integration-file.txt")
 	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Integration commit")
 
-	// Create state with CLAIMED task
+	// Create state with IMPLEMENTING task
 	agentID := "coder-1"
 	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	worktree := g.GetWorktreeRelPath(taskID)
@@ -227,7 +227,7 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 			{
 				ID:           taskID,
 				Description:  "Test task with rebase",
-				Status:       models.TaskStatusClaimed,
+				Status:       models.TaskStatusImplementing,
 				AssignedTo:   &agentID,
 				LeaseExpires: &leaseExpires,
 				Worktree:     &worktree,
@@ -321,7 +321,7 @@ func TestSubmitForReview_RebaseConflict(t *testing.T) {
 	testhelpers.MustGit(t, tmpDir, "add", "README.md")
 	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Integration README")
 
-	// Create state with CLAIMED task
+	// Create state with IMPLEMENTING task
 	agentID := "coder-1"
 	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	worktree := g.GetWorktreeRelPath(taskID)
@@ -334,7 +334,7 @@ func TestSubmitForReview_RebaseConflict(t *testing.T) {
 			{
 				ID:           taskID,
 				Description:  "Test task with rebase conflict",
-				Status:       models.TaskStatusClaimed,
+				Status:       models.TaskStatusImplementing,
 				AssignedTo:   &agentID,
 				LeaseExpires: &leaseExpires,
 				Worktree:     &worktree,
@@ -363,13 +363,13 @@ func TestSubmitForReview_RebaseConflict(t *testing.T) {
 		t.Errorf("expected error to include worktree path, got: %v", err)
 	}
 
-	// Verify task remains in CLAIMED status
+	// Verify task remains in IMPLEMENTING status
 	state, err := bb.Read()
 	testhelpers.AssertNoError(t, err)
 
 	task := &state.Tasks[0]
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("expected task to remain CLAIMED after conflict, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("expected task to remain IMPLEMENTING after conflict, got %s", task.Status)
 	}
 
 	// Verify review_commit is NOT set
@@ -402,7 +402,7 @@ func TestSubmitForReview_FetchFailure(t *testing.T) {
 	testhelpers.MustGit(t, wtPath, "commit", "-m", "Task commit")
 	wtCommit := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
 
-	// Create state with CLAIMED task but WRONG integration branch name
+	// Create state with IMPLEMENTING task but WRONG integration branch name
 	agentID := "coder-1"
 	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	worktree := g.GetWorktreeRelPath(taskID)
@@ -415,7 +415,7 @@ func TestSubmitForReview_FetchFailure(t *testing.T) {
 			{
 				ID:           taskID,
 				Description:  "Test task with fetch failure",
-				Status:       models.TaskStatusClaimed,
+				Status:       models.TaskStatusImplementing,
 				AssignedTo:   &agentID,
 				LeaseExpires: &leaseExpires,
 				Worktree:     &worktree,
@@ -441,13 +441,13 @@ func TestSubmitForReview_FetchFailure(t *testing.T) {
 		t.Errorf("expected error to mention fetch failure, got: %v", err)
 	}
 
-	// Verify task remains in CLAIMED status
+	// Verify task remains in IMPLEMENTING status
 	state, err := bb.Read()
 	testhelpers.AssertNoError(t, err)
 
 	task := &state.Tasks[0]
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("expected task to remain CLAIMED after fetch failure, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("expected task to remain IMPLEMENTING after fetch failure, got %s", task.Status)
 	}
 }
 
@@ -471,7 +471,7 @@ func TestSubmitForReview_WorktreeGone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create state with CLAIMED task
+	// Create state with IMPLEMENTING task
 	agentID := "coder-1"
 	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	worktree := g.GetWorktreeRelPath(taskID)
@@ -484,7 +484,7 @@ func TestSubmitForReview_WorktreeGone(t *testing.T) {
 			{
 				ID:           taskID,
 				Description:  "Test task with missing worktree",
-				Status:       models.TaskStatusClaimed,
+				Status:       models.TaskStatusImplementing,
 				AssignedTo:   &agentID,
 				LeaseExpires: &leaseExpires,
 				Worktree:     &worktree,
@@ -510,13 +510,13 @@ func TestSubmitForReview_WorktreeGone(t *testing.T) {
 		t.Errorf("expected error to mention missing worktree, got: %v", err)
 	}
 
-	// Verify task remains in CLAIMED status
+	// Verify task remains in IMPLEMENTING status
 	state, err := bb.Read()
 	testhelpers.AssertNoError(t, err)
 
 	task := &state.Tasks[0]
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("expected task to remain CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("expected task to remain IMPLEMENTING, got %s", task.Status)
 	}
 }
 
@@ -547,7 +547,7 @@ func TestSubmitForReview_DetachedHead(t *testing.T) {
 	// Detach HEAD by checking out the commit directly
 	testhelpers.MustGit(t, wtPath, "checkout", wtCommit)
 
-	// Create state with CLAIMED task
+	// Create state with IMPLEMENTING task
 	agentID := "coder-1"
 	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	worktree := g.GetWorktreeRelPath(taskID)
@@ -560,7 +560,7 @@ func TestSubmitForReview_DetachedHead(t *testing.T) {
 			{
 				ID:           taskID,
 				Description:  "Test task with detached HEAD",
-				Status:       models.TaskStatusClaimed,
+				Status:       models.TaskStatusImplementing,
 				AssignedTo:   &agentID,
 				LeaseExpires: &leaseExpires,
 				Worktree:     &worktree,
@@ -586,12 +586,12 @@ func TestSubmitForReview_DetachedHead(t *testing.T) {
 		t.Errorf("expected error to mention detached HEAD, got: %v", err)
 	}
 
-	// Verify task remains in CLAIMED status
+	// Verify task remains in IMPLEMENTING status
 	state, err := bb.Read()
 	testhelpers.AssertNoError(t, err)
 
 	task := &state.Tasks[0]
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("expected task to remain CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("expected task to remain IMPLEMENTING, got %s", task.Status)
 	}
 }

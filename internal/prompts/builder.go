@@ -71,9 +71,9 @@ func BuildPlannerContext(state *models.State, config PlannerContextConfig) strin
 	merged := countTasksByStatus(state.Tasks, models.TaskStatusMerged)
 	blocked := countTasksByStatus(state.Tasks, models.TaskStatusBlocked)
 	integrationFailed := countTasksByStatus(state.Tasks, models.TaskStatusIntegrationFailed)
-	unclaimed := countTasksByStatus(state.Tasks, models.TaskStatusUnclaimed)
+	unclaimed := countTasksByStatus(state.Tasks, models.TaskStatusReady)
 
-	inProgress := countTasksByStatus(state.Tasks, models.TaskStatusClaimed) +
+	inProgress := countTasksByStatus(state.Tasks, models.TaskStatusImplementing) +
 		countTasksByStatus(state.Tasks, models.TaskStatusReadyForReview) +
 		countTasksByStatus(state.Tasks, models.TaskStatusApproved)
 

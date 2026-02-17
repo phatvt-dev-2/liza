@@ -32,7 +32,7 @@ func TestBlackboardBasicReadWrite(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "Test task",
-				Status:      models.TaskStatusUnclaimed,
+				Status:      models.TaskStatusReady,
 				Priority:    1,
 				SpecRef:     "spec.md",
 				DoneWhen:    "Task is done",
@@ -95,14 +95,14 @@ func TestBlackboardGetTask(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "First task",
-				Status:      models.TaskStatusUnclaimed,
+				Status:      models.TaskStatusReady,
 				Priority:    1,
 				Created:     now,
 			},
 			{
 				ID:          "task-2",
 				Description: "Second task",
-				Status:      models.TaskStatusClaimed,
+				Status:      models.TaskStatusImplementing,
 				Priority:    2,
 				Created:     now,
 			},
@@ -208,7 +208,7 @@ func TestBlackboardModify(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "Original description",
-				Status:      models.TaskStatusUnclaimed,
+				Status:      models.TaskStatusReady,
 				Priority:    1,
 				Created:     now,
 			},
@@ -226,7 +226,7 @@ func TestBlackboardModify(t *testing.T) {
 	err := bb.Modify(func(s *models.State) error {
 		if len(s.Tasks) > 0 {
 			s.Tasks[0].Description = "Modified description"
-			s.Tasks[0].Status = models.TaskStatusClaimed
+			s.Tasks[0].Status = models.TaskStatusImplementing
 		}
 		return nil
 	})
@@ -245,8 +245,8 @@ func TestBlackboardModify(t *testing.T) {
 	if readState.Tasks[0].Description != "Modified description" {
 		t.Errorf("Description not modified: got %s, want 'Modified description'", readState.Tasks[0].Description)
 	}
-	if readState.Tasks[0].Status != models.TaskStatusClaimed {
-		t.Errorf("Status not modified: got %s, want %s", readState.Tasks[0].Status, models.TaskStatusClaimed)
+	if readState.Tasks[0].Status != models.TaskStatusImplementing {
+		t.Errorf("Status not modified: got %s, want %s", readState.Tasks[0].Status, models.TaskStatusImplementing)
 	}
 }
 
@@ -263,14 +263,14 @@ func TestBlackboardUpdateTask(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "Task 1",
-				Status:      models.TaskStatusUnclaimed,
+				Status:      models.TaskStatusReady,
 				Priority:    1,
 				Created:     now,
 			},
 			{
 				ID:          "task-2",
 				Description: "Task 2",
-				Status:      models.TaskStatusUnclaimed,
+				Status:      models.TaskStatusReady,
 				Priority:    2,
 				Created:     now,
 			},
@@ -287,7 +287,7 @@ func TestBlackboardUpdateTask(t *testing.T) {
 	// Update task-2
 	assignedTo := "agent-1"
 	err := bb.UpdateTask("task-2", func(task *models.Task) error {
-		task.Status = models.TaskStatusClaimed
+		task.Status = models.TaskStatusImplementing
 		task.AssignedTo = &assignedTo
 		return nil
 	})
@@ -300,8 +300,8 @@ func TestBlackboardUpdateTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask failed: %v", err)
 	}
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Task status not updated: got %s, want %s", task.Status, models.TaskStatusClaimed)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Task status not updated: got %s, want %s", task.Status, models.TaskStatusImplementing)
 	}
 	if task.AssignedTo == nil || *task.AssignedTo != "agent-1" {
 		t.Errorf("Task assignedTo not updated correctly")
@@ -312,7 +312,7 @@ func TestBlackboardUpdateTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask task-1 failed: %v", err)
 	}
-	if task1.Status != models.TaskStatusUnclaimed {
+	if task1.Status != models.TaskStatusReady {
 		t.Errorf("Task-1 status should be unchanged, got %s", task1.Status)
 	}
 }
@@ -501,7 +501,7 @@ func TestBlackboardUpdateTaskNotFound(t *testing.T) {
 
 	// Try to update non-existent task
 	err := bb.UpdateTask("task-999", func(task *models.Task) error {
-		task.Status = models.TaskStatusClaimed
+		task.Status = models.TaskStatusImplementing
 		return nil
 	})
 	if err == nil {
@@ -586,7 +586,7 @@ func TestBlackboardConcurrentReads(t *testing.T) {
 		Version: 1,
 		Goal:    models.Goal{ID: "goal-1", Status: models.GoalStatusInProgress, Created: now},
 		Tasks: []models.Task{
-			{ID: "task-1", Description: "Test", Status: models.TaskStatusUnclaimed, Priority: 1, Created: now},
+			{ID: "task-1", Description: "Test", Status: models.TaskStatusReady, Priority: 1, Created: now},
 		},
 		Agents: make(map[string]models.Agent),
 		Config: models.Config{IntegrationBranch: "main"},
@@ -665,7 +665,7 @@ func TestBlackboardConcurrentModifications(t *testing.T) {
 				s.Tasks = append(s.Tasks, models.Task{
 					ID:          id,
 					Description: "Test task",
-					Status:      models.TaskStatusUnclaimed,
+					Status:      models.TaskStatusReady,
 					Priority:    1,
 					Created:     now,
 				})

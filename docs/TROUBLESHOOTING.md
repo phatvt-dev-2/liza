@@ -155,15 +155,15 @@ This is normal — the three-phase claim pattern detected a race condition and w
 
 ### Task status invariant violation
 
-**Error:** `INVALID: CLAIMED task without assigned_to: task-1`
+**Error:** `INVALID: IMPLEMENTING task without assigned_to: task-1`
 
 **Fix the invariant:**
 ```bash
 # Option 1: Assign the agent
 yq -i '(.tasks[] | select(.id == "task-1")).assigned_to = "coder-1"' .liza/state.yaml
 
-# Option 2: Reset to UNCLAIMED
-yq -i '(.tasks[] | select(.id == "task-1")).status = "UNCLAIMED"' .liza/state.yaml
+# Option 2: Reset to READY
+yq -i '(.tasks[] | select(.id == "task-1")).status = "READY"' .liza/state.yaml
 ```
 
 ### Circular dependency detected
@@ -195,13 +195,13 @@ yq -i '(.tasks[] | select(.id == "task-1")) |= .spec_ref = "docs/requirements.md
 
 ### Worktree directory not found
 
-**Error:** `INVALID: CLAIMED task task-1 has worktree=.worktrees/task-1 but directory does not exist`
+**Error:** `INVALID: IMPLEMENTING task task-1 has worktree=.worktrees/task-1 but directory does not exist`
 
 **Recreate:** `git worktree add .worktrees/task-1 -b task-1`
 
 **Or reset task** (if work was lost):
 ```bash
-yq -i '(.tasks[] | select(.id == "task-1")).status = "UNCLAIMED"' .liza/state.yaml
+yq -i '(.tasks[] | select(.id == "task-1")).status = "READY"' .liza/state.yaml
 yq -i '(.tasks[] | select(.id == "task-1")).assigned_to = null' .liza/state.yaml
 yq -i '(.tasks[] | select(.id == "task-1")).worktree = null' .liza/state.yaml
 ```
@@ -435,11 +435,11 @@ liza init "Goal description"
 # Clear agent entry
 yq -i 'del(.agents."coder-1")' .liza/state.yaml
 
-# Reset task to UNCLAIMED (loses uncommitted work)
-yq -i '(.tasks[] | select(.assigned_to == "coder-1")).status = "UNCLAIMED"' .liza/state.yaml
+# Reset task to READY (loses uncommitted work)
+yq -i '(.tasks[] | select(.assigned_to == "coder-1")).status = "READY"' .liza/state.yaml
 yq -i '(.tasks[] | select(.assigned_to == "coder-1")).assigned_to = null' .liza/state.yaml
 
-# Or keep CLAIMED and restart with same agent ID (preserves worktree)
+# Or keep IMPLEMENTING and restart with same agent ID (preserves worktree)
 ```
 
 ---

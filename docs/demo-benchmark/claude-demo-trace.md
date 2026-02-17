@@ -70,7 +70,7 @@ Summary:
 - Done criteria directly map to spec success criteria
 - Scope is small enough for single coder session
 
-The task is now UNCLAIMED and ready for a coder to pick up.
+The task is now READY and ready for a coder to pick up.
 ```
 
 ---

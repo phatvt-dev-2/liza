@@ -58,9 +58,9 @@ func SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID string) 
 			return fmt.Errorf("task not found: %s", taskID)
 		}
 
-		// Validate task is in READY_FOR_REVIEW status
-		if task.Status != models.TaskStatusReadyForReview {
-			return fmt.Errorf("task %s is not READY_FOR_REVIEW (current status: %s)", taskID, task.Status)
+		// Validate task is in REVIEWING status
+		if task.Status != models.TaskStatusReviewing {
+			return fmt.Errorf("task %s is not REVIEWING (current status: %s)", taskID, task.Status)
 		}
 
 		// Update based on verdict

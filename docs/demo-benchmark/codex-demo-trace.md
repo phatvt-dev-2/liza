@@ -73,7 +73,7 @@ Validation result: `VALID`
 tasks:
   - id: implement-hello-cli
     description: Implement the hello CLI with default greeting and optional --name, plus tests.
-    status: UNCLAIMED
+    status: READY
     priority: 1
     created: "2026-01-28T16:14:42Z"
 ```
@@ -110,7 +110,7 @@ Read contract files in sequence:
 5. `specs/protocols/task-lifecycle.md` — Task lifecycle
 6. `specs/architecture/blackboard-schema.md` — State schema
 7. `specs/architecture/state-machines.md` — State transitions
-8. Current blackboard state (task details: CLAIMED, iteration 1)
+8. Current blackboard state (task details: IMPLEMENTING, iteration 1)
 9. `specs/vision.md` — Goal spec
 10. `skills/testing/SKILL.md` — Test protocol
 11. `skills/clean-code/SKILL.md` — Clean code protocol

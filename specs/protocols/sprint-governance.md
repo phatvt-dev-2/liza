@@ -86,7 +86,7 @@ CHECKPOINT files are not auto-cleared. If human does not respond:
 ```
 CHECKPOINT_STUCK since 2025-01-17T14:00:00Z (2h 15m)
 Sprint: sprint-1
-Tasks waiting: 3 (task-2 READY_FOR_REVIEW, task-3 CLAIMED, task-4 UNCLAIMED)
+Tasks waiting: 3 (task-2 READY_FOR_REVIEW, task-3 IMPLEMENTING, task-4 READY)
 Action required: rm .liza/CHECKPOINT to resume, or touch .liza/ABORT to stop
 ```
 
@@ -345,7 +345,7 @@ sprint:
 | Metric | Definition |
 |--------|------------|
 | `tasks_done` | Count of tasks with status IN (MERGED, ABANDONED, SUPERSEDED) |
-| `tasks_in_progress` | Count of tasks with status IN (CLAIMED, READY_FOR_REVIEW, REJECTED) |
+| `tasks_in_progress` | Count of tasks with status IN (IMPLEMENTING, READY_FOR_REVIEW, REJECTED) |
 | `tasks_blocked` | Count of tasks with status = BLOCKED |
 | `review_verdict_approvals` | Count of `approved` events across task histories |
 | `review_verdict_rejections` | Count of `rejected` events across task histories |

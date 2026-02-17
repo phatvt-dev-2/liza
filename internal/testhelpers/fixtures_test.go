@@ -96,7 +96,7 @@ func TestCreateValidState_Customizable(t *testing.T) {
 	state.Tasks = append(state.Tasks, models.Task{
 		ID:          "task-1",
 		Description: "Custom task",
-		Status:      models.TaskStatusUnclaimed,
+		Status:      models.TaskStatusReady,
 		Priority:    1,
 		Created:     time.Now().UTC(),
 		SpecRef:     "specs/custom.md",
@@ -156,7 +156,7 @@ func TestWriteInitialState_WithCustomState(t *testing.T) {
 		{
 			ID:          "task-1",
 			Description: "Test task",
-			Status:      models.TaskStatusUnclaimed,
+			Status:      models.TaskStatusReady,
 			Priority:    1,
 			Created:     time.Now().UTC(),
 			SpecRef:     "README.md",
@@ -184,42 +184,42 @@ func TestWriteInitialState_WithCustomState(t *testing.T) {
 
 func TestBuildTaskByStatus_Unclaimed(t *testing.T) {
 	now := time.Now().UTC()
-	task := BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+	task := BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 
 	if task.ID != "task-1" {
 		t.Errorf("Expected ID=task-1, got %s", task.ID)
 	}
-	if task.Status != models.TaskStatusUnclaimed {
-		t.Errorf("Expected status=UNCLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusReady {
+		t.Errorf("Expected status=READY, got %s", task.Status)
 	}
 	if task.AssignedTo != nil {
-		t.Error("UNCLAIMED task should not have AssignedTo")
+		t.Error("READY task should not have AssignedTo")
 	}
 	if task.LeaseExpires != nil {
-		t.Error("UNCLAIMED task should not have LeaseExpires")
+		t.Error("READY task should not have LeaseExpires")
 	}
 }
 
 func TestBuildTaskByStatus_Claimed(t *testing.T) {
 	now := time.Now().UTC()
-	task := BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+	task := BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Expected status=CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected status=IMPLEMENTING, got %s", task.Status)
 	}
 	if task.AssignedTo == nil {
-		t.Error("CLAIMED task should have AssignedTo")
+		t.Error("IMPLEMENTING task should have AssignedTo")
 	} else if *task.AssignedTo == "" {
 		t.Error("AssignedTo should not be empty")
 	}
 	if task.LeaseExpires == nil {
-		t.Error("CLAIMED task should have LeaseExpires")
+		t.Error("IMPLEMENTING task should have LeaseExpires")
 	}
 	if task.BaseCommit == nil {
-		t.Error("CLAIMED task should have BaseCommit")
+		t.Error("IMPLEMENTING task should have BaseCommit")
 	}
 	if task.Worktree == nil {
-		t.Error("CLAIMED task should have Worktree")
+		t.Error("IMPLEMENTING task should have Worktree")
 	}
 
 	// Verify worktree path format
@@ -247,6 +247,33 @@ func TestBuildTaskByStatus_ReadyForReview(t *testing.T) {
 	}
 	if task.Worktree == nil {
 		t.Error("READY_FOR_REVIEW task should have Worktree")
+	}
+}
+
+func TestBuildTaskByStatus_Reviewing(t *testing.T) {
+	now := time.Now().UTC()
+	task := BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+
+	if task.Status != models.TaskStatusReviewing {
+		t.Errorf("Expected status=REVIEWING, got %s", task.Status)
+	}
+	if task.AssignedTo == nil {
+		t.Error("REVIEWING task should have AssignedTo")
+	}
+	if task.ReviewCommit == nil {
+		t.Error("REVIEWING task should have ReviewCommit")
+	}
+	if task.ReviewingBy == nil {
+		t.Error("REVIEWING task should have ReviewingBy")
+	}
+	if task.ReviewLeaseExpires == nil {
+		t.Error("REVIEWING task should have ReviewLeaseExpires")
+	}
+	if task.BaseCommit == nil {
+		t.Error("REVIEWING task should have BaseCommit")
+	}
+	if task.Worktree == nil {
+		t.Error("REVIEWING task should have Worktree")
 	}
 }
 
@@ -367,9 +394,10 @@ func TestBuildTaskByStatus_CommonFields(t *testing.T) {
 	// Verify all tasks have common required fields
 	now := time.Now().UTC()
 	statuses := []models.TaskStatus{
-		models.TaskStatusUnclaimed,
-		models.TaskStatusClaimed,
+		models.TaskStatusReady,
+		models.TaskStatusImplementing,
 		models.TaskStatusReadyForReview,
+		models.TaskStatusReviewing,
 		models.TaskStatusRejected,
 		models.TaskStatusApproved,
 		models.TaskStatusMerged,
@@ -453,8 +481,8 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 	state := CreateValidState()
 	now := time.Now().UTC()
 	state.Tasks = []models.Task{
-		BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
-		BuildTaskByStatus("task-2", models.TaskStatusClaimed, now),
+		BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		BuildTaskByStatus("task-2", models.TaskStatusImplementing, now),
 		BuildTaskByStatus("task-3", models.TaskStatusReadyForReview, now),
 	}
 

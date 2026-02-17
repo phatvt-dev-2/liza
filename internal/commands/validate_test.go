@@ -83,12 +83,12 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 			errContains: "DRAFT task with assigned_to",
 		},
 		{
-			name: "CLAIMED without assigned_to",
+			name: "IMPLEMENTING without assigned_to",
 			setupTask: func() models.Task {
 				return models.Task{
 					ID:          "task-1",
 					Description: "Test",
-					Status:      models.TaskStatusClaimed,
+					Status:      models.TaskStatusImplementing,
 					Created:     time.Now().UTC(),
 					SpecRef:     "specs/test.md",
 					DoneWhen:    "Complete",
@@ -96,10 +96,10 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 				}
 			},
 			wantErr:     true,
-			errContains: "CLAIMED task without assigned_to",
+			errContains: "IMPLEMENTING task without assigned_to",
 		},
 		{
-			name: "CLAIMED without worktree",
+			name: "IMPLEMENTING without worktree",
 			setupTask: func() models.Task {
 				agent := "coder-1"
 				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
@@ -107,7 +107,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 				return models.Task{
 					ID:           "task-1",
 					Description:  "Test",
-					Status:       models.TaskStatusClaimed,
+					Status:       models.TaskStatusImplementing,
 					AssignedTo:   &agent,
 					LeaseExpires: &leaseExpires,
 					BaseCommit:   &baseCommit,
@@ -118,7 +118,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 				}
 			},
 			wantErr:     true,
-			errContains: "CLAIMED task without worktree",
+			errContains: "IMPLEMENTING task without worktree",
 		},
 		{
 			name: "READY_FOR_REVIEW without review_commit",
@@ -207,7 +207,7 @@ func TestValidateCommand_Dependencies(t *testing.T) {
 					{
 						ID:          "task-1",
 						Description: "Test",
-						Status:      models.TaskStatusUnclaimed,
+						Status:      models.TaskStatusReady,
 						DependsOn:   []string{"task-nonexistent"},
 						Created:     time.Now().UTC(),
 						SpecRef:     "specs/test.md",
@@ -220,7 +220,7 @@ func TestValidateCommand_Dependencies(t *testing.T) {
 			errContains: "non-existent task",
 		},
 		{
-			name: "CLAIMED task with unmet dependencies",
+			name: "IMPLEMENTING task with unmet dependencies",
 			setupTasks: func() []models.Task {
 				agent := "coder-1"
 				worktree := "wt-task-1"
@@ -230,7 +230,7 @@ func TestValidateCommand_Dependencies(t *testing.T) {
 					{
 						ID:          "task-2",
 						Description: "Dependency",
-						Status:      models.TaskStatusUnclaimed, // Not MERGED
+						Status:      models.TaskStatusReady, // Not MERGED
 						Created:     time.Now().UTC(),
 						SpecRef:     "specs/test.md",
 						DoneWhen:    "Complete",
@@ -239,7 +239,7 @@ func TestValidateCommand_Dependencies(t *testing.T) {
 					{
 						ID:           "task-1",
 						Description:  "Test",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &agent,
 						Worktree:     &worktree,
 						BaseCommit:   &baseCommit,
@@ -343,7 +343,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 		errContains string
 	}{
 		{
-			name: "agent with multiple CLAIMED tasks fails",
+			name: "agent with multiple IMPLEMENTING tasks fails",
 			setupTasks: func() []models.Task {
 				agent := "coder-1"
 				worktree1 := "wt-task-1"
@@ -354,7 +354,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 					{
 						ID:           "task-1",
 						Description:  "Test 1",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &agent,
 						Worktree:     &worktree1,
 						BaseCommit:   &baseCommit,
@@ -367,7 +367,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 					{
 						ID:           "task-2",
 						Description:  "Test 2",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &agent,
 						Worktree:     &worktree2,
 						BaseCommit:   &baseCommit,
@@ -383,7 +383,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 			errContains: "assigned to multiple active tasks",
 		},
 		{
-			name: "agent with REJECTED and CLAIMED tasks passes",
+			name: "agent with REJECTED and IMPLEMENTING tasks passes",
 			setupTasks: func() []models.Task {
 				agent := "coder-1"
 				worktree := "wt-task-2"
@@ -405,7 +405,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 					{
 						ID:           "task-2",
 						Description:  "Active task",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &agent,
 						Worktree:     &worktree,
 						BaseCommit:   &baseCommit,

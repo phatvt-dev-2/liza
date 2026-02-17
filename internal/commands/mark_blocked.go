@@ -11,7 +11,7 @@ import (
 )
 
 // MarkBlockedCommand marks a task as BLOCKED when work cannot proceed.
-// Only the assigned agent can mark a task as blocked, and only from CLAIMED status.
+// Only the assigned agent can mark a task as blocked, and only from IMPLEMENTING status.
 // Per blocking protocol: requires reason and 1-3 clarifying questions.
 func MarkBlockedCommand(projectRoot, taskID, reason string, questions []string, agentID string) error {
 	// Input validation
@@ -54,8 +54,8 @@ func MarkBlockedCommand(projectRoot, taskID, reason string, questions []string, 
 		}
 
 		// Validate task status
-		if task.Status != models.TaskStatusClaimed {
-			return fmt.Errorf("task must be in CLAIMED status to be marked blocked, current status: %s", task.Status)
+		if task.Status != models.TaskStatusImplementing {
+			return fmt.Errorf("task must be in IMPLEMENTING status to be marked blocked, current status: %s", task.Status)
 		}
 
 		// Validate agent is assigned to task

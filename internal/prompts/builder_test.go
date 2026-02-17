@@ -163,7 +163,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
 					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
-					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
 				}
 				return state
 			}(),
@@ -196,7 +196,7 @@ func TestBuildPlannerContext(t *testing.T) {
 			name: "hypothesis exhaustion trigger",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 				task.FailedBy = []string{"coder-1", "coder-2"}
 				state.Tasks = []models.Task{task}
 				return state
@@ -214,7 +214,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				state := testhelpers.CreateValidState()
 				// Need at least one task to avoid INITIAL_PLANNING trigger
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 				}
 				state.Discovered = []models.Discovery{
 					{
@@ -242,11 +242,11 @@ func TestBuildPlannerContext(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now),
 					testhelpers.BuildTaskByStatus("task-3", models.TaskStatusApproved, now),
 					testhelpers.BuildTaskByStatus("task-4", models.TaskStatusMerged, now),
-					testhelpers.BuildTaskByStatus("task-5", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-5", models.TaskStatusReady, now),
 				}
 				return state
 			}(),
@@ -254,7 +254,7 @@ func TestBuildPlannerContext(t *testing.T) {
 			wantContains: []string{
 				"- Total tasks: 5",
 				"- Merged: 1",
-				"- In progress: 3", // CLAIMED + READY_FOR_REVIEW + APPROVED
+				"- In progress: 3", // IMPLEMENTING + READY_FOR_REVIEW + APPROVED
 				"- Unclaimed: 1",
 			},
 		},
@@ -285,7 +285,7 @@ func TestBuildCoderContext(t *testing.T) {
 		{
 			name: "first iteration without rejection",
 			task: func() *models.Task {
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 				task.Description = "Implement authentication"
 				task.DoneWhen = "Users can login and logout"
 				task.Scope = "Add auth module to backend"
@@ -315,7 +315,7 @@ func TestBuildCoderContext(t *testing.T) {
 				"liza_handoff",
 				"If context exhaustion is near (~90%)",
 				"--- IMPLEMENTATION PHASE ---",
-				"The task is already CLAIMED for you",
+				"The task is already IMPLEMENTING for you",
 				"Do NOT run liza claim-task",
 				"Work ONLY in the worktree directory: cd /project/.worktrees/task-1",
 				"TDD (code tasks): Write tests FIRST",
@@ -336,7 +336,7 @@ func TestBuildCoderContext(t *testing.T) {
 		{
 			name: "handoff resume context is rendered",
 			task: func() *models.Task {
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 				task.Description = "Continue parser hardening"
 				task.DoneWhen = "All parser edge cases handled"
 				task.Scope = "Parser module"
@@ -364,7 +364,7 @@ func TestBuildCoderContext(t *testing.T) {
 		{
 			name: "second iteration with rejection feedback",
 			task: func() *models.Task {
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 				task.Description = "Add validation"
 				task.DoneWhen = "All inputs validated"
 				task.Scope = "Add validation layer"
@@ -388,7 +388,7 @@ func TestBuildCoderContext(t *testing.T) {
 		{
 			name: "first iteration should not show rejection section",
 			task: func() *models.Task {
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 				task.Iteration = 1
 				worktree := ".worktrees/task-1"
 				task.Worktree = &worktree
@@ -405,7 +405,7 @@ func TestBuildCoderContext(t *testing.T) {
 		{
 			name: "integration fix mode instructions",
 			task: func() *models.Task {
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 				task.Description = "Fix merge conflicts in auth module"
 				task.DoneWhen = "Auth module merges cleanly"
 				task.Scope = "Resolve conflicts"
@@ -451,7 +451,7 @@ func TestBuildCoderContext(t *testing.T) {
 		{
 			name: "integration fix with enhanced rebase instructions",
 			task: func() *models.Task {
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 				task.Description = "Fix merge conflicts"
 				task.DoneWhen = "Clean merge"
 				task.Scope = "Resolve conflicts"
@@ -500,7 +500,7 @@ func TestBuildCoderContext(t *testing.T) {
 		{
 			name: "integration fix uses MCP tool syntax not CLI commands",
 			task: func() *models.Task {
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 				task.IntegrationFix = true
 				worktree := ".worktrees/task-1"
 				task.Worktree = &worktree
@@ -924,7 +924,7 @@ func TestPlannerPromptAutonomyForAllWakeTriggers(t *testing.T) {
 			wantTrigger: "INTEGRATION_FAILED",
 			wantContains: []string{
 				"Act as backstop if needed",
-				"If task already CLAIMED",
+				"If task already IMPLEMENTING",
 				"No action needed — coder is handling it",
 				"Exit normally — this is the expected flow",
 				"Coders claim INTEGRATION_FAILED tasks directly",
@@ -934,7 +934,7 @@ func TestPlannerPromptAutonomyForAllWakeTriggers(t *testing.T) {
 			name: "HYPOTHESIS_EXHAUSTED has immediate action language",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 				task.FailedBy = []string{"coder-1", "coder-2"}
 				state.Tasks = []models.Task{task}
 				return state
@@ -954,7 +954,7 @@ func TestPlannerPromptAutonomyForAllWakeTriggers(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 				}
 				state.Discovered = []models.Discovery{
 					{

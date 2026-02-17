@@ -79,6 +79,11 @@ func ReleaseClaimCommand(projectRoot, taskID, role string, force bool, reason, a
 					}
 				}
 
+				// Transition REVIEWING back to READY_FOR_REVIEW
+				if task.Status == models.TaskStatusReviewing {
+					task.Status = models.TaskStatusReadyForReview
+				}
+
 				// Release reviewer agent state
 				if task.ReviewingBy != nil {
 					state.ReleaseAgent(*task.ReviewingBy)
@@ -123,8 +128,8 @@ func ReleaseClaimCommand(projectRoot, taskID, role string, force bool, reason, a
 				}
 
 				// Change status if CLAIMED
-				if task.Status == models.TaskStatusClaimed {
-					task.Status = models.TaskStatusUnclaimed
+				if task.Status == models.TaskStatusImplementing {
+					task.Status = models.TaskStatusReady
 				}
 
 				// Release coder agent state

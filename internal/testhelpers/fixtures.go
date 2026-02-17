@@ -150,9 +150,9 @@ func WriteInitialState(t *testing.T, statePath string, state *models.State) *db.
 // This helper understands the state machine requirements and sets required fields
 // based on the task status:
 //
-//   - UNCLAIMED: Basic task ready to be claimed
-//   - CLAIMED: Sets AssignedTo, LeaseExpires, BaseCommit, Worktree
-//   - READY_FOR_REVIEW: Sets ReviewCommit, all CLAIMED fields
+//   - READY: Basic task ready to be claimed
+//   - IMPLEMENTING: Sets AssignedTo, LeaseExpires, BaseCommit, Worktree
+//   - READY_FOR_REVIEW: Sets ReviewCommit, all IMPLEMENTING fields
 //   - REJECTED: Sets RejectionReason, ReviewCommit, increments Iteration
 //   - APPROVED: Sets ApprovedBy, ReviewCommit
 //   - MERGED: Sets MergeCommit, ApprovedBy
@@ -166,8 +166,8 @@ func WriteInitialState(t *testing.T, statePath string, state *models.State) *db.
 // Usage:
 //
 //	now := time.Now().UTC()
-//	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
-//	// Task now has all required fields for CLAIMED status
+//	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+//	// Task now has all required fields for IMPLEMENTING status
 func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) models.Task {
 	task := models.Task{
 		ID:          taskID,
@@ -182,10 +182,10 @@ func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) m
 	}
 
 	switch status {
-	case models.TaskStatusUnclaimed:
+	case models.TaskStatusReady:
 		// Basic task, no additional fields needed
 
-	case models.TaskStatusClaimed:
+	case models.TaskStatusImplementing:
 		agent := "coder-1"
 		task.AssignedTo = &agent
 		leaseExpires := now.Add(30 * time.Minute)
@@ -200,6 +200,20 @@ func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) m
 		task.AssignedTo = &agent
 		reviewCommit := "review123"
 		task.ReviewCommit = &reviewCommit
+		baseCommit := "abc1234"
+		task.BaseCommit = &baseCommit
+		worktree := ".worktrees/" + taskID
+		task.Worktree = &worktree
+
+	case models.TaskStatusReviewing:
+		agent := "coder-1"
+		task.AssignedTo = &agent
+		reviewCommit := "review123"
+		task.ReviewCommit = &reviewCommit
+		reviewingBy := "reviewer-1"
+		task.ReviewingBy = &reviewingBy
+		reviewLeaseExpires := now.Add(30 * time.Minute)
+		task.ReviewLeaseExpires = &reviewLeaseExpires
 		baseCommit := "abc1234"
 		task.BaseCommit = &baseCommit
 		worktree := ".worktrees/" + taskID
@@ -280,6 +294,30 @@ func StringPtr(s string) *string {
 //	task.LeaseExpires = testhelpers.TimePtr(time.Now().Add(30 * time.Minute))
 func TimePtr(t time.Time) *time.Time {
 	return &t
+}
+
+// TransitionToReviewing transitions a READY_FOR_REVIEW task to REVIEWING state.
+// This simulates what the supervisor does when a reviewer claims a task for review.
+func TransitionToReviewing(t *testing.T, bb *db.Blackboard, taskID, reviewerID string) {
+	t.Helper()
+
+	now := time.Now().UTC()
+	leaseExpires := now.Add(30 * time.Minute)
+
+	err := bb.Modify(func(state *models.State) error {
+		for i := range state.Tasks {
+			if state.Tasks[i].ID == taskID {
+				state.Tasks[i].Status = models.TaskStatusReviewing
+				state.Tasks[i].ReviewingBy = &reviewerID
+				state.Tasks[i].ReviewLeaseExpires = &leaseExpires
+				return nil
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to transition task %s to REVIEWING: %v", taskID, err)
+	}
 }
 
 // RegisterTestAgent registers a test agent with standard defaults in the blackboard.

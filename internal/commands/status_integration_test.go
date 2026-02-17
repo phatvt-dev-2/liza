@@ -50,8 +50,8 @@ func TestStatusCommand_Integration(t *testing.T) {
 		},
 	}
 	state.Tasks = []models.Task{
-		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
-		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusClaimed, now),
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, now),
 		testhelpers.BuildTaskByStatus("task-3", models.TaskStatusMerged, now),
 		testhelpers.BuildTaskByStatus("task-4", models.TaskStatusMerged, now),
 	}

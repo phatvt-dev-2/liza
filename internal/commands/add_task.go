@@ -99,7 +99,7 @@ func AddTaskCommand(statePath, logPath string, input *TaskInput, plannerID strin
 	newTask := models.Task{
 		ID:          input.ID,
 		Description: input.Description,
-		Status:      models.TaskStatusUnclaimed,
+		Status:      models.TaskStatusReady,
 		Priority:    input.Priority,
 		SpecRef:     input.SpecRef,
 		DoneWhen:    input.DoneWhen,

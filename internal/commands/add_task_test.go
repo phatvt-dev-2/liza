@@ -52,7 +52,7 @@ func TestAddTaskCommand(t *testing.T) {
 				{
 					ID:          "task-1",
 					Description: "Prerequisite task",
-					Status:      models.TaskStatusUnclaimed,
+					Status:      models.TaskStatusReady,
 					Priority:    1,
 					Created:     time.Now().UTC(),
 					SpecRef:     "specs/vision.md",
@@ -87,7 +87,7 @@ func TestAddTaskCommand(t *testing.T) {
 				{
 					ID:          "task-1",
 					Description: "Existing task",
-					Status:      models.TaskStatusUnclaimed,
+					Status:      models.TaskStatusReady,
 					Priority:    1,
 					Created:     time.Now().UTC(),
 					SpecRef:     "specs/vision.md",
@@ -278,8 +278,8 @@ func TestAddTaskCommand(t *testing.T) {
 			if addedTask.Description != tt.description {
 				t.Errorf("Description = %q, want %q", addedTask.Description, tt.description)
 			}
-			if addedTask.Status != models.TaskStatusUnclaimed {
-				t.Errorf("Status = %v, want %v", addedTask.Status, models.TaskStatusUnclaimed)
+			if addedTask.Status != models.TaskStatusReady {
+				t.Errorf("Status = %v, want %v", addedTask.Status, models.TaskStatusReady)
 			}
 			if addedTask.Priority != tt.priority {
 				t.Errorf("Priority = %d, want %d", addedTask.Priority, tt.priority)

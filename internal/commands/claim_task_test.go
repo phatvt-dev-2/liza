@@ -29,31 +29,31 @@ func TestClaimTaskCommand(t *testing.T) {
 		previousAgent  *string
 	}{
 		{
-			name:           "claim UNCLAIMED task",
+			name:           "claim READY task",
 			taskID:         "task-1",
 			agentID:        "coder-1",
-			taskStatus:     models.TaskStatusUnclaimed,
+			taskStatus:     models.TaskStatusReady,
 			hasWorktree:    false,
 			wantErr:        false,
 			wantWorktree:   true,
 			checkIteration: true,
 		},
 		{
-			name:          "claim UNCLAIMED task with unmet dependencies",
+			name:          "claim READY task with unmet dependencies",
 			taskID:        "task-2",
 			agentID:       "coder-1",
-			taskStatus:    models.TaskStatusUnclaimed,
+			taskStatus:    models.TaskStatusReady,
 			hasWorktree:   false,
 			hasDependency: true,
-			depStatus:     models.TaskStatusUnclaimed,
+			depStatus:     models.TaskStatusReady,
 			wantErr:       true,
 			errContains:   "unmet dependencies",
 		},
 		{
-			name:          "claim UNCLAIMED task with satisfied dependencies",
+			name:          "claim READY task with satisfied dependencies",
 			taskID:        "task-3",
 			agentID:       "coder-1",
-			taskStatus:    models.TaskStatusUnclaimed,
+			taskStatus:    models.TaskStatusReady,
 			hasWorktree:   false,
 			hasDependency: true,
 			depStatus:     models.TaskStatusMerged,
@@ -90,13 +90,13 @@ func TestClaimTaskCommand(t *testing.T) {
 			wantWorktree: true,
 		},
 		{
-			name:        "cannot claim CLAIMED task",
+			name:        "cannot claim IMPLEMENTING task",
 			taskID:      "task-7",
 			agentID:     "coder-1",
-			taskStatus:  models.TaskStatusClaimed,
+			taskStatus:  models.TaskStatusImplementing,
 			hasWorktree: true,
 			wantErr:     true,
-			errContains: "not UNCLAIMED",
+			errContains: "not READY",
 		},
 		{
 			name:        "cannot claim BLOCKED task",
@@ -105,13 +105,13 @@ func TestClaimTaskCommand(t *testing.T) {
 			taskStatus:  models.TaskStatusBlocked,
 			hasWorktree: false,
 			wantErr:     true,
-			errContains: "not UNCLAIMED",
+			errContains: "not READY",
 		},
 		{
 			name:        "agent already busy",
 			taskID:      "task-9",
 			agentID:     "coder-1",
-			taskStatus:  models.TaskStatusUnclaimed,
+			taskStatus:  models.TaskStatusReady,
 			hasWorktree: false,
 			agentBusy:   true,
 			wantErr:     true,
@@ -121,7 +121,7 @@ func TestClaimTaskCommand(t *testing.T) {
 			name:        "empty task ID",
 			taskID:      "",
 			agentID:     "coder-1",
-			taskStatus:  models.TaskStatusUnclaimed,
+			taskStatus:  models.TaskStatusReady,
 			hasWorktree: false,
 			wantErr:     true,
 			errContains: "task ID is required",
@@ -130,7 +130,7 @@ func TestClaimTaskCommand(t *testing.T) {
 			name:        "empty agent ID",
 			taskID:      "task-10",
 			agentID:     "",
-			taskStatus:  models.TaskStatusUnclaimed,
+			taskStatus:  models.TaskStatusReady,
 			hasWorktree: false,
 			wantErr:     true,
 			errContains: "agent ID is required",
@@ -139,7 +139,7 @@ func TestClaimTaskCommand(t *testing.T) {
 			name:        "nonexistent task",
 			taskID:      "nonexistent",
 			agentID:     "coder-1",
-			taskStatus:  models.TaskStatusUnclaimed,
+			taskStatus:  models.TaskStatusReady,
 			hasWorktree: false,
 			wantErr:     true,
 			errContains: "task not found",
@@ -228,7 +228,7 @@ func TestClaimTaskCommand(t *testing.T) {
 					baseCommit = &bc
 				}
 
-				if tt.taskStatus == models.TaskStatusClaimed {
+				if tt.taskStatus == models.TaskStatusImplementing {
 					agent := "coder-other"
 					assignedTo = &agent
 					exp := now.Add(30 * time.Minute)
@@ -366,8 +366,8 @@ func TestClaimTaskCommand(t *testing.T) {
 			}
 
 			// Check task status
-			if task.Status != models.TaskStatusClaimed {
-				t.Errorf("Expected task status CLAIMED, got %s", task.Status)
+			if task.Status != models.TaskStatusImplementing {
+				t.Errorf("Expected task status IMPLEMENTING, got %s", task.Status)
 			}
 
 			// Check assigned_to
@@ -453,7 +453,7 @@ func TestClaimTaskCommandIntegration(t *testing.T) {
 	// Create .liza directory
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
-	// Create initial state with UNCLAIMED task
+	// Create initial state with READY task
 	now := time.Now().UTC()
 
 	initialState := &models.State{
@@ -470,7 +470,7 @@ func TestClaimTaskCommandIntegration(t *testing.T) {
 			{
 				ID:          "task-integration",
 				Description: "Integration test task",
-				Status:      models.TaskStatusUnclaimed,
+				Status:      models.TaskStatusReady,
 				Priority:    1,
 				Created:     now,
 				SpecRef:     "README.md",
@@ -543,8 +543,8 @@ func TestClaimTaskCommandIntegration(t *testing.T) {
 	}
 
 	task := &state.Tasks[0]
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Expected task status CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected task status IMPLEMENTING, got %s", task.Status)
 	}
 	if task.AssignedTo == nil || *task.AssignedTo != "coder-1" {
 		t.Errorf("Expected assigned_to coder-1, got %v", task.AssignedTo)

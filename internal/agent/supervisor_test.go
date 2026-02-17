@@ -376,7 +376,7 @@ func TestWaitForCoderWork(t *testing.T) {
 		{
 			name: "claimable task available",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, time.Now().UTC()),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()),
 			},
 			wantWork: true,
 		},
@@ -397,7 +397,7 @@ func TestWaitForCoderWork(t *testing.T) {
 		{
 			name: "no claimable tasks",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, time.Now().UTC()),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC()),
 			},
 			wantWork: false,
 		},
@@ -406,10 +406,10 @@ func TestWaitForCoderWork(t *testing.T) {
 			tasks: []models.Task{
 				{
 					ID:        "task-1",
-					Status:    models.TaskStatusUnclaimed,
+					Status:    models.TaskStatusReady,
 					DependsOn: []string{"task-2"},
 				},
-				testhelpers.BuildTaskByStatus("task-2", models.TaskStatusClaimed, time.Now().UTC()),
+				testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, time.Now().UTC()),
 			},
 			wantWork: false,
 		},
@@ -477,7 +477,7 @@ func TestWaitForReviewerWork(t *testing.T) {
 		{
 			name: "no reviewable tasks",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 			},
 			wantWork: false,
 		},
@@ -545,7 +545,7 @@ func TestWaitForPlannerWork(t *testing.T) {
 		{
 			name: "no planner work needed",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 			},
 			wantWork: false,
 		},
@@ -612,12 +612,12 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 			setupState: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, time.Now().UTC()),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC()),
 				}
 				return state
 			},
 			modifyState: func(s *models.State) {
-				s.Tasks = append(s.Tasks, testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, time.Now().UTC()))
+				s.Tasks = append(s.Tasks, testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, time.Now().UTC()))
 			},
 			wantWork: true,
 		},
@@ -646,7 +646,7 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 				// Add 5 unclaimed tasks to trigger planner wake
 				for i := 1; i <= 5; i++ {
 					taskID := "task-" + string(rune('0'+i))
-					s.Tasks = append(s.Tasks, testhelpers.BuildTaskByStatus(taskID, models.TaskStatusUnclaimed, time.Now().UTC()))
+					s.Tasks = append(s.Tasks, testhelpers.BuildTaskByStatus(taskID, models.TaskStatusReady, time.Now().UTC()))
 				}
 			},
 			wantWork: true,
@@ -986,7 +986,7 @@ func TestBuildPrompt(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "Test task",
-				Status:      models.TaskStatusClaimed,
+				Status:      models.TaskStatusImplementing,
 				Priority:    1,
 				SpecRef:     "spec.md",
 				DoneWhen:    "Task is complete",
@@ -1293,7 +1293,7 @@ func TestAbortPrecedenceOverWork(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	state.Config.Mode = models.SystemModeStopped // STOPPED mode
 	state.Tasks = []models.Task{
-		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now), // Work available
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now), // Work available
 	}
 	testhelpers.WriteInitialState(t, statePath, state)
 
@@ -1320,7 +1320,7 @@ func TestWaitForCoderWorkDetectsResumableHandoff(t *testing.T) {
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
-	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 	task.HandoffPending = true
 	assigned := "coder-1"
 	task.AssignedTo = &assigned
@@ -1515,7 +1515,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedClaimedByCoder(t *testing.T)
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
-	// State after: task is CLAIMED (by coder)
+	// State after: task is IMPLEMENTING (by coder)
 	stateAfter := &models.State{
 		Version: 1,
 		Goal: models.Goal{
@@ -1528,7 +1528,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedClaimedByCoder(t *testing.T)
 			"planner-1": {Role: "planner", Status: models.AgentStatusIdle, Heartbeat: now},
 		},
 		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 		},
 		Config: models.Config{IntegrationBranch: "main"},
 	}
@@ -1583,7 +1583,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedSuperseded(t *testing.T) {
 		},
 		Tasks: []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, now),
-			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now),
+			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
 		},
 		Config: models.Config{IntegrationBranch: "main"},
 	}
@@ -1684,7 +1684,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedMixedOutcomes(t *testing.T) 
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
-	// State after: 1 CLAIMED, 1 SUPERSEDED, 1 still INTEGRATION_FAILED
+	// State after: 1 IMPLEMENTING, 1 SUPERSEDED, 1 still INTEGRATION_FAILED
 	stateAfter := &models.State{
 		Version: 1,
 		Goal: models.Goal{
@@ -1697,10 +1697,10 @@ func TestVerifyPlannerStateChanges_IntegrationFailedMixedOutcomes(t *testing.T) 
 			"planner-1": {Role: "planner", Status: models.AgentStatusIdle, Heartbeat: now},
 		},
 		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusSuperseded, now),
 			testhelpers.BuildTaskByStatus("task-3", models.TaskStatusIntegrationFailed, now),
-			testhelpers.BuildTaskByStatus("task-4", models.TaskStatusUnclaimed, now),
+			testhelpers.BuildTaskByStatus("task-4", models.TaskStatusReady, now),
 		},
 		Config: models.Config{IntegrationBranch: "main"},
 	}

@@ -23,9 +23,7 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 			name: "clear single stale review claim",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, time.Now().UTC())
-					reviewer := "reviewer-1"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())
 					// Set lease to 1 hour in the past (expired)
 					expiredTime := time.Now().UTC().Add(-1 * time.Hour)
 					task.ReviewLeaseExpires = &expiredTime
@@ -41,6 +39,9 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 				}
 				if task.ReviewLeaseExpires != nil {
 					t.Errorf("ReviewLeaseExpires should be nil, got %v", *task.ReviewLeaseExpires)
+				}
+				if task.Status != models.TaskStatusReadyForReview {
+					t.Errorf("Status should be READY_FOR_REVIEW, got %s", task.Status)
 				}
 
 				// Check log entry
@@ -63,15 +64,13 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 			name: "clear multiple stale review claims",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, time.Now().UTC())
-					reviewer := "reviewer-1"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())
 					expiredTime := time.Now().UTC().Add(-1 * time.Hour)
 					task.ReviewLeaseExpires = &expiredTime
 					return task
 				}(),
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, time.Now().UTC())
+					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReviewing, time.Now().UTC())
 					reviewer := "reviewer-2"
 					task.ReviewingBy = &reviewer
 					expiredTime := time.Now().UTC().Add(-2 * time.Hour)
@@ -79,9 +78,7 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 					return task
 				}(),
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReadyForReview, time.Now().UTC())
-					reviewer := "reviewer-1"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReviewing, time.Now().UTC())
 					expiredTime := time.Now().UTC().Add(-30 * time.Minute)
 					task.ReviewLeaseExpires = &expiredTime
 					return task
@@ -93,11 +90,9 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 		{
 			name: "no stale claims (all valid)",
 			tasks: []models.Task{
-				// Task with valid (future) lease
+				// Task in REVIEWING with valid (future) lease
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, time.Now().UTC())
-					reviewer := "reviewer-1"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())
 					futureTime := time.Now().UTC().Add(30 * time.Minute)
 					task.ReviewLeaseExpires = &futureTime
 					return task
@@ -111,25 +106,21 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 			tasks: []models.Task{
 				// Stale claim
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, time.Now().UTC())
-					reviewer := "reviewer-1"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())
 					expiredTime := time.Now().UTC().Add(-1 * time.Hour)
 					task.ReviewLeaseExpires = &expiredTime
 					return task
 				}(),
 				// Valid claim
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, time.Now().UTC())
-					reviewer := "reviewer-2"
-					task.ReviewingBy = &reviewer
+					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReviewing, time.Now().UTC())
 					futureTime := time.Now().UTC().Add(30 * time.Minute)
 					task.ReviewLeaseExpires = &futureTime
 					return task
 				}(),
 				// Stale claim
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReadyForReview, time.Now().UTC())
+					task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReviewing, time.Now().UTC())
 					reviewer := "reviewer-3"
 					task.ReviewingBy = &reviewer
 					expiredTime := time.Now().UTC().Add(-2 * time.Hour)
@@ -140,37 +131,43 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 			wantCleared: 2,
 			wantErr:     false,
 			validateFunc: func(t *testing.T, state *models.State, entries []log.Entry) {
-				// task-1 should be cleared
+				// task-1 should be cleared and reverted to READY_FOR_REVIEW
 				if state.Tasks[0].ReviewingBy != nil {
 					t.Errorf("task-1 ReviewingBy should be nil")
 				}
-				// task-2 should NOT be cleared
+				if state.Tasks[0].Status != models.TaskStatusReadyForReview {
+					t.Errorf("task-1 should be READY_FOR_REVIEW, got %s", state.Tasks[0].Status)
+				}
+				// task-2 should NOT be cleared (still REVIEWING)
 				if state.Tasks[1].ReviewingBy == nil {
 					t.Errorf("task-2 ReviewingBy should not be nil")
 				}
-				// task-3 should be cleared
+				if state.Tasks[1].Status != models.TaskStatusReviewing {
+					t.Errorf("task-2 should still be REVIEWING, got %s", state.Tasks[1].Status)
+				}
+				// task-3 should be cleared and reverted to READY_FOR_REVIEW
 				if state.Tasks[2].ReviewingBy != nil {
 					t.Errorf("task-3 ReviewingBy should be nil")
+				}
+				if state.Tasks[2].Status != models.TaskStatusReadyForReview {
+					t.Errorf("task-3 should be READY_FOR_REVIEW, got %s", state.Tasks[2].Status)
 				}
 			},
 		},
 		{
-			name: "no stale claims (no READY_FOR_REVIEW tasks)",
+			name: "no stale claims (no REVIEWING tasks)",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, time.Now().UTC()),
-				testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, time.Now().UTC()),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC()),
+				testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, time.Now().UTC()),
 			},
 			wantCleared: 0,
 			wantErr:     false,
 		},
 		{
-			name: "no stale claims (READY_FOR_REVIEW but no reviewing_by)",
+			name: "no stale claims (READY_FOR_REVIEW without reviewing_by)",
 			tasks: []models.Task{
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, time.Now().UTC())
-					// Clear reviewing_by and lease
-					task.ReviewingBy = nil
-					task.ReviewLeaseExpires = nil
 					return task
 				}(),
 			},
@@ -181,10 +178,8 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 			name: "stale claim with nil lease (malformed state)",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, time.Now().UTC())
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())
 					// Set reviewing_by but nil lease (malformed)
-					reviewer := "reviewer-1"
-					task.ReviewingBy = &reviewer
 					task.ReviewLeaseExpires = nil
 					return task
 				}(),

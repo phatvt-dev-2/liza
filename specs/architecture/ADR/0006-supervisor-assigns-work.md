@@ -40,7 +40,7 @@ The agent doesn't need logic to discover, evaluate, and claim work. It just exec
 │ 1. Poll blackboard
 │ 2. Find claimable work
 │ 3. Claim with lock     ──────────────▶  .liza/state.yaml
-│ 4. Prepare worktree                     (task.status = CLAIMED)
+│ 4. Prepare worktree                     (task.status = IMPLEMENTING)
 │ 5. Build bootstrap prompt
 │ 6. Spawn Claude         ──────────────▶  claude --print ...
 │ 7. Wait for completion

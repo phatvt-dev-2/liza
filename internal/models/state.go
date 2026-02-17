@@ -26,9 +26,10 @@ type TaskStatus string
 
 const (
 	TaskStatusDraft             TaskStatus = "DRAFT"
-	TaskStatusUnclaimed         TaskStatus = "UNCLAIMED"
-	TaskStatusClaimed           TaskStatus = "CLAIMED"
+	TaskStatusReady             TaskStatus = "READY"
+	TaskStatusImplementing      TaskStatus = "IMPLEMENTING"
 	TaskStatusReadyForReview    TaskStatus = "READY_FOR_REVIEW"
+	TaskStatusReviewing         TaskStatus = "REVIEWING"
 	TaskStatusRejected          TaskStatus = "REJECTED"
 	TaskStatusApproved          TaskStatus = "APPROVED"
 	TaskStatusMerged            TaskStatus = "MERGED"
@@ -41,10 +42,10 @@ const (
 // IsValid checks if the task status is valid
 func (ts TaskStatus) IsValid() bool {
 	switch ts {
-	case TaskStatusDraft, TaskStatusUnclaimed, TaskStatusClaimed,
-		TaskStatusReadyForReview, TaskStatusRejected, TaskStatusApproved,
-		TaskStatusMerged, TaskStatusBlocked, TaskStatusAbandoned,
-		TaskStatusSuperseded, TaskStatusIntegrationFailed:
+	case TaskStatusDraft, TaskStatusReady, TaskStatusImplementing,
+		TaskStatusReadyForReview, TaskStatusReviewing, TaskStatusRejected,
+		TaskStatusApproved, TaskStatusMerged, TaskStatusBlocked,
+		TaskStatusAbandoned, TaskStatusSuperseded, TaskStatusIntegrationFailed:
 		return true
 	}
 	return false
@@ -95,7 +96,7 @@ type Task struct {
 // IsClaimable checks if a task is claimable based on its status and dependencies
 func (t *Task) IsClaimable(allTasks []Task) bool {
 	// Check if status allows claiming
-	if t.Status != TaskStatusUnclaimed &&
+	if t.Status != TaskStatusReady &&
 		t.Status != TaskStatusRejected &&
 		t.Status != TaskStatusIntegrationFailed {
 		return false

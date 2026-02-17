@@ -46,7 +46,7 @@ func TestInspectCommand(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "Test task 1",
-				Status:      models.TaskStatusClaimed,
+				Status:      models.TaskStatusImplementing,
 				Priority:    1,
 				Created:     now.Add(-1 * time.Hour),
 			},
@@ -158,7 +158,7 @@ func TestInspectCommand(t *testing.T) {
 				Format:      "table",
 				ProjectRoot: tmpDir,
 			},
-			wantContains: []string{"task-1", "task-2", "CLAIMED", "MERGED"},
+			wantContains: []string{"task-1", "task-2", "IMPLEMENTING", "MERGED"},
 			wantErr:      false,
 		},
 		{
@@ -168,7 +168,7 @@ func TestInspectCommand(t *testing.T) {
 				Format:      "value",
 				ProjectRoot: tmpDir,
 			},
-			wantContains: []string{"task-1", "Test task 1", "CLAIMED"},
+			wantContains: []string{"task-1", "Test task 1", "IMPLEMENTING"},
 			wantErr:      false,
 		},
 		{

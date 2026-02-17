@@ -126,9 +126,10 @@ func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) 
 			stats.TasksCompleted++
 		case models.TaskStatusAbandoned, models.TaskStatusSuperseded:
 			stats.TasksFailed++
-		case models.TaskStatusClaimed, models.TaskStatusReadyForReview,
-			models.TaskStatusRejected, models.TaskStatusApproved,
-			models.TaskStatusBlocked, models.TaskStatusIntegrationFailed:
+		case models.TaskStatusImplementing, models.TaskStatusReadyForReview,
+			models.TaskStatusReviewing, models.TaskStatusRejected,
+			models.TaskStatusApproved, models.TaskStatusBlocked,
+			models.TaskStatusIntegrationFailed:
 			stats.TasksInProgress++
 		}
 

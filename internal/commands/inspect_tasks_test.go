@@ -21,7 +21,7 @@ func TestInspectTasks(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "Implement feature A",
-				Status:      models.TaskStatusClaimed,
+				Status:      models.TaskStatusImplementing,
 				Priority:    1,
 				AssignedTo:  &assignedTo,
 				Created:     now.Add(-2 * time.Hour),
@@ -50,7 +50,7 @@ func TestInspectTasks(t *testing.T) {
 			{
 				ID:          "task-4",
 				Description: "Unclaimed task",
-				Status:      models.TaskStatusUnclaimed,
+				Status:      models.TaskStatusReady,
 				Priority:    4,
 				Created:     now.Add(-1 * time.Hour),
 			},
@@ -73,9 +73,9 @@ func TestInspectTasks(t *testing.T) {
 			wantFormat: "table",
 		},
 		{
-			name: "filter by status CLAIMED",
+			name: "filter by status IMPLEMENTING",
 			opts: inspectTasksOptions{
-				StatusFilter: string(models.TaskStatusClaimed),
+				StatusFilter: string(models.TaskStatusImplementing),
 			},
 			wantCount:  1,
 			wantIDs:    []string{"task-1"},
@@ -219,7 +219,7 @@ func TestInspectTask(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "Implement feature A",
-				Status:      models.TaskStatusClaimed,
+				Status:      models.TaskStatusImplementing,
 				Priority:    1,
 				AssignedTo:  &assignedTo,
 				Created:     now.Add(-2 * time.Hour),
@@ -348,7 +348,7 @@ func TestTaskInfo_ComputedFields(t *testing.T) {
 	task := models.Task{
 		ID:          "task-1",
 		Description: "Test task",
-		Status:      models.TaskStatusClaimed,
+		Status:      models.TaskStatusImplementing,
 		Priority:    1,
 		AssignedTo:  &assignedTo,
 		Created:     now.Add(-2 * time.Hour),
@@ -389,13 +389,13 @@ func TestTaskInfo_MultipleFilters(t *testing.T) {
 		Tasks: []models.Task{
 			{
 				ID:         "task-1",
-				Status:     models.TaskStatusClaimed,
+				Status:     models.TaskStatusImplementing,
 				AssignedTo: &assignedTo1,
 				Created:    now,
 			},
 			{
 				ID:         "task-2",
-				Status:     models.TaskStatusClaimed,
+				Status:     models.TaskStatusImplementing,
 				AssignedTo: &assignedTo2,
 				Created:    now,
 			},
@@ -411,7 +411,7 @@ func TestTaskInfo_MultipleFilters(t *testing.T) {
 
 	// Filter by status AND assigned_to
 	opts := inspectTasksOptions{
-		StatusFilter:     string(models.TaskStatusClaimed),
+		StatusFilter:     string(models.TaskStatusImplementing),
 		AssignedToFilter: "coder-1",
 		Internal:         true,
 	}
@@ -441,7 +441,7 @@ func TestCalculateTimeInStatus(t *testing.T) {
 		{
 			name: "time since claimed",
 			task: &models.Task{
-				Status:  models.TaskStatusClaimed,
+				Status:  models.TaskStatusImplementing,
 				Created: now.Add(-5 * time.Hour),
 				History: []models.TaskHistoryEntry{
 					{Time: now.Add(-5 * time.Hour), Event: "created"},
@@ -466,7 +466,7 @@ func TestCalculateTimeInStatus(t *testing.T) {
 		{
 			name: "no history - use created time",
 			task: &models.Task{
-				Status:  models.TaskStatusUnclaimed,
+				Status:  models.TaskStatusReady,
 				Created: now.Add(-1 * time.Hour),
 				History: []models.TaskHistoryEntry{},
 			},
@@ -498,7 +498,7 @@ func TestTaskInfo_DependenciesField(t *testing.T) {
 			name: "task with no dependencies",
 			task: &models.Task{
 				ID:        "task-1",
-				Status:    models.TaskStatusUnclaimed,
+				Status:    models.TaskStatusReady,
 				Created:   now,
 				DependsOn: nil,
 			},
@@ -509,7 +509,7 @@ func TestTaskInfo_DependenciesField(t *testing.T) {
 			name: "task with empty dependencies",
 			task: &models.Task{
 				ID:        "task-2",
-				Status:    models.TaskStatusUnclaimed,
+				Status:    models.TaskStatusReady,
 				Created:   now,
 				DependsOn: []string{},
 			},
@@ -520,7 +520,7 @@ func TestTaskInfo_DependenciesField(t *testing.T) {
 			name: "task with single dependency",
 			task: &models.Task{
 				ID:        "task-3",
-				Status:    models.TaskStatusUnclaimed,
+				Status:    models.TaskStatusReady,
 				Created:   now,
 				DependsOn: []string{"task-1"},
 			},
@@ -531,7 +531,7 @@ func TestTaskInfo_DependenciesField(t *testing.T) {
 			name: "task with multiple dependencies",
 			task: &models.Task{
 				ID:        "task-4",
-				Status:    models.TaskStatusUnclaimed,
+				Status:    models.TaskStatusReady,
 				Created:   now,
 				DependsOn: []string{"task-1", "task-2", "task-3"},
 			},
@@ -564,7 +564,7 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 		{
 			ID:           "task-1",
 			Description:  "No dependencies",
-			Status:       "UNCLAIMED",
+			Status:       "READY",
 			Priority:     1,
 			DependsOn:    nil,
 			Age:          "1h ago",
@@ -573,7 +573,7 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 		{
 			ID:           "task-2",
 			Description:  "Single dependency",
-			Status:       "UNCLAIMED",
+			Status:       "READY",
 			Priority:     2,
 			DependsOn:    []string{"task-1"},
 			Age:          "30m ago",
@@ -582,7 +582,7 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 		{
 			ID:           "task-3",
 			Description:  "Multiple dependencies",
-			Status:       "UNCLAIMED",
+			Status:       "READY",
 			Priority:     3,
 			DependsOn:    []string{"task-1", "task-2"},
 			Age:          "15m ago",
@@ -621,7 +621,7 @@ func TestFormatTaskValue_WithDependencies(t *testing.T) {
 			task: taskInfo{
 				ID:           "task-1",
 				Description:  "Test task",
-				Status:       "UNCLAIMED",
+				Status:       "READY",
 				Priority:     1,
 				DependsOn:    nil,
 				Age:          "1h ago",
@@ -637,7 +637,7 @@ func TestFormatTaskValue_WithDependencies(t *testing.T) {
 			task: taskInfo{
 				ID:           "task-2",
 				Description:  "Test task",
-				Status:       "UNCLAIMED",
+				Status:       "READY",
 				Priority:     1,
 				DependsOn:    []string{},
 				Age:          "1h ago",
@@ -653,7 +653,7 @@ func TestFormatTaskValue_WithDependencies(t *testing.T) {
 			task: taskInfo{
 				ID:           "task-3",
 				Description:  "Test task",
-				Status:       "UNCLAIMED",
+				Status:       "READY",
 				Priority:     1,
 				DependsOn:    []string{"task-1"},
 				Age:          "1h ago",
@@ -672,7 +672,7 @@ func TestFormatTaskValue_WithDependencies(t *testing.T) {
 			task: taskInfo{
 				ID:           "task-4",
 				Description:  "Test task",
-				Status:       "UNCLAIMED",
+				Status:       "READY",
 				Priority:     1,
 				DependsOn:    []string{"task-1", "task-2", "task-3"},
 				Age:          "1h ago",

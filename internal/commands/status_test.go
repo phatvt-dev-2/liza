@@ -41,8 +41,8 @@ func TestBuildStatusData(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
-					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, now),
 					testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReadyForReview, now),
 					testhelpers.BuildTaskByStatus("task-4", models.TaskStatusMerged, now),
 					testhelpers.BuildTaskByStatus("task-5", models.TaskStatusRejected, now),
@@ -61,7 +61,7 @@ func TestBuildStatusData(t *testing.T) {
 					t.Errorf("expected 1 terminal task, got %d", data.Tasks.Terminal)
 				}
 				if data.Tasks.Claimable != 2 {
-					t.Errorf("expected 2 claimable tasks (UNCLAIMED + REJECTED), got %d", data.Tasks.Claimable)
+					t.Errorf("expected 2 claimable tasks (READY + REJECTED), got %d", data.Tasks.Claimable)
 				}
 				if data.Tasks.Reviewable != 1 {
 					t.Errorf("expected 1 reviewable task, got %d", data.Tasks.Reviewable)
@@ -72,9 +72,9 @@ func TestBuildStatusData(t *testing.T) {
 			name: "tasks blocked by dependencies",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
-				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 				task1.DependsOn = []string{"task-0"}
-				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now)
+				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now)
 				task2.DependsOn = []string{"task-0"}
 				state.Tasks = []models.Task{task1, task2}
 				return state
@@ -164,7 +164,7 @@ func TestBuildStatusData(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now),
 				}
 				return state
@@ -204,8 +204,8 @@ func TestBuildStatusData(t *testing.T) {
 					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
 					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
 					testhelpers.BuildTaskByStatus("task-3", models.TaskStatusMerged, now),
-					testhelpers.BuildTaskByStatus("task-4", models.TaskStatusClaimed, now),
-					testhelpers.BuildTaskByStatus("task-5", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-4", models.TaskStatusImplementing, now),
+					testhelpers.BuildTaskByStatus("task-5", models.TaskStatusReady, now),
 				}
 				return state
 			}(),
@@ -333,9 +333,9 @@ func TestBuildStatusData_ByStatusMap(t *testing.T) {
 
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{
-		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
-		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now),
-		testhelpers.BuildTaskByStatus("task-3", models.TaskStatusClaimed, now),
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
+		testhelpers.BuildTaskByStatus("task-3", models.TaskStatusImplementing, now),
 		testhelpers.BuildTaskByStatus("task-4", models.TaskStatusReadyForReview, now),
 		testhelpers.BuildTaskByStatus("task-5", models.TaskStatusMerged, now),
 		testhelpers.BuildTaskByStatus("task-6", models.TaskStatusMerged, now),
@@ -350,8 +350,8 @@ func TestBuildStatusData_ByStatusMap(t *testing.T) {
 	}
 
 	expectedCounts := map[models.TaskStatus]int{
-		models.TaskStatusUnclaimed:      2,
-		models.TaskStatusClaimed:        1,
+		models.TaskStatusReady:          2,
+		models.TaskStatusImplementing:   1,
 		models.TaskStatusReadyForReview: 1,
 		models.TaskStatusMerged:         3,
 	}
@@ -420,7 +420,7 @@ func TestBuildStatusData_WorkQueuesReason(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 				}
 				return state
 			}(),
@@ -431,7 +431,7 @@ func TestBuildStatusData_WorkQueuesReason(t *testing.T) {
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now),
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 				}
 				return state
 			}(),
@@ -482,8 +482,8 @@ func TestFormatStatusDashboard(t *testing.T) {
 					Active:   7,
 					Terminal: 3,
 					ByStatus: map[string]int{
-						"UNCLAIMED":        2,
-						"CLAIMED":          3,
+						"READY":            2,
+						"IMPLEMENTING":     3,
 						"READY_FOR_REVIEW": 2,
 						"MERGED":           3,
 					},
@@ -531,7 +531,7 @@ func TestFormatStatusDashboard(t *testing.T) {
 				"=== TASKS ===",
 				"Total: 10 (7 active, 3 terminal)",
 				"By Status:",
-				"CLAIMED: 3",
+				"IMPLEMENTING: 3",
 				"Claimable: 2 tasks",
 				"Reviewable: 2 tasks",
 				"=== AGENTS ===",
@@ -682,7 +682,7 @@ func TestFormatStatusDashboard(t *testing.T) {
 					Total:         3,
 					Active:        3,
 					Terminal:      0,
-					ByStatus:      map[string]int{"UNCLAIMED": 3},
+					ByStatus:      map[string]int{"READY": 3},
 					Claimable:     0,
 					Reviewable:    0,
 					BlockedByDeps: 3,
@@ -735,18 +735,18 @@ func TestWriteTasksSection(t *testing.T) {
 			tasks: taskStatus{
 				Total: 5, Active: 3, Terminal: 2,
 				ByStatus: map[string]int{
-					"UNCLAIMED": 2,
-					"CLAIMED":   1,
-					"MERGED":    2,
+					"READY":        2,
+					"IMPLEMENTING": 1,
+					"MERGED":       2,
 				},
 				Claimable: 2, Reviewable: 0, BlockedByDeps: 0,
 			},
 			expect: "=== TASKS ===\n" +
 				"Total: 5 (3 active, 2 terminal)\n" +
 				"\nBy Status:\n" +
-				"  CLAIMED: 1\n" +
+				"  IMPLEMENTING: 1\n" +
 				"  MERGED: 2\n" +
-				"  UNCLAIMED: 2\n" +
+				"  READY: 2\n" +
 				"\nClaimable: 2 tasks\n" +
 				"Reviewable: 0 tasks\n" +
 				"\n",
@@ -755,7 +755,7 @@ func TestWriteTasksSection(t *testing.T) {
 			name: "blocked by deps line appears when nonzero",
 			tasks: taskStatus{
 				Total: 3, Active: 3, Terminal: 0,
-				ByStatus:      map[string]int{"UNCLAIMED": 3},
+				ByStatus:      map[string]int{"READY": 3},
 				Claimable:     0,
 				Reviewable:    0,
 				BlockedByDeps: 2,
@@ -763,7 +763,7 @@ func TestWriteTasksSection(t *testing.T) {
 			expect: "=== TASKS ===\n" +
 				"Total: 3 (3 active, 0 terminal)\n" +
 				"\nBy Status:\n" +
-				"  UNCLAIMED: 3\n" +
+				"  READY: 3\n" +
 				"\nClaimable: 0 tasks\n" +
 				"Reviewable: 0 tasks\n" +
 				"Blocked by dependencies: 2 tasks\n" +

@@ -54,8 +54,8 @@ Chose **Option 3**: Shared file-based blackboard in `.liza/` directory.
 ```
 
 **Key state transitions in blackboard:**
-- `UNCLAIMED` → `CLAIMED` (Coder claims task)
-- `CLAIMED` → `READY_FOR_REVIEW` (Coder submits work)
+- `READY` → `IMPLEMENTING` (Coder claims task)
+- `IMPLEMENTING` → `READY_FOR_REVIEW` (Coder submits work)
 - `READY_FOR_REVIEW` → `APPROVED` / `REJECTED` (Reviewer decides)
 - `APPROVED` → `MERGED` (Supervisor merges)
 

@@ -58,7 +58,7 @@ func TestInspectAgents(t *testing.T) {
 		Tasks: []models.Task{
 			{
 				ID:         "task-1",
-				Status:     models.TaskStatusClaimed,
+				Status:     models.TaskStatusImplementing,
 				AssignedTo: strPtr("coder-1"),
 				Created:    now.Add(-1 * time.Hour),
 				History: []models.TaskHistoryEntry{
@@ -252,7 +252,7 @@ func TestInspectAgent(t *testing.T) {
 		Tasks: []models.Task{
 			{
 				ID:         "task-1",
-				Status:     models.TaskStatusClaimed,
+				Status:     models.TaskStatusImplementing,
 				AssignedTo: strPtr("coder-1"),
 				Created:    now.Add(-1 * time.Hour),
 				History: []models.TaskHistoryEntry{
@@ -377,7 +377,7 @@ func TestAgentInfo_ComputedFields(t *testing.T) {
 
 	task := &models.Task{
 		ID:         "task-1",
-		Status:     models.TaskStatusClaimed,
+		Status:     models.TaskStatusImplementing,
 		AssignedTo: strPtr("coder-1"),
 		Created:    now.Add(-1 * time.Hour),
 		History: []models.TaskHistoryEntry{

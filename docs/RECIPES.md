@@ -200,7 +200,7 @@ liza status                           # Full dashboard
 
 ```bash
 MODE=$(liza get config.mode)
-UNCLAIMED=$(liza get tasks --format json | jq '[.[] | select(.status=="UNCLAIMED")] | length')
+READY=$(liza get tasks --format json | jq '[.[] | select(.status=="READY")] | length')
 DONE=$(liza get sprint.metrics.tasks_done)
 ```
 

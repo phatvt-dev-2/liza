@@ -67,7 +67,7 @@ Piping the same output through different tools hoping for different results is N
 
 **Capabilities:**
 - Read specs and docs to understand goal context
-- Write goal and tasks to blackboard (two-phase: DRAFT → UNCLAIMED)
+- Write goal and tasks to blackboard (two-phase: DRAFT → READY)
 - Rescope tasks (split, redefine, kill) with audit trail
 - Reassign tasks after hypothesis exhaustion
 - Resolve blocked reviews
@@ -178,7 +178,7 @@ Include a one-sentence root cause in the `hypothesis_exhaustion` log entry.
 
 **Capabilities:**
 - Read specs to understand task requirements without asking
-- Work on claimable tasks: UNCLAIMED, REJECTED, or INTEGRATION_FAILED (supervisor claims on coder's behalf)
+- Work on claimable tasks: READY, REJECTED, or INTEGRATION_FAILED (supervisor claims on coder's behalf)
 - Create/modify code in task worktree
 - Commit to task worktree (not integration branch)
 - Request review

@@ -21,7 +21,7 @@ func TestMarkBlockedCommand(t *testing.T) {
 		validateState func(*testing.T, *models.State)
 	}{
 		{
-			name:      "Success - CLAIMED to BLOCKED with valid inputs",
+			name:      "Success - IMPLEMENTING to BLOCKED with valid inputs",
 			taskID:    "task-1",
 			reason:    "Test blocker reason",
 			questions: []string{"Question 1?", "Question 2?"},
@@ -35,7 +35,7 @@ func TestMarkBlockedCommand(t *testing.T) {
 					{
 						ID:           "task-1",
 						Description:  "Test task",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &assignedTo,
 						LeaseExpires: &leaseExpires,
 						Created:      now,
@@ -87,13 +87,13 @@ func TestMarkBlockedCommand(t *testing.T) {
 			},
 		},
 		{
-			name:       "Error - Task not in CLAIMED status",
+			name:       "Error - Task not in IMPLEMENTING status",
 			taskID:     "task-1",
 			reason:     "Test reason",
 			questions:  []string{"Question?"},
 			agentID:    "coder-1",
 			wantErr:    true,
-			wantErrMsg: "must be in CLAIMED status",
+			wantErrMsg: "must be in IMPLEMENTING status",
 			setupState: func(s *models.State) {
 				now := time.Now().UTC()
 				s.Tasks = []models.Task{
@@ -150,7 +150,7 @@ func TestMarkBlockedCommand(t *testing.T) {
 					{
 						ID:           "task-1",
 						Description:  "Test task",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &assignedTo,
 						LeaseExpires: &leaseExpires,
 						Created:      now,

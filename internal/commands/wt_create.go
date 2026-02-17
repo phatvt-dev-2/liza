@@ -11,7 +11,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
-// WtCreateCommand creates a worktree for a CLAIMED task.
+// WtCreateCommand creates a worktree for a IMPLEMENTING task.
 // It creates a worktree from the integration branch and updates the task's base_commit.
 // If fresh is true, it will delete any existing worktree before creating a new one.
 func WtCreateCommand(projectRoot, taskID string, fresh bool) error {
@@ -46,8 +46,8 @@ func WtCreateCommand(projectRoot, taskID string, fresh bool) error {
 	}
 
 	// Validate task status
-	if task.Status != models.TaskStatusClaimed {
-		return fmt.Errorf("task %s is not CLAIMED (status: %s)", taskID, task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		return fmt.Errorf("task %s is not IMPLEMENTING (status: %s)", taskID, task.Status)
 	}
 
 	// Get integration branch from config

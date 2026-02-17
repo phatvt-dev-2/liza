@@ -51,17 +51,17 @@ func TestWtDeleteCommand(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name:        "cannot delete worktree for CLAIMED task",
+			name:        "cannot delete worktree for IMPLEMENTING task",
 			taskID:      "task-5",
-			taskStatus:  models.TaskStatusClaimed,
+			taskStatus:  models.TaskStatusImplementing,
 			hasWorktree: true,
 			wantErr:     true,
 			errContains: "cannot delete worktree",
 		},
 		{
-			name:        "cannot delete worktree for UNCLAIMED task",
+			name:        "cannot delete worktree for READY task",
 			taskID:      "task-6",
-			taskStatus:  models.TaskStatusUnclaimed,
+			taskStatus:  models.TaskStatusReady,
 			hasWorktree: true,
 			wantErr:     true,
 			errContains: "cannot delete worktree",
@@ -177,7 +177,7 @@ func TestWtDeleteCommand(t *testing.T) {
 					task.RescopeReason = &reason
 					task.SupersededBy = []string{"task-other"}
 				}
-				if tt.taskStatus == models.TaskStatusClaimed {
+				if tt.taskStatus == models.TaskStatusImplementing {
 					agent := "coder-1"
 					task.AssignedTo = &agent
 					leaseExpires := now.Add(30 * time.Minute)

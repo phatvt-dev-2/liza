@@ -25,26 +25,26 @@ func TestWtCreateCommand(t *testing.T) {
 		errContains string
 	}{
 		{
-			name:       "create worktree for CLAIMED task",
+			name:       "create worktree for IMPLEMENTING task",
 			taskID:     "task-1",
-			taskStatus: models.TaskStatusClaimed,
+			taskStatus: models.TaskStatusImplementing,
 			fresh:      false,
 			existingWT: false,
 			wantErr:    false,
 		},
 		{
-			name:        "task not CLAIMED",
+			name:        "task not IMPLEMENTING",
 			taskID:      "task-2",
-			taskStatus:  models.TaskStatusUnclaimed,
+			taskStatus:  models.TaskStatusReady,
 			fresh:       false,
 			existingWT:  false,
 			wantErr:     true,
-			errContains: "not CLAIMED",
+			errContains: "not IMPLEMENTING",
 		},
 		{
 			name:       "worktree already exists without fresh",
 			taskID:     "task-3",
-			taskStatus: models.TaskStatusClaimed,
+			taskStatus: models.TaskStatusImplementing,
 			fresh:      false,
 			existingWT: true,
 			wantErr:    false, // Should succeed without error
@@ -52,7 +52,7 @@ func TestWtCreateCommand(t *testing.T) {
 		{
 			name:       "worktree already exists with fresh",
 			taskID:     "task-4",
-			taskStatus: models.TaskStatusClaimed,
+			taskStatus: models.TaskStatusImplementing,
 			fresh:      true,
 			existingWT: true,
 			wantErr:    false,
@@ -60,7 +60,7 @@ func TestWtCreateCommand(t *testing.T) {
 		{
 			name:        "empty task ID",
 			taskID:      "",
-			taskStatus:  models.TaskStatusClaimed,
+			taskStatus:  models.TaskStatusImplementing,
 			fresh:       false,
 			existingWT:  false,
 			wantErr:     true,
@@ -69,7 +69,7 @@ func TestWtCreateCommand(t *testing.T) {
 		{
 			name:        "nonexistent task",
 			taskID:      "nonexistent",
-			taskStatus:  models.TaskStatusClaimed,
+			taskStatus:  models.TaskStatusImplementing,
 			fresh:       false,
 			existingWT:  false,
 			wantErr:     true,
@@ -139,7 +139,7 @@ func TestWtCreateCommand(t *testing.T) {
 					History:     []models.TaskHistoryEntry{},
 				}
 
-				if tt.taskStatus == models.TaskStatusClaimed {
+				if tt.taskStatus == models.TaskStatusImplementing {
 					task.AssignedTo = &agent
 					task.Worktree = &worktreePath
 					leaseExpires := now.Add(30 * time.Minute)
@@ -251,7 +251,7 @@ func TestWtCreateCommandIntegration(t *testing.T) {
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
-	// Create initial state with CLAIMED task
+	// Create initial state with IMPLEMENTING task
 	now := time.Now().UTC()
 	agent := "coder-1"
 	worktreePath := ".worktrees/task-integration"
@@ -271,7 +271,7 @@ func TestWtCreateCommandIntegration(t *testing.T) {
 			{
 				ID:           "task-integration",
 				Description:  "Integration test task",
-				Status:       models.TaskStatusClaimed,
+				Status:       models.TaskStatusImplementing,
 				Priority:     1,
 				Created:      now,
 				SpecRef:      "README.md",

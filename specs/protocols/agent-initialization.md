@@ -87,7 +87,7 @@ agents:
 ```
 1. Parse .liza/state.yaml for:
    - Goal status and description
-   - Task statuses (DRAFT, UNCLAIMED, CLAIMED, READY_FOR_REVIEW, etc.)
+   - Task statuses (DRAFT, READY, IMPLEMENTING, READY_FOR_REVIEW, etc.)
    - Other agents' states
    - Any PAUSE/CHECKPOINT signals
 2. Check for handoff notes relevant to reclaimable tasks
@@ -123,7 +123,7 @@ Role-specific decision tree for what to do first.
 
 4. General decision tree (when no specific trigger):
    IF goal.status == "PLANNING":
-       → Continue decomposition (DRAFT → UNCLAIMED)
+       → Continue decomposition (DRAFT → READY)
 
    IF all tasks in terminal state (MERGED, ABANDONED):
        → Assess goal completion, exit or create checkpoint
@@ -147,7 +147,7 @@ Role-specific decision tree for what to do first.
 
 2. Verify assignment:
    - Read task from state.yaml
-   - Verify status is CLAIMED
+   - Verify status is IMPLEMENTING
    - Verify assigned_to matches $LIZA_AGENT_ID
    - Verify worktree directory exists
 

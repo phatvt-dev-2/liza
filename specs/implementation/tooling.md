@@ -94,7 +94,7 @@ The `liza` CLI uses a consistent exit code taxonomy:
 
 | Command | Exit 1 | Exit 3 | Exit 4 |
 |---------|--------|--------|--------|
-| `liza wt-create` | Task not CLAIMED | Worktree creation failed | — |
+| `liza wt-create` | Task not IMPLEMENTING | Worktree creation failed | — |
 | `liza wt-merge` | Task not APPROVED, SHA mismatch | Merge conflict | — |
 | `liza validate` | Schema violation found | — | — |
 
@@ -115,7 +115,7 @@ Agents have shell access via Claude Code's bash tool. Blackboard operations are 
 
 ```
 Phase 1: Validate under lock (no state mutation)
-  - Verify task exists and is UNCLAIMED
+  - Verify task exists and is READY
   - Verify dependencies are satisfied (all depends_on tasks MERGED)
   - Verify agent is available
 
@@ -125,13 +125,13 @@ Phase 2: Create worktree (outside lock)
 
 Phase 3: Re-validate and commit under lock
   - Re-check all conditions (state may have changed)
-  - Set CLAIMED status with all required fields atomically
+  - Set IMPLEMENTING status with all required fields atomically
   - On validation failure: delete worktree and exit
 
 Cleanup: If commit fails, worktree is deleted to maintain consistency
 ```
 
-This pattern ensures no task is ever in CLAIMED state without a valid worktree.
+This pattern ensures no task is ever in IMPLEMENTING state without a valid worktree.
 
 **State Updates:** Agents use dedicated CLI commands for state transitions. The CLI handles locking and validation internally:
 
@@ -265,7 +265,7 @@ See [Agent Identity Protocol](../architecture/roles.md#agent-identity-protocol) 
 |-------|------------|---------------|
 | 1. Bootstrap | Human | Project exists, git initialized |
 | 2. Planner | Human | Blackboard initialized, specs exist |
-| 3. Coder(s) | Human | Planner has finalized tasks (UNCLAIMED) |
+| 3. Coder(s) | Human | Planner has finalized tasks (READY) |
 | 4. Code Reviewer | Human | Coder has requested review (READY_FOR_REVIEW) |
 
 Agents can be started earlier—they'll wait/exit if no work available.
@@ -432,7 +432,7 @@ Human owns the intent and acts as observer and circuit-breaker, not approver.
 | Pause all | `liza pause` | Sets `config.mode: PAUSED`; agents exit gracefully (code 42), supervisors wait |
 | Resume | `liza resume` | Sets `config.mode: RUNNING`; supervisors restart agents |
 | Force replan | `liza mark-blocked <task> --reason "human override"` | Planner escalation triggered |
-| Inject task | `liza add-task --id X ...` (as UNCLAIMED) | New task available for claim |
+| Inject task | `liza add-task --id X ...` (as READY) | New task available for claim |
 | Abort goal | `liza stop` | Sets `config.mode: STOPPED`; all agents terminate, supervisors stop |
 
 ### Human Communication

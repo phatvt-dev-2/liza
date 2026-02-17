@@ -31,13 +31,15 @@ func TestReleaseClaimCommand(t *testing.T) {
 			setupState: func(s *models.State) {
 				reviewingBy := "reviewer-1"
 				reviewLeaseExpires := time.Now().UTC().Add(-1 * time.Hour) // expired
+				reviewCommit := "abc123"
 				s.Tasks = []models.Task{
 					{
 						ID:                 "t1",
 						Description:        "Test task",
-						Status:             models.TaskStatusReadyForReview,
+						Status:             models.TaskStatusReviewing,
 						ReviewingBy:        &reviewingBy,
 						ReviewLeaseExpires: &reviewLeaseExpires,
+						ReviewCommit:       &reviewCommit,
 						Created:            time.Now().UTC(),
 						History:            []models.TaskHistoryEntry{},
 					},
@@ -45,6 +47,9 @@ func TestReleaseClaimCommand(t *testing.T) {
 			},
 			validateState: func(t *testing.T, s *models.State) {
 				task := &s.Tasks[0]
+				if task.Status != models.TaskStatusReadyForReview {
+					t.Errorf("expected status READY_FOR_REVIEW, got %s", task.Status)
+				}
 				if task.ReviewingBy != nil {
 					t.Errorf("expected reviewing_by to be nil, got %v", task.ReviewingBy)
 				}
@@ -73,7 +78,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 					{
 						ID:           "t2",
 						Description:  "Test task",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &assignedTo,
 						LeaseExpires: &leaseExpires,
 						Created:      time.Now().UTC(),
@@ -89,8 +94,8 @@ func TestReleaseClaimCommand(t *testing.T) {
 				if task.LeaseExpires != nil {
 					t.Errorf("expected lease_expires to be nil, got %v", task.LeaseExpires)
 				}
-				if task.Status != models.TaskStatusUnclaimed {
-					t.Errorf("expected status UNCLAIMED, got %s", task.Status)
+				if task.Status != models.TaskStatusReady {
+					t.Errorf("expected status READY, got %s", task.Status)
 				}
 				if len(task.History) != 1 {
 					t.Fatalf("expected 1 history entry, got %d", len(task.History))
@@ -116,7 +121,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 					{
 						ID:                 "t3",
 						Description:        "Test task",
-						Status:             models.TaskStatusClaimed,
+						Status:             models.TaskStatusImplementing,
 						AssignedTo:         &assignedTo,
 						LeaseExpires:       &leaseExpires,
 						ReviewingBy:        &reviewingBy,
@@ -151,13 +156,15 @@ func TestReleaseClaimCommand(t *testing.T) {
 			setupState: func(s *models.State) {
 				reviewingBy := "reviewer-1"
 				reviewLeaseExpires := time.Now().UTC().Add(1 * time.Hour) // still valid
+				reviewCommit := "abc123"
 				s.Tasks = []models.Task{
 					{
 						ID:                 "t4",
 						Description:        "Test task",
-						Status:             models.TaskStatusReadyForReview,
+						Status:             models.TaskStatusReviewing,
 						ReviewingBy:        &reviewingBy,
 						ReviewLeaseExpires: &reviewLeaseExpires,
+						ReviewCommit:       &reviewCommit,
 						Created:            time.Now().UTC(),
 						History:            []models.TaskHistoryEntry{},
 					},
@@ -174,13 +181,15 @@ func TestReleaseClaimCommand(t *testing.T) {
 			setupState: func(s *models.State) {
 				reviewingBy := "reviewer-1"
 				reviewLeaseExpires := time.Now().UTC().Add(1 * time.Hour) // still valid
+				reviewCommit := "abc123"
 				s.Tasks = []models.Task{
 					{
 						ID:                 "t5",
 						Description:        "Test task",
-						Status:             models.TaskStatusReadyForReview,
+						Status:             models.TaskStatusReviewing,
 						ReviewingBy:        &reviewingBy,
 						ReviewLeaseExpires: &reviewLeaseExpires,
+						ReviewCommit:       &reviewCommit,
 						Created:            time.Now().UTC(),
 						History:            []models.TaskHistoryEntry{},
 					},
@@ -188,6 +197,9 @@ func TestReleaseClaimCommand(t *testing.T) {
 			},
 			validateState: func(t *testing.T, s *models.State) {
 				task := &s.Tasks[0]
+				if task.Status != models.TaskStatusReadyForReview {
+					t.Errorf("expected status READY_FOR_REVIEW, got %s", task.Status)
+				}
 				if task.ReviewingBy != nil {
 					t.Errorf("expected reviewing_by to be nil, got %v", task.ReviewingBy)
 				}
@@ -209,7 +221,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 					{
 						ID:           "t6",
 						Description:  "Test task",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &assignedTo,
 						LeaseExpires: &leaseExpires,
 						Created:      time.Now().UTC(),
@@ -232,7 +244,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 					{
 						ID:           "t7",
 						Description:  "Test task",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &assignedTo,
 						LeaseExpires: &leaseExpires,
 						Created:      time.Now().UTC(),
@@ -261,7 +273,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 					{
 						ID:          "t8",
 						Description: "Test task",
-						Status:      models.TaskStatusUnclaimed,
+						Status:      models.TaskStatusReady,
 						Created:     time.Now().UTC(),
 						History:     []models.TaskHistoryEntry{},
 					},

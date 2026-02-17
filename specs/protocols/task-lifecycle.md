@@ -300,7 +300,7 @@ Before agents can run, human must initialize the project:
 2. If no goal defined: exit(42) — human must define goal via bootstrap sequence
 3. If goal defined but no tasks: decompose into tasks (write as DRAFT first)
 4. Verify specs exist for tasks; if not, flag for human
-5. Finalize DRAFT → UNCLAIMED when plan complete
+5. Finalize DRAFT → READY when plan complete
 6. If tasks exist: monitor for blocked/escalation conditions
 7. Write initial goal-alignment summary
 
@@ -309,7 +309,7 @@ Before agents can run, human must initialize the project:
 **Note:** The supervisor (`liza agent`) claims tasks and creates worktrees BEFORE spawning the coder. The coder receives its assigned task in the bootstrap prompt.
 
 1. Extract task ID and worktree path from bootstrap prompt
-2. Verify assignment in state.yaml (status CLAIMED, assigned_to matches self)
+2. Verify assignment in state.yaml (status IMPLEMENTING, assigned_to matches self)
 3. Read the **full task entry** from blackboard (all fields: description, done_when, scope, iteration, rejection_reason, etc.)
 4. Read specs relevant to task (using task's `spec_ref`)
 5. **For iteration 2+:** Read and address prior `rejection_reason` (extracted into prompt by supervisor)

@@ -60,7 +60,7 @@ func TestExpiredClaimLease(t *testing.T) {
 
 	// Second agent should NOT be able to claim the task directly
 	// (The claim command doesn't check for expired leases itself - that's the watch command's job)
-	// But the validation should catch that it's still CLAIMED
+	// But the validation should catch that it's still IMPLEMENTING
 	t.Log("Agent 2 attempts to claim already-claimed task")
 	err = commands.ClaimTaskCommand(projectDir, taskID, agent2)
 	if err == nil {
@@ -105,12 +105,13 @@ func TestExpiredReviewLease(t *testing.T) {
 	})
 	testhelpers.AssertNoError(t, err)
 
-	// First reviewer claims the review
+	// First reviewer claims the review (transitions to REVIEWING)
 	t.Log("Reviewer 1 claims review")
 	reviewLeaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	err = bb.Modify(func(state *models.State) error {
 		for i := range state.Tasks {
 			if state.Tasks[i].ID == taskID {
+				state.Tasks[i].Status = models.TaskStatusReviewing
 				state.Tasks[i].ReviewingBy = &reviewer1
 				state.Tasks[i].ReviewLeaseExpires = &reviewLeaseExpires
 				break
@@ -163,12 +164,13 @@ func TestExpiredReviewLease(t *testing.T) {
 		t.Error("Expected review lease to be cleared after expiry")
 	}
 
-	// Now reviewer2 should be able to claim the review
+	// Now reviewer2 should be able to claim the review (transitions to REVIEWING)
 	t.Log("Reviewer 2 claims review after expiry")
 	newLeaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	err = bb.Modify(func(state *models.State) error {
 		for i := range state.Tasks {
 			if state.Tasks[i].ID == taskID {
+				state.Tasks[i].Status = models.TaskStatusReviewing
 				state.Tasks[i].ReviewingBy = &reviewer2
 				state.Tasks[i].ReviewLeaseExpires = &newLeaseExpires
 				break

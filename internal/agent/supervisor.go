@@ -689,7 +689,7 @@ func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot, agent
 }
 
 func isResumableHandoff(task *models.Task, agentID string) bool {
-	return task.Status == models.TaskStatusClaimed &&
+	return task.Status == models.TaskStatusImplementing &&
 		task.HandoffPending &&
 		task.AssignedTo != nil &&
 		*task.AssignedTo == agentID
@@ -759,8 +759,8 @@ func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string) err
 			return nil
 		}
 
-		// If task is still CLAIMED, agent may have exited without completing
-		if task.Status == models.TaskStatusClaimed {
+		// If task is still IMPLEMENTING, agent may have exited without completing
+		if task.Status == models.TaskStatusImplementing {
 			GetLogger().Warn("Agent exited with task still claimed",
 				"task_id", task.ID,
 				"agent_id", agentID,
@@ -812,8 +812,8 @@ func resumeHandoffTask(bb *db.Blackboard, state *models.State, agentID string) (
 			if t == nil {
 				return fmt.Errorf("task %s not found while resuming handoff", id)
 			}
-			if t.Status != models.TaskStatusClaimed {
-				return fmt.Errorf("task %s is no longer CLAIMED", id)
+			if t.Status != models.TaskStatusImplementing {
+				return fmt.Errorf("task %s is no longer IMPLEMENTING", id)
 			}
 			if t.AssignedTo == nil || *t.AssignedTo != agentID {
 				return fmt.Errorf("task %s is no longer assigned to %s", id, agentID)
@@ -915,14 +915,12 @@ func claimReviewerTask(agentID string, leaseDuration int, bb *db.Blackboard) (ta
 
 	err = bb.Modify(func(state *models.State) error {
 		// Find reviewable task with highest priority
+		// READY_FOR_REVIEW tasks are available for claiming (stale REVIEWING leases
+		// are reverted to READY_FOR_REVIEW by ClearStaleReviewClaimsCommand)
 		var candidates []*models.Task
 		for i := range state.Tasks {
 			t := &state.Tasks[i]
-			if t.Status != models.TaskStatusReadyForReview {
-				continue
-			}
-			// Available if no reviewer or expired lease
-			if t.ReviewingBy == nil || (t.ReviewLeaseExpires != nil && t.ReviewLeaseExpires.Before(now)) {
+			if t.Status == models.TaskStatusReadyForReview {
 				candidates = append(candidates, t)
 			}
 		}
@@ -932,7 +930,8 @@ func claimReviewerTask(agentID string, leaseDuration int, bb *db.Blackboard) (ta
 			return fmt.Errorf("no reviewable tasks found")
 		}
 
-		// Atomically claim the task
+		// Atomically claim the task and transition to REVIEWING
+		task.Status = models.TaskStatusReviewing
 		task.ReviewingBy = &agentID
 		task.ReviewLeaseExpires = &leaseExpires
 
@@ -1321,7 +1320,7 @@ func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) err
 				switch afterTask.Status {
 				case models.TaskStatusIntegrationFailed:
 					stillFailed++
-				case models.TaskStatusClaimed:
+				case models.TaskStatusImplementing:
 					claimed++
 				case models.TaskStatusSuperseded:
 					superseded++

@@ -49,7 +49,7 @@ Single points of failure with no redundancy or validation mechanism.
 **Skill:** systemic-thinking
 **Category:** LOAD-BEARING
 
-**Issue:** Task state transitions are not enforced by a declared state machine in `internal/models/`. There is no `CanTransition(from, to)` method. Each command in `internal/commands/` independently checks its own preconditions: `claim_task.go` checks `IsClaimable()`, `submit_review.go` checks status equals CLAIMED, `submit_verdict.go` checks READY_FOR_REVIEW. The valid transition graph is emergent from the union of all command preconditions, not declared in one place. Adding a new command or modifying an existing one can silently create an invalid transition path with no compilation error and no test failure (unless a specific integration test covers that exact path).
+**Issue:** Task state transitions are not enforced by a declared state machine in `internal/models/`. There is no `CanTransition(from, to)` method. Each command in `internal/commands/` independently checks its own preconditions: `claim_task.go` checks `IsClaimable()`, `submit_review.go` checks status equals IMPLEMENTING, `submit_verdict.go` checks READY_FOR_REVIEW. The valid transition graph is emergent from the union of all command preconditions, not declared in one place. Adding a new command or modifying an existing one can silently create an invalid transition path with no compilation error and no test failure (unless a specific integration test covers that exact path).
 
 **Implication:** The state machine — the most critical invariant of the multi-agent coordination protocol — exists only as a side effect of scattered conditional checks, making it invisible to code review and resistant to verification.
 
@@ -445,10 +445,10 @@ Long-term concerns about system evolution.
 
 **Skill:** systemic-thinking
 
-**Original issue:** `liza claim-task` only handled UNCLAIMED tasks. REJECTED and INTEGRATION_FAILED tasks couldn't be re-claimed, and worktree handling for reassignment was undefined.
+**Original issue:** `liza claim-task` only handled READY tasks. REJECTED and INTEGRATION_FAILED tasks couldn't be re-claimed, and worktree handling for reassignment was undefined.
 
-**Fix:** Supports claiming from UNCLAIMED, REJECTED, and INTEGRATION_FAILED states:
-- UNCLAIMED: creates fresh worktree
+**Fix:** Supports claiming from READY, REJECTED, and INTEGRATION_FAILED states:
+- READY: creates fresh worktree
 - REJECTED (same coder): preserves worktree and base_commit for drift accuracy
 - REJECTED (different coder): deletes worktree, creates fresh, resets review_cycles_current
 - INTEGRATION_FAILED: preserves worktree for conflict resolution, sets integration_fix flag

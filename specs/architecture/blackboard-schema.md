@@ -122,7 +122,7 @@ tasks:
     worktree: null
     spec_ref: specs/retry-logic.md#payments
     # done_when: TBD — intentionally incomplete to show DRAFT state requirement
-    # Planner must define done_when before finalizing to UNCLAIMED
+    # Planner must define done_when before finalizing to READY
     created: 2025-01-17T15:00:00Z
 
   - id: task-4
@@ -135,7 +135,7 @@ tasks:
 
   - id: task-4a
     description: "Add auth retry logic"
-    status: UNCLAIMED
+    status: READY
     supersedes: task-4
     priority: 2
     depends_on: []  # No dependencies — can be claimed immediately
@@ -145,7 +145,7 @@ tasks:
 
   - id: task-4b
     description: "Add validation retry logic"
-    status: UNCLAIMED
+    status: READY
     supersedes: task-4
     priority: 3
     depends_on: [task-4a]  # Blocked until task-4a is MERGED
@@ -170,7 +170,7 @@ tasks:
 
   - id: task-7
     description: "Fix merge conflict in UserAPI retry logic"
-    status: CLAIMED
+    status: IMPLEMENTING
     priority: 1
     assigned_to: coder-1
     worktree: .worktrees/task-7
@@ -223,10 +223,10 @@ The `iteration` field tracks coder work cycles on a task:
 
 | Event | `iteration` Value |
 |-------|-------------------|
-| Task created (DRAFT/UNCLAIMED) | Not set (null) |
-| First claim (UNCLAIMED → CLAIMED) | Set to 1 |
+| Task created (DRAFT/READY) | Not set (null) |
+| First claim (READY → IMPLEMENTING) | Set to 1 |
 | Work iteration complete | Unchanged (work within single claim) |
-| Review rejected (REJECTED → CLAIMED, same coder) | Increment by 1 |
+| Review rejected (REJECTED → IMPLEMENTING, same coder) | Increment by 1 |
 | Task reassigned (different coder) | Reset to 1 |
 | Task reaches terminal state | Preserved (audit trail) |
 
@@ -299,11 +299,11 @@ The `depends_on` field declares explicit dependencies between tasks:
 
 ```yaml
 - id: task-auth
-  status: UNCLAIMED
+  status: READY
   depends_on: []  # No dependencies
 
 - id: task-validation
-  status: UNCLAIMED
+  status: READY
   depends_on: [task-auth]  # Blocked until task-auth is MERGED
 ```
 
@@ -315,10 +315,10 @@ The `depends_on` field declares explicit dependencies between tasks:
 
 **Claimability Rule:**
 ```
-claimable = (status in [UNCLAIMED, REJECTED, INTEGRATION_FAILED]) AND (depends_on is empty OR all depends_on tasks are MERGED)
+claimable = (status in [READY, REJECTED, INTEGRATION_FAILED]) AND (depends_on is empty OR all depends_on tasks are MERGED)
 ```
 
-- **UNCLAIMED**: Fresh task ready for first attempt
+- **READY**: Fresh task ready for first attempt
 - **REJECTED**: Code review failed; coder can reclaim to address feedback
 - **INTEGRATION_FAILED**: Merge failed; coder can reclaim to resolve conflicts
 
@@ -543,7 +543,7 @@ config:
 - timestamp: 2025-01-17T14:05:00Z
   agent: planner-1
   action: tasks_finalized
-  detail: "5 tasks moved from DRAFT to UNCLAIMED"
+  detail: "5 tasks moved from DRAFT to READY"
 
 - timestamp: 2025-01-17T14:06:00Z
   agent: coder-1
@@ -607,7 +607,7 @@ agents:
 - If original agent returns after expiry → must self-abort immediately
 
 **Lease and Review States:**
-- Coder lease (`lease_expires`) governs CLAIMED state only
+- Coder lease (`lease_expires`) governs IMPLEMENTING state only
 - When task transitions to READY_FOR_REVIEW, the coder's lease becomes inactive
 - Supervisor assigns review by setting `reviewing_by` and `review_lease_expires` before spawning Code Reviewer
 - If Code Reviewer crashes, review lease expires and supervisor can assign to another Code Reviewer
@@ -670,13 +670,13 @@ Reads do not require lock (eventual consistency acceptable for reads).
 | Claim task | Supervisor | Two-phase: validate under lock → create worktree → re-validate and commit under lock (see tooling.md) |
 | Extend lease | Any | Lock → update heartbeat + lease_expires → unlock |
 | Request review | Coder | Lock → verify clean git status → write commit SHA + set READY_FOR_REVIEW atomically → unlock |
-| Claim review | Supervisor | Lock → verify READY_FOR_REVIEW + no active review lease → write reviewing_by + review_lease_expires → unlock |
+| Claim review | Supervisor | Lock → verify READY_FOR_REVIEW → set REVIEWING + write reviewing_by + review_lease_expires → unlock |
 | Extend review lease | Code Reviewer | Lock → update review_lease_expires → unlock |
-| Submit verdict | Code Reviewer | Lock → verify commit SHA matches + reviewing_by matches self → set APPROVED/REJECTED + reason + set approved_by on approval + clear review lease → unlock |
+| Submit verdict | Code Reviewer | Lock → verify REVIEWING + commit SHA matches + reviewing_by matches self → set APPROVED/REJECTED + reason + set approved_by on approval + clear review lease → unlock |
 | Execute merge | Supervisor | After Code Reviewer sets APPROVED → supervisor runs `liza wt-merge` → update state to MERGED |
 | Mark blocked | Any | Lock → set state BLOCKED + diagnosis → unlock |
 | Rescope task | Planner | Lock → set original SUPERSEDED → create new task(s) with reference → unlock |
-| Finalize draft | Planner | Lock → change DRAFT to UNCLAIMED → unlock |
+| Finalize draft | Planner | Lock → change DRAFT to READY → unlock |
 | Log activity | Any | Append to log.yaml (no lock needed, append-only) |
 
 ---
@@ -746,19 +746,22 @@ invariants:
   - "DRAFT task cannot have assigned_to"
   - "Non-DRAFT task (except SUPERSEDED, ABANDONED) must have done_when"
   - "Non-DRAFT task (except SUPERSEDED, ABANDONED) must have spec_ref"
-  - "CLAIMED task must have assigned_to"
-  - "CLAIMED task must have worktree"
-  - "CLAIMED task worktree path must exist (catches partial claim failures)"
-  - "CLAIMED task must have valid lease_expires"
-  - "CLAIMED task must have base_commit (except integration_fix tasks which reuse existing worktree)"
+  - "IMPLEMENTING task must have assigned_to"
+  - "IMPLEMENTING task must have worktree"
+  - "IMPLEMENTING task worktree path must exist (catches partial claim failures)"
+  - "IMPLEMENTING task must have valid lease_expires"
+  - "IMPLEMENTING task must have base_commit (except integration_fix tasks which reuse existing worktree)"
   - "READY_FOR_REVIEW task must have review_commit"
+  - "REVIEWING task must have reviewing_by"
+  - "REVIEWING task must have review_lease_expires"
+  - "REVIEWING task must have review_commit"
   - "REJECTED task must have rejection_reason"
   - "BLOCKED task must have blocked_reason and blocked_questions"
   - "SUPERSEDED task must have superseded_by and rescope_reason"
   - "MERGED task must not have worktree"
   - "depends_on must reference existing task IDs"
   - "depends_on must not create circular dependencies"
-  - "CLAIMED task must have all depends_on tasks in MERGED status"
+  - "IMPLEMENTING task must have all depends_on tasks in MERGED status"
   - "Agent WORKING must have task"
   - "Agent WORKING should have lease_expires in future (warning if expired beyond grace period of 60s — may indicate long-running operation)"
   - "No two agents assigned to same task"
@@ -768,9 +771,9 @@ invariants:
   # Transition invariants (runtime-enforced, not statically validated)
   # These are enforced by agent behavior and atomic operations during state transitions.
   # `liza validate` validates static state invariants; these require history analysis.
-  - "CLAIMED task from REJECTED must have new lease_expires (not stale from prior claim)"
-  - "UNCLAIMED task must preserve failed_by if previously BLOCKED"
-  - "CLAIMED task with integration_fix:true must have lease_expires set"
+  - "IMPLEMENTING task from REJECTED must have new lease_expires (not stale from prior claim)"
+  - "READY task must preserve failed_by if previously BLOCKED"
+  - "IMPLEMENTING task with integration_fix:true must have lease_expires set"
 ```
 
 **Enforcement Note:** Static invariants (above the "Transition invariants" comment) are validated by `liza validate`. Transition invariants are runtime constraints enforced by agents performing atomic operations during state transitions — they cannot be verified post-hoc without history event analysis.

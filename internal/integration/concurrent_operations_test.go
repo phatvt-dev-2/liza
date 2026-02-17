@@ -78,8 +78,8 @@ func TestConcurrentClaimAttempts(t *testing.T) {
 		t.Fatal("Task not found")
 	}
 
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Expected task status CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected task status IMPLEMENTING, got %s", task.Status)
 	}
 
 	if task.AssignedTo == nil {
@@ -145,8 +145,8 @@ func TestConcurrentClaimsOfDifferentTasks(t *testing.T) {
 			continue
 		}
 
-		if task.Status != models.TaskStatusClaimed {
-			t.Errorf("Expected task %s status CLAIMED, got %s", taskIDs[i], task.Status)
+		if task.Status != models.TaskStatusImplementing {
+			t.Errorf("Expected task %s status IMPLEMENTING, got %s", taskIDs[i], task.Status)
 		}
 
 		if task.AssignedTo == nil {
@@ -337,7 +337,7 @@ func TestConcurrentClaimWithWorktreeConflict(t *testing.T) {
 			if !strings.Contains(errMsg, "race condition") &&
 				!strings.Contains(errMsg, "worktree") &&
 				!strings.Contains(errMsg, "branch") &&
-				!strings.Contains(errMsg, "is CLAIMED") {
+				!strings.Contains(errMsg, "is IMPLEMENTING") {
 				t.Errorf("Agent %s: unexpected error type: %v", agentIDs[i], err)
 			}
 		}
@@ -361,13 +361,13 @@ func TestConcurrentClaimWithWorktreeConflict(t *testing.T) {
 	}
 
 	// Task should be CLAIMED
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Task status should be CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Task status should be IMPLEMENTING, got %s", task.Status)
 	}
 
 	// Should be assigned to the successful agent
 	if task.AssignedTo == nil {
-		t.Fatal("Task marked CLAIMED but AssignedTo is nil")
+		t.Fatal("Task marked IMPLEMENTING but AssignedTo is nil")
 	}
 	if *task.AssignedTo != successfulAgent {
 		t.Errorf("Task assigned to %s, expected %s", *task.AssignedTo, successfulAgent)
@@ -375,13 +375,13 @@ func TestConcurrentClaimWithWorktreeConflict(t *testing.T) {
 
 	// Worktree must be set
 	if task.Worktree == nil {
-		t.Fatal("Task marked CLAIMED but worktree is nil")
+		t.Fatal("Task marked IMPLEMENTING but worktree is nil")
 	}
 
 	// CRITICAL CHECK: Worktree directory must exist on disk
 	worktreePath := filepath.Join(projectDir, *task.Worktree)
 	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
-		t.Fatalf("INVALID STATE: Task marked CLAIMED with worktree=%s but directory does not exist",
+		t.Fatalf("INVALID STATE: Task marked IMPLEMENTING with worktree=%s but directory does not exist",
 			*task.Worktree)
 	}
 
@@ -455,11 +455,11 @@ func TestConcurrentClaimIntegrationFailedTask(t *testing.T) {
 			successfulAgent = agentIDs[i]
 			t.Logf("Agent %s successfully claimed INTEGRATION_FAILED task", agentIDs[i])
 		} else {
-			// Expected errors: either "race condition", "not claimable", or "is CLAIMED"
+			// Expected errors: either "race condition", "not claimable", or "is IMPLEMENTING"
 			if !strings.Contains(err.Error(), "race condition") &&
 				!strings.Contains(err.Error(), "not claimable") &&
 				!strings.Contains(err.Error(), "no claimable tasks") &&
-				!strings.Contains(err.Error(), "is CLAIMED") {
+				!strings.Contains(err.Error(), "is IMPLEMENTING") {
 				t.Logf("Agent %s failed with unexpected error: %v", agentIDs[i], err)
 			} else {
 				t.Logf("Agent %s failed as expected: %v", agentIDs[i], err)
@@ -481,8 +481,8 @@ func TestConcurrentClaimIntegrationFailedTask(t *testing.T) {
 	}
 
 	// Task should be CLAIMED
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Expected task status CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected task status IMPLEMENTING, got %s", task.Status)
 	}
 
 	// Should be assigned to exactly one agent

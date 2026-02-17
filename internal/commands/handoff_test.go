@@ -35,7 +35,7 @@ func TestHandoffCommand(t *testing.T) {
 					{
 						ID:           "task-1",
 						Description:  "Test task",
-						Status:       models.TaskStatusClaimed,
+						Status:       models.TaskStatusImplementing,
 						AssignedTo:   &assigned,
 						LeaseExpires: &lease,
 						Created:      now,
@@ -152,7 +152,7 @@ func TestHandoffCommand(t *testing.T) {
 					{
 						ID:          "task-1",
 						Description: "Test",
-						Status:      models.TaskStatusUnclaimed,
+						Status:      models.TaskStatusReady,
 						Created:     now,
 						SpecRef:     "README.md",
 						DoneWhen:    "Done",
@@ -162,7 +162,7 @@ func TestHandoffCommand(t *testing.T) {
 				}
 			},
 			wantErr:       true,
-			wantErrSubstr: "is not CLAIMED",
+			wantErrSubstr: "is not IMPLEMENTING",
 		},
 		{
 			name:       "task assigned to different coder",
@@ -177,7 +177,7 @@ func TestHandoffCommand(t *testing.T) {
 					{
 						ID:          "task-1",
 						Description: "Test",
-						Status:      models.TaskStatusClaimed,
+						Status:      models.TaskStatusImplementing,
 						AssignedTo:  &assigned,
 						Created:     now,
 						SpecRef:     "README.md",

@@ -121,22 +121,25 @@ Task states in the blackboard track the workflow lifecycle:
 
 | State | Description | Next States |
 |-------|-------------|-------------|
-| DRAFT | Planner defining | UNCLAIMED |
-| UNCLAIMED | Ready for claim | CLAIMED |
-| CLAIMED | Coder working | READY_FOR_REVIEW, BLOCKED |
-| READY_FOR_REVIEW | Awaiting review | APPROVED, REJECTED |
-| REJECTED | Feedback provided | CLAIMED |
+| DRAFT | Planner defining | READY |
+| READY | Ready for claim | IMPLEMENTING |
+| IMPLEMENTING | Coder working | READY_FOR_REVIEW, BLOCKED |
+| READY_FOR_REVIEW | Awaiting review | REVIEWING |
+| REVIEWING | Reviewer active | APPROVED, REJECTED, READY_FOR_REVIEW (stale lease) |
+| REJECTED | Feedback provided | IMPLEMENTING |
 | APPROVED | Merge eligible | MERGED, INTEGRATION_FAILED |
-| BLOCKED | Awaiting escalation | UNCLAIMED, SUPERSEDED, ABANDONED |
-| INTEGRATION_FAILED | Merge failed | CLAIMED |
+| BLOCKED | Awaiting escalation | READY, SUPERSEDED, ABANDONED |
+| INTEGRATION_FAILED | Merge failed | IMPLEMENTING |
 | MERGED | Terminal | — |
 | SUPERSEDED | Terminal | — |
 | ABANDONED | Terminal | — |
 
 **Forbidden Task Transitions:**
-- DRAFT → CLAIMED (coders cannot claim drafts)
-- CLAIMED → MERGED (skipping review)
-- CLAIMED → APPROVED (self-approval)
+- DRAFT → IMPLEMENTING (coders cannot claim drafts)
+- IMPLEMENTING → MERGED (skipping review)
+- IMPLEMENTING → APPROVED (self-approval)
+- READY_FOR_REVIEW → APPROVED (must go through REVIEWING)
+- READY_FOR_REVIEW → REJECTED (must go through REVIEWING)
 - Any terminal → Any state
 
 **Stop Triggers:**
@@ -147,7 +150,7 @@ Task states in the blackboard track the workflow lifecycle:
 
 **Claimability Rule:**
 ```
-claimable = (status in [UNCLAIMED, REJECTED, INTEGRATION_FAILED])
+claimable = (status in [READY, REJECTED, INTEGRATION_FAILED])
             AND (depends_on is empty OR all depends_on are MERGED)
 ```
 

@@ -47,7 +47,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 				},
 				{
 					ID:          "task-2",
-					Status:      models.TaskStatusClaimed,
+					Status:      models.TaskStatusImplementing,
 					Description: "In progress task",
 					Created:     time.Now(),
 				},
@@ -59,7 +59,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 				},
 				{
 					ID:          "task-4",
-					Status:      models.TaskStatusUnclaimed,
+					Status:      models.TaskStatusReady,
 					Description: "Unclaimed task",
 					Created:     time.Now(),
 				},
@@ -101,7 +101,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 				},
 				{
 					ID:          "task-3",
-					Status:      models.TaskStatusClaimed,
+					Status:      models.TaskStatusImplementing,
 					Description: "Task 3",
 					Iteration:   2,
 					Created:     time.Now(),
@@ -300,7 +300,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 			tasks: []models.Task{
 				{
 					ID:          "task-1",
-					Status:      models.TaskStatusClaimed,
+					Status:      models.TaskStatusImplementing,
 					Description: "Claimed task",
 					Created:     time.Now(),
 				},
@@ -320,7 +320,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 			agents: map[string]models.Agent{},
 			wantMetrics: models.SprintMetrics{
 				TasksDone:                        0,
-				TasksInProgress:                  3, // CLAIMED, READY_FOR_REVIEW, REJECTED
+				TasksInProgress:                  3, // IMPLEMENTING, READY_FOR_REVIEW, REJECTED
 				TasksBlocked:                     0,
 				IterationsTotal:                  0,
 				ReviewCyclesTotal:                0,

@@ -16,11 +16,11 @@ func TestFormatJSON(t *testing.T) {
 			name: "simple object",
 			data: map[string]any{
 				"id":     "task-1",
-				"status": "CLAIMED",
+				"status": "IMPLEMENTING",
 			},
 			want: `{
   "id": "task-1",
-  "status": "CLAIMED"
+  "status": "IMPLEMENTING"
 }`,
 			wantErr: false,
 		},
@@ -63,10 +63,10 @@ func TestFormatYAML(t *testing.T) {
 			name: "simple object",
 			data: map[string]any{
 				"id":     "task-1",
-				"status": "CLAIMED",
+				"status": "IMPLEMENTING",
 			},
 			want: `id: task-1
-status: CLAIMED`,
+status: IMPLEMENTING`,
 			wantErr: false,
 		},
 		{
@@ -148,10 +148,10 @@ func TestFormatKeyValue(t *testing.T) {
 			name: "simple fields",
 			data: map[string]any{
 				"id":     "task-1",
-				"status": "CLAIMED",
+				"status": "IMPLEMENTING",
 				"count":  42,
 			},
-			wantContain: []string{"id: task-1", "status: CLAIMED", "count: 42"},
+			wantContain: []string{"id: task-1", "status: IMPLEMENTING", "count: 42"},
 		},
 		{
 			name: "with nil value",
@@ -186,11 +186,11 @@ func TestFormatTable(t *testing.T) {
 			name:    "simple table",
 			headers: []string{"ID", "Status", "Count"},
 			rows: [][]string{
-				{"task-1", "CLAIMED", "1"},
+				{"task-1", "IMPLEMENTING", "1"},
 				{"task-2", "READY_FOR_REVIEW", "2"},
 			},
 			want: `ID      Status            Count
-task-1  CLAIMED           1
+task-1  IMPLEMENTING      1
 task-2  READY_FOR_REVIEW  2`,
 		},
 		{
@@ -232,7 +232,7 @@ func TestFormatDashboard(t *testing.T) {
 						Rows    [][]string
 					}{
 						Headers: []string{"ID", "Status"},
-						Rows:    [][]string{{"task-1", "CLAIMED"}},
+						Rows:    [][]string{{"task-1", "IMPLEMENTING"}},
 					},
 					Format: "table",
 				},

@@ -27,7 +27,7 @@ func TestCheckExpiredLeases(t *testing.T) {
 			state: &models.State{
 				Tasks: []models.Task{
 					func() models.Task {
-						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 						return task
 					}(),
 				},
@@ -55,7 +55,7 @@ func TestCheckExpiredLeases(t *testing.T) {
 			state: &models.State{
 				Tasks: []models.Task{
 					func() models.Task {
-						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
 						reviewer := "reviewer-1"
 						task.ReviewingBy = &reviewer
 						// Expired lease (past grace period)
@@ -78,7 +78,7 @@ func TestCheckExpiredLeases(t *testing.T) {
 			state: &models.State{
 				Tasks: []models.Task{
 					func() models.Task {
-						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 						return task
 					}(),
 				},
@@ -98,7 +98,7 @@ func TestCheckExpiredLeases(t *testing.T) {
 			state: &models.State{
 				Tasks: []models.Task{
 					func() models.Task {
-						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 						return task
 					}(),
 				},
@@ -168,7 +168,7 @@ func TestCheckBlockedTasks(t *testing.T) {
 		{
 			name: "no blocked tasks",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 			},
 			cache:      make(map[string]time.Time),
 			wantAlerts: 0,
@@ -358,7 +358,7 @@ func TestCheckIntegrationFailures(t *testing.T) {
 		{
 			name: "no integration failures",
 			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now),
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 			},
 			wantAlerts: 0,
 		},
@@ -388,7 +388,7 @@ func TestCheckHypothesisExhaustion(t *testing.T) {
 			name: "two failed coders",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 					task.FailedBy = []string{"coder-1", "coder-2"}
 					return task
 				}(),
@@ -399,7 +399,7 @@ func TestCheckHypothesisExhaustion(t *testing.T) {
 			name: "one failed coder",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 					task.FailedBy = []string{"coder-1"}
 					return task
 				}(),
@@ -433,7 +433,7 @@ func TestCheckReassigned(t *testing.T) {
 			name: "task reassigned to different coder",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 					assignee := "coder-2"
 					task.AssignedTo = &assignee
 					// Add history showing first claimer was different
@@ -455,7 +455,7 @@ func TestCheckReassigned(t *testing.T) {
 			name: "same coder - no reassignment",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 					assignee := "coder-1"
 					task.AssignedTo = &assignee
 					task.History = []models.TaskHistoryEntry{
@@ -497,7 +497,7 @@ func TestCheckApproachingLimits(t *testing.T) {
 			name: "approaching iteration limit",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 					task.Iteration = 8
 					return task
 				}(),
@@ -508,7 +508,7 @@ func TestCheckApproachingLimits(t *testing.T) {
 			name: "at iteration cliff",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusClaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 					task.Iteration = 10
 					return task
 				}(),
@@ -530,7 +530,7 @@ func TestCheckApproachingLimits(t *testing.T) {
 			name: "one failure + high review cycles",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 					task.FailedBy = []string{"coder-1"}
 					task.ReviewCyclesCurrent = 3
 					return task

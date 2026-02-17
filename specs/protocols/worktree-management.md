@@ -4,8 +4,8 @@
 
 | Event | Action | Actor |
 |-------|--------|-------|
-| Task CLAIMED (fresh) | Create worktree via `liza claim-task` | Supervisor |
-| Task CLAIMED (reassignment) | Create fresh worktree via `liza claim-task` | Supervisor |
+| Task IMPLEMENTING (fresh) | Create worktree via `liza claim-task` | Supervisor |
+| Task IMPLEMENTING (reassignment) | Create fresh worktree via `liza claim-task` | Supervisor |
 | Task APPROVED | Merge eligible | — |
 | Task MERGED | `liza wt-merge task-N` | Supervisor (after Code Reviewer approves) |
 | Task BLOCKED | Delete worktree: `liza wt-delete task-N` | Planner |
@@ -14,7 +14,7 @@
 
 **Note:** Worktree creation is supervisor-only (via `liza claim-task`), not agent-callable. This ensures worktrees exist before agents are spawned.
 
-**Reassignment rule:** When a different coder claims a task (after REJECTED or BLOCKED → UNCLAIMED), the worktree is deleted and recreated fresh. Same coder re-claiming keeps the existing worktree. Rationale: salvaging failed work often costs more than restarting from spec.
+**Reassignment rule:** When a different coder claims a task (after REJECTED or BLOCKED → READY), the worktree is deleted and recreated fresh. Same coder re-claiming keeps the existing worktree. Rationale: salvaging failed work often costs more than restarting from spec.
 
 ---
 
@@ -64,7 +64,7 @@ Merge to main is human-triggered, not part of Liza flow.
 
 When a coder's lease expires:
 
-1. **Task becomes reclaimable** — status stays CLAIMED but lease_expires is in the past
+1. **Task becomes reclaimable** — status stays IMPLEMENTING but lease_expires is in the past
 2. **Original coder must self-abort** — if they return after expiry, they exit immediately
 3. **Worktree handling depends on who supervisor assigns:**
    - Same coder: worktree preserved (agent returning after brief network issue)

@@ -19,11 +19,11 @@ func TestClaimCoderTask_BasicPrioritySelection(t *testing.T) {
 	state := testhelpers.CreateValidState()
 
 	// Create two claimable tasks with different priorities
-	taskLow := testhelpers.BuildTaskByStatus("task-low", models.TaskStatusUnclaimed, now)
+	taskLow := testhelpers.BuildTaskByStatus("task-low", models.TaskStatusReady, now)
 	taskLow.Priority = 3
 	taskLow.Created = now.Add(-2 * time.Minute) // Older
 
-	taskHigh := testhelpers.BuildTaskByStatus("task-high", models.TaskStatusUnclaimed, now)
+	taskHigh := testhelpers.BuildTaskByStatus("task-high", models.TaskStatusReady, now)
 	taskHigh.Priority = 1
 	taskHigh.Created = now.Add(-1 * time.Minute) // Newer
 
@@ -53,15 +53,15 @@ func TestClaimCoderTask_TieBreakingByCreationTime(t *testing.T) {
 	state := testhelpers.CreateValidState()
 
 	// Create three tasks with same priority but different creation times
-	taskOldest := testhelpers.BuildTaskByStatus("task-oldest", models.TaskStatusUnclaimed, now)
+	taskOldest := testhelpers.BuildTaskByStatus("task-oldest", models.TaskStatusReady, now)
 	taskOldest.Priority = 2
 	taskOldest.Created = now.Add(-3 * time.Minute)
 
-	taskMiddle := testhelpers.BuildTaskByStatus("task-middle", models.TaskStatusUnclaimed, now)
+	taskMiddle := testhelpers.BuildTaskByStatus("task-middle", models.TaskStatusReady, now)
 	taskMiddle.Priority = 2
 	taskMiddle.Created = now.Add(-2 * time.Minute)
 
-	taskNewest := testhelpers.BuildTaskByStatus("task-newest", models.TaskStatusUnclaimed, now)
+	taskNewest := testhelpers.BuildTaskByStatus("task-newest", models.TaskStatusReady, now)
 	taskNewest.Priority = 2
 	taskNewest.Created = now.Add(-1 * time.Minute)
 
@@ -91,18 +91,18 @@ func TestClaimCoderTask_RespectsClaimability(t *testing.T) {
 	state := testhelpers.CreateValidState()
 
 	// Create a dependency task that blocks the high-priority task
-	taskDep := testhelpers.BuildTaskByStatus("task-dep", models.TaskStatusUnclaimed, now)
+	taskDep := testhelpers.BuildTaskByStatus("task-dep", models.TaskStatusReady, now)
 	taskDep.Priority = 3
 	taskDep.Created = now.Add(-3 * time.Minute)
 
 	// Create high-priority task that is blocked by dependency
-	taskHighBlocked := testhelpers.BuildTaskByStatus("task-high-blocked", models.TaskStatusUnclaimed, now)
+	taskHighBlocked := testhelpers.BuildTaskByStatus("task-high-blocked", models.TaskStatusReady, now)
 	taskHighBlocked.Priority = 1
 	taskHighBlocked.Created = now.Add(-2 * time.Minute)
 	taskHighBlocked.DependsOn = []string{"task-dep"}
 
 	// Create low-priority task that is claimable
-	taskLowClaimable := testhelpers.BuildTaskByStatus("task-low-claimable", models.TaskStatusUnclaimed, now)
+	taskLowClaimable := testhelpers.BuildTaskByStatus("task-low-claimable", models.TaskStatusReady, now)
 	taskLowClaimable.Priority = 3
 	taskLowClaimable.Created = now.Add(-1 * time.Minute)
 
@@ -138,7 +138,7 @@ func TestClaimCoderTask_RejectedTasksPriority(t *testing.T) {
 	taskRejectedHigh.AssignedTo = nil // Clear assignment so it's claimable
 
 	// Create a low-priority unclaimed task
-	taskUnclaimedLow := testhelpers.BuildTaskByStatus("task-unclaimed-low", models.TaskStatusUnclaimed, now)
+	taskUnclaimedLow := testhelpers.BuildTaskByStatus("task-unclaimed-low", models.TaskStatusReady, now)
 	taskUnclaimedLow.Priority = 3
 	taskUnclaimedLow.Created = now.Add(-1 * time.Minute)
 
@@ -177,7 +177,7 @@ func TestClaimCoderTask_IntegrationFailedPriority(t *testing.T) {
 	testhelpers.CreateTestWorktree(t, tmpDir, "task-failed-high")
 
 	// Create a low-priority unclaimed task
-	taskUnclaimedLow := testhelpers.BuildTaskByStatus("task-unclaimed-low", models.TaskStatusUnclaimed, now)
+	taskUnclaimedLow := testhelpers.BuildTaskByStatus("task-unclaimed-low", models.TaskStatusReady, now)
 	taskUnclaimedLow.Priority = 4
 	taskUnclaimedLow.Created = now.Add(-1 * time.Minute)
 
@@ -206,15 +206,15 @@ func TestClaimCoderTask_AllSamePriority(t *testing.T) {
 	state := testhelpers.CreateValidState()
 
 	// Create three tasks with same priority
-	task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, now)
+	task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 	task1.Priority = 3
 	task1.Created = now.Add(-3 * time.Minute)
 
-	task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusUnclaimed, now)
+	task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now)
 	task2.Priority = 3
 	task2.Created = now.Add(-2 * time.Minute)
 
-	task3 := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusUnclaimed, now)
+	task3 := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReady, now)
 	task3.Priority = 3
 	task3.Created = now.Add(-1 * time.Minute)
 
@@ -256,7 +256,7 @@ func TestClaimCoderTask_MixedPriorities(t *testing.T) {
 	}
 
 	for _, p := range priorities {
-		task := testhelpers.BuildTaskByStatus(p.id, models.TaskStatusUnclaimed, now)
+		task := testhelpers.BuildTaskByStatus(p.id, models.TaskStatusReady, now)
 		task.Priority = p.priority
 		task.Created = now.Add(p.offset)
 		state.Tasks = append(state.Tasks, task)
@@ -286,7 +286,7 @@ func TestClaimCoderTask_NoClaimableTasks(t *testing.T) {
 	state := testhelpers.CreateValidState()
 
 	// Create only non-claimable tasks
-	taskClaimed := testhelpers.BuildTaskByStatus("task-claimed", models.TaskStatusClaimed, now)
+	taskClaimed := testhelpers.BuildTaskByStatus("task-claimed", models.TaskStatusImplementing, now)
 	taskClaimed.Priority = 1
 
 	taskMerged := testhelpers.BuildTaskByStatus("task-merged", models.TaskStatusMerged, now)
@@ -409,14 +409,10 @@ func TestClaimReviewerTask_SkipsClaimedReviewTasks(t *testing.T) {
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
 
-	// High-priority task already being reviewed
-	taskHighClaimed := testhelpers.BuildTaskByStatus("task-high-claimed", models.TaskStatusReadyForReview, now)
+	// High-priority task already being reviewed (REVIEWING state — not a candidate for claimReviewerTask)
+	taskHighClaimed := testhelpers.BuildTaskByStatus("task-high-claimed", models.TaskStatusReviewing, now)
 	taskHighClaimed.Priority = 1
 	taskHighClaimed.Created = now.Add(-3 * time.Minute)
-	reviewer := "code-reviewer-99"
-	taskHighClaimed.ReviewingBy = &reviewer
-	leaseExpires := now.Add(30 * time.Minute)
-	taskHighClaimed.ReviewLeaseExpires = &leaseExpires
 
 	// Lower-priority task available for review
 	taskLowAvailable := testhelpers.BuildTaskByStatus("task-low-available", models.TaskStatusReadyForReview, now)
@@ -488,10 +484,10 @@ func TestClaimReviewerTask_NoReviewableTasks(t *testing.T) {
 	state := testhelpers.CreateValidState()
 
 	// Only create tasks in non-reviewable states
-	taskUnclaimed := testhelpers.BuildTaskByStatus("task-unclaimed", models.TaskStatusUnclaimed, now)
+	taskUnclaimed := testhelpers.BuildTaskByStatus("task-unclaimed", models.TaskStatusReady, now)
 	taskUnclaimed.Priority = 1
 
-	taskClaimed := testhelpers.BuildTaskByStatus("task-claimed", models.TaskStatusClaimed, now)
+	taskClaimed := testhelpers.BuildTaskByStatus("task-claimed", models.TaskStatusImplementing, now)
 	taskClaimed.Priority = 1
 
 	state.Tasks = []models.Task{taskUnclaimed, taskClaimed}

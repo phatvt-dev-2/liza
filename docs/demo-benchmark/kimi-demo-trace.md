@@ -67,7 +67,7 @@ Validation result: `VALID`
 ```yaml
 tasks:
   - id: implement-hello-cli
-    status: UNCLAIMED
+    status: READY
     priority: 1
 ```
 
@@ -78,7 +78,7 @@ Planning Complete:
 ┌─────────────────────┬─────────────────────┬──────────┬───────────┬──────────────┐
 │        Task         │         ID          │ Priority │  Status   │ Dependencies │
 ├─────────────────────┼─────────────────────┼──────────┼───────────┼──────────────┤
-│ Implement hello CLI │ implement-hello-cli │ 1        │ UNCLAIMED │ None         │
+│ Implement hello CLI │ implement-hello-cli │ 1        │ READY │ None         │
 └─────────────────────┴─────────────────────┴──────────┴───────────┴──────────────┘
 
 Summary:

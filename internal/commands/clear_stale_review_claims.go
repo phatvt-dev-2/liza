@@ -10,8 +10,8 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
-// ClearStaleReviewClaimsCommand finds and clears expired review leases on READY_FOR_REVIEW tasks.
-// Returns the number of claims cleared.
+// ClearStaleReviewClaimsCommand finds and clears expired review leases on REVIEWING tasks.
+// When a lease expires, the task reverts to READY_FOR_REVIEW. Returns the number of claims cleared.
 func ClearStaleReviewClaimsCommand(projectRoot string) (int, error) {
 	// Setup paths
 	lp := paths.New(projectRoot)
@@ -26,12 +26,12 @@ func ClearStaleReviewClaimsCommand(projectRoot string) (int, error) {
 
 	// Atomic update
 	err := bb.Modify(func(state *models.State) error {
-		// Find READY_FOR_REVIEW tasks with expired review leases
+		// Find REVIEWING tasks with expired review leases
 		for i := range state.Tasks {
 			task := &state.Tasks[i]
 
-			// Skip if not READY_FOR_REVIEW
-			if task.Status != models.TaskStatusReadyForReview {
+			// Skip if not REVIEWING
+			if task.Status != models.TaskStatusReviewing {
 				continue
 			}
 
@@ -62,7 +62,8 @@ func ClearStaleReviewClaimsCommand(projectRoot string) (int, error) {
 				continue
 			}
 
-			// Clear the stale claim
+			// Revert to READY_FOR_REVIEW and clear the stale claim
+			task.Status = models.TaskStatusReadyForReview
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
 

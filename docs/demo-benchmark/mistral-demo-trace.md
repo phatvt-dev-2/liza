@@ -128,7 +128,7 @@ Read contract files in sequence:
 2. `specs/protocols/task-lifecycle.md` — Task lifecycle
 3. `specs/architecture/blackboard-schema.md` — State schema
 4. `specs/architecture/state-machines.md` — State transitions
-5. `.liza/state.yaml` — Current blackboard state (task details: CLAIMED, iteration 1)
+5. `.liza/state.yaml` — Current blackboard state (task details: IMPLEMENTING, iteration 1)
 6. `specs/vision.md` — Goal spec
 
 ### Worktree Verification

@@ -37,7 +37,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 					{
 						ID:                 "t1",
 						Description:        "Test task",
-						Status:             models.TaskStatusReadyForReview,
+						Status:             models.TaskStatusReviewing,
 						ReviewCommit:       &reviewCommit,
 						ReviewingBy:        &reviewingBy,
 						ReviewLeaseExpires: &reviewLeaseExpires,
@@ -106,7 +106,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 					{
 						ID:                  "t2",
 						Description:         "Test task",
-						Status:              models.TaskStatusReadyForReview,
+						Status:              models.TaskStatusReviewing,
 						ReviewCommit:        &reviewCommit,
 						ReviewingBy:         &reviewingBy,
 						ReviewLeaseExpires:  &reviewLeaseExpires,
@@ -179,7 +179,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 					{
 						ID:                  "t3",
 						Description:         "Test task",
-						Status:              models.TaskStatusReadyForReview,
+						Status:              models.TaskStatusReviewing,
 						ReviewCommit:        &reviewCommit,
 						ReviewCyclesCurrent: 2,
 						ReviewCyclesTotal:   5,
@@ -256,19 +256,19 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			},
 		},
 		{
-			name:       "task not in READY_FOR_REVIEW status",
+			name:       "task not in REVIEWING status",
 			taskID:     "t1",
 			verdict:    "APPROVED",
 			reason:     "",
 			agentID:    "reviewer-1",
 			wantErr:    true,
-			wantErrMsg: "task t1 is not READY_FOR_REVIEW",
+			wantErrMsg: "task t1 is not REVIEWING",
 			setupState: func(s *models.State) {
 				s.Tasks = []models.Task{
 					{
 						ID:          "t1",
 						Description: "Test task",
-						Status:      models.TaskStatusClaimed,
+						Status:      models.TaskStatusImplementing,
 						Created:     time.Now().UTC(),
 						History:     []models.TaskHistoryEntry{},
 					},

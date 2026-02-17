@@ -117,7 +117,7 @@ Agents hold time-bounded leases on tasks. A stale agent's task becomes reclaimab
 
 ### DRAFT Tasks
 
-Planner writes tasks as DRAFT, finalizes to UNCLAIMED. Coders cannot claim half-written tasks.
+Planner writes tasks as DRAFT, finalizes to READY. Coders cannot claim half-written tasks.
 
 ### Commit SHA Verification
 

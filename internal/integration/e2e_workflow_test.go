@@ -96,8 +96,8 @@ func TestSimpleWorkflow(t *testing.T) {
 	if len(state.Tasks) != 1 {
 		t.Fatalf("Expected 1 task, got %d", len(state.Tasks))
 	}
-	if state.Tasks[0].Status != models.TaskStatusUnclaimed {
-		t.Errorf("Expected task status UNCLAIMED, got %s", state.Tasks[0].Status)
+	if state.Tasks[0].Status != models.TaskStatusReady {
+		t.Errorf("Expected task status READY, got %s", state.Tasks[0].Status)
 	}
 
 	// Step 3: Register an agent
@@ -118,8 +118,8 @@ func TestSimpleWorkflow(t *testing.T) {
 	if task == nil {
 		t.Fatal("Task not found after claim")
 	}
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Expected task status CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected task status IMPLEMENTING, got %s", task.Status)
 	}
 	if task.AssignedTo == nil || *task.AssignedTo != agentID {
 		t.Errorf("Expected task assigned to %s", agentID)
@@ -166,6 +166,9 @@ func TestSimpleWorkflow(t *testing.T) {
 	t.Log("Step 6: Register reviewer and approve")
 	reviewerID := "reviewer-1"
 	testhelpers.RegisterTestAgent(t, bb, reviewerID, "reviewer")
+
+	// Transition to REVIEWING (simulates supervisor reviewer claim)
+	testhelpers.TransitionToReviewing(t, bb, taskID, reviewerID)
 
 	if err := commands.SubmitVerdictCommand(projectDir, taskID, "APPROVED", "", reviewerID); err != nil {
 		t.Fatalf("SubmitVerdict failed: %v", err)
@@ -275,8 +278,8 @@ func TestTaskDependencyWorkflow(t *testing.T) {
 	state, err := bb.Read()
 	testhelpers.AssertNoError(t, err)
 	task := findTask(state.Tasks, "task-2")
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Expected task-2 status CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected task-2 status IMPLEMENTING, got %s", task.Status)
 	}
 
 	t.Log("✓ Task dependency workflow test passed")

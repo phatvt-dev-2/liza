@@ -73,9 +73,10 @@ func computeSprintMetrics(state *models.State) models.SprintMetrics {
 			metrics.TasksDone++
 		}
 
-		// Tasks in progress: CLAIMED, READY_FOR_REVIEW, REJECTED, INTEGRATION_FAILED
-		if task.Status == models.TaskStatusClaimed ||
+		// Tasks in progress: IMPLEMENTING, READY_FOR_REVIEW, REVIEWING, REJECTED, INTEGRATION_FAILED
+		if task.Status == models.TaskStatusImplementing ||
 			task.Status == models.TaskStatusReadyForReview ||
+			task.Status == models.TaskStatusReviewing ||
 			task.Status == models.TaskStatusRejected ||
 			task.Status == models.TaskStatusIntegrationFailed {
 			metrics.TasksInProgress++

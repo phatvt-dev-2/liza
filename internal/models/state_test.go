@@ -10,9 +10,10 @@ import (
 func TestTaskStatusConstants(t *testing.T) {
 	validStatuses := []TaskStatus{
 		TaskStatusDraft,
-		TaskStatusUnclaimed,
-		TaskStatusClaimed,
+		TaskStatusReady,
+		TaskStatusImplementing,
 		TaskStatusReadyForReview,
+		TaskStatusReviewing,
 		TaskStatusRejected,
 		TaskStatusApproved,
 		TaskStatusMerged,
@@ -49,9 +50,10 @@ func TestTaskTerminalStates(t *testing.T) {
 
 	nonTerminalStates := []TaskStatus{
 		TaskStatusDraft,
-		TaskStatusUnclaimed,
-		TaskStatusClaimed,
+		TaskStatusReady,
+		TaskStatusImplementing,
 		TaskStatusReadyForReview,
+		TaskStatusReviewing,
 		TaskStatusRejected,
 		TaskStatusApproved,
 		TaskStatusBlocked,
@@ -140,7 +142,7 @@ func TestTaskYAMLMarshaling(t *testing.T) {
 	task := Task{
 		ID:          "task-1",
 		Description: "Test task",
-		Status:      TaskStatusUnclaimed,
+		Status:      TaskStatusReady,
 		Priority:    1,
 		Created:     created,
 		SpecRef:     "specs/test.md",
@@ -241,7 +243,7 @@ func TestStateYAMLMarshaling(t *testing.T) {
 			{
 				ID:          "task-1",
 				Description: "Test task",
-				Status:      TaskStatusUnclaimed,
+				Status:      TaskStatusReady,
 				Priority:    1,
 				Created:     created,
 				SpecRef:     "specs/test.md",
@@ -315,17 +317,17 @@ func TestTaskClaimability(t *testing.T) {
 		claimable bool
 	}{
 		{
-			name: "UNCLAIMED with no dependencies",
+			name: "READY with no dependencies",
 			task: Task{
-				Status:    TaskStatusUnclaimed,
+				Status:    TaskStatusReady,
 				DependsOn: []string{},
 			},
 			claimable: true,
 		},
 		{
-			name: "UNCLAIMED with nil dependencies",
+			name: "READY with nil dependencies",
 			task: Task{
-				Status: TaskStatusUnclaimed,
+				Status: TaskStatusReady,
 			},
 			claimable: true,
 		},
@@ -353,9 +355,9 @@ func TestTaskClaimability(t *testing.T) {
 			claimable: false,
 		},
 		{
-			name: "CLAIMED is not claimable",
+			name: "IMPLEMENTING is not claimable",
 			task: Task{
-				Status: TaskStatusClaimed,
+				Status: TaskStatusImplementing,
 			},
 			claimable: false,
 		},
@@ -382,7 +384,7 @@ func TestTaskClaimabilityWithDependencies(t *testing.T) {
 	// Mock function that checks if dependencies are satisfied
 	allTasks := []Task{
 		{ID: "task-1", Status: TaskStatusMerged},
-		{ID: "task-2", Status: TaskStatusUnclaimed},
+		{ID: "task-2", Status: TaskStatusReady},
 		{ID: "task-3", Status: TaskStatusMerged},
 	}
 
@@ -392,20 +394,20 @@ func TestTaskClaimabilityWithDependencies(t *testing.T) {
 		claimable bool
 	}{
 		{
-			name: "UNCLAIMED with all dependencies MERGED",
+			name: "READY with all dependencies MERGED",
 			task: Task{
 				ID:        "task-4",
-				Status:    TaskStatusUnclaimed,
+				Status:    TaskStatusReady,
 				DependsOn: []string{"task-1", "task-3"},
 			},
 			claimable: true,
 		},
 		{
-			name: "UNCLAIMED with unmet dependencies",
+			name: "READY with unmet dependencies",
 			task: Task{
 				ID:        "task-5",
-				Status:    TaskStatusUnclaimed,
-				DependsOn: []string{"task-1", "task-2"}, // task-2 is UNCLAIMED
+				Status:    TaskStatusReady,
+				DependsOn: []string{"task-1", "task-2"}, // task-2 is READY
 			},
 			claimable: false,
 		},

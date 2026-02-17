@@ -102,29 +102,42 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			return fmt.Errorf("DRAFT task with assigned_to: %s", task.ID)
 		}
 
-		// CLAIMED must have assigned_to
-		if task.Status == models.TaskStatusClaimed && task.AssignedTo == nil {
-			return fmt.Errorf("CLAIMED task without assigned_to: %s", task.ID)
+		// IMPLEMENTING must have assigned_to
+		if task.Status == models.TaskStatusImplementing && task.AssignedTo == nil {
+			return fmt.Errorf("IMPLEMENTING task without assigned_to: %s", task.ID)
 		}
 
-		// CLAIMED must have worktree
-		if task.Status == models.TaskStatusClaimed && task.Worktree == nil {
-			return fmt.Errorf("CLAIMED task without worktree: %s", task.ID)
+		// IMPLEMENTING must have worktree
+		if task.Status == models.TaskStatusImplementing && task.Worktree == nil {
+			return fmt.Errorf("IMPLEMENTING task without worktree: %s", task.ID)
 		}
 
-		// CLAIMED must have base_commit (except integration_fix tasks)
-		if task.Status == models.TaskStatusClaimed && !task.IntegrationFix && task.BaseCommit == nil {
-			return fmt.Errorf("CLAIMED task without base_commit: %s", task.ID)
+		// IMPLEMENTING must have base_commit (except integration_fix tasks)
+		if task.Status == models.TaskStatusImplementing && !task.IntegrationFix && task.BaseCommit == nil {
+			return fmt.Errorf("IMPLEMENTING task without base_commit: %s", task.ID)
 		}
 
-		// CLAIMED must have lease_expires
-		if task.Status == models.TaskStatusClaimed && task.LeaseExpires == nil {
-			return fmt.Errorf("CLAIMED task without lease_expires: %s", task.ID)
+		// IMPLEMENTING must have lease_expires
+		if task.Status == models.TaskStatusImplementing && task.LeaseExpires == nil {
+			return fmt.Errorf("IMPLEMENTING task without lease_expires: %s", task.ID)
 		}
 
 		// READY_FOR_REVIEW must have review_commit
 		if task.Status == models.TaskStatusReadyForReview && task.ReviewCommit == nil {
 			return fmt.Errorf("READY_FOR_REVIEW task without review_commit: %s", task.ID)
+		}
+
+		// REVIEWING must have reviewing_by, review_lease_expires, and review_commit
+		if task.Status == models.TaskStatusReviewing {
+			if task.ReviewingBy == nil {
+				return fmt.Errorf("REVIEWING task without reviewing_by: %s", task.ID)
+			}
+			if task.ReviewLeaseExpires == nil {
+				return fmt.Errorf("REVIEWING task without review_lease_expires: %s", task.ID)
+			}
+			if task.ReviewCommit == nil {
+				return fmt.Errorf("REVIEWING task without review_commit: %s", task.ID)
+			}
 		}
 
 		// MERGED task must NOT have worktree
@@ -157,17 +170,17 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 		}
 
-		// Track assignments for duplicate check (only CLAIMED tasks count as active)
-		if task.AssignedTo != nil && task.Status == models.TaskStatusClaimed {
+		// Track assignments for duplicate check (only IMPLEMENTING tasks count as active)
+		if task.AssignedTo != nil && task.Status == models.TaskStatusImplementing {
 			agent := *task.AssignedTo
 			assignments[agent] = append(assignments[agent], task.ID)
 		}
 
-		// CLAIMED worktree path must exist (only check if projectRoot is not empty to allow tests)
-		if task.Status == models.TaskStatusClaimed && task.Worktree != nil && projectRoot != "" {
+		// IMPLEMENTING worktree path must exist (only check if projectRoot is not empty to allow tests)
+		if task.Status == models.TaskStatusImplementing && task.Worktree != nil && projectRoot != "" {
 			wtPath := filepath.Join(projectRoot, *task.Worktree)
 			if _, err := os.Stat(wtPath); os.IsNotExist(err) {
-				return fmt.Errorf("CLAIMED task %s has worktree=%s but directory does not exist", task.ID, *task.Worktree)
+				return fmt.Errorf("IMPLEMENTING task %s has worktree=%s but directory does not exist", task.ID, *task.Worktree)
 			}
 		}
 
@@ -237,8 +250,8 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 			}
 		}
 
-		// CLAIMED tasks must have all dependencies MERGED
-		if task.Status == models.TaskStatusClaimed {
+		// IMPLEMENTING tasks must have all dependencies MERGED
+		if task.Status == models.TaskStatusImplementing {
 			var unmet []string
 			for _, depID := range task.DependsOn {
 				depTask := findTask(state.Tasks, depID)
@@ -247,7 +260,7 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 				}
 			}
 			if len(unmet) > 0 {
-				return fmt.Errorf("CLAIMED task %s has unmet dependencies: %s (must be MERGED)", task.ID, strings.Join(unmet, ", "))
+				return fmt.Errorf("IMPLEMENTING task %s has unmet dependencies: %s (must be MERGED)", task.ID, strings.Join(unmet, ", "))
 			}
 		}
 	}

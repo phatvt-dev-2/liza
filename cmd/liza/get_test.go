@@ -71,7 +71,7 @@ func TestGetCommand(t *testing.T) {
 			{
 				ID:          task1,
 				Description: "Test task",
-				Status:      models.TaskStatusClaimed,
+				Status:      models.TaskStatusImplementing,
 				Priority:    1,
 				AssignedTo:  &coder1,
 				SpecRef:     "specs/vision.md",
@@ -85,7 +85,7 @@ func TestGetCommand(t *testing.T) {
 			{
 				ID:          task2,
 				Description: "Fix authentication bug",
-				Status:      models.TaskStatusUnclaimed,
+				Status:      models.TaskStatusReady,
 				Priority:    2,
 				SpecRef:     "specs/auth.md",
 				DoneWhen:    "Auth bug is fixed",
@@ -95,7 +95,7 @@ func TestGetCommand(t *testing.T) {
 			{
 				ID:          task3,
 				Description: "Implement feature XYZ",
-				Status:      models.TaskStatusUnclaimed,
+				Status:      models.TaskStatusReady,
 				Priority:    3,
 				SpecRef:     "specs/features.md",
 				DoneWhen:    "Feature is implemented",
@@ -199,12 +199,12 @@ func TestGetCommand(t *testing.T) {
 		{
 			name:         "get tasks - table format",
 			args:         []string{"get", "tasks", "--format", "table"},
-			wantContains: []string{"task-1", "CLAIMED", "Test task"},
+			wantContains: []string{"task-1", "IMPLEMENTING", "Test task"},
 		},
 		{
 			name:         "get specific task",
 			args:         []string{"get", "tasks", "task-1", "--format", "value"},
-			wantContains: []string{"ID: task-1", "Status: CLAIMED", "Description: Test task"},
+			wantContains: []string{"ID: task-1", "Status: IMPLEMENTING", "Description: Test task"},
 		},
 		{
 			name:         "get agents - table format",
@@ -229,17 +229,17 @@ func TestGetCommand(t *testing.T) {
 		{
 			name:         "get tasks - JSON format",
 			args:         []string{"get", "tasks", "--format", "json"},
-			wantContains: []string{`"id": "task-1"`, `"status": "CLAIMED"`},
+			wantContains: []string{`"id": "task-1"`, `"status": "IMPLEMENTING"`},
 		},
 		{
 			name:         "get task by ID shorthand",
 			args:         []string{"get", "task-1", "--format", "value"},
-			wantContains: []string{"ID: task-1", "Status: CLAIMED", "Description: Test task"},
+			wantContains: []string{"ID: task-1", "Status: IMPLEMENTING", "Description: Test task"},
 		},
 		{
 			name:         "get task by ID shorthand - JSON",
 			args:         []string{"get", "task-1", "--format", "json"},
-			wantContains: []string{`"id": "task-1"`, `"status": "CLAIMED"`},
+			wantContains: []string{`"id": "task-1"`, `"status": "IMPLEMENTING"`},
 		},
 		{
 			name:         "get agent by ID shorthand",
@@ -264,12 +264,12 @@ func TestGetCommand(t *testing.T) {
 		{
 			name:         "get task with non-standard ID",
 			args:         []string{"get", "fix-auth-bug", "--format", "value"},
-			wantContains: []string{"ID: fix-auth-bug", "Status: UNCLAIMED", "Description: Fix authentication bug"},
+			wantContains: []string{"ID: fix-auth-bug", "Status: READY", "Description: Fix authentication bug"},
 		},
 		{
 			name:         "get task with alphanumeric ID",
 			args:         []string{"get", "feature-xyz-123", "--format", "value"},
-			wantContains: []string{"ID: feature-xyz-123", "Status: UNCLAIMED", "Description: Implement feature XYZ"},
+			wantContains: []string{"ID: feature-xyz-123", "Status: READY", "Description: Implement feature XYZ"},
 		},
 		{
 			name:         "get nonexistent task by ID shorthand",

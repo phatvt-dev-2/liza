@@ -105,7 +105,7 @@ func TestCalculateTimeOnTask(t *testing.T) {
 			name: "task claimed 1 hour ago",
 			task: &models.Task{
 				ID:     "task-1",
-				Status: models.TaskStatusClaimed,
+				Status: models.TaskStatusImplementing,
 				History: []models.TaskHistoryEntry{
 					{
 						Time:  now.Add(-1 * time.Hour),
@@ -120,7 +120,7 @@ func TestCalculateTimeOnTask(t *testing.T) {
 			name: "task with no history",
 			task: &models.Task{
 				ID:      "task-2",
-				Status:  models.TaskStatusUnclaimed,
+				Status:  models.TaskStatusReady,
 				History: []models.TaskHistoryEntry{},
 			},
 			wantMin: 0,

@@ -25,8 +25,8 @@ func setupTestWorkspace(t *testing.T) (string, func()) {
 	// Create state with test tasks
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{
-		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, time.Now().UTC()),
-		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusClaimed, time.Now().UTC()),
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()),
+		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, time.Now().UTC()),
 	}
 	state.Agents = map[string]models.Agent{
 		"coder-1": {
@@ -299,7 +299,7 @@ func setupTestWorkspaceWithGit(t *testing.T) (string, func()) {
 	// Create state with test data
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{
-		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusUnclaimed, time.Now().UTC()),
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()),
 	}
 	state.Agents = map[string]models.Agent{
 		"coder-1": {
@@ -446,8 +446,8 @@ func TestHandleClaimTask(t *testing.T) {
 	}
 
 	task := state.Tasks[0]
-	if task.Status != models.TaskStatusClaimed {
-		t.Errorf("Expected status CLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected status IMPLEMENTING, got %s", task.Status)
 	}
 	if task.AssignedTo == nil || *task.AssignedTo != "coder-1" {
 		t.Errorf("Expected assigned_to coder-1, got %v", task.AssignedTo)
@@ -469,7 +469,7 @@ func TestHandleClaimTaskAlreadyClaimed(t *testing.T) {
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
-		state.Tasks[0].Status = models.TaskStatusClaimed
+		state.Tasks[0].Status = models.TaskStatusImplementing
 		assignedTo := "coder-1"
 		state.Tasks[0].AssignedTo = &assignedTo
 		return nil
@@ -522,7 +522,7 @@ func TestHandleSubmitForReview(t *testing.T) {
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err = bb.Modify(func(state *models.State) error {
-		state.Tasks[0].Status = models.TaskStatusClaimed
+		state.Tasks[0].Status = models.TaskStatusImplementing
 		assignedTo := "coder-1"
 		state.Tasks[0].AssignedTo = &assignedTo
 		worktree := g.GetWorktreeRelPath(taskID)
@@ -581,7 +581,7 @@ func TestHandleHandoff(t *testing.T) {
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
-		state.Tasks[0].Status = models.TaskStatusClaimed
+		state.Tasks[0].Status = models.TaskStatusImplementing
 		assignedTo := "coder-1"
 		state.Tasks[0].AssignedTo = &assignedTo
 		state.Agents["coder-1"] = models.Agent{
@@ -642,20 +642,23 @@ func TestHandleSubmitVerdict(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
 	defer cleanup()
 
-	// Setup: Set task to READY_FOR_REVIEW
+	// Setup: Set task to REVIEWING (reviewer has claimed it)
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
 		now := time.Now().UTC()
-		state.Tasks[0].Status = models.TaskStatusReadyForReview
+		state.Tasks[0].Status = models.TaskStatusReviewing
 		assignedTo := "coder-1"
 		state.Tasks[0].AssignedTo = &assignedTo
 		reviewCommit := "abc123def456"
 		state.Tasks[0].ReviewCommit = &reviewCommit
+		reviewingBy := "reviewer-1"
+		state.Tasks[0].ReviewingBy = &reviewingBy
 		worktree := ".worktrees/task-1"
 		state.Tasks[0].Worktree = &worktree
 		currentTask := "task-1"
 		reviewLease := now.Add(30 * time.Minute)
+		state.Tasks[0].ReviewLeaseExpires = &reviewLease
 		state.Agents["reviewer-1"] = models.Agent{
 			Role:         "code-reviewer",
 			Status:       models.AgentStatusReviewing,
@@ -717,7 +720,7 @@ func TestHandleReleaseClaim(t *testing.T) {
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
-		state.Tasks[0].Status = models.TaskStatusClaimed
+		state.Tasks[0].Status = models.TaskStatusImplementing
 		assignedTo := "coder-1"
 		state.Tasks[0].AssignedTo = &assignedTo
 		worktree := ".worktrees/task-1"
@@ -761,8 +764,8 @@ func TestHandleReleaseClaim(t *testing.T) {
 	}
 
 	task := state.Tasks[0]
-	if task.Status != models.TaskStatusUnclaimed {
-		t.Errorf("Expected status UNCLAIMED, got %s", task.Status)
+	if task.Status != models.TaskStatusReady {
+		t.Errorf("Expected status READY, got %s", task.Status)
 	}
 	if task.AssignedTo != nil {
 		t.Errorf("Expected assigned_to to be nil, got %v", task.AssignedTo)
@@ -778,7 +781,7 @@ func TestHandleSupersede(t *testing.T) {
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
-		newTask := testhelpers.BuildTaskByStatus("task-replacement", models.TaskStatusUnclaimed, time.Now().UTC())
+		newTask := testhelpers.BuildTaskByStatus("task-replacement", models.TaskStatusReady, time.Now().UTC())
 		state.Tasks = append(state.Tasks, newTask)
 		return nil
 	})
@@ -869,7 +872,7 @@ func TestHandleWtCreate(t *testing.T) {
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
-		state.Tasks[0].Status = models.TaskStatusClaimed
+		state.Tasks[0].Status = models.TaskStatusImplementing
 		assignedTo := "coder-1"
 		state.Tasks[0].AssignedTo = &assignedTo
 		return nil
@@ -917,7 +920,7 @@ func TestHandleWtCreateFresh(t *testing.T) {
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
-		state.Tasks[0].Status = models.TaskStatusClaimed
+		state.Tasks[0].Status = models.TaskStatusImplementing
 		assignedTo := "coder-1"
 		state.Tasks[0].AssignedTo = &assignedTo
 		worktree := ".worktrees/task-1"
@@ -1049,13 +1052,13 @@ func TestHandleWtCreateRequiresClaimed(t *testing.T) {
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	// Try to create worktree for UNCLAIMED task
+	// Try to create worktree for READY task
 	_, err := server.handleWtCreate(map[string]any{
 		"task_id": "task-1",
 	})
 
 	if err == nil {
-		t.Error("Expected error when creating worktree for UNCLAIMED task")
+		t.Error("Expected error when creating worktree for READY task")
 	}
 }
 
@@ -1133,9 +1136,11 @@ func TestHandleClearStaleReviews(t *testing.T) {
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
-		state.Tasks[0].Status = models.TaskStatusReadyForReview
+		state.Tasks[0].Status = models.TaskStatusReviewing
 		reviewingBy := "reviewer-1"
 		state.Tasks[0].ReviewingBy = &reviewingBy
+		reviewCommit := "abc123"
+		state.Tasks[0].ReviewCommit = &reviewCommit
 		// Expired lease (in the past)
 		expiredTime := time.Now().UTC().Add(-1 * time.Hour)
 		state.Tasks[0].ReviewLeaseExpires = &expiredTime
@@ -1171,6 +1176,9 @@ func TestHandleClearStaleReviews(t *testing.T) {
 
 	if state.Tasks[0].ReviewingBy != nil {
 		t.Error("Expected reviewing_by to be cleared for stale review")
+	}
+	if state.Tasks[0].Status != models.TaskStatusReadyForReview {
+		t.Errorf("Expected status READY_FOR_REVIEW after stale clear, got %s", state.Tasks[0].Status)
 	}
 }
 

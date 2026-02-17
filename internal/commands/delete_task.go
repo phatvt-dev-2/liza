@@ -55,13 +55,13 @@ func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, r
 			return fmt.Errorf("cannot delete MERGED task %s (use --force if you really want to)", taskID)
 		}
 
-		// Check if actively being worked on (CLAIMED with valid lease)
-		if task.Status == models.TaskStatusClaimed && task.LeaseExpires != nil && task.LeaseExpires.After(now) {
+		// Check if actively being worked on (IMPLEMENTING with valid lease)
+		if task.Status == models.TaskStatusImplementing && task.LeaseExpires != nil && task.LeaseExpires.After(now) {
 			return fmt.Errorf("cannot delete task %s in status %s (actively being worked on)", taskID, task.Status)
 		}
 
 		// Check if under review
-		if task.Status == models.TaskStatusReadyForReview {
+		if task.Status == models.TaskStatusReadyForReview || task.Status == models.TaskStatusReviewing {
 			return fmt.Errorf("cannot delete task %s in status %s (under review)", taskID, task.Status)
 		}
 	}
@@ -172,11 +172,11 @@ func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, r
 				return fmt.Errorf("cannot delete MERGED task %s (use --force if you really want to)", taskID)
 			}
 
-			if currentTask.Status == models.TaskStatusClaimed && currentTask.LeaseExpires != nil && currentTask.LeaseExpires.After(now) {
+			if currentTask.Status == models.TaskStatusImplementing && currentTask.LeaseExpires != nil && currentTask.LeaseExpires.After(now) {
 				return fmt.Errorf("cannot delete task %s in status %s (actively being worked on)", taskID, currentTask.Status)
 			}
 
-			if currentTask.Status == models.TaskStatusReadyForReview {
+			if currentTask.Status == models.TaskStatusReadyForReview || currentTask.Status == models.TaskStatusReviewing {
 				return fmt.Errorf("cannot delete task %s in status %s (under review)", taskID, currentTask.Status)
 			}
 		}

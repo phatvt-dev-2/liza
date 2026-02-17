@@ -165,8 +165,8 @@ CIRCUIT_BREAKER_TRIPPED -> RUNNING (liza resume, after fixing root cause)
 | Status | Claimable | Reviewable | Terminal |
 |--------|-----------|------------|----------|
 | DRAFT | No | No | No |
-| UNCLAIMED | Yes | No | No |
-| CLAIMED | No | No | No |
+| READY | Yes | No | No |
+| IMPLEMENTING | No | No | No |
 | READY_FOR_REVIEW | No | Yes | No |
 | REJECTED | Yes | No | No |
 | APPROVED | No | No | No |

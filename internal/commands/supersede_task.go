@@ -14,7 +14,7 @@ import (
 // This is used by the planner when rescoping blocked, rejected, or problematic tasks.
 //
 // Requirements:
-// - Task must be in BLOCKED, REJECTED, or UNCLAIMED status
+// - Task must be in BLOCKED, REJECTED, or READY status
 // - At least one replacement task ID must be provided
 // - Rescope reason must be non-empty
 //
@@ -66,8 +66,8 @@ func SupersedeTaskCommand(projectRoot, taskID string, replacementIDs []string, r
 	originalStatus := task.Status
 	if originalStatus != models.TaskStatusBlocked &&
 		originalStatus != models.TaskStatusRejected &&
-		originalStatus != models.TaskStatusUnclaimed {
-		return fmt.Errorf("cannot supersede task %s in status %s (must be BLOCKED, REJECTED, or UNCLAIMED)", taskID, originalStatus)
+		originalStatus != models.TaskStatusReady {
+		return fmt.Errorf("cannot supersede task %s in status %s (must be BLOCKED, REJECTED, or READY)", taskID, originalStatus)
 	}
 
 	// Phase 2: Atomic State Update (via bb.Modify with lock)

@@ -30,7 +30,7 @@ func TestInspectMetrics(t *testing.T) {
 		},
 		Tasks: []models.Task{
 			{ID: "t1", Status: models.TaskStatusMerged},
-			{ID: "t2", Status: models.TaskStatusClaimed},
+			{ID: "t2", Status: models.TaskStatusImplementing},
 		},
 		Agents: map[string]models.Agent{
 			"coder-1": {
@@ -193,7 +193,7 @@ func TestInspectAgentMetrics(t *testing.T) {
 			},
 			{
 				ID:         "t3",
-				Status:     models.TaskStatusClaimed,
+				Status:     models.TaskStatusImplementing,
 				AssignedTo: &agent1,
 				Iteration:  1,
 				History: []models.TaskHistoryEntry{
@@ -413,7 +413,7 @@ func TestCalculateAgentMetrics(t *testing.T) {
 		},
 		{
 			ID:         "t3",
-			Status:     models.TaskStatusClaimed,
+			Status:     models.TaskStatusImplementing,
 			AssignedTo: &agent1,
 			Iteration:  1,
 		},
@@ -471,7 +471,7 @@ func TestCalculateAgentMetrics(t *testing.T) {
 		t.Fatalf("expected to find coder-1 metrics")
 	}
 
-	// coder-1: 2 completed (MERGED), 1 in progress (CLAIMED), 0 failed
+	// coder-1: 2 completed (MERGED), 1 in progress (IMPLEMENTING), 0 failed
 	if coder1.TasksCompleted != 2 {
 		t.Errorf("expected coder-1 TasksCompleted=2, got %d", coder1.TasksCompleted)
 	}

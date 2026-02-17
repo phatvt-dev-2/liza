@@ -247,6 +247,9 @@ func TestSuccessfulMerge(t *testing.T) {
 		t.Fatalf("SubmitForReview failed: %v", err)
 	}
 
+	// Transition to REVIEWING (simulates supervisor reviewer claim)
+	testhelpers.TransitionToReviewing(t, bb, taskID, reviewerID)
+
 	// Approve task
 	if err := commands.SubmitVerdictCommand(projectDir, taskID, "APPROVED", "", reviewerID); err != nil {
 		t.Fatalf("SubmitVerdict failed: %v", err)
