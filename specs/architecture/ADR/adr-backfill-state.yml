@@ -1,13 +1,18 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-02-16T12:00:00Z"
+last_updated: "2026-02-18T01:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
-  "pyproject.toml": {tier: 0, category: "dependency_manifest"}
-  "uv.lock": {tier: 0, category: "dependency_manifest"}
+  "pyproject.toml": {tier: 0, category: "dependency_manifest", note: "deleted — replaced by go.mod (ADR-0012)"}
+  "uv.lock": {tier: 0, category: "dependency_manifest", note: "deleted — replaced by go.sum (ADR-0012)"}
+  "go.mod": {tier: 0, category: "dependency_manifest"}
+  "go.sum": {tier: 0, category: "dependency_manifest"}
   ".pre-commit-config.yaml": {tier: 0, category: "dev_tooling_deps"}
+  ".goreleaser.yaml": {tier: 0, category: "release_infrastructure", note: "ADR-0017"}
+  ".github/workflows/ci.yml": {tier: 1, category: "ci_pipeline", note: "ADR-0017"}
+  ".github/workflows/release.yml": {tier: 1, category: "release_pipeline", note: "ADR-0017"}
 
   # Tier 1 - Infrastructure & Core Structure
   "contracts/CORE.md": {tier: 1, category: "core_contract"}
@@ -211,6 +216,60 @@ clusters:
       rationale: "Context control — distinct complementary contracts loaded on demand. Aligns with generic-subagent skill."
       limitations: "Three modes to maintain; MODE: SUBAGENT marker is convention-enforced"
     note: "Extends ADR-0004 (Dual-Mode) to three modes. References ADR-0014 (Tiered Context) for subagent exclusion."
+
+  - id: 16
+    title: "Embedded Template Architecture for Agent Prompts"
+    commit_shas: ["896be0a", "ff6bf69"]
+    date_range: "2026-02-16 to 2026-02-17"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0016-embedded-template-architecture.md"
+    user_context:
+      problem: "Maintaining prompts within Go code was painful; three sources of truth (contract, runtime ref, prompt) drifted"
+      alternatives: "Keep string formatting, external templates, embedded templates"
+      rationale: "Separation of concerns — single source of truth per concern, content separated from logic"
+      limitations: "Template errors are runtime not compile-time"
+    note: "Extends ADR-0012 (Go CLI). Eliminates agent-runtime-reference.md."
+
+  - id: 17
+    title: "Release Infrastructure"
+    commit_shas: ["8eeabe9"]
+    date_range: "2026-02-16"
+    confidence: 0.85
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0017-release-infrastructure.md"
+    user_context:
+      problem: "Go CLI needed distribution mechanism"
+      alternatives: "go install, GoReleaser+GitHub Releases, package managers"
+      rationale: "Ported from liza-go fork — working setup, author not deeply familiar with Go distribution"
+      limitations: "No homebrew tap, no apt/rpm, GoReleaser config not deeply understood"
+
+  - id: 18
+    title: "Two-Step Deployment (Setup + Init)"
+    commit_shas: ["85623ef", "faf412c", "62f860a"]
+    date_range: "2026-02-17"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0018-two-step-deployment.md"
+    user_context:
+      problem: "Symlinks and relative paths between contract files don't cohabit; duplicating contracts across projects made maintenance brittle"
+      alternatives: "Fix relative paths, post-process copies, global setup + project init"
+      rationale: "Single canonical location preserves cross-references, eliminates per-project duplication"
+      limitations: "Extra setup step, global state outside git"
+
+  - id: 19
+    title: "Task Lifecycle State Machine Evolution"
+    commit_shas: ["97d7687", "12b8dfa", "421ceef"]
+    date_range: "2026-02-17"
+    confidence: 0.85
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0019-task-lifecycle-state-machine-evolution.md"
+    user_context:
+      problem: "Generic state names (UNCLAIMED/CLAIMED) don't express activity; planning multi-role expansion beyond coder/reviewer"
+      alternatives: "Minimal rename, full rename + REVIEWING + enforcement"
+      rationale: "Role-neutral naming supports multiple worker/reviewer pair types; REVIEWING state is preventive"
+      limitations: "Breaking change to existing blackboard files"
+    note: "Evolves ADR-0003 (Blackboard) and ADR-0011 (Script-Enforced Status)."
 
 processing_cursor:
   step: "ordering"
