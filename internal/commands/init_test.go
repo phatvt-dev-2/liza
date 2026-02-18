@@ -15,20 +15,9 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-// setupGlobalLiza creates a fake ~/.liza/CORE.md so init's prereq check passes.
-// It overrides $HOME via t.Setenv (auto-reverted on cleanup).
+// setupGlobalLiza delegates to testhelpers.SetupGlobalLiza.
 func setupGlobalLiza(t *testing.T) string {
-	t.Helper()
-	fakeHome := t.TempDir()
-	t.Setenv("HOME", fakeHome)
-	globalLiza := filepath.Join(fakeHome, ".liza")
-	if err := os.MkdirAll(globalLiza, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(globalLiza, "CORE.md"), []byte("# CORE\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	return fakeHome
+	return testhelpers.SetupGlobalLiza(t)
 }
 
 func TestInitCommand(t *testing.T) {

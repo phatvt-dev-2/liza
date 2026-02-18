@@ -102,6 +102,24 @@ func SetupLizaDir(t *testing.T, tmpDir string) (statePath, lockPath string) {
 	return statePath, lockPath
 }
 
+// SetupGlobalLiza creates a fake ~/.liza/CORE.md so that commands requiring
+// 'liza setup' to have been run (like InitCommand) pass their prerequisite check.
+// It overrides $HOME via t.Setenv (auto-reverted on test cleanup).
+// Returns the fake home directory path.
+func SetupGlobalLiza(t *testing.T) string {
+	t.Helper()
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	globalLiza := filepath.Join(fakeHome, ".liza")
+	if err := os.MkdirAll(globalLiza, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(globalLiza, "CORE.md"), []byte("# CORE\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return fakeHome
+}
+
 // CreateTestWorktree creates a test worktree directory for a task.
 // It creates the .worktrees/<taskID> directory structure.
 // Note: This only creates the directory; it does NOT run git worktree commands

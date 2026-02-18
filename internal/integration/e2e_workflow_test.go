@@ -21,6 +21,8 @@ import (
 func setupTestProject(t *testing.T) (projectDir string, cleanup func()) {
 	t.Helper()
 
+	testhelpers.SetupGlobalLiza(t)
+
 	tmpDir := t.TempDir()
 
 	// Initialize git repository
