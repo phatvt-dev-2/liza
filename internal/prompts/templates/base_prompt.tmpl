@@ -31,7 +31,7 @@ MCP TOOLS AVAILABLE:
 State modification MUST use these MCP tools (not bash commands):
 
 Planning tools:
-- liza_add_task — Add task (structured params: id, description, spec_ref, done_when, scope, priority, depends_on, agent_id)
+- liza_add_task — Add task (structured params: id, desc, spec, done, scope, priority, depends, agent_id)
 - liza_supersede_task — Supersede task (params: task_id, replacement_ids, reason, agent_id)
 
 Coder tools:
@@ -52,7 +52,7 @@ Worktree tools:
 Query tools (read-only):
 - liza_get — Query state (params: query, format)
 - liza_status — Dashboard overview (no params)
-- liza_validate — Validate state (params: skip_spec_file_check)
+- liza_validate — Validate state (params: skip_spec_check)
 
 Each tool accepts structured JSON parameters. Examples in role-specific sections below.
 

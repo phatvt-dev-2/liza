@@ -103,13 +103,13 @@ func TestConcurrentAddTask(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, errors[i] = server.handleAddTask(map[string]any{
-				"id":          fmt.Sprintf("task-concurrent-%d", i),
-				"description": fmt.Sprintf("Concurrent task %d", i),
-				"spec_ref":    "specs/test-spec.md",
-				"done_when":   "Task is complete",
-				"scope":       "Test concurrent adds",
-				"priority":    1,
-				"agent_id":    "planner-1",
+				"id":       fmt.Sprintf("task-concurrent-%d", i),
+				"desc":     fmt.Sprintf("Concurrent task %d", i),
+				"spec":     "specs/test-spec.md",
+				"done":     "Task is complete",
+				"scope":    "Test concurrent adds",
+				"priority": 1,
+				"agent_id": "planner-1",
 			})
 		}()
 	}
@@ -159,26 +159,26 @@ func TestConcurrentAddTaskSameID(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		_, err1 = server.handleAddTask(map[string]any{
-			"id":          "task-duplicate",
-			"description": "Duplicate task from goroutine 1",
-			"spec_ref":    "specs/test-spec.md",
-			"done_when":   "Task is complete",
-			"scope":       "Test duplicate",
-			"priority":    1,
-			"agent_id":    "planner-1",
+			"id":       "task-duplicate",
+			"desc":     "Duplicate task from goroutine 1",
+			"spec":     "specs/test-spec.md",
+			"done":     "Task is complete",
+			"scope":    "Test duplicate",
+			"priority": 1,
+			"agent_id": "planner-1",
 		})
 	}()
 
 	go func() {
 		defer wg.Done()
 		_, err2 = server.handleAddTask(map[string]any{
-			"id":          "task-duplicate",
-			"description": "Duplicate task from goroutine 2",
-			"spec_ref":    "specs/test-spec.md",
-			"done_when":   "Task is complete",
-			"scope":       "Test duplicate",
-			"priority":    1,
-			"agent_id":    "planner-1",
+			"id":       "task-duplicate",
+			"desc":     "Duplicate task from goroutine 2",
+			"spec":     "specs/test-spec.md",
+			"done":     "Task is complete",
+			"scope":    "Test duplicate",
+			"priority": 1,
+			"agent_id": "planner-1",
 		})
 	}()
 

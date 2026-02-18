@@ -124,7 +124,7 @@ func (s *Server) handleValidate(params map[string]any) (any, error) {
 	statePath := paths.New(s.projectRoot).StatePath()
 
 	skipSpecFileCheck := false
-	if skip, ok := params["skip_spec_file_check"].(bool); ok {
+	if skip, ok := params["skip_spec_check"].(bool); ok {
 		skipSpecFileCheck = skip
 	}
 
@@ -193,17 +193,17 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	description, err := requireString(params, "description")
+	description, err := requireString(params, "desc")
 	if err != nil {
 		return nil, err
 	}
 
-	specRef, err := requireString(params, "spec_ref")
+	specRef, err := requireString(params, "spec")
 	if err != nil {
 		return nil, err
 	}
 
-	doneWhen, err := requireString(params, "done_when")
+	doneWhen, err := requireString(params, "done")
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 	}
 
 	var dependsOn []string
-	if deps, ok := params["depends_on"].([]any); ok {
+	if deps, ok := params["depends"].([]any); ok {
 		for _, dep := range deps {
 			if depStr, ok := dep.(string); ok {
 				dependsOn = append(dependsOn, depStr)

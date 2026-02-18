@@ -295,7 +295,7 @@ func (s *Server) registerReadOnlyTools() {
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
-				"skip_spec_file_check": {
+				"skip_spec_check": {
 					Type:        "boolean",
 					Description: "Skip validation of spec file existence",
 					Default:     false,
@@ -351,15 +351,15 @@ func (s *Server) registerMutationTools() {
 					Type:        "string",
 					Description: "Unique task ID",
 				},
-				"description": {
+				"desc": {
 					Type:        "string",
 					Description: "Task description",
 				},
-				"spec_ref": {
+				"spec": {
 					Type:        "string",
 					Description: "Reference to specification file",
 				},
-				"done_when": {
+				"done": {
 					Type:        "string",
 					Description: "Completion criteria",
 				},
@@ -372,7 +372,7 @@ func (s *Server) registerMutationTools() {
 					Description: "Task priority (default: 1)",
 					Default:     1,
 				},
-				"depends_on": {
+				"depends": {
 					Type:        "array",
 					Description: "List of task IDs this task depends on",
 				},
@@ -382,7 +382,7 @@ func (s *Server) registerMutationTools() {
 					Default:     "planner-1",
 				},
 			},
-			Required: []string{"id", "description", "spec_ref", "done_when", "scope"},
+			Required: []string{"id", "desc", "spec", "done", "scope"},
 		},
 	}, s.handleAddTask)
 

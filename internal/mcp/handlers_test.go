@@ -347,13 +347,13 @@ func TestHandleAddTask(t *testing.T) {
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
 	result, err := server.handleAddTask(map[string]any{
-		"id":          "task-new",
-		"description": "New test task",
-		"spec_ref":    "specs/test-spec.md",
-		"done_when":   "Task is complete",
-		"scope":       "Add new feature",
-		"priority":    1,
-		"agent_id":    "planner-1",
+		"id":       "task-new",
+		"desc":     "New test task",
+		"spec":     "specs/test-spec.md",
+		"done":     "Task is complete",
+		"scope":    "Add new feature",
+		"priority": 1,
+		"agent_id": "planner-1",
 	})
 
 	if err != nil {
@@ -833,13 +833,13 @@ func TestMutationsLoggedCorrectly(t *testing.T) {
 
 	// Perform an add task operation
 	_, err := server.handleAddTask(map[string]any{
-		"id":          "task-logged",
-		"description": "Task for log test",
-		"spec_ref":    "specs/test-spec.md",
-		"done_when":   "Task is complete",
-		"scope":       "Test logging",
-		"priority":    1,
-		"agent_id":    "planner-1",
+		"id":       "task-logged",
+		"desc":     "Task for log test",
+		"spec":     "specs/test-spec.md",
+		"done":     "Task is complete",
+		"scope":    "Test logging",
+		"priority": 1,
+		"agent_id": "planner-1",
 	})
 
 	if err != nil {
