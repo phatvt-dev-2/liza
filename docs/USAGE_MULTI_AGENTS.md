@@ -136,6 +136,17 @@ cat .liza/log.yaml
 git log integration --oneline
 ```
 
+### Running Multiple Sprints
+
+After a sprint completes (all tasks MERGED/ABANDONED), the system pauses at a checkpoint.
+To start a new sprint:
+
+1. Remove the old blackboard: `rm -rf .liza`
+2. Re-initialize: `liza init "<new goal>" --spec <spec_ref>`
+3. Restart agents
+
+The planner does not auto-detect changes to `vision.md` between sprints. Each sprint starts fresh from `liza init`.
+
 ### CLI Commands
 
 The `liza` binary provides all system operations. Key commands:
