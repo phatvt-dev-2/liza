@@ -115,7 +115,9 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 					if s.Tasks[i].Status != models.TaskStatusApproved {
 						return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, s.Tasks[i].Status)
 					}
-					s.Tasks[i].Status = models.TaskStatusIntegrationFailed
+					if err := s.Tasks[i].Transition(models.TaskStatusIntegrationFailed); err != nil {
+						return err
+					}
 					s.Tasks[i].FailedBy = appendUniqueAgentID(s.Tasks[i].FailedBy, agentID)
 
 					// Add history entry with specific reason
@@ -186,7 +188,9 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 					if s.Tasks[i].Status != models.TaskStatusApproved {
 						return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, s.Tasks[i].Status)
 					}
-					s.Tasks[i].Status = models.TaskStatusIntegrationFailed
+					if err := s.Tasks[i].Transition(models.TaskStatusIntegrationFailed); err != nil {
+						return err
+					}
 					s.Tasks[i].FailedBy = appendUniqueAgentID(s.Tasks[i].FailedBy, agentID)
 
 					// Add history entry
@@ -256,7 +260,9 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 						if s.Tasks[i].Status != models.TaskStatusApproved {
 							return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, s.Tasks[i].Status)
 						}
-						s.Tasks[i].Status = models.TaskStatusIntegrationFailed
+						if err := s.Tasks[i].Transition(models.TaskStatusIntegrationFailed); err != nil {
+							return err
+						}
 						s.Tasks[i].FailedBy = appendUniqueAgentID(s.Tasks[i].FailedBy, agentID)
 						s.Tasks[i].MergeCommit = &mergeCommit
 
@@ -296,7 +302,9 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 				if s.Tasks[i].Status != models.TaskStatusApproved {
 					return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, s.Tasks[i].Status)
 				}
-				s.Tasks[i].Status = models.TaskStatusMerged
+				if err := s.Tasks[i].Transition(models.TaskStatusMerged); err != nil {
+					return err
+				}
 				s.Tasks[i].Worktree = nil
 				s.Tasks[i].MergeCommit = &mergeCommit
 

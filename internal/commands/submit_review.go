@@ -163,7 +163,9 @@ Alternatively, abort the rebase and ask for help:
 		}
 
 		// Update task status and review_commit (use post-rebase commit)
-		task.Status = models.TaskStatusReadyForReview
+		if err := task.Transition(models.TaskStatusReadyForReview); err != nil {
+			return err
+		}
 		task.ReviewCommit = &postRebaseCommit
 
 		// Add history entry

@@ -11,7 +11,6 @@ Persistent record of issues identified by architectural analysis skills.
 - [Structural Load-Bearing Elements](#structural-load-bearing-elements)
   - [Planner as Single Semantic Interpreter](#planner-as-single-semantic-interpreter)
   - [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate)
-  - [Implicit State Machine](#implicit-state-machine)
 - [Systemic Tensions](#systemic-tensions)
   - [Spec Completeness vs Reality](#spec-completeness-vs-reality)
   - [Documentation/Implementation Desynchronization](#documentationimplementation-desynchronization)
@@ -40,6 +39,7 @@ Persistent record of issues identified by architectural analysis skills.
 - [Completed Fixes](#completed-fixes)
 - [Fix Details](#fix-details)
   - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
+  - [Implicit State Machine](#implicit-state-machine)
 
 ---
 
@@ -78,21 +78,6 @@ Single points of failure with no redundancy or validation mechanism.
 - Supervisor health check endpoint
 - Redundant supervisor with leader election
 - Agent self-validation of claim state on startup
-
-### Implicit State Machine
-
-**Skill:** systemic-thinking
-**Category:** LOAD-BEARING
-
-**Issue:** Task state transitions are not enforced by a declared state machine in `internal/models/`. There is no `CanTransition(from, to)` method. Each command in `internal/commands/` independently checks its own preconditions: `claim_task.go` checks `IsClaimable()`, `submit_review.go` checks status equals IMPLEMENTING, `submit_verdict.go` checks READY_FOR_REVIEW. The valid transition graph is emergent from the union of all command preconditions, not declared in one place. Adding a new command or modifying an existing one can silently create an invalid transition path with no compilation error and no test failure (unless a specific integration test covers that exact path).
-
-**Implication:** The state machine — the most critical invariant of the multi-agent coordination protocol — exists only as a side effect of scattered conditional checks, making it invisible to code review and resistant to verification.
-
-**Future options:**
-- Declare valid transitions in `models/` as a `map[TaskStatus][]TaskStatus`
-- Add `CanTransition(from, to TaskStatus) bool` method
-- Validate all transitions through a single `Transition()` method that enforces the graph
-- Generate state machine diagram from the declaration for spec alignment
 
 ---
 
@@ -436,6 +421,7 @@ Long-term concerns about system evolution.
 - [x] cleanupStaleLock inode race — truncate lock file instead of deleting it *(code-review)*
 - [x] classifyError "invalid" overbroad — narrowed to `invalid task ID`, sanitized all error messages *(code-review)*
 - [x] mergeCommit[:7] unguarded in rollback path — added length check *(code-review)*
+- [x] Implicit state machine — declared `taskTransitions` map + `Transition()` method, migrated all 14 transition sites *(systemic-thinking)*
 
 ---
 
@@ -539,3 +525,12 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 **Original issue:** The `db` package introduced a well-designed error taxonomy (`LockError` with 5 classified categories: Timeout, Permission, DiskFull, Filesystem, Stale), but the MCP server's `classifyError()` was a TODO stub returning generic internal error for everything. Agents couldn't distinguish retryable errors from fatal ones.
 
 **Fix:** `classifyError()` in `internal/mcp/server.go` implements pattern-based mapping to distinct JSON-RPC error codes: not found, lock timeout, race condition, validation error, and internal error. Follow-up fix narrowed overbroad "invalid" matching to `invalid task ID` specifically.
+
+### Implicit State Machine
+
+**Skill:** systemic-thinking
+**Category:** LOAD-BEARING
+
+**Original issue:** Task state transitions were not enforced by a declared state machine. Each command independently checked its own preconditions, making the valid transition graph emergent from scattered conditional checks across 7 command files and `supervisor.go`. Adding or modifying a command could silently create invalid transition paths.
+
+**Fix:** Declared the complete transition graph as `taskTransitions` map in `internal/models/state.go` with `CanTransition()` and `Transition()` methods. All 14 production transition sites migrated from direct `task.Status = X` to `task.Transition(X)`, which validates against the declared graph and returns a descriptive error on invalid transitions. `IsClaimable()` rewritten to derive claimable statuses from `CanTransition()` instead of a hardcoded switch. Existing precondition checks in commands preserved as defense-in-depth.

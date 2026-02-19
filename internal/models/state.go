@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"slices"
 	"time"
 )
@@ -103,6 +104,38 @@ func (ts TaskStatus) IsTerminal() bool {
 	return ts == TaskStatusMerged || ts == TaskStatusAbandoned || ts == TaskStatusSuperseded
 }
 
+// taskTransitions defines the complete, explicit task state machine.
+// Every valid status transition is declared here. Terminal states have empty target lists.
+var taskTransitions = map[TaskStatus][]TaskStatus{
+	TaskStatusDraft:             {TaskStatusReady, TaskStatusAbandoned},
+	TaskStatusReady:             {TaskStatusImplementing, TaskStatusSuperseded, TaskStatusAbandoned},
+	TaskStatusImplementing:      {TaskStatusReadyForReview, TaskStatusBlocked, TaskStatusReady},
+	TaskStatusReadyForReview:    {TaskStatusReviewing},
+	TaskStatusReviewing:         {TaskStatusApproved, TaskStatusRejected, TaskStatusReadyForReview},
+	TaskStatusRejected:          {TaskStatusImplementing, TaskStatusSuperseded, TaskStatusAbandoned},
+	TaskStatusApproved:          {TaskStatusMerged, TaskStatusIntegrationFailed},
+	TaskStatusBlocked:           {TaskStatusSuperseded, TaskStatusAbandoned},
+	TaskStatusIntegrationFailed: {TaskStatusImplementing, TaskStatusAbandoned},
+	TaskStatusMerged:            {},
+	TaskStatusAbandoned:         {},
+	TaskStatusSuperseded:        {},
+}
+
+// CanTransition reports whether a transition from ts to the given target status is valid.
+func (ts TaskStatus) CanTransition(to TaskStatus) bool {
+	return slices.Contains(taskTransitions[ts], to)
+}
+
+// Transition validates and applies a status transition on the task.
+// Returns a descriptive error if the transition is invalid.
+func (t *Task) Transition(to TaskStatus) error {
+	if !t.Status.CanTransition(to) {
+		return fmt.Errorf("invalid task transition: %s → %s (task %s)", t.Status, to, t.ID)
+	}
+	t.Status = to
+	return nil
+}
+
 // Task represents a single task in the Liza system
 type Task struct {
 	ID                  string             `yaml:"id"`
@@ -156,18 +189,14 @@ func (t *Task) IsClaimable(role string, allTasks []Task) bool {
 		return false
 	}
 
-	// Check if status allows claiming for this role.
-	// TODO: When adding a second task type, consider moving claimable-status mapping
-	// into the workflow registry so it's co-located with the role sequence.
+	// Check if status allows claiming for this role using the transition map.
 	switch role {
 	case RoleCoder:
-		if t.Status != TaskStatusReady &&
-			t.Status != TaskStatusRejected &&
-			t.Status != TaskStatusIntegrationFailed {
+		if !t.Status.CanTransition(TaskStatusImplementing) {
 			return false
 		}
 	case RoleCodeReviewer:
-		if t.Status != TaskStatusReadyForReview {
+		if !t.Status.CanTransition(TaskStatusReviewing) {
 			return false
 		}
 	default:

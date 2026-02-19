@@ -965,7 +965,9 @@ func claimReviewerTask(agentID string, leaseDuration int, bb *db.Blackboard) (ta
 		}
 
 		// Atomically claim the task and transition to REVIEWING
-		task.Status = models.TaskStatusReviewing
+		if err := task.Transition(models.TaskStatusReviewing); err != nil {
+			return err
+		}
 		task.ReviewingBy = &agentID
 		task.ReviewLeaseExpires = &leaseExpires
 

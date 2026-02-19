@@ -63,7 +63,9 @@ func ClearStaleReviewClaimsCommand(projectRoot string) (int, error) {
 			}
 
 			// Revert to READY_FOR_REVIEW and clear the stale claim
-			task.Status = models.TaskStatusReadyForReview
+			if err := task.Transition(models.TaskStatusReadyForReview); err != nil {
+				return err
+			}
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
 

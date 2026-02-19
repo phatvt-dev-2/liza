@@ -64,7 +64,9 @@ func MarkBlockedCommand(projectRoot, taskID, reason string, questions []string, 
 		}
 
 		// Update task state
-		task.Status = models.TaskStatusBlocked
+		if err := task.Transition(models.TaskStatusBlocked); err != nil {
+			return err
+		}
 		task.BlockedReason = &reason
 		task.BlockedQuestions = questions
 		task.AssignedTo = nil   // Clear assignment

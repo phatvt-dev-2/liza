@@ -65,7 +65,9 @@ func SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID string) 
 
 		// Update based on verdict
 		if verdict == "APPROVED" {
-			task.Status = models.TaskStatusApproved
+			if err := task.Transition(models.TaskStatusApproved); err != nil {
+				return err
+			}
 			task.ApprovedBy = &agentID
 			task.RejectionReason = nil
 
@@ -79,7 +81,9 @@ func SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID string) 
 			task.History = append(task.History, historyEntry)
 		} else {
 			// REJECTED
-			task.Status = models.TaskStatusRejected
+			if err := task.Transition(models.TaskStatusRejected); err != nil {
+				return err
+			}
 			task.RejectionReason = &reason
 
 			// Increment review cycles

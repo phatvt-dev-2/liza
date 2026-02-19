@@ -67,6 +67,133 @@ func TestTaskTerminalStates(t *testing.T) {
 	}
 }
 
+func TestTaskTransitionMapCompleteness(t *testing.T) {
+	// Every valid status must have an entry in the transition map.
+	allStatuses := []TaskStatus{
+		TaskStatusDraft, TaskStatusReady, TaskStatusImplementing,
+		TaskStatusReadyForReview, TaskStatusReviewing, TaskStatusRejected,
+		TaskStatusApproved, TaskStatusMerged, TaskStatusBlocked,
+		TaskStatusAbandoned, TaskStatusSuperseded, TaskStatusIntegrationFailed,
+	}
+	for _, s := range allStatuses {
+		if _, ok := taskTransitions[s]; !ok {
+			t.Errorf("status %s missing from taskTransitions map", s)
+		}
+	}
+}
+
+func TestTaskTransitionMapTargetsValid(t *testing.T) {
+	// Every target in the map must be a valid TaskStatus.
+	for from, targets := range taskTransitions {
+		for _, to := range targets {
+			if !to.IsValid() {
+				t.Errorf("taskTransitions[%s] contains invalid target %s", from, to)
+			}
+		}
+	}
+}
+
+func TestTerminalStatesHaveNoTransitions(t *testing.T) {
+	terminals := []TaskStatus{TaskStatusMerged, TaskStatusAbandoned, TaskStatusSuperseded}
+	for _, s := range terminals {
+		targets := taskTransitions[s]
+		if len(targets) != 0 {
+			t.Errorf("terminal status %s has non-empty transition targets: %v", s, targets)
+		}
+	}
+}
+
+func TestCanTransition(t *testing.T) {
+	tests := []struct {
+		from TaskStatus
+		to   TaskStatus
+		want bool
+	}{
+		// Valid edges
+		{TaskStatusDraft, TaskStatusReady, true},
+		{TaskStatusDraft, TaskStatusAbandoned, true},
+		{TaskStatusReady, TaskStatusImplementing, true},
+		{TaskStatusReady, TaskStatusSuperseded, true},
+		{TaskStatusReady, TaskStatusAbandoned, true},
+		{TaskStatusImplementing, TaskStatusReadyForReview, true},
+		{TaskStatusImplementing, TaskStatusBlocked, true},
+		{TaskStatusImplementing, TaskStatusReady, true},
+		{TaskStatusReadyForReview, TaskStatusReviewing, true},
+		{TaskStatusReviewing, TaskStatusApproved, true},
+		{TaskStatusReviewing, TaskStatusRejected, true},
+		{TaskStatusReviewing, TaskStatusReadyForReview, true},
+		{TaskStatusRejected, TaskStatusImplementing, true},
+		{TaskStatusRejected, TaskStatusSuperseded, true},
+		{TaskStatusRejected, TaskStatusAbandoned, true},
+		{TaskStatusApproved, TaskStatusMerged, true},
+		{TaskStatusApproved, TaskStatusIntegrationFailed, true},
+		{TaskStatusBlocked, TaskStatusSuperseded, true},
+		{TaskStatusBlocked, TaskStatusAbandoned, true},
+		{TaskStatusIntegrationFailed, TaskStatusImplementing, true},
+		{TaskStatusIntegrationFailed, TaskStatusAbandoned, true},
+
+		// Invalid edges
+		{TaskStatusDraft, TaskStatusImplementing, false},
+		{TaskStatusReady, TaskStatusApproved, false},
+		{TaskStatusImplementing, TaskStatusMerged, false},
+		{TaskStatusReadyForReview, TaskStatusApproved, false},
+		{TaskStatusApproved, TaskStatusReady, false},
+		{TaskStatusMerged, TaskStatusReady, false},
+		{TaskStatusAbandoned, TaskStatusReady, false},
+		{TaskStatusSuperseded, TaskStatusReady, false},
+
+		// Unknown status
+		{TaskStatus("UNKNOWN"), TaskStatusReady, false},
+	}
+
+	for _, tt := range tests {
+		name := string(tt.from) + "→" + string(tt.to)
+		t.Run(name, func(t *testing.T) {
+			got := tt.from.CanTransition(tt.to)
+			if got != tt.want {
+				t.Errorf("CanTransition(%s, %s) = %v, want %v", tt.from, tt.to, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTaskTransition(t *testing.T) {
+	t.Run("valid transition", func(t *testing.T) {
+		task := Task{ID: "task-1", Status: TaskStatusDraft}
+		err := task.Transition(TaskStatusReady)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if task.Status != TaskStatusReady {
+			t.Errorf("status = %s, want READY", task.Status)
+		}
+	})
+
+	t.Run("invalid transition returns error", func(t *testing.T) {
+		task := Task{ID: "task-42", Status: TaskStatusDraft}
+		err := task.Transition(TaskStatusMerged)
+		if err == nil {
+			t.Fatal("expected error for invalid transition")
+		}
+		want := "invalid task transition: DRAFT → MERGED (task task-42)"
+		if err.Error() != want {
+			t.Errorf("error = %q, want %q", err.Error(), want)
+		}
+		// Status must not change on error
+		if task.Status != TaskStatusDraft {
+			t.Errorf("status changed to %s on failed transition", task.Status)
+		}
+	})
+
+	t.Run("terminal state rejects all transitions", func(t *testing.T) {
+		task := Task{ID: "task-99", Status: TaskStatusMerged}
+		err := task.Transition(TaskStatusReady)
+		if err == nil {
+			t.Fatal("expected error transitioning from terminal state")
+		}
+	})
+}
+
 func TestAgentStatusConstants(t *testing.T) {
 	validStatuses := []AgentStatus{
 		AgentStatusStarting,

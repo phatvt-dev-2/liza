@@ -245,7 +245,9 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 		}
 
 		// Update task
-		task.Status = models.TaskStatusImplementing
+		if err := task.Transition(models.TaskStatusImplementing); err != nil {
+			return err
+		}
 		task.AssignedTo = &agentID
 		task.LeaseExpires = &leaseExpires
 

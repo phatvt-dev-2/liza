@@ -93,7 +93,9 @@ func SupersedeTaskCommand(projectRoot, taskID string, replacementIDs []string, r
 		}
 
 		// Update task fields
-		currentTask.Status = models.TaskStatusSuperseded
+		if err := currentTask.Transition(models.TaskStatusSuperseded); err != nil {
+			return err
+		}
 		currentTask.SupersededBy = replacementIDs
 		currentTask.RescopeReason = &reason
 
