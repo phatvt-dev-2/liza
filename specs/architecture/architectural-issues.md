@@ -19,8 +19,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause)
   - [Restart/Lease Churn Under Load](#restartlease-churn-under-load)
   - [Supervisor Wait-Claim-Spawn Loop](#supervisor-wait-claim-spawn-loop)
-- [Blind Spots](#blind-spots)
-  - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
 - [Assumptions](#assumptions)
   - [Human Availability as Bottleneck](#human-availability-as-bottleneck)
   - [Spec Maturity Dependency](#spec-maturity-dependency)
@@ -40,6 +38,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [Kill Switch Granularity](#kill-switch-granularity)
 - [Completed Fixes](#completed-fixes)
 - [Fix Details](#fix-details)
+  - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
 
 ---
 
@@ -123,18 +122,21 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 **Skill:** systemic-thinking
 **Category:** TENSION
 
-**Issue:** The Go CLI migration (ADR-0012) replaced the entire operational layer (18 bash scripts → Go CLI) but only partially updated the documents that agents and humans read as operational truth. This creates runtime failures, not cosmetic drift:
-- `MULTI_AGENT_MODE.md` instructs agents to run `liza handoff` (doesn't exist yet)
-- `DEMO.md` and `USAGE_MULTI_AGENTS.md` told users to run `liza agent code_reviewer` (underscore) — the CLI validates `code-reviewer` (hyphen) and rejects the documented form *(fixed)*
-- `state-machines.md` and `circuit-breaker.md` still describe signal file creation (`touch .liza/CHECKPOINT`, `rm .liza/ABORT`) as the mechanism for system control, while the Go CLI uses state field mutations *(fixed)*
-- `DEMO.md` contains `yq` commands as monitoring instructions that assume a dependency the Go CLI eliminated
+**Issue:** The Go CLI migration (ADR-0012) replaced the entire operational layer (18 bash scripts → Go CLI) but only partially updated the documents that agents and humans read as operational truth. Remaining drift:
+- `DEMO.md` contains 9 `yq` commands as monitoring instructions — the Go CLI eliminated the `yq` dependency and provides `liza get`/`liza status` equivalents (documented in `RECIPES.md`)
+- Additional `yq` references persist in `TROUBLESHOOTING.md`, `USAGE_MULTI_AGENTS.md`, `sprint-governance.md`, `circuit-breaker.md`, `worktree-management.md`, `roles.md`
 
-**Implication:** For a system whose core value proposition is agents reading specs as source of truth, a partially-migrated documentation layer is a systemic correctness risk — agents follow instructions that produce errors, then waste cycles debugging phantom issues.
+Previously fixed:
+- ~~`liza handoff` missing~~ — CLI command + MCP tool implemented
+- ~~`code_reviewer` underscore~~ — fixed to `code-reviewer`
+- ~~Signal file references~~ — replaced with state field mutations
 
-**Current mitigation:** Partial — some doc references fixed during Go CLI migration. `liza handoff` tracked in TODO-human.md.
+**Implication:** For a system whose core value proposition is agents reading specs as source of truth, stale `yq` references cause confusion — users and agents encounter commands that require an eliminated dependency.
+
+**Current mitigation:** `RECIPES.md` documents all `liza get` equivalents for former `yq` queries.
 
 **Future options:**
-- Complete documentation sweep for remaining bash/signal-file references
+- Complete documentation sweep replacing `yq` commands with `liza get`/`liza status` equivalents
 - Automated doc-code consistency check (grep for removed patterns)
 
 ---
@@ -187,26 +189,6 @@ Circuit breaker theoretically catches this via spec_gap_cluster, but pattern det
 - Supervisor state machine with explicit "stalled" detection
 - Alert on N cycles without state change
 - Automatic pause after repeated no-progress cycles
-
----
-
-## Blind Spots
-
-Information exists in the system but is inaccessible where needed.
-
-### Error Classification Lost at Agent Interface
-
-**Skill:** systemic-thinking
-**Category:** BLIND SPOT
-
-**Issue:** The `db` package introduces a well-designed error taxonomy (`LockError` with 5 classified categories: Timeout, Permission, DiskFull, Filesystem, Stale). The `commands` layer passes through plain `error` without classification. The MCP server's `classifyError()` is a TODO stub that returns generic internal error for everything. At the surface where agents interact (MCP tools), all errors are indistinguishable. An agent encountering "lock timeout" (retry-worthy) receives the same error shape as "disk full" (not retry-worthy) or "task not found" (logic error). The error taxonomy was built at the right layer but never propagated to the consumer.
-
-**Implication:** Agents treat all errors uniformly (likely: retry or give up), because the information needed for intelligent error handling exists in the system but is inaccessible at the agent interface.
-
-**Future options:**
-- Propagate `LockError` categories through `commands` layer to MCP
-- Implement `classifyError()` in MCP server using error type assertions
-- Return structured error codes in MCP tool responses (retryable vs fatal vs logic error)
 
 ---
 
@@ -427,6 +409,7 @@ Long-term concerns about system evolution.
 - [x] wt_merge ordering — commit state to MERGED before worktree deletion *(code-review)*
 - [x] Agent status staleness — update agent state in submit-review, submit-verdict, delete-task *(code-review)*
 - [x] classifyError stub — pattern-based mapping to JSON-RPC error codes *(code-review)*
+- [x] Error classification lost at agent interface — `classifyError()` implemented with 5 error categories *(systemic-thinking)*
 - [x] JSON-RPC notifications — detect `id: null` requests, handle without reply *(code-review)*
 - [x] Hypothesis exhaustion false positive — exclude terminal tasks from FailedBy check *(code-review)*
 - [x] Concurrent git contention — documented limitation in architectural-issues *(code-review)*
@@ -530,3 +513,12 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 **Original issue:** Hypothesis exhaustion forced rescope without diagnosing cause, leading to task churn.
 
 **Fix:** Planner must document root cause before rescoping and include it in `rescope_reason` and the rescope log entry (task lifecycle + roles).
+
+### Error Classification Lost at Agent Interface
+
+**Skill:** systemic-thinking
+**Category:** BLIND SPOT
+
+**Original issue:** The `db` package introduced a well-designed error taxonomy (`LockError` with 5 classified categories: Timeout, Permission, DiskFull, Filesystem, Stale), but the MCP server's `classifyError()` was a TODO stub returning generic internal error for everything. Agents couldn't distinguish retryable errors from fatal ones.
+
+**Fix:** `classifyError()` in `internal/mcp/server.go` implements pattern-based mapping to distinct JSON-RPC error codes: not found, lock timeout, race condition, validation error, and internal error. Follow-up fix narrowed overbroad "invalid" matching to `invalid task ID` specifically.
