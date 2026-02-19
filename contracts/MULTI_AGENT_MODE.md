@@ -43,7 +43,7 @@ Each agent has a defined role with specific capabilities and constraints.
 **Role Boundaries:**
 - Coders cannot self-approve
 - Coders cannot merge to integration branch
-- Code Reviewers cannot implement (only review)
+- Code Reviewers cannot implement (only review and write new adversarial tests, not modify existing tests)
 - Planners cannot claim implementation tasks
 
 Violating role boundaries is a Tier 1 violation — process integrity, not data/code integrity.

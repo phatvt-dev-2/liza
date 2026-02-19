@@ -29,6 +29,7 @@
       "mcp__liza__liza_delete_agent",
 
       "Skill(adr-backfill)",
+      "Skill(black-box-red-testing)",
       "Skill(clean-code)",
       "Skill(code-review)",
       "Skill(debugging)",

@@ -113,7 +113,7 @@ Specialized protocols agents load conditionally. Each contains a single `SKILL.m
 | `spec-backfill/` | Extracting specifications from existing code |
 | `generic-subagent/` | Delegating read-only work to subagents |
 | `systemic-thinking/` | Systemic coherence and risk analysis |
-| `adversarial-testing/` | Security and edge-case testing |
+| `black-box-red-testing/` | Red tests that expose real bugs |
 | `adr-backfill/` | Extracting ADRs from git history |
 | `feynman/` | Explaining complex ideas simply |
 | `lesson-capture/` | Capturing project-specific operational lessons |

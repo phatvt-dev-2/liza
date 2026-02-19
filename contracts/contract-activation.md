@@ -78,6 +78,7 @@ In `~/.claude/settings.json`, configure **global** permissions — things that a
       "Skill(spec-review)",
       "Skill(systemic-thinking)",
       "Skill(testing)",
+      "Skill(black-box-red-testing)",
 
       "WebFetch",
       "WebSearch",
