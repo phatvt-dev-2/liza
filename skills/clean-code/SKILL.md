@@ -7,6 +7,15 @@ Clean Code is a reader's gift — refactor for the next developer, not the compi
 
 **Boy Scout Rule:** Leave the code cleaner than you found it. Every change is an opportunity to improve.
 
+# Input
+
+| Argument | Scope Source | Pre-flight |
+|----------|-------------|------------|
+| (none) | `git diff --cached` | Full (staged changes required) |
+| `<commit-sha>` | `git diff <sha>^..<sha>` | Tests + coverage + concurrent work only |
+
+When a commit SHA is provided, the commit's diff defines the scope. Changes are made directly to files — the user reviews and amends the commit (or creates a new one). Skip staging-dependent pre-flight steps (staged check, stash backup).
+
 # Modes
 
 | Mode | Scope | When |
@@ -33,7 +42,7 @@ Before any transformation:
 
 0. **Language detection** — detect project language from staged file extensions, load the corresponding language file from `skills/clean-code/languages/<lang>.md`. This populates `$TEST_CMD`, `$COVERAGE_CMD`, and all other Tool Map variables used below. See Language-Specific Patterns for the full contract. If mixed languages are staged, see the mixed-language rule in that section.
 
-1. **Staged changes exist**
+1. **Staged changes exist** *(skip when commit SHA provided)*
 ```bash
    git diff --cached --quiet && echo "Nothing staged" && exit 1
 ```
@@ -61,7 +70,7 @@ Before any transformation:
   - If staged diff >500 lines: require scope reduction or switch to Full-file mode with chunking strategy
   - **STOP if >500 lines** — "Staged diff too large (N lines). Reduce scope or switch to Full-file mode?"
 
-5. **Git stash backup**
+5. **Git stash backup** *(skip when commit SHA provided — commit itself is the backup)*
 ```bash
    BACKUP=$(git stash create)
    [ -z "$BACKUP" ] && { echo "⚠️ No changes to backup — STOP"; exit 1; }
