@@ -72,7 +72,7 @@ Piping the same output through different tools hoping for different results is N
 - Reassign tasks after hypothesis exhaustion
 - Resolve blocked reviews
 - Mark tasks SUPERSEDED when rescoping
-- Write deferred systemic findings to `docs/architectural-issues.md` (see below)
+- Write deferred systemic findings to `specs/architecture/architectural-issues.md` (see below)
 
 **Constraints:**
 - Cannot claim Coder or Code Reviewer tasks
@@ -148,7 +148,7 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 **Systemic Finding Disposition:**
 When processing discoveries with `source: systemic-thinking`:
 - **Actionable now:** Create task with `spec_ref` and `done_when`. Set `converted_to_task` on discovery.
-- **Deferred:** Write to `docs/architectural-issues.md` using the persistence format from the systemic-thinking skill. Set `converted_to_task: deferred` on discovery.
+- **Deferred:** Write to `specs/architecture/architectural-issues.md` using the persistence format from the systemic-thinking skill. Set `converted_to_task: deferred` on discovery.
 - **Dismissed:** Set `converted_to_task: dismissed` on discovery. No further action.
 
 **Multiple Blocked Tasks:**

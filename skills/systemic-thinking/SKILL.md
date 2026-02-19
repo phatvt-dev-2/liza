@@ -113,7 +113,7 @@ If nothing found: `No systemic issues identified.`
 
 ## Persistence of Findings
 
-**ISSUES_FILE** = `docs/architectural-issues.md`
+**ISSUES_FILE** = `specs/architecture/architectural-issues.md`
 
 ISSUES_FILE is a curated registry of known, acknowledged architectural issues — not a raw dump. Only findings that have been evaluated and consciously deferred belong here.
 

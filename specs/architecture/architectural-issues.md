@@ -6,6 +6,41 @@ Persistent record of issues identified by architectural analysis skills.
 - `systemic-thinking` — Systemic coherence and risk analysis
 - `software-architecture-review` — Code-level architectural patterns and smells
 
+## Table of Contents
+
+- [Structural Load-Bearing Elements](#structural-load-bearing-elements)
+  - [Planner as Single Semantic Interpreter](#planner-as-single-semantic-interpreter)
+  - [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate)
+  - [Implicit State Machine](#implicit-state-machine)
+- [Systemic Tensions](#systemic-tensions)
+  - [Spec Completeness vs Reality](#spec-completeness-vs-reality)
+  - [Documentation/Implementation Desynchronization](#documentationimplementation-desynchronization)
+- [Feedback Loops](#feedback-loops)
+  - [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause)
+  - [Restart/Lease Churn Under Load](#restartlease-churn-under-load)
+  - [Supervisor Wait-Claim-Spawn Loop](#supervisor-wait-claim-spawn-loop)
+- [Blind Spots](#blind-spots)
+  - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
+- [Assumptions](#assumptions)
+  - [Human Availability as Bottleneck](#human-availability-as-bottleneck)
+  - [Spec Maturity Dependency](#spec-maturity-dependency)
+  - [Well-Formed Blackboard State](#well-formed-blackboard-state)
+  - [Multi-Instance Blackboard Coherence](#multi-instance-blackboard-coherence)
+- [Stress Points](#stress-points)
+  - [Supervisor Contention](#supervisor-contention)
+  - [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
+- [Fragility](#fragility)
+  - [Cross-Script State Mutation](#cross-script-state-mutation)
+  - [YAML Round-Trip Data Loss](#yaml-round-trip-data-loss)
+- [Trajectory](#trajectory)
+  - [Blackboard Growth Without Pruning](#blackboard-growth-without-pruning)
+  - [Anomaly Detail Validation Incomplete](#anomaly-detail-validation-incomplete)
+- [Accepted v1 Limitations](#accepted-v1-limitations)
+  - [Self-Reported Validation](#self-reported-validation)
+  - [Kill Switch Granularity](#kill-switch-granularity)
+- [Completed Fixes](#completed-fixes)
+- [Fix Details](#fix-details)
+
 ---
 
 ## Structural Load-Bearing Elements
