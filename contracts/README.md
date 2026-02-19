@@ -18,7 +18,7 @@ Contract split complete. Original `_archive/CONTRACT_FOR_PAIRING_AGENTS_v3.md` p
 
 ## Deployment
 
-See [COntract Activation](contract-activation.md)
+See [Contract Activation](contract-activation.md)
 
 ## Contract Hierarchy
 

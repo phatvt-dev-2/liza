@@ -22,6 +22,8 @@
 | [Roles](architecture/roles.md)                         | Planner, Coder, Code Reviewer responsibilities |
 | [State Machines](architecture/state-machines.md)       | Task states, agent states, exit codes |
 | [Blackboard Schema](architecture/blackboard-schema.md) | state.yaml structure, locking, operations |
+| [Supervision Model](architecture/supervision-model.md) | Action responsibility: supervisor vs agent via MCP tools |
+| [Architectural Issues](architecture/architectural-issues.md) | Persistent record of issues from architectural analysis |
 | [ADR/](architecture/ADR/)                              | Architecture Decision Records (created as decisions arise) |
 
 ### Protocols
@@ -32,6 +34,7 @@
 | [Sprint Governance](protocols/sprint-governance.md) | Checkpoints, retrospectives, spec evolution |
 | [Circuit Breaker](protocols/circuit-breaker.md) | Systemic failure detection, severity classification |
 | [Worktree Management](protocols/worktree-management.md) | Isolated workspaces, merge protocol |
+| [Agent Initialization](protocols/agent-initialization.md) | Agent bootstrap sequence from prompt to productive work |
 
 ### Implementation
 
@@ -93,10 +96,10 @@ See [Vision](<build/0 - Vision.md>) for the design philosophy and cost gradient.
 |----------|-----------|--------|
 | Build | 1 (0.md) | Complete |
 | Functional | 7 (0.md + 1.1–1.6) | Complete |
-| Architecture | 4 + ADR/ | Complete |
-| Protocols | 4 | Complete |
+| Architecture | 6 + ADR/ | Complete |
+| Protocols | 5 | Complete |
 | Implementation | 4 | Complete |
-| Contracts | 4 | Pending extraction |
+| Contracts | 8 | Complete |
 
 ---
 
