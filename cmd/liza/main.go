@@ -1012,6 +1012,9 @@ Example YAML file format:
 				input.DependsOn = []string{}
 			}
 		}
+		if cmd.Flags().Changed("type") {
+			input.Type, _ = cmd.Flags().GetString("type")
+		}
 
 		if input.Priority == 0 {
 			input.Priority = 1
@@ -1223,6 +1226,7 @@ func init() {
 	addTaskCmd.Flags().String("scope", "", "task scope (required unless using --file)")
 	addTaskCmd.Flags().Int("priority", 0, "task priority (default: 1, overrides file value)")
 	addTaskCmd.Flags().String("depends", "", "comma-separated list of task IDs this task depends on (overrides file value)")
+	addTaskCmd.Flags().String("type", "", "task type determining role workflow (default: coding)")
 	addTaskCmd.Flags().String("state", "", "path to state.yaml (default: .liza/state.yaml)")
 	addTaskCmd.Flags().String("log", "", "path to log.yaml (default: .liza/log.yaml)")
 

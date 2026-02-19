@@ -1263,7 +1263,7 @@ func TestWaitForWorkPollingAbortStateMode(t *testing.T) {
 
 	// Use polling wait with 50ms poll interval
 	checkWork := func(s *models.State) (bool, string) {
-		return models.CountClaimableTasks(s) > 0, ""
+		return models.CountClaimableTasks(s, models.RoleCoder) > 0, ""
 	}
 
 	// Start waiting in background

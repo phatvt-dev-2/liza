@@ -234,8 +234,11 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 		}
 	}
 
+	taskType, _ := params["type"].(string)
+
 	input := &commands.TaskInput{
 		ID:          id,
+		Type:        taskType,
 		Description: description,
 		SpecRef:     specRef,
 		DoneWhen:    doneWhen,

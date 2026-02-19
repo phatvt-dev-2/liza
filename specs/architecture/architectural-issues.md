@@ -33,6 +33,7 @@ Persistent record of issues identified by architectural analysis skills.
 - [Trajectory](#trajectory)
   - [Blackboard Growth Without Pruning](#blackboard-growth-without-pruning)
   - [Anomaly Detail Validation Incomplete](#anomaly-detail-validation-incomplete)
+  - [Task Type Registry is Partial Abstraction](#task-type-registry-is-partial-abstraction)
 - [Accepted v1 Limitations](#accepted-v1-limitations)
   - [Self-Reported Validation](#self-reported-validation)
   - [Kill Switch Granularity](#kill-switch-granularity)
@@ -358,6 +359,22 @@ Long-term concerns about system evolution.
 **Future options:**
 - Add cases for all 10 missing types in `validateAnomalies()` (`internal/commands/validate.go:360`)
 - Generate validation from a single type→fields declaration (eliminate spec/code/template as three separate lists)
+
+### Task Type Registry is Partial Abstraction
+
+**Skill:** code-review
+**Category:** TRAJECTORY
+
+**Issue:** The task type workflow registry (`taskWorkflows` in `internal/models/state.go`) maps `TaskType` → ordered role sequence, but the mapping of role → claimable statuses is hardcoded in `IsClaimable`'s switch statement. The registry captures *which* roles participate but not *how* they participate (i.e., which statuses each role can claim from). Adding a new role requires modifying the switch, which undermines the "new types add rows to the registry" premise.
+
+**Implication:** When a second task type arrives (e.g., `specification` with a `spec_reviewer` role), the claimable-status mapping will need resolving — either by extending the registry to include status rules, or by accepting the switch as the canonical location for claiming semantics.
+
+**Current mitigation:** TODO comment on the switch in `IsClaimable`. Only one task type exists today, so there's no split in practice.
+
+**Future options:**
+- Extend registry to map `(TaskType, role)` → `[]TaskStatus` (claimable statuses)
+- Keep the switch but validate it against registry entries at init time
+- Accept the split as intentional separation of concerns (registry = participation, switch = claiming rules)
 
 ---
 

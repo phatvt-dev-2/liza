@@ -56,6 +56,7 @@ Task fields:
 | Field | Type | Set By | Description |
 |-------|------|--------|-------------|
 | id | string | Planner | Unique task identifier (kebab-case) |
+| type | string | Planner | Task type determining role workflow (default: "coding") |
 | description | string | Planner | What to build (1-2 sentences) |
 | status | enum | CLI/MCP | Current state (see Task State Machine) |
 | priority | int | Planner | 1 (highest) to 5 (lowest) |

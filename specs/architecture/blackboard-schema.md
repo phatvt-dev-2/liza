@@ -64,6 +64,7 @@ goal:
 
 tasks:
   - id: task-1
+    type: coding  # Task type → role workflow mapping (default: "coding" → coder, code_reviewer)
     description: "Add retry decorator to UserAPI.get_user()"
     status: MERGED
     priority: 1
@@ -759,6 +760,7 @@ invariants:
   - "BLOCKED task must have blocked_reason and blocked_questions"
   - "SUPERSEDED task must have superseded_by and rescope_reason"
   - "MERGED task must not have worktree"
+  - "Task type must be a known type (currently: 'coding'); empty defaults to 'coding'"
   - "depends_on must reference existing task IDs"
   - "depends_on must not create circular dependencies"
   - "IMPLEMENTING task must have all depends_on tasks in MERGED status"

@@ -237,8 +237,8 @@ func buildTaskStatus(state *models.State) taskStatus {
 	}
 
 	// Count work availability
-	ts.Claimable = models.CountClaimableTasks(state)
-	ts.Reviewable = models.CountReviewableTasks(state)
+	ts.Claimable = models.CountClaimableTasks(state, models.RoleCoder)
+	ts.Reviewable = models.CountReviewableTasks(state, models.RoleCodeReviewer)
 
 	return ts
 }

@@ -21,6 +21,53 @@ type State struct {
 	Config         Config                 `yaml:"config"`
 }
 
+// TaskType represents the kind of task, determining which roles participate in its lifecycle.
+type TaskType string
+
+const (
+	TaskTypeCoding TaskType = "coding"
+)
+
+// Role name constants used in task workflow definitions.
+const (
+	RoleCoder        = "coder"
+	RoleCodeReviewer = "code_reviewer"
+)
+
+// taskWorkflows maps each TaskType to its ordered role sequence.
+// This is the single source of truth for which roles participate in a task type's lifecycle.
+// Access via RoleWorkflow(), HasRole(), and IsValid() — not directly.
+var taskWorkflows = map[TaskType][]string{
+	TaskTypeCoding: {RoleCoder, RoleCodeReviewer},
+}
+
+// IsValid checks if the task type is known.
+func (tt TaskType) IsValid() bool {
+	_, ok := taskWorkflows[tt]
+	return ok
+}
+
+// RoleWorkflow returns a copy of the ordered role sequence for this task type.
+func (tt TaskType) RoleWorkflow() []string {
+	wf := taskWorkflows[tt]
+	if wf == nil {
+		return nil
+	}
+	out := make([]string, len(wf))
+	copy(out, wf)
+	return out
+}
+
+// HasRole checks if the given role participates in this task type's workflow.
+func (tt TaskType) HasRole(role string) bool {
+	for _, r := range taskWorkflows[tt] {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
 // TaskStatus represents the state of a task
 type TaskStatus string
 
@@ -59,6 +106,7 @@ func (ts TaskStatus) IsTerminal() bool {
 // Task represents a single task in the Liza system
 type Task struct {
 	ID                  string             `yaml:"id"`
+	Type                TaskType           `yaml:"type,omitempty"`
 	Description         string             `yaml:"description"`
 	Status              TaskStatus         `yaml:"status"`
 	Priority            int                `yaml:"priority"`
@@ -93,12 +141,36 @@ type Task struct {
 	History             []TaskHistoryEntry `yaml:"history"`
 }
 
-// IsClaimable checks if a task is claimable based on its status and dependencies
-func (t *Task) IsClaimable(allTasks []Task) bool {
-	// Check if status allows claiming
-	if t.Status != TaskStatusReady &&
-		t.Status != TaskStatusRejected &&
-		t.Status != TaskStatusIntegrationFailed {
+// EffectiveType returns the task's type, defaulting to TaskTypeCoding when empty (backward compat).
+func (t *Task) EffectiveType() TaskType {
+	if t.Type == "" {
+		return TaskTypeCoding
+	}
+	return t.Type
+}
+
+// IsClaimable checks if a task is claimable by the given role based on its type, status, and dependencies.
+func (t *Task) IsClaimable(role string, allTasks []Task) bool {
+	// Check that the task type includes this role
+	if !t.EffectiveType().HasRole(role) {
+		return false
+	}
+
+	// Check if status allows claiming for this role.
+	// TODO: When adding a second task type, consider moving claimable-status mapping
+	// into the workflow registry so it's co-located with the role sequence.
+	switch role {
+	case RoleCoder:
+		if t.Status != TaskStatusReady &&
+			t.Status != TaskStatusRejected &&
+			t.Status != TaskStatusIntegrationFailed {
+			return false
+		}
+	case RoleCodeReviewer:
+		if t.Status != TaskStatusReadyForReview {
+			return false
+		}
+	default:
 		return false
 	}
 

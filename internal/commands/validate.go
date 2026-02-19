@@ -88,6 +88,9 @@ func validateTaskStates(state *models.State, projectRoot string, skipSpecFileChe
 		if !task.Status.IsValid() {
 			return fmt.Errorf("unknown task status '%s' for task %s", task.Status, task.ID)
 		}
+		if !task.EffectiveType().IsValid() {
+			return fmt.Errorf("unknown task type '%s' for task %s", task.Type, task.ID)
+		}
 	}
 	return nil
 }

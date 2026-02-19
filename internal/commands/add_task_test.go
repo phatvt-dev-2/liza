@@ -622,6 +622,87 @@ depends_on:
 	}
 }
 
+func TestAddTaskCommandTaskType(t *testing.T) {
+	tests := []struct {
+		name        string
+		taskType    string
+		wantErr     bool
+		errContains string
+		wantType    models.TaskType
+	}{
+		{
+			name:     "default type when empty",
+			taskType: "",
+			wantType: models.TaskTypeCoding,
+		},
+		{
+			name:     "explicit coding type",
+			taskType: "coding",
+			wantType: models.TaskTypeCoding,
+		},
+		{
+			name:        "invalid type rejected",
+			taskType:    "unknown",
+			wantErr:     true,
+			errContains: "unknown task type",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			logFile := paths.New(tmpDir).LogPath()
+			testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+			state := testhelpers.CreateValidState()
+			bb := testhelpers.WriteInitialState(t, stateFile, state)
+
+			if err := os.WriteFile(logFile, []byte{}, 0644); err != nil {
+				t.Fatalf("Failed to create log file: %v", err)
+			}
+
+			input := &TaskInput{
+				ID:          "task-1",
+				Type:        tt.taskType,
+				Description: "Test task",
+				SpecRef:     "specs/vision.md",
+				DoneWhen:    "Done",
+				Scope:       "Scope",
+				Priority:    1,
+			}
+
+			err := AddTaskCommand(stateFile, logFile, input, "planner-1")
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				testhelpers.AssertErrorContains(t, err, tt.errContains)
+				return
+			}
+
+			testhelpers.AssertNoError(t, err)
+
+			readState, err := bb.Read()
+			if err != nil {
+				t.Fatalf("Failed to read state: %v", err)
+			}
+
+			for i := range readState.Tasks {
+				if readState.Tasks[i].ID == "task-1" {
+					if readState.Tasks[i].Type != tt.wantType {
+						t.Errorf("Type = %q, want %q", readState.Tasks[i].Type, tt.wantType)
+					}
+					return
+				}
+			}
+			t.Fatal("Task not found in state")
+		})
+	}
+}
+
 func TestAddTaskCommandValidation(t *testing.T) {
 	// Create temp directory (project root)
 	tmpDir := t.TempDir()

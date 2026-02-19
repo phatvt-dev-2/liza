@@ -706,7 +706,7 @@ func waitForWorkPolling(
 func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			claimable := models.CountClaimableTasks(s)
+			claimable := models.CountClaimableTasks(s, models.RoleCoder)
 			resumableHandoffs := countResumableHandoffTasks(s, agentID)
 			logMsg := models.GetCoderWorkDiagnostics(s)
 
@@ -744,7 +744,7 @@ func countResumableHandoffTasks(state *models.State, agentID string) int {
 func waitForReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			count := models.CountReviewableTasks(s)
+			count := models.CountReviewableTasks(s, models.RoleCodeReviewer)
 			logMsg := models.GetReviewerWorkDiagnostics(s)
 			return count > 0, logMsg
 		})
@@ -913,7 +913,7 @@ func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, wor
 
 	var candidates []*models.Task
 	for i := range state.Tasks {
-		if state.Tasks[i].IsClaimable(state.Tasks) {
+		if state.Tasks[i].IsClaimable(models.RoleCoder, state.Tasks) {
 			candidates = append(candidates, &state.Tasks[i])
 		}
 	}
@@ -954,9 +954,8 @@ func claimReviewerTask(agentID string, leaseDuration int, bb *db.Blackboard) (ta
 		// are reverted to READY_FOR_REVIEW by ClearStaleReviewClaimsCommand)
 		var candidates []*models.Task
 		for i := range state.Tasks {
-			t := &state.Tasks[i]
-			if t.Status == models.TaskStatusReadyForReview {
-				candidates = append(candidates, t)
+			if state.Tasks[i].IsClaimable(models.RoleCodeReviewer, state.Tasks) {
+				candidates = append(candidates, &state.Tasks[i])
 			}
 		}
 		task := selectHighestPriorityTask(candidates)

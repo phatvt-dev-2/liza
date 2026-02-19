@@ -6,50 +6,27 @@ import (
 	"time"
 )
 
-// CountClaimableTasks counts tasks that coders can claim.
-// A task is claimable if:
-//   - Status is READY, REJECTED, or INTEGRATION_FAILED
-//   - All dependencies (depends_on) are MERGED
-func CountClaimableTasks(state *State) int {
-	// Build set of merged task IDs
-	mergedIDs := make(map[string]bool)
-	for _, task := range state.Tasks {
-		if task.Status == TaskStatusMerged {
-			mergedIDs[task.ID] = true
-		}
-	}
-
+// CountClaimableTasks counts tasks claimable by the given role.
+// Uses IsClaimable which checks task type, status, and dependencies.
+func CountClaimableTasks(state *State, role string) int {
 	count := 0
-	for _, task := range state.Tasks {
-		if task.Status != TaskStatusReady &&
-			task.Status != TaskStatusRejected &&
-			task.Status != TaskStatusIntegrationFailed {
-			continue
-		}
-
-		allDepsSatisfied := true
-		for _, depID := range task.DependsOn {
-			if !mergedIDs[depID] {
-				allDepsSatisfied = false
-				break
-			}
-		}
-
-		if allDepsSatisfied {
+	for i := range state.Tasks {
+		if state.Tasks[i].IsClaimable(role, state.Tasks) {
 			count++
 		}
 	}
-
 	return count
 }
 
 // CountReviewableTasks counts tasks that are immediately claimable by a reviewer.
-// Only READY_FOR_REVIEW tasks qualify — REVIEWING tasks with expired leases require
-// ClearStaleReviewClaimsCommand to revert them to READY_FOR_REVIEW first.
-func CountReviewableTasks(state *State) int {
+// Only READY_FOR_REVIEW tasks with the "code_reviewer" role in their workflow qualify.
+// REVIEWING tasks with expired leases require ClearStaleReviewClaimsCommand to revert
+// them to READY_FOR_REVIEW first.
+func CountReviewableTasks(state *State, role string) int {
 	count := 0
-	for _, task := range state.Tasks {
-		if task.Status == TaskStatusReadyForReview {
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if task.Status == TaskStatusReadyForReview && task.EffectiveType().HasRole(role) {
 			count++
 		}
 	}
@@ -58,7 +35,7 @@ func CountReviewableTasks(state *State) int {
 
 // GetCoderWorkDiagnostics returns detailed diagnostic information about task availability for coders.
 func GetCoderWorkDiagnostics(state *State) string {
-	claimable := CountClaimableTasks(state)
+	claimable := CountClaimableTasks(state, RoleCoder)
 
 	if claimable > 0 {
 		return fmt.Sprintf("Found %d claimable task(s)", claimable)
@@ -118,10 +95,10 @@ func GetReviewerWorkDiagnostics(state *State) string {
 	activelyReviewing := 0
 
 	for _, task := range state.Tasks {
-		if task.Status == TaskStatusReadyForReview {
+		if task.Status == TaskStatusReadyForReview && task.EffectiveType().HasRole(RoleCodeReviewer) {
 			unassigned++
 		}
-		if task.Status == TaskStatusReviewing {
+		if task.Status == TaskStatusReviewing && task.EffectiveType().HasRole(RoleCodeReviewer) {
 			if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
 				expiredLeases++
 			} else {

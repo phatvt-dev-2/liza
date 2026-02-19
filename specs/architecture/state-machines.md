@@ -80,6 +80,24 @@
 Note: REVIEWING → READY_FOR_REVIEW (stale lease recovery, not shown)
 ```
 
+### Type-Aware Claimability
+
+Each task has a `type` field (default: `"coding"`) that determines which roles participate in its lifecycle. The workflow registry maps each type to an ordered role sequence:
+
+| Type | Role Workflow | Coder Claims | Code Reviewer Claims |
+|------|--------------|--------------|---------------------|
+| `coding` | coder → code_reviewer | READY, REJECTED, INTEGRATION_FAILED | READY_FOR_REVIEW |
+
+Claimability rule:
+```
+claimable(task, role) =
+    task.effective_type().has_role(role)
+    AND status in claimable_statuses_for(role)
+    AND (depends_on is empty OR all depends_on are MERGED)
+```
+
+When new task types are added (e.g., `specification`, `architecture`), they define their own role workflow in the registry. The supervisor and work detection derive behavior from the registry rather than hardcoding role checks.
+
 ### Forbidden Transitions
 
 - DRAFT → IMPLEMENTING (coders cannot claim drafts)

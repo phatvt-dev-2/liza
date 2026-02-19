@@ -17,6 +17,7 @@ import (
 // Can be loaded from a YAML file or constructed from CLI flags.
 type TaskInput struct {
 	ID          string   `yaml:"id"`
+	Type        string   `yaml:"type,omitempty"`
 	Description string   `yaml:"description"`
 	SpecRef     string   `yaml:"spec_ref"`
 	DoneWhen    string   `yaml:"done_when"`
@@ -68,6 +69,17 @@ func AddTaskCommand(statePath, logPath string, input *TaskInput, plannerID strin
 		return fmt.Errorf("priority must be positive, got %d", input.Priority)
 	}
 
+	// Default task type to "coding" if empty
+	if input.Type == "" {
+		input.Type = string(models.TaskTypeCoding)
+	}
+
+	// Validate task type
+	taskType := models.TaskType(input.Type)
+	if !taskType.IsValid() {
+		return fmt.Errorf("unknown task type %q", input.Type)
+	}
+
 	// Normalize dependencies (trim whitespace, remove empty strings)
 	normalizedDeps := []string{}
 	for _, dep := range input.DependsOn {
@@ -98,6 +110,7 @@ func AddTaskCommand(statePath, logPath string, input *TaskInput, plannerID strin
 	// Create new task
 	newTask := models.Task{
 		ID:          input.ID,
+		Type:        taskType,
 		Description: input.Description,
 		Status:      models.TaskStatusReady,
 		Priority:    input.Priority,

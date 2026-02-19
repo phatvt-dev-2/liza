@@ -376,6 +376,11 @@ func (s *Server) registerMutationTools() {
 					Type:        "array",
 					Description: "List of task IDs this task depends on",
 				},
+				"type": {
+					Type:        "string",
+					Description: "Task type determining role workflow (default: coding)",
+					Default:     "coding",
+				},
 				"agent_id": {
 					Type:        "string",
 					Description: "Agent ID performing the action (default: planner-1)",

@@ -109,7 +109,7 @@ func TestCountClaimableTasks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
-			got := models.CountClaimableTasks(state)
+			got := models.CountClaimableTasks(state, models.RoleCoder)
 			if got != tt.want {
 				t.Errorf("CountClaimableTasks() = %d, want %d", got, tt.want)
 			}
@@ -224,7 +224,7 @@ func TestCountReviewableTasks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
-			got := models.CountReviewableTasks(state)
+			got := models.CountReviewableTasks(state, models.RoleCodeReviewer)
 			if got != tt.want {
 				t.Errorf("CountReviewableTasks() = %d, want %d", got, tt.want)
 			}
@@ -514,9 +514,9 @@ func TestHasCoderWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.CountClaimableTasks(tt.state) > 0
+			got := models.CountClaimableTasks(tt.state, models.RoleCoder) > 0
 			if got != tt.want {
-				t.Errorf("HasCoderWork() = %v, want %v", got, tt.want)
+				t.Errorf("CountClaimableTasks() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -565,9 +565,9 @@ func TestHasReviewerWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.CountReviewableTasks(tt.state) > 0
+			got := models.CountReviewableTasks(tt.state, models.RoleCodeReviewer) > 0
 			if got != tt.want {
-				t.Errorf("HasReviewerWork() = %v, want %v", got, tt.want)
+				t.Errorf("CountReviewableTasks() = %v, want %v", got, tt.want)
 			}
 		})
 	}

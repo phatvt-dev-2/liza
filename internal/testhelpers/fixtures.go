@@ -171,6 +171,7 @@ func WriteInitialState(t *testing.T, statePath string, state *models.State) *db.
 func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) models.Task {
 	task := models.Task{
 		ID:          taskID,
+		Type:        models.TaskTypeCoding,
 		Description: "Test task",
 		Status:      status,
 		Priority:    1,

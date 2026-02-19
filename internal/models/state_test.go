@@ -310,6 +310,134 @@ func TestStateYAMLMarshaling(t *testing.T) {
 	}
 }
 
+func TestTaskTypeIsValid(t *testing.T) {
+	if !TaskTypeCoding.IsValid() {
+		t.Error("TaskTypeCoding should be valid")
+	}
+	if TaskType("unknown").IsValid() {
+		t.Error("unknown task type should be invalid")
+	}
+	if TaskType("").IsValid() {
+		t.Error("empty task type should be invalid (not in registry)")
+	}
+}
+
+func TestTaskTypeRoleWorkflow(t *testing.T) {
+	workflow := TaskTypeCoding.RoleWorkflow()
+	if len(workflow) != 2 {
+		t.Fatalf("coding workflow should have 2 roles, got %d", len(workflow))
+	}
+	if workflow[0] != RoleCoder || workflow[1] != RoleCodeReviewer {
+		t.Errorf("coding workflow = %v, want [coder code_reviewer]", workflow)
+	}
+}
+
+func TestTaskTypeHasRole(t *testing.T) {
+	if !TaskTypeCoding.HasRole(RoleCoder) {
+		t.Error("coding type should have coder role")
+	}
+	if !TaskTypeCoding.HasRole(RoleCodeReviewer) {
+		t.Error("coding type should have code_reviewer role")
+	}
+	if TaskTypeCoding.HasRole("planner") {
+		t.Error("coding type should not have planner role")
+	}
+}
+
+func TestEffectiveType(t *testing.T) {
+	// Empty type defaults to coding
+	task := Task{Type: ""}
+	if task.EffectiveType() != TaskTypeCoding {
+		t.Errorf("EffectiveType() for empty = %s, want %s", task.EffectiveType(), TaskTypeCoding)
+	}
+
+	// Explicit coding type
+	task = Task{Type: TaskTypeCoding}
+	if task.EffectiveType() != TaskTypeCoding {
+		t.Errorf("EffectiveType() for coding = %s, want %s", task.EffectiveType(), TaskTypeCoding)
+	}
+}
+
+func TestTaskTypeBackwardCompat(t *testing.T) {
+	// YAML without type field should unmarshal with empty Type
+	yamlData := `id: task-1
+description: Test task
+status: READY
+priority: 1
+`
+	var task Task
+	if err := yaml.Unmarshal([]byte(yamlData), &task); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+	if task.Type != "" {
+		t.Errorf("Type should be empty for backward compat, got %q", task.Type)
+	}
+	if task.EffectiveType() != TaskTypeCoding {
+		t.Errorf("EffectiveType() = %s, want %s", task.EffectiveType(), TaskTypeCoding)
+	}
+}
+
+func TestIsClaimableWithRole(t *testing.T) {
+	tests := []struct {
+		name      string
+		task      Task
+		role      string
+		claimable bool
+	}{
+		{
+			name:      "coder can claim READY coding task",
+			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding},
+			role:      RoleCoder,
+			claimable: true,
+		},
+		{
+			name:      "coder can claim REJECTED coding task",
+			task:      Task{Status: TaskStatusRejected, Type: TaskTypeCoding},
+			role:      RoleCoder,
+			claimable: true,
+		},
+		{
+			name:      "coder cannot claim READY_FOR_REVIEW task",
+			task:      Task{Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
+			role:      RoleCoder,
+			claimable: false,
+		},
+		{
+			name:      "code_reviewer can claim READY_FOR_REVIEW coding task",
+			task:      Task{Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
+			role:      RoleCodeReviewer,
+			claimable: true,
+		},
+		{
+			name:      "code_reviewer cannot claim READY task",
+			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding},
+			role:      RoleCodeReviewer,
+			claimable: false,
+		},
+		{
+			name:      "planner cannot claim any task",
+			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding},
+			role:      "planner",
+			claimable: false,
+		},
+		{
+			name:      "unknown type is not claimable",
+			task:      Task{Status: TaskStatusReady, Type: TaskType("unknown")},
+			role:      RoleCoder,
+			claimable: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.task.IsClaimable(tt.role, nil)
+			if result != tt.claimable {
+				t.Errorf("IsClaimable(%q) = %v, want %v", tt.role, result, tt.claimable)
+			}
+		})
+	}
+}
+
 func TestTaskClaimability(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -372,7 +500,7 @@ func TestTaskClaimability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(nil) // nil means all dependencies are satisfied
+			result := tt.task.IsClaimable(RoleCoder, nil) // nil means all dependencies are satisfied
 			if result != tt.claimable {
 				t.Errorf("IsClaimable() = %v, want %v", result, tt.claimable)
 			}
@@ -415,7 +543,7 @@ func TestTaskClaimabilityWithDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(allTasks)
+			result := tt.task.IsClaimable(RoleCoder, allTasks)
 			if result != tt.claimable {
 				t.Errorf("IsClaimable() = %v, want %v", result, tt.claimable)
 			}

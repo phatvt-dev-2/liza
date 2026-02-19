@@ -6,6 +6,20 @@ Tasks flow through a lifecycle managed by Planner, Coder, and Code Reviewer role
 
 For state diagrams and valid transitions, see [State Machines](../architecture/state-machines.md).
 
+## Task Type and Role Workflow
+
+Each task has a `type` field that determines which roles participate in its lifecycle. The type maps to an ordered role workflow via a static registry:
+
+| Type | Workflow | Description |
+|------|----------|-------------|
+| `coding` (default) | coder → code_reviewer | Standard code implementation with review |
+
+When the `type` field is empty, it defaults to `"coding"` for backward compatibility. Unknown types are rejected by `liza validate`.
+
+The task type is set by the Planner during task creation (via `liza_add_task` or `liza add-task --type`). Coders and Code Reviewers can only claim tasks whose type includes their role in the workflow.
+
+See [State Machines — Type-Aware Claimability](../architecture/state-machines.md#type-aware-claimability) for the formal claimability rule.
+
 ## Iteration Protocol
 
 ### Ralph-Style Loop
