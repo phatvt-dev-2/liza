@@ -40,7 +40,18 @@ Persistent record of issues identified by architectural analysis skills.
 - [Fix Details](#fix-details)
   - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
   - [Implicit State Machine](#implicit-state-machine)
-
+- [Code-Level Architectural Smells](#code-level-architectural-smells)
+  - [Supervisor God File](#supervisor-god-file)
+  - [Duplicated File-Locking Mechanism](#duplicated-file-locking-mechanism)
+  - [MCP Handler Bypasses Blackboard Locking](#mcp-handler-bypasses-blackboard-locking)
+  - [Magic Number 1800 Scattered](#magic-number-1800-scattered)
+  - [executeTemplate Panics on Error](#executetemplate-panics-on-error)
+  - [Inconsistent NotFoundError Usage](#inconsistent-notfounderror-usage)
+  - [Commands Presentation+Logic Coupling](#commands-presentationlogic-coupling)
+  - [Agent → Commands Upward Dependency](#agent--commands-upward-dependency)
+  - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
+  - [Untested MCP Server Dispatch Layer](#untested-mcp-server-dispatch-layer)
+  - [Untested Work Detection Logic](#untested-work-detection-logic)
 ---
 
 ## Structural Load-Bearing Elements
@@ -534,3 +545,130 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 **Original issue:** Task state transitions were not enforced by a declared state machine. Each command independently checked its own preconditions, making the valid transition graph emergent from scattered conditional checks across 7 command files and `supervisor.go`. Adding or modifying a command could silently create invalid transition paths.
 
 **Fix:** Declared the complete transition graph as `taskTransitions` map in `internal/models/state.go` with `CanTransition()` and `Transition()` methods. All 14 production transition sites migrated from direct `task.Status = X` to `task.Transition(X)`, which validates against the declared graph and returns a descriptive error on invalid transitions. `IsClaimable()` rewritten to derive claimable statuses from `CanTransition()` instead of a hardcoded switch. Existing precondition checks in commands preserved as defense-in-depth.
+
+---
+
+## Code-Level Architectural Smells
+
+Issues identified through code-level architectural analysis (patterns, structure, duplication).
+
+### Supervisor God File
+
+**Skill:** software-architecture-review
+**Category:** God class/module
+
+**Issue:** `internal/agent/supervisor.go` is 1,426 LOC with 5+ responsibilities: loop orchestration, prompt building, lease management, checkpoint handling, and agent spawning. It is the most frequently changed file and the hardest to test in isolation.
+
+**Implication:** High change frequency combined with broad responsibility means most agent-layer changes risk unrelated regressions. Testing requires setting up the full supervisor context even for narrow behaviors.
+
+**Direction:** Extract cohesive pieces — lease management, prompt assembly, and agent spawning are candidates for standalone packages or files within `internal/agent/`.
+
+### Duplicated File-Locking Mechanism
+
+**Skill:** software-architecture-review
+**Category:** DRY violation / Shotgun surgery
+
+**Issue:** `internal/db/blackboard.go` and `internal/log/logger.go` independently implement identical file-locking with `gofrs/flock`: same constants (`DefaultLockTimeout=10s`, `LockCheckInterval=100ms`), same polling loop pattern (`withLock` / `withLockOperation`). The db version has additional stale-lock recovery and metrics; the log version does not.
+
+**Implication:** If the polling interval, timeout, or recovery logic is patched in one package, the other silently diverges. The log package also lacks the stale-lock recovery that db has, creating inconsistent failure modes under the same stress conditions.
+
+**Direction:** Extract to a shared `internal/filelock` utility using the db package's enriched version as the basis.
+
+### MCP Handler Bypasses Blackboard Locking
+
+**Skill:** software-architecture-review
+**Category:** Leaky abstraction / Boundary violation
+
+**Issue:** `internal/mcp/handlers.go` line 180 reads `state.yaml` directly via `os.ReadFile`, bypassing `db.Blackboard.Read()` and its flock protection. This is in the `readResource` handler for `liza://state`.
+
+**Implication:** Under concurrent access, the MCP handler can read a partially-written state file, returning corrupt or inconsistent data to agents. The Blackboard abstraction exists precisely to prevent this.
+
+**Direction:** Replace direct file read with `db.Blackboard.Read()`. The handler already has access to the state path; it needs a Blackboard instance instead.
+
+### Magic Number 1800 Scattered
+
+**Skill:** software-architecture-review
+**Category:** Hardcoded configuration
+
+**Issue:** The default lease duration of 1800 seconds appears as an unnamed magic number in `internal/agent/supervisor.go` (lines 469, 860) and `internal/commands/claim_task.go` (line 104). All three use the same fallback pattern: `if leaseDuration <= 0 { leaseDuration = 1800 }`. Additionally, `supervisor.go` has 6 more magic numbers in `getRoleWaitConfig` for poll/wait defaults (30, 60, 1800).
+
+**Implication:** No single place to change the default lease duration. `internal/agent/heartbeat.go` already defines `DefaultLeaseDuration = 30 * time.Minute` as a named constant, but the three fallback sites use raw `1800` instead.
+
+**Direction:** Replace magic numbers with the existing `DefaultLeaseDuration` constant (converting to seconds where needed), or define `DefaultLeaseDurationSeconds` alongside it.
+
+### executeTemplate Panics on Error
+
+**Skill:** software-architecture-review
+**Category:** Leaky abstraction / Non-idempotent operations
+
+**Issue:** `internal/prompts/templates.go` calls `panic("template: " + err.Error())` when template execution fails, instead of returning an error. In a long-running supervisor process, this crashes the entire binary on malformed template data.
+
+**Implication:** Template execution errors (missing fields, type mismatches) are unrecoverable. The supervisor cannot gracefully handle or retry — the process dies and must be restarted externally.
+
+**Direction:** Change `executeTemplate` to return `(string, error)`. Callers already handle errors from prompt building; propagation is straightforward.
+
+### Inconsistent NotFoundError Usage
+
+**Skill:** software-architecture-review
+**Category:** Primitive obsession / Unstable interface
+
+**Issue:** `internal/errors` defines a structured `NotFoundError` with `IsNotFound()` check, but most "not found" scenarios use ad-hoc `fmt.Errorf("task not found: %s", taskID)` strings. The structured type is only used by inspect commands (`inspect_tasks.go`, `inspect_agents.go`, `inspect_field.go`); other commands and the db package use string-based errors for the same semantic meaning.
+
+**Implication:** Callers cannot reliably distinguish "not found" from other errors programmatically. The MCP `classifyError()` already does pattern matching on error strings — fragile and will break if wording changes.
+
+**Direction:** Adopt `NotFoundError` consistently across `db/blackboard.go` and command files. The MCP `classifyError()` can then use `errors.As` instead of string matching.
+
+### Commands Presentation+Logic Coupling
+
+**Skill:** software-architecture-review
+**Category:** Leaky abstraction / Inappropriate intimacy
+
+**Issue:** The `commands` package serves three consumers with incompatible I/O expectations — CLI (terminal), MCP server (JSON-RPC over stdio), and supervisor (background process) — but embeds terminal assumptions: 40+ `fmt.Print*` calls to stdout/stderr and 5+ direct `os.Stdin` reads in non-test production code. Functions like `ClaimTaskCommand()` print success messages, `SetupCommand()` prompts for confirmation, and `DeleteTaskCommand()` reads interactive input.
+
+**Implication:** MCP server calls commands via `handlers.go` that print to stdout, which is the JSON-RPC transport channel — stdout writes from commands could corrupt the protocol stream. Supervisor calls (`commands.ClaimTaskCommand()`, `commands.WtMergeCommand()`) mix operational output with supervisor logs. Tests must monkey-patch `os.Stdin` (8+ test files use `os.Stdin = r` / `defer func() { os.Stdin = oldStdin }()`) — fragile and not concurrency-safe.
+
+**Direction:** Separate business logic from presentation. Command functions return structured results; callers handle output. The MCP adapter already does this partially — `StatusCommand()` returns a string. Extend pattern to mutation commands. This also resolves the agent→commands coupling (see below).
+
+### Agent → Commands Upward Dependency
+
+**Skill:** software-architecture-review
+**Category:** Leaky abstraction
+
+**Issue:** The supervisor (`internal/agent/supervisor.go`) directly calls three `commands` package functions: `ClaimTaskCommand()` (line 926), `WtMergeCommand()` (line 1250), `ClearStaleReviewClaimsCommand()` (line 383). It also imports `commands.IntegrationFailedError` for error type checking. The `commands` package doc.go states "Each command corresponds to a subcommand in the liza CLI" — the supervisor is an unintended consumer of CLI-specific handlers.
+
+**Implication:** The orchestration layer (agent) depends on the CLI handler layer (commands), creating a conceptual inversion. The supervisor inherits presentation side effects — when it calls `ClaimTaskCommand()`, it gets terminal output it doesn't want. This coupling means changes to command presentation (e.g., adding progress indicators) leak into the supervisor.
+
+**Direction:** Extract business logic from `ClaimTaskCommand`, `WtMergeCommand`, and `ClearStaleReviewClaimsCommand` into service functions that return structured results (no I/O side effects). Both `commands` and `agent` call these functions. Synergistic with monolithic command decomposition — the "phases" extracted from commands become the shared service layer.
+
+### Interactive Stdin in Library Packages
+
+**Skill:** software-architecture-review
+**Category:** Untestable by design
+
+**Issue:** Direct `os.Stdin` reads via `bufio.NewReader(os.Stdin)` or `bufio.NewScanner(os.Stdin)` in: `embedded/embedded.go` (2 locations: `WriteClaudeSettings`, `WriteMCPSettings`), `commands/setup.go` (2 locations), `commands/init.go` (1), `commands/delete_task.go` (2), `commands/delete_agent.go` (1). Total: 8 locations across 5 files in 2 packages.
+
+**Implication:** Functions with hardwired stdin cannot be used non-interactively (e.g., from MCP server or automated scripts). Tests work around this by replacing `os.Stdin` with pipe readers (observed in 8+ test files) — this pattern is fragile and not safe for concurrent test execution.
+
+**Direction:** Accept an `io.Reader` parameter or a `Confirmer` callback for interactive prompts. Default to `os.Stdin` at the CLI call site in `cmd/liza/main.go`. This makes the same functions usable from non-interactive contexts (MCP, automation, tests).
+
+### Untested MCP Server Dispatch Layer
+
+**Skill:** software-architecture-review
+**Category:** Untested critical path
+
+**Issue:** `internal/mcp/server.go`'s `HandleRequest()` (JSON-RPC routing: switch on method → call handler → return response) and `classifyError()` (5 classification branches mapping Go errors to JSON-RPC error codes) are at 0% statement coverage. `server_test.go` has only 4 initialization/registration tests. `handlers_test.go` (1,298 LOC) tests handlers directly but bypasses the dispatch layer entirely — a misrouted method or misclassified error would not be caught.
+
+**Implication:** `classifyError` determines whether agents retry or abort on failure. Silent misclassification (e.g., a lock timeout classified as internal error) breaks agent retry behavior with no error signal. `HandleRequest` routing errors would silently return "method not found" for valid tools.
+
+**Direction:** Test `HandleRequest` and `classifyError` directly — both are pure logic with no I/O coupling. `HandleRequest` takes a `Request` struct and returns a `Response`; `classifyError` takes an `error` and returns a code. Table-driven tests with representative error strings and method names.
+
+### Untested Work Detection Logic
+
+**Skill:** software-architecture-review
+**Category:** Untested critical path
+
+**Issue:** `internal/models/diagnostics.go` (127 LOC) has no corresponding test file. Contains 4 pure functions on `*State`: `CountClaimableTasks`, `CountReviewableTasks`, `GetCoderWorkDiagnostics`, `GetReviewerWorkDiagnostics`. These are called by the supervisor to determine work availability — they directly control when agents wake up and what work they claim.
+
+**Implication:** Work detection logic is a critical decision point: incorrect counts mean agents either sleep when work is available or wake when none exists. Both failure modes stall the system. The functions are pure (no I/O, no side effects) making them straightforward to test.
+
+**Direction:** Write unit tests with table-driven cases covering: tasks with various statuses, dependency satisfaction/unsatisfaction, review lease expiry, mixed task types. Tests should exercise the boundary between "claimable" and "not claimable" for each status/dependency combination.
