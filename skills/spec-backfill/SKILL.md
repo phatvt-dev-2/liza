@@ -264,13 +264,21 @@ A bad backfilled spec:
 When the user invokes this skill:
 
 1. Check for existing state (`specs/spec-backfill-state.yaml`), offer to resume
-2. If starting fresh, begin with code classification
-3. Show the user your classification for validation
-4. Map existing specs to code, surface gaps and conflicts
-5. **Ask** which gaps to prioritize
-6. Generate specs one at a time, confirming each before proceeding
-7. Verify no legacy content lost before archiving
-8. Update mapping and changelog
+2. **Detect staleness** — compare stored SHAs in `spec-mapping.yaml` against current HEAD:
+   - `code_sha` stale, `spec_sha` current → code-ahead-of-spec (new behavior undocumented)
+   - `code_sha` current, `spec_sha` stale → spec edited (intentional or drift?)
+   - Both stale → full reconciliation needed
+   - New code files (not in mapping) → flag as candidates for classification
+   - Deleted code files → flag for mapping cleanup
+   - If nothing stale/new → report "all current" and stop
+3. Surface stale mappings and new files to user
+4. If starting fresh or extending, begin with code classification
+5. Show the user your classification for validation
+6. Map existing specs to code, surface gaps and conflicts
+7. **Ask** which gaps to prioritize
+8. Generate specs one at a time, confirming each before proceeding
+9. Verify no legacy content lost before archiving
+10. Update mapping (including SHAs), changelog, and output report per `references/report-format.md`
 
 ---
 
@@ -292,16 +300,24 @@ code_classification:
 
 mappings:
   # code_path → spec mapping
+  # Staleness: compare code_sha and spec_sha against current HEAD
+  #   code_sha stale, spec_sha current → code-ahead-of-spec
+  #   code_sha current, spec_sha stale → spec edited (intentional or drift?)
+  #   both stale → full reconciliation needed
   "src/billing/invoice.py":
     spec_path: "specs/functional/1.2.1.md"
     spec_title: "Invoicing"
-    status: aligned  # aligned | gap | conflict | stale
+    code_sha: a1b2c3d
+    spec_sha: x9y8z7w
+    status: aligned  # aligned | gap | conflict (stale is computed from SHA comparison, not stored)
     last_verified: "2024-01-15"
     confidence: confirmed  # confirmed | inferred-pending-review
     conflict_details: null
   "src/notifications/email.py":
     spec_path: null
     spec_title: null
+    code_sha: d4e5f6a
+    spec_sha: null
     status: gap
     last_verified: "2024-01-15"
     confidence: inferred-pending-review
@@ -309,6 +325,8 @@ mappings:
   "src/auth/login.py":
     spec_path: "specs/functional/1.1.1.md"
     spec_title: "User Login"
+    code_sha: b7c8d9e
+    spec_sha: f3g4h5i
     status: conflict
     last_verified: "2024-01-15"
     confidence: confirmed
