@@ -54,15 +54,7 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Find task
-	var task *models.Task
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			task = &state.Tasks[i]
-			break
-		}
-	}
-
+	task := state.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
@@ -109,38 +101,37 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 
 		// Update state to INTEGRATION_FAILED
 		updateErr := bb.Modify(func(s *models.State) error {
-			for i := range s.Tasks {
-				if s.Tasks[i].ID == taskID {
-					// Re-validate status under lock to prevent concurrent transition
-					if s.Tasks[i].Status != models.TaskStatusApproved {
-						return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, s.Tasks[i].Status)
-					}
-					if err := s.Tasks[i].Transition(models.TaskStatusIntegrationFailed); err != nil {
-						return err
-					}
-					s.Tasks[i].FailedBy = appendUniqueAgentID(s.Tasks[i].FailedBy, agentID)
-
-					// Add history entry with specific reason
-					shortWtHEAD := wtHEAD
-					if len(wtHEAD) > 7 {
-						shortWtHEAD = wtHEAD[:7]
-					}
-					shortReviewCommit := expectedCommit
-					if len(expectedCommit) > 7 {
-						shortReviewCommit = expectedCommit[:7]
-					}
-					reason := fmt.Sprintf("worktree HEAD (%s) does not match approved commit (%s)", shortWtHEAD, shortReviewCommit)
-					s.Tasks[i].History = append(s.Tasks[i].History, models.TaskHistoryEntry{
-						Time:   time.Now(),
-						Event:  "integration_failed",
-						Agent:  &agentID,
-						Reason: &reason,
-					})
-
-					return nil
-				}
+			t := s.FindTask(taskID)
+			if t == nil {
+				return fmt.Errorf("task not found: %s", taskID)
 			}
-			return fmt.Errorf("task not found: %s", taskID)
+			// Re-validate status under lock to prevent concurrent transition
+			if t.Status != models.TaskStatusApproved {
+				return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
+			}
+			if err := t.Transition(models.TaskStatusIntegrationFailed); err != nil {
+				return err
+			}
+			t.FailedBy = appendUniqueAgentID(t.FailedBy, agentID)
+
+			// Add history entry with specific reason
+			shortWtHEAD := wtHEAD
+			if len(wtHEAD) > 7 {
+				shortWtHEAD = wtHEAD[:7]
+			}
+			shortReviewCommit := expectedCommit
+			if len(expectedCommit) > 7 {
+				shortReviewCommit = expectedCommit[:7]
+			}
+			reason := fmt.Sprintf("worktree HEAD (%s) does not match approved commit (%s)", shortWtHEAD, shortReviewCommit)
+			t.History = append(t.History, models.TaskHistoryEntry{
+				Time:   time.Now(),
+				Event:  "integration_failed",
+				Agent:  &agentID,
+				Reason: &reason,
+			})
+
+			return nil
 		})
 
 		if updateErr != nil {
@@ -182,30 +173,29 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 
 		// Update state to INTEGRATION_FAILED
 		updateErr := bb.Modify(func(s *models.State) error {
-			for i := range s.Tasks {
-				if s.Tasks[i].ID == taskID {
-					// Re-validate status under lock to prevent concurrent transition
-					if s.Tasks[i].Status != models.TaskStatusApproved {
-						return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, s.Tasks[i].Status)
-					}
-					if err := s.Tasks[i].Transition(models.TaskStatusIntegrationFailed); err != nil {
-						return err
-					}
-					s.Tasks[i].FailedBy = appendUniqueAgentID(s.Tasks[i].FailedBy, agentID)
-
-					// Add history entry
-					reason := "merge conflict"
-					s.Tasks[i].History = append(s.Tasks[i].History, models.TaskHistoryEntry{
-						Time:   time.Now(),
-						Event:  "integration_failed",
-						Agent:  &agentID,
-						Reason: &reason,
-					})
-
-					return nil
-				}
+			t := s.FindTask(taskID)
+			if t == nil {
+				return fmt.Errorf("task not found: %s", taskID)
 			}
-			return fmt.Errorf("task not found: %s", taskID)
+			// Re-validate status under lock to prevent concurrent transition
+			if t.Status != models.TaskStatusApproved {
+				return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
+			}
+			if err := t.Transition(models.TaskStatusIntegrationFailed); err != nil {
+				return err
+			}
+			t.FailedBy = appendUniqueAgentID(t.FailedBy, agentID)
+
+			// Add history entry
+			reason := "merge conflict"
+			t.History = append(t.History, models.TaskHistoryEntry{
+				Time:   time.Now(),
+				Event:  "integration_failed",
+				Agent:  &agentID,
+				Reason: &reason,
+			})
+
+			return nil
 		})
 
 		if updateErr != nil {
@@ -254,32 +244,31 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 
 			// Update state to INTEGRATION_FAILED
 			updateErr := bb.Modify(func(s *models.State) error {
-				for i := range s.Tasks {
-					if s.Tasks[i].ID == taskID {
-						// Re-validate status under lock to prevent concurrent transition
-						if s.Tasks[i].Status != models.TaskStatusApproved {
-							return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, s.Tasks[i].Status)
-						}
-						if err := s.Tasks[i].Transition(models.TaskStatusIntegrationFailed); err != nil {
-							return err
-						}
-						s.Tasks[i].FailedBy = appendUniqueAgentID(s.Tasks[i].FailedBy, agentID)
-						s.Tasks[i].MergeCommit = &mergeCommit
-
-						// Add history entry
-						failReason := "integration tests failed"
-						s.Tasks[i].History = append(s.Tasks[i].History, models.TaskHistoryEntry{
-							Time:   time.Now(),
-							Event:  "integration_failed",
-							Agent:  &agentID,
-							Reason: &failReason,
-							Commit: &mergeCommit,
-						})
-
-						return nil
-					}
+				t := s.FindTask(taskID)
+				if t == nil {
+					return fmt.Errorf("task not found: %s", taskID)
 				}
-				return fmt.Errorf("task not found: %s", taskID)
+				// Re-validate status under lock to prevent concurrent transition
+				if t.Status != models.TaskStatusApproved {
+					return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
+				}
+				if err := t.Transition(models.TaskStatusIntegrationFailed); err != nil {
+					return err
+				}
+				t.FailedBy = appendUniqueAgentID(t.FailedBy, agentID)
+				t.MergeCommit = &mergeCommit
+
+				// Add history entry
+				failReason := "integration tests failed"
+				t.History = append(t.History, models.TaskHistoryEntry{
+					Time:   time.Now(),
+					Event:  "integration_failed",
+					Agent:  &agentID,
+					Reason: &failReason,
+					Commit: &mergeCommit,
+				})
+
+				return nil
 			})
 
 			if updateErr != nil {
@@ -296,35 +285,34 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 	// worktree still exists for investigation; reverse order would lose the worktree
 	// while state still says APPROVED)
 	err = bb.Modify(func(s *models.State) error {
-		for i := range s.Tasks {
-			if s.Tasks[i].ID == taskID {
-				// Re-validate status under lock to prevent concurrent transition
-				if s.Tasks[i].Status != models.TaskStatusApproved {
-					return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, s.Tasks[i].Status)
-				}
-				if err := s.Tasks[i].Transition(models.TaskStatusMerged); err != nil {
-					return err
-				}
-				s.Tasks[i].Worktree = nil
-				s.Tasks[i].MergeCommit = &mergeCommit
-
-				// Release the assigned agent
-				if s.Tasks[i].AssignedTo != nil {
-					s.ReleaseAgent(*s.Tasks[i].AssignedTo)
-				}
-
-				// Add history entry
-				s.Tasks[i].History = append(s.Tasks[i].History, models.TaskHistoryEntry{
-					Time:   time.Now(),
-					Event:  "merged",
-					Agent:  &agentID,
-					Commit: &mergeCommit,
-				})
-
-				return nil
-			}
+		t := s.FindTask(taskID)
+		if t == nil {
+			return fmt.Errorf("task not found: %s", taskID)
 		}
-		return fmt.Errorf("task not found: %s", taskID)
+		// Re-validate status under lock to prevent concurrent transition
+		if t.Status != models.TaskStatusApproved {
+			return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
+		}
+		if err := t.Transition(models.TaskStatusMerged); err != nil {
+			return err
+		}
+		t.Worktree = nil
+		t.MergeCommit = &mergeCommit
+
+		// Release the assigned agent
+		if t.AssignedTo != nil {
+			s.ReleaseAgent(*t.AssignedTo)
+		}
+
+		// Add history entry
+		t.History = append(t.History, models.TaskHistoryEntry{
+			Time:   time.Now(),
+			Event:  "merged",
+			Agent:  &agentID,
+			Commit: &mergeCommit,
+		})
+
+		return nil
 	})
 
 	if err != nil {

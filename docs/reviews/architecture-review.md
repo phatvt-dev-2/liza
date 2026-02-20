@@ -35,7 +35,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `IsClaimable()` encodes claiming rules with dependency checking
 - 12 task statuses with `IsValid()`, `IsTerminal()` methods
 - ~~No explicit `CanTransition()`~~ *(pass 2: resolved)* — `taskTransitions` map with `CanTransition()` and `Transition()` methods now exist (state.go:107-137), used consistently across 13 command call sites
-- No `FindTask(taskID)` method on `State` — task lookups are duplicated inline across the codebase *(pass 2, Complexity lens)*
+- ~~No `FindTask(taskID)` method on `State`~~ *(pass 2, Complexity lens — resolved)* — `FindTask(taskID)` and `FindTaskIndex(taskID)` methods now exist on `*State`, all inline lookups migrated
 - Pure leaf package: zero internal imports, zero external imports — clean domain boundary *(pass 3, Boundaries lens)*
 - `diagnostics.go` (127 LOC) has no corresponding test file — functions `CountClaimableTasks`, `GetCoderWorkDiagnostics`, `GetReviewerWorkDiagnostics` are used by supervisor for work detection *(pass 4, Coverage lens)*
 
@@ -52,7 +52,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `LockError` with 5 classified types (Timeout, Permission, DiskFull, Filesystem, Stale)
 - `Watcher` uses fsnotify on directory (not file) to catch atomic renames
 - `Metrics` for lock acquisition timing
-- `GetTask()` and `UpdateTask()` exist but are underutilized — most commands bypass them for inline lookups *(pass 2, Complexity lens)*
+- `GetTask()` and `UpdateTask()` exist and now delegate to `State.FindTask()` internally *(pass 2, Complexity lens — resolved)*
 
 #### agent (`internal/agent/`) — 1,667 LOC
 
@@ -204,14 +204,14 @@ commands/ (volatile, high-level)
 - `PlannerContextConfig` is an empty struct — premature abstraction or placeholder
 - `commands/format.go` has bubble-sort for map keys (functional but O(n^2); `sort.Strings` exists)
 - `dashboardSection` type with `"table"` format case is a no-op (line 155: just appends empty string)
-- `findTaskByID()` duplicated identically in `supervisor.go:1080` and `inspect_agents.go:143`; `findTask()` (same logic, different name) in `validate.go:450` *(pass 2, Complexity lens)*
+- ~~`findTaskByID()` duplicated~~ *(pass 2, Complexity lens — resolved)* — removed all 3 duplicate helpers, replaced by `State.FindTask()`
 
 **What's implicit that should be explicit?**
 - ~~Task state transitions~~ *(pass 2: resolved — explicit `taskTransitions` map now exists)*
 - The "Blackboard must remain stateless beyond cache" constraint (documented in architectural-issues.md)
 - Default lease duration (1800 seconds) — exists as magic number, not named constant
 - The relationship between `GracePeriod` (60s in validate.go) and `LeaseGracePeriod` (120s in watch.go)
-- Missing `State.FindTask(taskID)` domain method — forces 55+ inline lookups *(pass 2, Complexity lens)*
+- ~~Missing `State.FindTask(taskID)` domain method~~ *(pass 2, Complexity lens — resolved)* — `FindTask` and `FindTaskIndex` added, all inline lookups migrated
 - The contract between `commands` and its consumers — commands assume terminal I/O but serve three different transports *(pass 3, Boundaries lens)*
 
 **What's missing from the walkthrough?**
@@ -223,7 +223,7 @@ commands/ (volatile, high-level)
 - `leaseDuration = 1800` fallback in supervisor.go (x2) and claim_task.go (x1) (duplicated)
 - `NotFoundError` structured type vs ad-hoc `fmt.Errorf("task not found: %s")` — **25+ instances** of the ad-hoc form in non-test code *(pass 2: quantified)*
 - `derefString()` in prompts/builder.go duplicates `deref` template function
-- Inline task-lookup loop duplicated 55+ times across commands, agent, db packages *(pass 2, Complexity lens)*
+- ~~Inline task-lookup loop duplicated 55+ times across commands, agent, db packages~~ *(pass 2, Complexity lens — resolved: `State.FindTask()`)*
 - Template execution pattern in `commands/templates.go` vs `prompts/templates.go` — nearly identical: embed.FS + funcMap with `deref` + template.Must + executeTemplate that panics *(pass 3, Boundaries lens)*
 - `os.Stdin` reads across `embedded` (2), `commands/setup` (2), `commands/init` (1), `commands/delete_task` (2), `commands/delete_agent` (1) — all tested by monkey-patching `os.Stdin` *(pass 3, Boundaries lens)*
 
@@ -359,13 +359,11 @@ The `mcp` package is a textbook adapter: it translates JSON-RPC wire format into
 
 **Direction:** Decompose into phases. `ClaimTaskCommand` already documents its three-phase structure in comments ("Phase 1: Validate Under Lock", "Phase 2: Handle worktree outside lock", "Phase 3: Re-validate and commit under lock") — extract each phase into a named function. Apply same pattern to WtMerge, DeleteTask, SubmitForReview.
 
-#### Smell: Pervasive task-lookup duplication *(pass 2, Complexity lens)*
+#### ~~Smell: Pervasive task-lookup duplication~~ *(pass 2, Complexity lens — resolved)*
 
-**Signal:** The pattern `for i := range state.Tasks { if state.Tasks[i].ID == taskID { task = &state.Tasks[i]; break } }` appears **55+ times** in non-test code. `findTaskByID()` is duplicated identically in `supervisor.go:1080` and `inspect_agents.go:143`. `findTask()` (same logic, different name) exists in `validate.go:450`. Meanwhile, `Blackboard.GetTask()` and `Blackboard.UpdateTask()` exist but are barely used.
+**Signal:** The pattern `for i := range state.Tasks { if state.Tasks[i].ID == taskID { task = &state.Tasks[i]; break } }` appeared **55+ times** in non-test code. `findTaskByID()` was duplicated identically in `supervisor.go` and `inspect_agents.go`. `findTask()` (same logic, different name) existed in `validate.go`. Meanwhile, `Blackboard.GetTask()` and `Blackboard.UpdateTask()` existed but were barely used.
 
-**Impact:** Bug fixes to task-lookup logic (e.g., adding validation) require 55+ changes. The `State` type lacks a `FindTask()` method, forcing every consumer to reimplement the same 6-line loop. This is the largest single DRY violation in the codebase.
-
-**Direction:** Add `State.FindTask(taskID string) *Task` method to `internal/models/`. Migrate inline lookups incrementally. Remove duplicated `findTaskByID`/`findTask` helpers.
+**Fix:** Added `State.FindTask(taskID string) *Task` and `State.FindTaskIndex(taskID string) int` methods to `internal/models/state.go`. Migrated all ~35 inline ID-lookup loops in non-test production code across `commands/`, `agent/`, `db/`, and `models/` packages. Removed all 3 duplicate private helpers (`findTaskByID` in supervisor.go and inspect_agents.go, `findTask` in validate.go). `Blackboard.GetTask()` and `UpdateTask()` now delegate to `State.FindTask()` internally. Filtering loops (iterating all tasks with complex conditions) were correctly left as-is — they're a different pattern.
 
 #### Smell: Commands as presentation+logic hybrid *(pass 3, Boundaries lens)*
 
@@ -553,7 +551,7 @@ The 24.7% uncovered code concentrates in two patterns:
 | ~~**High**~~ | ~~Untested `models/diagnostics.go`~~ *(pass 4 — resolved: `diagnostics_test.go` covers all 4 functions with table-driven tests)* | | |
 | **Medium** | Commands presentation+logic coupling *(pass 3)* | 3 consumers with incompatible I/O expectations; MCP stdout corruption risk | Commands return structured results; callers handle presentation |
 | **Medium** | agent → commands upward dependency *(pass 3)* | Orchestration depends on CLI layer; inherits presentation side effects | Extract shared business logic from commands into service functions |
-| **Medium** | Task-lookup duplication (55+ inline loops) *(pass 2)* | Largest DRY violation; bug fixes require 55+ changes | Add `State.FindTask()` method, migrate incrementally |
+| ~~**Medium**~~ | ~~Task-lookup duplication (55+ inline loops)~~ *(pass 2 — resolved: `State.FindTask()` + `FindTaskIndex()` added, all inline lookups migrated, 3 duplicate helpers removed)* | | |
 | **Medium** | Magic number 1800 (lease default) | Scattered across 3 files, easy to make inconsistent | Define named constant in one location |
 | **Medium** | `executeTemplate` panics (2 locations) | Crashes long-running supervisor process | Return error instead |
 | **Medium** | Inconsistent `NotFoundError` usage (25+ ad-hoc instances) | Prevents reliable programmatic error distinction | Adopt `NotFoundError` consistently, pair with `State.FindTask()` |
@@ -578,7 +576,7 @@ The 24.7% uncovered code concentrates in two patterns:
 
 Liza's architecture is well-suited to its constraints: a file-based multi-agent coordination system for solo developers. The dependency graph is clean with no cycles. Test coverage is excellent (2:1 ratio) with consistent patterns and strong helper infrastructure. The atomic state persistence via flock and fsync+rename is correctly implemented. Health monitoring is comprehensive. The task state machine is now explicit with a complete transition map.
 
-**Pass 2 (Complexity lens)** added two structural findings: (1) Monolithic command functions — `WtMergeCommand` and `ClaimTaskCommand` at 310-319 LOC each are the system's longest single functions, resisting comprehension and targeted testing. (2) Task-lookup duplication — the same 6-line loop appears 55+ times, making it the largest DRY violation in the codebase.
+**Pass 2 (Complexity lens)** added two structural findings: (1) Monolithic command functions — `WtMergeCommand` and `ClaimTaskCommand` at 310-319 LOC each are the system's longest single functions, resisting comprehension and targeted testing. ~~(2) Task-lookup duplication — the same 6-line loop appears 55+ times, making it the largest DRY violation in the codebase~~ (resolved: `State.FindTask()` and `FindTaskIndex()` added, all inline lookups migrated).
 
 **Pass 3 (Boundaries lens)** reveals the `commands` package as the system's central boundary concern. It serves three consumers (CLI, MCP, supervisor) with incompatible I/O expectations but embeds terminal assumptions (40+ stdout writes, 5+ stdin reads). The supervisor's upward dependency on `commands` compounds this — orchestration logic inherits CLI presentation side effects. The MCP adapter layer is clean (textbook adapter pattern), and the domain/persistence boundaries are well-drawn. The recommended path forward is separating business logic from presentation in the commands layer, which would simultaneously resolve the agent→commands coupling, enable clean MCP delegation, and eliminate the stdin monkey-patching test pattern.
 

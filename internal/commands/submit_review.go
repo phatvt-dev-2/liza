@@ -39,15 +39,7 @@ func SubmitForReviewCommand(projectRoot, taskID, commitSHA, agentID string) erro
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Find task
-	var task *models.Task
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			task = &state.Tasks[i]
-			break
-		}
-	}
-
+	task := state.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
@@ -135,15 +127,7 @@ Alternatively, abort the rebase and ask for help:
 	now := time.Now().UTC()
 
 	err = bb.Modify(func(state *models.State) error {
-		// Find task
-		var task *models.Task
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				task = &state.Tasks[i]
-				break
-			}
-		}
-
+		task := state.FindTask(taskID)
 		if task == nil {
 			return fmt.Errorf("task not found: %s", taskID)
 		}

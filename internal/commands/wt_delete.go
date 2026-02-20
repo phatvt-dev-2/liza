@@ -28,15 +28,7 @@ func WtDeleteCommand(projectRoot, taskID string) error {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Find task
-	var task *models.Task
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			task = &state.Tasks[i]
-			break
-		}
-	}
-
+	task := state.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
@@ -73,13 +65,12 @@ func WtDeleteCommand(projectRoot, taskID string) error {
 
 	// Update task.worktree to null in state
 	err = bb.Modify(func(state *models.State) error {
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				state.Tasks[i].Worktree = nil
-				return nil
-			}
+		task := state.FindTask(taskID)
+		if task == nil {
+			return fmt.Errorf("task not found: %s", taskID)
 		}
-		return fmt.Errorf("task not found: %s", taskID)
+		task.Worktree = nil
+		return nil
 	})
 
 	if err != nil {

@@ -771,12 +771,7 @@ func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string) err
 	}
 
 	// Find the task
-	for i := range state.Tasks {
-		task := &state.Tasks[i]
-		if task.ID != taskID {
-			continue
-		}
-
+	if task := state.FindTask(taskID); task != nil {
 		// Check if it's now READY_FOR_REVIEW
 		if task.Status == models.TaskStatusReadyForReview {
 			// Log the successful submission
@@ -837,13 +832,7 @@ func resumeHandoffTask(bb *db.Blackboard, state *models.State, agentID string) (
 		wt := *task.Worktree
 
 		err := bb.Modify(func(s *models.State) error {
-			var t *models.Task
-			for j := range s.Tasks {
-				if s.Tasks[j].ID == id {
-					t = &s.Tasks[j]
-					break
-				}
-			}
+			t := s.FindTask(id)
 			if t == nil {
 				return fmt.Errorf("task %s not found while resuming handoff", id)
 			}
@@ -933,10 +922,8 @@ func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, wor
 		return "", "", fmt.Errorf("failed to read state after claim: %w", err)
 	}
 
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == task.ID && state.Tasks[i].Worktree != nil {
-			return task.ID, *state.Tasks[i].Worktree, nil
-		}
+	if claimed := state.FindTask(task.ID); claimed != nil && claimed.Worktree != nil {
+		return task.ID, *claimed.Worktree, nil
 	}
 
 	return "", "", fmt.Errorf("task worktree not set after claim")
@@ -1018,7 +1005,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 	// Add role-specific context
 	switch config.Role {
 	case "coder":
-		task := findTaskByID(state.Tasks, taskID)
+		task := state.FindTask(taskID)
 		if task == nil {
 			return "", fmt.Errorf("task not found: %s", taskID)
 		}
@@ -1038,7 +1025,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 		prompt += prompts.BuildCoderContext(task, coderConfig)
 
 	case "code-reviewer":
-		task := findTaskByID(state.Tasks, taskID)
+		task := state.FindTask(taskID)
 		if task == nil {
 			return "", fmt.Errorf("task not found: %s", taskID)
 		}
@@ -1074,16 +1061,6 @@ func selectHighestPriorityTask(candidates []*models.Task) *models.Task {
 		}
 	}
 	return best
-}
-
-// findTaskByID finds a task by ID in a task slice
-func findTaskByID(tasks []models.Task, taskID string) *models.Task {
-	for i := range tasks {
-		if tasks[i].ID == taskID {
-			return &tasks[i]
-		}
-	}
-	return nil
 }
 
 // savePrompt saves the prompt to a file and returns the path
@@ -1345,13 +1322,7 @@ func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) err
 		claimed := 0
 		superseded := 0
 		for _, taskID := range failedTaskIDs {
-			var afterTask *models.Task
-			for i := range stateAfter.Tasks {
-				if stateAfter.Tasks[i].ID == taskID {
-					afterTask = &stateAfter.Tasks[i]
-					break
-				}
-			}
+			afterTask := stateAfter.FindTask(taskID)
 			if afterTask != nil {
 				switch afterTask.Status {
 				case models.TaskStatusIntegrationFailed:

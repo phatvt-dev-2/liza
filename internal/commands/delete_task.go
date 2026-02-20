@@ -34,15 +34,7 @@ func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, r
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Find task
-	var task *models.Task
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			task = &state.Tasks[i]
-			break
-		}
-	}
-
+	task := state.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
@@ -151,15 +143,7 @@ func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, r
 
 	// Phase 3: Atomic State Update
 	err = bb.Modify(func(state *models.State) error {
-		// Find task in state.Tasks
-		taskIndex := -1
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				taskIndex = i
-				break
-			}
-		}
-
+		taskIndex := state.FindTaskIndex(taskID)
 		if taskIndex == -1 {
 			return fmt.Errorf("task not found: %s", taskID)
 		}

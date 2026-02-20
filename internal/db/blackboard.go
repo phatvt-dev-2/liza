@@ -255,13 +255,7 @@ func (bb *Blackboard) GetTask(taskID string) (*models.Task, error) {
 		return nil, err
 	}
 
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			return &state.Tasks[i], nil
-		}
-	}
-
-	return nil, nil
+	return state.FindTask(taskID), nil
 }
 
 // GetAgent returns the agent with the given ID, or (nil, nil) if not found.
@@ -281,12 +275,11 @@ func (bb *Blackboard) GetAgent(agentID string) (*models.Agent, error) {
 // UpdateTask atomically updates a task by ID
 func (bb *Blackboard) UpdateTask(taskID string, fn func(*models.Task) error) error {
 	return bb.Modify(func(state *models.State) error {
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				return fn(&state.Tasks[i])
-			}
+		task := state.FindTask(taskID)
+		if task == nil {
+			return fmt.Errorf("task not found: %s", taskID)
 		}
-		return fmt.Errorf("task not found: %s", taskID)
+		return fn(task)
 	})
 }
 

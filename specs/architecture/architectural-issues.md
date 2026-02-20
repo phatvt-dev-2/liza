@@ -50,6 +50,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [Commands Presentation+Logic Coupling](#commands-presentationlogic-coupling)
   - [Agent → Commands Upward Dependency](#agent--commands-upward-dependency)
   - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
+  - [~~Pervasive Task-Lookup Duplication~~](#pervasive-task-lookup-duplication)
   - [~~Untested MCP Server Dispatch Layer~~](#untested-mcp-server-dispatch-layer)
   - [~~Untested Work Detection Logic~~](#untested-work-detection-logic)
 ---
@@ -437,6 +438,7 @@ Long-term concerns about system evolution.
 - [x] Untested work detection logic — `diagnostics_test.go` covers all 4 functions (`CountClaimableTasks`, `CountReviewableTasks`, `GetCoderWorkDiagnostics`, `GetReviewerWorkDiagnostics`) *(software-architecture-review)*
 - [x] MCP handler bypasses Blackboard locking — `readStateResource()` now uses `Blackboard.ReadRaw()` under flock instead of direct `os.ReadFile` *(software-architecture-review)*
 - [x] Duplicated file-locking mechanism — extracted to `internal/filelock` package, both `db` and `log` use shared implementation *(software-architecture-review)*
+- [x] Pervasive task-lookup duplication — `State.FindTask()` and `FindTaskIndex()` replace 35+ inline loops and 3 duplicate helpers *(software-architecture-review)*
 
 ---
 
@@ -646,6 +648,14 @@ Issues identified through code-level architectural analysis (patterns, structure
 **Implication:** Functions with hardwired stdin cannot be used non-interactively (e.g., from MCP server or automated scripts). Tests work around this by replacing `os.Stdin` with pipe readers (observed in 8+ test files) — this pattern is fragile and not safe for concurrent test execution.
 
 **Direction:** Accept an `io.Reader` parameter or a `Confirmer` callback for interactive prompts. Default to `os.Stdin` at the CLI call site in `cmd/liza/main.go`. This makes the same functions usable from non-interactive contexts (MCP, automation, tests).
+
+### ~~Pervasive Task-Lookup Duplication~~
+
+**Skill:** software-architecture-review
+**Category:** DRY violation / Shotgun surgery
+**Status:** RESOLVED — `State.FindTask()` and `FindTaskIndex()` added to `internal/models/state.go`
+
+**Fix:** Added `FindTask(taskID string) *Task` and `FindTaskIndex(taskID string) int` methods to `*models.State`. Migrated all ~35 inline ID-lookup loops in non-test production code across `commands/`, `agent/`, `db/`, and `models/` packages. Removed 3 duplicate private helper functions (`findTaskByID` in `supervisor.go` and `inspect_agents.go`, `findTask` in `validate.go`). `Blackboard.GetTask()` and `UpdateTask()` now delegate to `State.FindTask()` internally. Bug fixes to task-lookup logic now require changing one method instead of 35+ locations.
 
 ### ~~Untested MCP Server Dispatch Layer~~
 

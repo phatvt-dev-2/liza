@@ -267,6 +267,29 @@ func (s *State) ReleaseAgent(agentID string) {
 	}
 }
 
+// FindTask returns a pointer to the task with the given ID, or nil if not found.
+// The returned pointer refers to the element within s.Tasks, so mutations are
+// reflected in the state (useful inside Blackboard.Modify closures).
+func (s *State) FindTask(taskID string) *Task {
+	for i := range s.Tasks {
+		if s.Tasks[i].ID == taskID {
+			return &s.Tasks[i]
+		}
+	}
+	return nil
+}
+
+// FindTaskIndex returns the index of the task with the given ID, or -1 if not found.
+// Use when you need to remove a task from the slice.
+func (s *State) FindTaskIndex(taskID string) int {
+	for i := range s.Tasks {
+		if s.Tasks[i].ID == taskID {
+			return i
+		}
+	}
+	return -1
+}
+
 // AllPlannedTasksTerminal returns true if the sprint has planned tasks and all of
 // them are in a terminal state (MERGED, ABANDONED, SUPERSEDED). Returns false if
 // the planned list is empty or any planned task is not found/not terminal.
@@ -275,17 +298,8 @@ func (s *State) AllPlannedTasksTerminal() bool {
 		return false
 	}
 	for _, taskID := range s.Sprint.Scope.Planned {
-		found := false
-		for i := range s.Tasks {
-			if s.Tasks[i].ID == taskID {
-				if !s.Tasks[i].Status.IsTerminal() {
-					return false
-				}
-				found = true
-				break
-			}
-		}
-		if !found {
+		task := s.FindTask(taskID)
+		if task == nil || !task.Status.IsTerminal() {
 			return false
 		}
 	}

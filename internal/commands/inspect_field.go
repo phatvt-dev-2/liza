@@ -309,13 +309,7 @@ func getAgentComputedField(state *models.State, agentID, field string) (any, err
 
 // getTaskComputedField calculates task-specific computed values
 func getTaskComputedField(state *models.State, taskID, field string) (any, error) {
-	var task *models.Task
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			task = &state.Tasks[i]
-			break
-		}
-	}
+	task := state.FindTask(taskID)
 	if task == nil {
 		return nil, &errors.NotFoundError{Entity: fmt.Sprintf("task %s", taskID), Field: ""}
 	}

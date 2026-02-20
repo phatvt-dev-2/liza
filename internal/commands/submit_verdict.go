@@ -45,15 +45,7 @@ func SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID string) 
 	now := time.Now().UTC()
 
 	err := bb.Modify(func(state *models.State) error {
-		// Find task
-		var task *models.Task
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				task = &state.Tasks[i]
-				break
-			}
-		}
-
+		task := state.FindTask(taskID)
 		if task == nil {
 			return fmt.Errorf("task not found: %s", taskID)
 		}

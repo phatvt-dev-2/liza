@@ -61,15 +61,7 @@ func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
 
 // inspectTask shows details for a single task
 func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (any, error) {
-	// Find the task
-	var foundTask *models.Task
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			foundTask = &state.Tasks[i]
-			break
-		}
-	}
-
+	foundTask := state.FindTask(taskID)
 	if foundTask == nil {
 		return nil, &errors.NotFoundError{Entity: fmt.Sprintf("task %s", taskID)}
 	}

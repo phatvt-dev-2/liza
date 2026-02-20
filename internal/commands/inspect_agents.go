@@ -49,7 +49,7 @@ func inspectAgents(state *models.State, opts inspectAgentsOptions) (any, error) 
 		// Find the task this agent is working on (if any)
 		var currentTask *models.Task
 		if agent.CurrentTask != nil {
-			currentTask = findTaskByID(state.Tasks, *agent.CurrentTask)
+			currentTask = state.FindTask(*agent.CurrentTask)
 		}
 
 		// Build agentInfo with computed fields
@@ -82,7 +82,7 @@ func inspectAgent(state *models.State, agentID string, opts inspectAgentsOptions
 	// Find the task this agent is working on (if any)
 	var currentTask *models.Task
 	if agent.CurrentTask != nil {
-		currentTask = findTaskByID(state.Tasks, *agent.CurrentTask)
+		currentTask = state.FindTask(*agent.CurrentTask)
 	}
 
 	// Build agentInfo with computed fields
@@ -137,16 +137,6 @@ func buildagentInfo(agentID string, agent *models.Agent, currentTask *models.Tas
 	}
 
 	return info
-}
-
-// findTaskByID finds a task by its ID
-func findTaskByID(tasks []models.Task, taskID string) *models.Task {
-	for i := range tasks {
-		if tasks[i].ID == taskID {
-			return &tasks[i]
-		}
-	}
-	return nil
 }
 
 // formatAgentsOutput formats a list of agents for output

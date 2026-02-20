@@ -49,15 +49,7 @@ func SupersedeTaskCommand(projectRoot, taskID string, replacementIDs []string, r
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Find task
-	var task *models.Task
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			task = &state.Tasks[i]
-			break
-		}
-	}
-
+	task := state.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
@@ -72,20 +64,10 @@ func SupersedeTaskCommand(projectRoot, taskID string, replacementIDs []string, r
 
 	// Phase 2: Atomic State Update (via bb.Modify with lock)
 	err = bb.Modify(func(state *models.State) error {
-		// Re-find task in state
-		taskIndex := -1
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				taskIndex = i
-				break
-			}
-		}
-
-		if taskIndex == -1 {
+		currentTask := state.FindTask(taskID)
+		if currentTask == nil {
 			return fmt.Errorf("task not found: %s", taskID)
 		}
-
-		currentTask := &state.Tasks[taskIndex]
 
 		// Re-validate status hasn't changed (TOCTOU protection)
 		if currentTask.Status != originalStatus {

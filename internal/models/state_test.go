@@ -948,6 +948,105 @@ func containsField(yamlStr, field string) bool {
 	return false
 }
 
+func TestFindTask(t *testing.T) {
+	now := time.Now().UTC()
+	mkTask := func(id string) Task {
+		return Task{ID: id, Status: TaskStatusReady, Created: now, Priority: 1, Iteration: 1}
+	}
+
+	state := &State{
+		Tasks: []Task{mkTask("task-1"), mkTask("task-2"), mkTask("task-3")},
+	}
+
+	tests := []struct {
+		name   string
+		taskID string
+		wantID string // empty means expect nil
+	}{
+		{"found first", "task-1", "task-1"},
+		{"found middle", "task-2", "task-2"},
+		{"found last", "task-3", "task-3"},
+		{"not found", "task-99", ""},
+		{"empty ID", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := state.FindTask(tt.taskID)
+			if tt.wantID == "" {
+				if got != nil {
+					t.Errorf("FindTask(%q) = %v, want nil", tt.taskID, got)
+				}
+			} else {
+				if got == nil {
+					t.Fatalf("FindTask(%q) = nil, want task %q", tt.taskID, tt.wantID)
+				}
+				if got.ID != tt.wantID {
+					t.Errorf("FindTask(%q).ID = %q, want %q", tt.taskID, got.ID, tt.wantID)
+				}
+			}
+		})
+	}
+
+	// Verify returned pointer refers to slice element (mutations apply)
+	t.Run("returned pointer is mutable", func(t *testing.T) {
+		task := state.FindTask("task-1")
+		task.Status = TaskStatusImplementing
+		if state.Tasks[0].Status != TaskStatusImplementing {
+			t.Error("mutation via FindTask pointer did not apply to slice element")
+		}
+		state.Tasks[0].Status = TaskStatusReady // restore
+	})
+
+	// Empty state
+	t.Run("empty state", func(t *testing.T) {
+		empty := &State{}
+		if got := empty.FindTask("task-1"); got != nil {
+			t.Errorf("FindTask on empty state = %v, want nil", got)
+		}
+	})
+}
+
+func TestFindTaskIndex(t *testing.T) {
+	now := time.Now().UTC()
+	mkTask := func(id string) Task {
+		return Task{ID: id, Status: TaskStatusReady, Created: now, Priority: 1, Iteration: 1}
+	}
+
+	state := &State{
+		Tasks: []Task{mkTask("task-1"), mkTask("task-2"), mkTask("task-3")},
+	}
+
+	tests := []struct {
+		name   string
+		taskID string
+		want   int
+	}{
+		{"found first", "task-1", 0},
+		{"found middle", "task-2", 1},
+		{"found last", "task-3", 2},
+		{"not found", "task-99", -1},
+		{"empty ID", "", -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := state.FindTaskIndex(tt.taskID)
+			if got != tt.want {
+				t.Errorf("FindTaskIndex(%q) = %d, want %d", tt.taskID, got, tt.want)
+			}
+		})
+	}
+
+	// Empty state
+	t.Run("empty state", func(t *testing.T) {
+		empty := &State{}
+		if got := empty.FindTaskIndex("task-1"); got != -1 {
+			t.Errorf("FindTaskIndex on empty state = %d, want -1", got)
+		}
+	})
+}
+
 func TestAllPlannedTasksTerminal(t *testing.T) {
 	now := time.Now().UTC()
 	mkTask := func(id string, status TaskStatus) Task {

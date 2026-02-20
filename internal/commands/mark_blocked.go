@@ -41,14 +41,7 @@ func MarkBlockedCommand(projectRoot, taskID, reason string, questions []string, 
 	now := time.Now().UTC()
 
 	err := bb.Modify(func(state *models.State) error {
-		// Find task by ID
-		var task *models.Task
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				task = &state.Tasks[i]
-				break
-			}
-		}
+		task := state.FindTask(taskID)
 		if task == nil {
 			return fmt.Errorf("task not found: %s", taskID)
 		}

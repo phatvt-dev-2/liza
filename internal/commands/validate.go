@@ -257,7 +257,7 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 		if task.Status == models.TaskStatusImplementing {
 			var unmet []string
 			for _, depID := range task.DependsOn {
-				depTask := findTask(state.Tasks, depID)
+				depTask := state.FindTask(depID)
 				if depTask != nil && depTask.Status != models.TaskStatusMerged {
 					unmet = append(unmet, depID)
 				}
@@ -274,7 +274,7 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 		}
 
 		visited := make(map[string]bool)
-		if err := checkCircular(task.ID, task.ID, visited, state.Tasks); err != nil {
+		if err := checkCircular(task.ID, task.ID, visited, state); err != nil {
 			return err
 		}
 	}
@@ -282,8 +282,8 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 	return nil
 }
 
-func checkCircular(start, current string, visited map[string]bool, tasks []models.Task) error {
-	task := findTask(tasks, current)
+func checkCircular(start, current string, visited map[string]bool, state *models.State) error {
+	task := state.FindTask(current)
 	if task == nil || len(task.DependsOn) == 0 {
 		return nil
 	}
@@ -294,7 +294,7 @@ func checkCircular(start, current string, visited map[string]bool, tasks []model
 		}
 		if !visited[depID] {
 			visited[depID] = true
-			if err := checkCircular(start, depID, visited, tasks); err != nil {
+			if err := checkCircular(start, depID, visited, state); err != nil {
 				return err
 			}
 		}
@@ -445,13 +445,4 @@ func requiresCompletionFields(status models.TaskStatus) bool {
 	return status != models.TaskStatusDraft &&
 		status != models.TaskStatusSuperseded &&
 		status != models.TaskStatusAbandoned
-}
-
-func findTask(tasks []models.Task, taskID string) *models.Task {
-	for i := range tasks {
-		if tasks[i].ID == taskID {
-			return &tasks[i]
-		}
-	}
-	return nil
 }

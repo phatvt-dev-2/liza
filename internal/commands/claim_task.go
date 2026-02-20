@@ -46,15 +46,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Find task
-	var task *models.Task
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			task = &state.Tasks[i]
-			break
-		}
-	}
-
+	task := state.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
@@ -66,13 +58,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 		if len(task.DependsOn) > 0 {
 			var unmet []string
 			for _, depID := range task.DependsOn {
-				var depTask *models.Task
-				for i := range state.Tasks {
-					if state.Tasks[i].ID == depID {
-						depTask = &state.Tasks[i]
-						break
-					}
-				}
+				depTask := state.FindTask(depID)
 				if depTask == nil || depTask.Status != models.TaskStatusMerged {
 					unmet = append(unmet, depID)
 				}
@@ -180,14 +166,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 
 	err = bb.Modify(func(state *models.State) error {
 		// Re-check task exists and status hasn't changed
-		var task *models.Task
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				task = &state.Tasks[i]
-				break
-			}
-		}
-
+		task := state.FindTask(taskID)
 		if task == nil {
 			return fmt.Errorf("task not found: %s", taskID)
 		}
@@ -209,13 +188,7 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 			if len(task.DependsOn) > 0 {
 				var unmet []string
 				for _, depID := range task.DependsOn {
-					var depTask *models.Task
-					for i := range state.Tasks {
-						if state.Tasks[i].ID == depID {
-							depTask = &state.Tasks[i]
-							break
-						}
-					}
+					depTask := state.FindTask(depID)
 					if depTask == nil || depTask.Status != models.TaskStatusMerged {
 						unmet = append(unmet, depID)
 					}

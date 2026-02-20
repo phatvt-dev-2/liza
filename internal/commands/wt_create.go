@@ -32,15 +32,7 @@ func WtCreateCommand(projectRoot, taskID string, fresh bool) error {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Find task
-	var task *models.Task
-	for i := range state.Tasks {
-		if state.Tasks[i].ID == taskID {
-			task = &state.Tasks[i]
-			break
-		}
-	}
-
+	task := state.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
@@ -81,13 +73,12 @@ func WtCreateCommand(projectRoot, taskID string, fresh bool) error {
 
 	// Update task.base_commit in state
 	err = bb.Modify(func(state *models.State) error {
-		for i := range state.Tasks {
-			if state.Tasks[i].ID == taskID {
-				state.Tasks[i].BaseCommit = &baseCommit
-				return nil
-			}
+		task := state.FindTask(taskID)
+		if task == nil {
+			return fmt.Errorf("task not found: %s", taskID)
 		}
-		return fmt.Errorf("task not found: %s", taskID)
+		task.BaseCommit = &baseCommit
+		return nil
 	})
 
 	if err != nil {
