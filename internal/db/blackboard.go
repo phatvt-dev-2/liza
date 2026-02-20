@@ -239,6 +239,23 @@ func (bb *Blackboard) Read() (*models.State, error) {
 	return &state, nil
 }
 
+// ReadRaw reads the raw state.yaml bytes under flock protection.
+// Use this when you need the file content without parsing (e.g., serving
+// the raw YAML to an external consumer), while still respecting the lock
+// to avoid reading partially-written data.
+func (bb *Blackboard) ReadRaw() ([]byte, error) {
+	var data []byte
+	err := bb.withLock(func() error {
+		var readErr error
+		data, readErr = os.ReadFile(bb.statePath)
+		return readErr
+	})
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 // ReadCached reads the current state with caching based on file mtime.
 // This method avoids disk I/O when the file hasn't changed by caching raw
 // YAML bytes. Each call returns a freshly-parsed *models.State, so callers

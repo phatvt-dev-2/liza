@@ -78,6 +78,40 @@ func TestBlackboardBasicReadWrite(t *testing.T) {
 	}
 }
 
+// TestBlackboardReadRaw tests that ReadRaw returns exact file bytes under lock
+func TestBlackboardReadRaw(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	// Write known content directly
+	content := []byte("version: 1\ngoal:\n  id: goal-1\n")
+	if err := os.WriteFile(statePath, content, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+	data, err := bb.ReadRaw()
+	if err != nil {
+		t.Fatalf("ReadRaw failed: %v", err)
+	}
+
+	if string(data) != string(content) {
+		t.Errorf("ReadRaw returned different content:\ngot:  %q\nwant: %q", string(data), string(content))
+	}
+}
+
+// TestBlackboardReadRawMissingFile tests ReadRaw on non-existent file
+func TestBlackboardReadRawMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "nonexistent.yaml")
+
+	bb := New(statePath)
+	_, err := bb.ReadRaw()
+	if err == nil {
+		t.Fatal("Expected error for missing file, got nil")
+	}
+}
+
 // TestBlackboardGetTask tests retrieving a specific task
 func TestBlackboardGetTask(t *testing.T) {
 	dir := t.TempDir()

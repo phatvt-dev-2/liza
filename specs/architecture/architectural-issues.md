@@ -435,6 +435,7 @@ Long-term concerns about system evolution.
 - [x] Implicit state machine — declared `taskTransitions` map + `Transition()` method, migrated all 14 transition sites *(systemic-thinking)*
 - [x] Untested MCP server dispatch layer — `server_dispatch_test.go` covers `HandleRequest` routing, `classifyError` all 5 branches, `handleToolCall`, `handleResourceRead`, `handleNotification` *(software-architecture-review)*
 - [x] Untested work detection logic — `diagnostics_test.go` covers all 4 functions (`CountClaimableTasks`, `CountReviewableTasks`, `GetCoderWorkDiagnostics`, `GetReviewerWorkDiagnostics`) *(software-architecture-review)*
+- [x] MCP handler bypasses Blackboard locking — `readStateResource()` now uses `Blackboard.ReadRaw()` under flock instead of direct `os.ReadFile` *(software-architecture-review)*
 
 ---
 
@@ -576,16 +577,11 @@ Issues identified through code-level architectural analysis (patterns, structure
 
 **Direction:** Extract to a shared `internal/filelock` utility using the db package's enriched version as the basis.
 
-### MCP Handler Bypasses Blackboard Locking
+### ~~MCP Handler Bypasses Blackboard Locking~~
 
 **Skill:** software-architecture-review
 **Category:** Leaky abstraction / Boundary violation
-
-**Issue:** `internal/mcp/handlers.go` line 180 reads `state.yaml` directly via `os.ReadFile`, bypassing `db.Blackboard.Read()` and its flock protection. This is in the `readResource` handler for `liza://state`.
-
-**Implication:** Under concurrent access, the MCP handler can read a partially-written state file, returning corrupt or inconsistent data to agents. The Blackboard abstraction exists precisely to prevent this.
-
-**Direction:** Replace direct file read with `db.Blackboard.Read()`. The handler already has access to the state path; it needs a Blackboard instance instead.
+**Status:** RESOLVED — `readStateResource()` now uses `Blackboard.ReadRaw()` under flock
 
 ### Magic Number 1800 Scattered
 

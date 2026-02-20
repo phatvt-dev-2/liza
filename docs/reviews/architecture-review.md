@@ -410,13 +410,11 @@ Tests work around this by replacing `os.Stdin` with pipe readers (8+ test files 
 
 **Direction:** Define `DefaultLeaseDurationSeconds = 1800` alongside `Config` in models or use `heartbeat.DefaultLeaseDuration` consistently.
 
-#### Smell: MCP handlers bypass Blackboard locking
+#### ~~Smell: MCP handlers bypass Blackboard locking~~ *(resolved)*
 
-**Signal:** `mcp/handlers.go` reads `state.yaml` directly via `os.ReadFile()` (for the `liza://state` resource) instead of going through `db.Blackboard.Read()`.
+**Signal:** `mcp/handlers.go` read `state.yaml` directly via `os.ReadFile()` (for the `liza://state` resource) instead of going through `db.Blackboard.Read()`.
 
-**Impact:** Under concurrent writes, the resource handler can return partially-written state. The Blackboard's locking exists specifically to prevent this.
-
-**Direction:** Use `db.Blackboard.Read()` for the state resource handler.
+**Fix:** Added `Blackboard.ReadRaw()` method that reads raw bytes under flock. `Server` struct now holds a `*db.Blackboard` instance. `readStateResource()` uses `s.bb.ReadRaw()` instead of `os.ReadFile()`. `ReadRaw` (rather than `Read` + re-marshal) avoids the YAML round-trip data loss issue.
 
 #### Smell: Inconsistent "not found" error types
 
@@ -545,7 +543,7 @@ The 24.7% uncovered code concentrates in two patterns:
 | **High** | `supervisor.go` god file (1,428 LOC, 19% branch density) | Primary change target, mixes 5+ concerns, highest complexity density | Extract `claimManager`, `mergeHandler`, `plannerVerifier` subsystems |
 | **High** | Monolithic command functions (310-319 LOC single functions) *(pass 2)* | 4+ commands resist comprehension, review, and targeted testing | Decompose into named phase functions (validate → execute → commit) |
 | **High** | Duplicated flock mechanism (db + log) | Constants and logic can diverge silently | Extract `internal/filelock` shared package |
-| **High** | MCP handler bypasses Blackboard locking | Can return corrupted state under concurrent access | Use `db.Blackboard.Read()` for state resource |
+| ~~**High**~~ | ~~MCP handler bypasses Blackboard locking~~ *(resolved: `Blackboard.ReadRaw()` added, `readStateResource()` uses flock-protected read)* | | |
 | ~~**High**~~ | ~~Untested MCP server dispatch + `classifyError`~~ *(pass 4 — resolved: `server_dispatch_test.go` covers `HandleRequest` routing, `classifyError` all 5 branches, `handleToolCall`, `handleResourceRead`, `handleNotification`)* | | |
 | ~~**High**~~ | ~~Untested `models/diagnostics.go`~~ *(pass 4 — resolved: `diagnostics_test.go` covers all 4 functions with table-driven tests)* | | |
 | **Medium** | Commands presentation+logic coupling *(pass 3)* | 3 consumers with incompatible I/O expectations; MCP stdout corruption risk | Commands return structured results; callers handle presentation |
@@ -581,7 +579,7 @@ Liza's architecture is well-suited to its constraints: a file-based multi-agent 
 
 **Pass 4 (Coverage lens)** adds quantitative depth: 75.3% statement coverage overall, with the uncovered 24.7% concentrated in two patterns — runtime orchestration code (supervisor Execute, MCP server dispatch) and I/O-coupled functions. The most actionable finding: `mcp/server.classifyError` and `HandleRequest` are pure logic at 0% that can be tested trivially without any refactoring. Similarly, `models/diagnostics.go` (127 LOC, 4 functions, no test file) is critical work-detection logic that's entirely untested despite being pure functions on `*State`. I/O coupling (already flagged as a Boundaries smell) is now quantitatively confirmed as the primary driver of untested critical paths — functions with hardwired `os.Stdin`/`os.Stdout`/`os/exec` account for the majority of the 0% coverage.
 
-The primary structural concerns in priority order: (1) `supervisor.go` god file, (2) commands presentation+logic coupling, (3) monolithic command functions, (4) MCP handler bypassing Blackboard locking (correctness issue), (5) untested MCP dispatch and diagnostics (low-effort, high-value test additions). Items 2 and 3 are synergistic — decomposing commands into phases naturally creates the service layer that resolves the boundary issue. Item 5 is independent and can be addressed immediately.
+The primary structural concerns in priority order: (1) `supervisor.go` god file, (2) commands presentation+logic coupling, (3) monolithic command functions, ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved). Items 2 and 3 are synergistic — decomposing commands into phases naturally creates the service layer that resolves the boundary issue.
 
 ---
 

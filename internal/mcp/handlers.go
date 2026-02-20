@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/paths"
@@ -173,11 +172,9 @@ func (s *Server) handleResourceReadInternal(uri string) (any, error) {
 	}
 }
 
-// readStateResource returns the raw state.yaml content
+// readStateResource returns the raw state.yaml content under flock protection.
 func (s *Server) readStateResource() (any, error) {
-	statePath := paths.New(s.projectRoot).StatePath()
-
-	data, err := os.ReadFile(statePath)
+	data, err := s.bb.ReadRaw()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read state file: %w", err)
 	}

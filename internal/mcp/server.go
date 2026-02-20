@@ -6,13 +6,16 @@ import (
 	"io"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/mcp/protocol"
+	"github.com/liza-mas/liza/internal/paths"
 )
 
 // Server represents the MCP server
 type Server struct {
 	projectRoot string
 	logPath     string
+	bb          *db.Blackboard
 	tools       map[string]protocol.Tool
 	resources   map[string]protocol.Resource
 	handlers    map[string]ToolHandler
@@ -26,6 +29,7 @@ func NewServer(projectRoot, logPath string) *Server {
 	s := &Server{
 		projectRoot: projectRoot,
 		logPath:     logPath,
+		bb:          db.New(paths.New(projectRoot).StatePath()),
 		tools:       make(map[string]protocol.Tool),
 		resources:   make(map[string]protocol.Resource),
 		handlers:    make(map[string]ToolHandler),
