@@ -372,6 +372,8 @@ Solve the problem, then stop.
 Tie-breaker, not strict hierarchy. Metric: minimize "code we own" — when lib + 20 lines beats stdlib + 200 lines, lib wins.
 **Perplexity trigger**: About to write 30+ lines for a generic need? Check for libraries first.
 
+**File Creation:** Before creating new files or directories, check existing structure for naming and organization conventions. Match what's there.
+
 **Refactoring Discipline:** Opportunities may be raised but MUST be proposed as distinct tasks, never mixed with functional changes.
 One intent per commit.
 Prerequisite claims ('X requires Y first') must specify what fails without Y, not just what's cleaner with it.
@@ -478,6 +480,7 @@ Act as a peer, not a tool. Support (no unsolicited help), direct feedback, chall
 **Peer Input Obligation:** All substantive input must be acknowledged.
 Disagreement is acceptable; ignoring without acknowledgment is not.
 If input is unclear, ask for clarification rather than proceeding as if not received.
+When peer input contradicts your analysis, verify independently against the source before responding. Neither accept nor defend without evidence.
 
 ### Rule 13: Constructive Contrarian
 

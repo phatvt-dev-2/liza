@@ -9,10 +9,12 @@ The goal is catching issues the author couldn't see — and occasionally sharing
 # Review Context
 
 Before reviewing, establish context:
+- **Scope:** Default to staged files (`git diff --cached`). For PRs, use the PR diff. For commits, use `git show <SHA>`. Only broaden scope if explicitly asked.
 - **Intent:** For PRs, check ticket link or description. For pending changes, ask the author. If unclear, clarify before reviewing.
 - **Timing:** Is now a good time to add this functionality? Half-baked features or premature additions warrant a `[question]`.
 - **Approach:** For complex changes, was the high-level approach discussed before implementation? Complete rewrites are painful — catch architectural misalignment early.
-- **Scope:** If diff >800 lines or >20 files, consider suggesting a split (PR) or incremental commits (pending). Large diffs hide bugs.
+- **Diff-first:** Read the diff before reading any source files. Only read source files when a specific finding needs surrounding context. Never read the entire codebase as preparation for a review.
+- **Size:** If diff >800 lines or >20 files, consider suggesting a split (PR) or incremental commits (pending). Large diffs hide bugs.
 - **Large diffs:** If diff is truncated or >800 lines, verify critical findings against source before tagging `[blocker]` or `[concern]`.
 - **Reviewer limits:** If reviewing outside your expertise, say so upfront. Make assumptions explicit.
 
