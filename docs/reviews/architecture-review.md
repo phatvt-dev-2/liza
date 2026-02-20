@@ -230,11 +230,11 @@ commands/ (volatile, high-level)
 | `supervisor.handleApprovedMerges` | 0% | Merge orchestration |
 | `supervisor.resumeHandoffTask` | 11.4% | Complex handoff logic |
 | `supervisor.RunSupervisor` | 54.4% | Main loop |
-| `mcp/server.HandleRequest` | 0% | Request dispatch |
+| ~~`mcp/server.HandleRequest`~~ | ~~0%~~ | ~~Request dispatch~~ *(resolved: `server_dispatch_test.go`)* |
 | `mcp/server.Run` | 0% | Server main loop |
-| `mcp/server.classifyError` | 0% | Error code mapping |
+| ~~`mcp/server.classifyError`~~ | ~~0%~~ | ~~Error code mapping~~ *(resolved: all 5 branches tested)* |
 | `mcp/protocol/*` | 0% | All error constructors + stdio |
-| `models/diagnostics.go` | 0% | No test file exists |
+| ~~`models/diagnostics.go`~~ | ~~0%~~ | ~~No test file exists~~ *(resolved: `diagnostics_test.go`)* |
 | `embedded.WriteMCPSettings` | 0% | Stdin-coupled |
 | `validate.validateAnomalies` | 13.3% | Only first branch tested |
 | `validate.validateHandoff` | 33.3% | |
@@ -242,7 +242,7 @@ commands/ (volatile, high-level)
 
 **Files without any test file** *(pass 4, Coverage lens)*:
 - `cmd/liza/main.go` (1,275 LOC) — CLI wiring
-- `internal/models/diagnostics.go` (127 LOC) — work detection logic
+- ~~`internal/models/diagnostics.go` (127 LOC) — work detection logic~~ *(resolved)*
 - `cmd/liza-mcp/main.go` (69 LOC) — MCP entry point
 - `internal/mcp/protocol/errors.go` (68 LOC) — error constructors
 - `internal/prompts/templates.go` (34 LOC) — template execution
@@ -450,23 +450,23 @@ Tests work around this by replacing `os.Stdin` with pipe readers (8+ test files 
 
 **Direction:** Define named constants alongside the Config struct.
 
-#### Smell: Untested critical execution paths *(pass 4, Coverage lens)*
+#### ~~Smell: Untested critical execution paths~~ *(pass 4, Coverage lens — partially resolved)*
 
 **Signal:** The system's most critical runtime paths have 0% statement coverage:
 - `supervisor.Execute()` and `ExecuteInteractive()` — the actual agent execution entry points that build `exec.Cmd`, set stdin/stdout, run the CLI, and handle exit codes
 - `supervisor.handleApprovedMerges()` — orchestrates post-approval merge workflow
 - `supervisor.logTaskSubmissionIfCompleted()` — completion logging
-- `mcp/server.HandleRequest()` — JSON-RPC request dispatch (routing, tool call handling, resource read handling)
+- ~~`mcp/server.HandleRequest()` — JSON-RPC request dispatch~~ *(resolved: `server_dispatch_test.go`)*
 - `mcp/server.Run()` — the MCP server main loop (read request → dispatch → write response)
-- `mcp/server.classifyError()` — maps Go errors to JSON-RPC error codes (5 classification branches)
+- ~~`mcp/server.classifyError()` — maps Go errors to JSON-RPC error codes~~ *(resolved: all 5 branches tested)*
 - All `mcp/protocol/` functions — error constructors and stdio transport
-- `models/diagnostics.go` — all 4 functions (no test file exists)
+- ~~`models/diagnostics.go` — all 4 functions~~ *(resolved: `diagnostics_test.go`)*
 
-**Impact:** The tested code (helpers, validators, work detection) is exercised thoroughly, but the code that wires it all together at runtime has no direct tests. This creates a "tested parts, untested whole" pattern. If `classifyError` misclassifies an error, agents get wrong retry behavior. If `HandleRequest` routing breaks, all MCP tools fail. If `Execute` mishandles an exit code, the supervisor loop misbehaves. These are the paths most likely to manifest production bugs since they're the integration seams.
+**Impact:** The tested code (helpers, validators, work detection) is exercised thoroughly, but the code that wires it all together at runtime has no direct tests. This creates a "tested parts, untested whole" pattern. ~~If `classifyError` misclassifies an error, agents get wrong retry behavior. If `HandleRequest` routing breaks, all MCP tools fail.~~ If `Execute` mishandles an exit code, the supervisor loop misbehaves. The remaining untested paths are I/O-coupled functions requiring injection seams.
 
 The root cause is I/O coupling: functions at 0% are precisely those with hardwired `os.Stdin`, `os.Stdout`, or `os/exec.Command`. The `CLIExecutor` interface in supervisor was the right move — but it was the only such seam created.
 
-**Direction:** For `mcp/server`, the dispatch layer is pure logic (switch on method → call handler → return response) that can be tested by constructing `JSONRPCRequest` values and calling `HandleRequest` directly — no I/O injection needed. For `classifyError`, same: pure function, easy to test. For `diagnostics.go`: pure functions on `*State` — straightforward unit tests. For `supervisor.Execute`/`ExecuteInteractive`: already abstracted behind `CLIExecutor` interface, which is mocked in `TestSupervisorBasicLoop`, but the `DefaultCLIExecutor` concrete implementation is untested. For `mcp/server.Run` and `protocol/stdio`: require I/O injection (see "Non-injectable stdio" smell).
+**Direction:** ~~For `mcp/server`, the dispatch layer is pure logic~~ (done). ~~For `classifyError`, same: pure function~~ (done). ~~For `diagnostics.go`: pure functions on `*State`~~ (done). For `supervisor.Execute`/`ExecuteInteractive`: already abstracted behind `CLIExecutor` interface, which is mocked in `TestSupervisorBasicLoop`, but the `DefaultCLIExecutor` concrete implementation is untested. For `mcp/server.Run` and `protocol/stdio`: require I/O injection (see "Non-injectable stdio" smell).
 
 #### Smell: No interface-based seams beyond CLIExecutor *(pass 3, Boundaries lens)*
 
@@ -546,8 +546,8 @@ The 24.7% uncovered code concentrates in two patterns:
 | **High** | Monolithic command functions (310-319 LOC single functions) *(pass 2)* | 4+ commands resist comprehension, review, and targeted testing | Decompose into named phase functions (validate → execute → commit) |
 | **High** | Duplicated flock mechanism (db + log) | Constants and logic can diverge silently | Extract `internal/filelock` shared package |
 | **High** | MCP handler bypasses Blackboard locking | Can return corrupted state under concurrent access | Use `db.Blackboard.Read()` for state resource |
-| **High** | Untested MCP server dispatch + `classifyError` *(pass 4)* | Pure logic at 0% coverage; misclassification silently breaks agent retry behavior | Test `HandleRequest` and `classifyError` directly — no I/O injection needed |
-| **High** | Untested `models/diagnostics.go` *(pass 4)* | Work detection logic at 0% with no test file; determines when agents wake up | Write unit tests — pure functions on `*State`, straightforward |
+| ~~**High**~~ | ~~Untested MCP server dispatch + `classifyError`~~ *(pass 4 — resolved: `server_dispatch_test.go` covers `HandleRequest` routing, `classifyError` all 5 branches, `handleToolCall`, `handleResourceRead`, `handleNotification`)* | | |
+| ~~**High**~~ | ~~Untested `models/diagnostics.go`~~ *(pass 4 — resolved: `diagnostics_test.go` covers all 4 functions with table-driven tests)* | | |
 | **Medium** | Commands presentation+logic coupling *(pass 3)* | 3 consumers with incompatible I/O expectations; MCP stdout corruption risk | Commands return structured results; callers handle presentation |
 | **Medium** | agent → commands upward dependency *(pass 3)* | Orchestration depends on CLI layer; inherits presentation side effects | Extract shared business logic from commands into service functions |
 | **Medium** | Task-lookup duplication (55+ inline loops) *(pass 2)* | Largest DRY violation; bug fixes require 55+ changes | Add `State.FindTask()` method, migrate incrementally |

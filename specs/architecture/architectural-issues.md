@@ -50,8 +50,8 @@ Persistent record of issues identified by architectural analysis skills.
   - [Commands Presentation+Logic Coupling](#commands-presentationlogic-coupling)
   - [Agent → Commands Upward Dependency](#agent--commands-upward-dependency)
   - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
-  - [Untested MCP Server Dispatch Layer](#untested-mcp-server-dispatch-layer)
-  - [Untested Work Detection Logic](#untested-work-detection-logic)
+  - [~~Untested MCP Server Dispatch Layer~~](#untested-mcp-server-dispatch-layer)
+  - [~~Untested Work Detection Logic~~](#untested-work-detection-logic)
 ---
 
 ## Structural Load-Bearing Elements
@@ -433,6 +433,8 @@ Long-term concerns about system evolution.
 - [x] classifyError "invalid" overbroad — narrowed to `invalid task ID`, sanitized all error messages *(code-review)*
 - [x] mergeCommit[:7] unguarded in rollback path — added length check *(code-review)*
 - [x] Implicit state machine — declared `taskTransitions` map + `Transition()` method, migrated all 14 transition sites *(systemic-thinking)*
+- [x] Untested MCP server dispatch layer — `server_dispatch_test.go` covers `HandleRequest` routing, `classifyError` all 5 branches, `handleToolCall`, `handleResourceRead`, `handleNotification` *(software-architecture-review)*
+- [x] Untested work detection logic — `diagnostics_test.go` covers all 4 functions (`CountClaimableTasks`, `CountReviewableTasks`, `GetCoderWorkDiagnostics`, `GetReviewerWorkDiagnostics`) *(software-architecture-review)*
 
 ---
 
@@ -651,24 +653,18 @@ Issues identified through code-level architectural analysis (patterns, structure
 
 **Direction:** Accept an `io.Reader` parameter or a `Confirmer` callback for interactive prompts. Default to `os.Stdin` at the CLI call site in `cmd/liza/main.go`. This makes the same functions usable from non-interactive contexts (MCP, automation, tests).
 
-### Untested MCP Server Dispatch Layer
+### ~~Untested MCP Server Dispatch Layer~~
 
 **Skill:** software-architecture-review
 **Category:** Untested critical path
+**Status:** RESOLVED — `internal/mcp/server_dispatch_test.go` added
 
-**Issue:** `internal/mcp/server.go`'s `HandleRequest()` (JSON-RPC routing: switch on method → call handler → return response) and `classifyError()` (5 classification branches mapping Go errors to JSON-RPC error codes) are at 0% statement coverage. `server_test.go` has only 4 initialization/registration tests. `handlers_test.go` (1,298 LOC) tests handlers directly but bypasses the dispatch layer entirely — a misrouted method or misclassified error would not be caught.
+**Fix:** Added `server_dispatch_test.go` with table-driven tests covering: `HandleRequest` routing (all 4 method branches + unknown method), `handleToolCall` (invalid params, missing name, unknown tool, successful handler, nil arguments, handler error with classification), `handleResourceRead` (invalid params), `classifyError` (all 5 classification branches: not found, lock timeout, race condition, validation, internal — 14 test cases), leak prevention (raw error strings never exposed), `handleNotification` (known and unknown). Request ID preservation verified.
 
-**Implication:** `classifyError` determines whether agents retry or abort on failure. Silent misclassification (e.g., a lock timeout classified as internal error) breaks agent retry behavior with no error signal. `HandleRequest` routing errors would silently return "method not found" for valid tools.
-
-**Direction:** Test `HandleRequest` and `classifyError` directly — both are pure logic with no I/O coupling. `HandleRequest` takes a `Request` struct and returns a `Response`; `classifyError` takes an `error` and returns a code. Table-driven tests with representative error strings and method names.
-
-### Untested Work Detection Logic
+### ~~Untested Work Detection Logic~~
 
 **Skill:** software-architecture-review
 **Category:** Untested critical path
+**Status:** RESOLVED — `internal/models/diagnostics_test.go` added
 
-**Issue:** `internal/models/diagnostics.go` (127 LOC) has no corresponding test file. Contains 4 pure functions on `*State`: `CountClaimableTasks`, `CountReviewableTasks`, `GetCoderWorkDiagnostics`, `GetReviewerWorkDiagnostics`. These are called by the supervisor to determine work availability — they directly control when agents wake up and what work they claim.
-
-**Implication:** Work detection logic is a critical decision point: incorrect counts mean agents either sleep when work is available or wake when none exists. Both failure modes stall the system. The functions are pure (no I/O, no side effects) making them straightforward to test.
-
-**Direction:** Write unit tests with table-driven cases covering: tasks with various statuses, dependency satisfaction/unsatisfaction, review lease expiry, mixed task types. Tests should exercise the boundary between "claimable" and "not claimable" for each status/dependency combination.
+**Fix:** Added `diagnostics_test.go` with table-driven tests covering all 4 functions: `CountClaimableTasks` (empty state, role filtering, mixed statuses, dependency blocking/satisfaction), `CountReviewableTasks` (empty state, status filtering, role filtering), `GetCoderWorkDiagnostics` (claimable found, blocked-by-deps, in-progress, combined), `GetReviewerWorkDiagnostics` (unassigned, expired leases, active reviews, nil lease handling).
