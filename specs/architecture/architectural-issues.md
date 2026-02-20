@@ -41,7 +41,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
   - [Implicit State Machine](#implicit-state-machine)
 - [Code-Level Architectural Smells](#code-level-architectural-smells)
-  - [Supervisor God File](#supervisor-god-file)
+  - [~~Supervisor God File~~](#supervisor-god-file)
   - [~~Duplicated File-Locking Mechanism~~](#duplicated-file-locking-mechanism)
   - [MCP Handler Bypasses Blackboard Locking](#mcp-handler-bypasses-blackboard-locking)
   - [Magic Number 1800 Scattered](#magic-number-1800-scattered)
@@ -439,6 +439,7 @@ Long-term concerns about system evolution.
 - [x] MCP handler bypasses Blackboard locking — `readStateResource()` now uses `Blackboard.ReadRaw()` under flock instead of direct `os.ReadFile` *(software-architecture-review)*
 - [x] Duplicated file-locking mechanism — extracted to `internal/filelock` package, both `db` and `log` use shared implementation *(software-architecture-review)*
 - [x] Pervasive task-lookup duplication — `State.FindTask()` and `FindTaskIndex()` replace 35+ inline loops and 3 duplicate helpers *(software-architecture-review)*
+- [x] Supervisor god file — decomposed 1,426 LOC into 6 cohesive files within `internal/agent/` by responsibility *(software-architecture-review)*
 
 ---
 
@@ -558,16 +559,21 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 
 Issues identified through code-level architectural analysis (patterns, structure, duplication).
 
-### Supervisor God File
+### ~~Supervisor God File~~
 
 **Skill:** software-architecture-review
 **Category:** God class/module
+**Status:** RESOLVED — decomposed into 6 cohesive files within `internal/agent/`
 
-**Issue:** `internal/agent/supervisor.go` is 1,426 LOC with 5+ responsibilities: loop orchestration, prompt building, lease management, checkpoint handling, and agent spawning. It is the most frequently changed file and the hardest to test in isolation.
+**Fix:** Split `supervisor.go` (1,426 LOC, 31 functions) into 6 files by responsibility:
+- `supervisor.go` (~270 LOC) — types, interfaces, main loop (`RunSupervisor`)
+- `registration.go` (~175 LOC) — agent identity and lifecycle
+- `waitforwork.go` (~300 LOC) — work detection with event-driven + polling
+- `claiming.go` (~230 LOC) — task claiming and merge handling
+- `prompt.go` (~95 LOC) — prompt assembly
+- `systemctl.go` (~160 LOC) — system control, execution, planner verification
 
-**Implication:** High change frequency combined with broad responsibility means most agent-layer changes risk unrelated regressions. Testing requires setting up the full supervisor context even for narrow behaviors.
-
-**Direction:** Extract cohesive pieces — lease management, prompt assembly, and agent spawning are candidates for standalone packages or files within `internal/agent/`.
+Test files split correspondingly. `supervisor_priority_test.go` renamed to `claiming_priority_test.go`. No signature changes, no behavior changes.
 
 ### ~~Duplicated File-Locking Mechanism~~
 

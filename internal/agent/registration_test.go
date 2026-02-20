@@ -1,0 +1,426 @@
+package agent
+
+import (
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+// TestValidateIdentity tests agent ID format validation
+func TestValidateIdentity(t *testing.T) {
+	tests := []struct {
+		name    string
+		agentID string
+		role    string
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "valid coder ID",
+			agentID: "coder-1",
+			role:    "coder",
+			wantErr: false,
+		},
+		{
+			name:    "valid reviewer ID",
+			agentID: "code-reviewer-1",
+			role:    "code-reviewer",
+			wantErr: false,
+		},
+		{
+			name:    "valid planner ID",
+			agentID: "planner-1",
+			role:    "planner",
+			wantErr: false,
+		},
+		{
+			name:    "valid multi-digit number",
+			agentID: "coder-42",
+			role:    "coder",
+			wantErr: false,
+		},
+		{
+			name:    "empty agent ID",
+			agentID: "",
+			role:    "coder",
+			wantErr: true,
+			errMsg:  "agent ID required",
+		},
+		{
+			name:    "missing number",
+			agentID: "coder",
+			role:    "coder",
+			wantErr: true,
+			errMsg:  "format",
+		},
+		{
+			name:    "non-numeric suffix",
+			agentID: "coder-abc",
+			role:    "coder",
+			wantErr: true,
+			errMsg:  "numeric",
+		},
+		{
+			name:    "role mismatch",
+			agentID: "coder-1",
+			role:    "planner",
+			wantErr: true,
+			errMsg:  "mismatch",
+		},
+		{
+			name:    "invalid prefix",
+			agentID: "invalid-1",
+			role:    "coder",
+			wantErr: true,
+			errMsg:  "mismatch",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateIdentity(tt.agentID, tt.role)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateIdentity() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("Error should contain %q, got %v", tt.errMsg, err)
+			}
+		})
+	}
+}
+
+// TestRegisterAgent tests agent registration
+func TestRegisterAgent(t *testing.T) {
+	tests := []struct {
+		name           string
+		agentID        string
+		role           string
+		existingAgent  *models.Agent
+		expectRegister bool
+		wantErr        bool
+		errMsg         string
+	}{
+		{
+			name:           "new agent registration",
+			agentID:        "coder-1",
+			role:           "coder",
+			existingAgent:  nil,
+			expectRegister: true,
+			wantErr:        false,
+		},
+		{
+			name:    "collision with valid lease",
+			agentID: "coder-1",
+			role:    "coder",
+			existingAgent: &models.Agent{
+				Role:         "coder",
+				Status:       models.AgentStatusWorking,
+				LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(10 * time.Minute)),
+				Heartbeat:    time.Now().UTC(),
+			},
+			expectRegister: false,
+			wantErr:        true,
+			errMsg:         "collision",
+		},
+		{
+			name:    "takeover expired lease",
+			agentID: "coder-1",
+			role:    "coder",
+			existingAgent: &models.Agent{
+				Role:         "coder",
+				Status:       models.AgentStatusWorking,
+				LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(-10 * time.Minute)),
+				Heartbeat:    time.Now().UTC().Add(-10 * time.Minute),
+			},
+			expectRegister: true,
+			wantErr:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			state := testhelpers.CreateValidState()
+			if tt.existingAgent != nil {
+				state.Agents[tt.agentID] = *tt.existingAgent
+			}
+
+			bb := testhelpers.WriteInitialState(t, statePath, state)
+
+			err := registerAgent(bb, tmpDir, tt.agentID, tt.role, "terminal-1", 1800)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("registerAgent() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr && tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("Error should contain %q, got %v", tt.errMsg, err)
+			}
+
+			if tt.expectRegister {
+				// Verify agent was registered with correct status
+				state, err := bb.Read()
+				if err != nil {
+					t.Fatalf("Failed to read state: %v", err)
+				}
+
+				agent, exists := state.Agents[tt.agentID]
+				if !exists {
+					t.Errorf("Agent %s not registered", tt.agentID)
+					return
+				}
+
+				if agent.Status != models.AgentStatusIdle {
+					t.Errorf("Expected status IDLE, got %s", agent.Status)
+				}
+
+				if agent.Role != tt.role {
+					t.Errorf("Expected role %s, got %s", tt.role, agent.Role)
+				}
+
+				// Verify PID is stored
+				if agent.PID == 0 {
+					t.Error("Expected PID to be set (non-zero)")
+				}
+			}
+		})
+	}
+}
+
+// TestRegisterAgentConcurrent tests concurrent registration race condition
+func TestRegisterAgentConcurrent(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	agentID := "coder-1"
+	role := "coder"
+	numGoroutines := 5
+
+	// Track success/failure counts
+	successes := make(chan bool, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	// Launch multiple goroutines trying to register the same agent ID
+	for range numGoroutines {
+		go func() {
+			err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800)
+			if err != nil {
+				errors <- err
+			} else {
+				successes <- true
+			}
+		}()
+	}
+
+	// Collect results
+	successCount := 0
+	errorCount := 0
+	for range numGoroutines {
+		select {
+		case <-successes:
+			successCount++
+		case err := <-errors:
+			errorCount++
+			// Verify error is about collision
+			if !strings.Contains(err.Error(), "collision") && !strings.Contains(err.Error(), "already registered") {
+				t.Errorf("Expected collision error, got: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("Timeout waiting for registration results")
+		}
+	}
+
+	// Exactly one should succeed, rest should fail with collision
+	if successCount != 1 {
+		t.Errorf("Expected exactly 1 successful registration, got %d", successCount)
+	}
+
+	if errorCount != numGoroutines-1 {
+		t.Errorf("Expected %d collision errors, got %d", numGoroutines-1, errorCount)
+	}
+
+	// Verify only one agent exists in state
+	finalState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read final state: %v", err)
+	}
+
+	agent, exists := finalState.Agents[agentID]
+	if !exists {
+		t.Fatal("Agent should be registered")
+	}
+
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Agent status should be IDLE, got %s", agent.Status)
+	}
+}
+
+// TestUnregisterAgent tests agent cleanup
+func TestUnregisterAgent(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	agentID := "coder-1"
+	state.Agents[agentID] = models.Agent{
+		Role:      "coder",
+		Status:    models.AgentStatusWorking,
+		Heartbeat: time.Now().UTC(),
+	}
+
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	unregisterAgent(bb, agentID)
+
+	// Verify agent was removed
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	if _, exists := state.Agents[agentID]; exists {
+		t.Errorf("Agent %s should be unregistered", agentID)
+	}
+}
+
+// TestRegisterAgentStoresPID tests that agent registration stores the process PID
+func TestRegisterAgentStoresPID(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	agentID := "coder-1"
+	role := "coder"
+
+	err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800)
+	if err != nil {
+		t.Fatalf("registerAgent() error = %v", err)
+	}
+
+	// Verify PID is stored and matches current process
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	agent, exists := state.Agents[agentID]
+	if !exists {
+		t.Fatal("Agent should be registered")
+	}
+
+	// Verify PID is non-zero
+	if agent.PID == 0 {
+		t.Error("PID should be set (non-zero)")
+	}
+
+	// Verify PID matches current process (in test, it will be the test process PID)
+	currentPID := os.Getpid()
+	if agent.PID != currentPID {
+		t.Errorf("Expected PID to be %d (current process), got %d", currentPID, agent.PID)
+	}
+}
+
+// TestPlannerStatusTransitions tests planner agent status lifecycle
+func TestPlannerStatusTransitions(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	// No tasks - triggers INITIAL_PLANNING work for planner
+	state.Tasks = []models.Task{}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+
+	// Register planner agent
+	agentID := "planner-1"
+	err := registerAgent(bb, tmpDir, agentID, "planner", "terminal-1", 1800)
+	if err != nil {
+		t.Fatalf("registerAgent() error = %v", err)
+	}
+
+	// Verify initial status is IDLE
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	agent := state.Agents[agentID]
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Initial status = %s, want IDLE", agent.Status)
+	}
+
+	// Simulate planner starting work - set PLANNING status
+	err = setAgentToPlanningStatus(bb, agentID)
+	if err != nil {
+		t.Fatalf("setAgentToPlanningStatus() error = %v", err)
+	}
+
+	// Verify status is now PLANNING
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	agent = state.Agents[agentID]
+	if agent.Status != models.AgentStatusPlanning {
+		t.Errorf("Status after setAgentToPlanningStatus = %s, want PLANNING", agent.Status)
+	}
+
+	// Verify heartbeat was updated
+	if agent.Heartbeat.Before(time.Now().UTC().Add(-5 * time.Second)) {
+		t.Error("Heartbeat should be updated when status changes to PLANNING")
+	}
+
+	// Simulate planner completing work - reset to IDLE
+	err = resetAgentToIdle(bb, agentID)
+	if err != nil {
+		t.Fatalf("resetAgentToIdle() error = %v", err)
+	}
+
+	// Verify status is back to IDLE
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	agent = state.Agents[agentID]
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Status after resetAgentToIdle = %s, want IDLE", agent.Status)
+	}
+}
+
+// TestSetAgentToPlanningStatusNonExistent tests error handling for non-existent agent
+func TestSetAgentToPlanningStatusNonExistent(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+
+	// Try to set status for non-existent agent
+	err := setAgentToPlanningStatus(bb, "planner-999")
+	if err == nil {
+		t.Error("setAgentToPlanningStatus() should return error for non-existent agent")
+	}
+
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("Error should mention 'not found', got: %v", err)
+	}
+}

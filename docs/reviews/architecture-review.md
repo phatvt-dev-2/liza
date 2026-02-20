@@ -54,12 +54,18 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `Metrics` for lock acquisition timing
 - `GetTask()` and `UpdateTask()` exist and now delegate to `State.FindTask()` internally *(pass 2, Complexity lens — resolved)*
 
-#### agent (`internal/agent/`) — 1,667 LOC
+#### agent (`internal/agent/`) — 1,667 LOC (6 files)
 
 **Purpose:** Supervisor loop, heartbeat, work detection, logging.
 
 **Observations:**
-- `supervisor.go` (1,428 LOC, 33 functions, 19% branch density) — largest production file, confirmed god file *(pass 2: metrics added)*
+- ~~`supervisor.go` (1,428 LOC, 33 functions) — god file~~ *(resolved: decomposed into 6 cohesive files)*:
+  - `supervisor.go` (~270 LOC) — types, interfaces, main loop
+  - `registration.go` (~175 LOC) — agent identity and lifecycle
+  - `waitforwork.go` (~300 LOC) — work detection (event-driven + polling)
+  - `claiming.go` (~230 LOC) — task claiming and merge handling
+  - `prompt.go` (~95 LOC) — prompt assembly
+  - `systemctl.go` (~160 LOC) — system control, execution, planner verification
 - `RunSupervisor()` (186 LOC): checkAbort → waitWhilePaused → handleApprovedMerges → waitForWork → claimTask → buildPrompt → executeAgent → handleExitCode
 - `CLIExecutor` interface enables mock testing (supports claude, codex, gemini, vibe)
 - `waitForWorkEventDriven()` (116 LOC) with fsnotify + polling fallback
@@ -259,7 +265,7 @@ commands/ (volatile, high-level)
 
 | File | LOC | Functions | Branch Density | Longest Function |
 |------|-----|-----------|---------------|-----------------|
-| supervisor.go | 1,428 | 33 | 19% | RunSupervisor (186) |
+| ~~supervisor.go~~ | ~~1,428~~ | ~~33~~ | ~~19%~~ | ~~RunSupervisor (186)~~ *(resolved: split into 6 files, largest ~270 LOC)* |
 | main.go | 1,275 | 5 | 9% | init (111) |
 | server.go | 704 | 22 | 5% | registerMutationTools (242) |
 | handlers.go | 547 | 29 | 14% | — |
@@ -343,13 +349,11 @@ The `mcp` package is a textbook adapter: it translates JSON-RPC wire format into
 
 ### 2.3 Smells
 
-#### Smell: God class in `supervisor.go`
+#### ~~Smell: God class in `supervisor.go`~~ *(resolved)*
 
 **Signal:** 1,428 LOC, 33 functions, 19% branch density (highest in codebase), mixes agent lifecycle, work detection, task claiming, prompt building, CLI execution, merge handling, and planner verification. *(pass 2: metrics added)*
 
-**Impact:** Difficult to understand, modify, or test any single concern in isolation. The file is the primary change target for most new features.
-
-**Direction:** Extract cohesive subsystems: `claimManager` (claiming logic), `mergeHandler` (approved merge workflow), `plannerVerifier` (post-execution verification). The existing `CLIExecutor` interface shows the pattern.
+**Fix:** Decomposed into 6 cohesive files within `internal/agent/`: `supervisor.go` (types + main loop), `registration.go` (identity + lifecycle), `waitforwork.go` (work detection), `claiming.go` (task claiming + merges), `prompt.go` (prompt assembly), `systemctl.go` (system control + execution + verification). Test files split correspondingly. No signature or behavior changes.
 
 #### Smell: Monolithic command functions *(pass 2, Complexity lens)*
 
@@ -543,7 +547,7 @@ The 24.7% uncovered code concentrates in two patterns:
 
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
-| **High** | `supervisor.go` god file (1,428 LOC, 19% branch density) | Primary change target, mixes 5+ concerns, highest complexity density | Extract `claimManager`, `mergeHandler`, `plannerVerifier` subsystems |
+| ~~**High**~~ | ~~`supervisor.go` god file (1,428 LOC, 19% branch density)~~ *(resolved: decomposed into 6 cohesive files within `internal/agent/`)* | | |
 | **High** | Monolithic command functions (310-319 LOC single functions) *(pass 2)* | 4+ commands resist comprehension, review, and targeted testing | Decompose into named phase functions (validate → execute → commit) |
 | **High** | Duplicated flock mechanism (db + log) | Constants and logic can diverge silently | Extract `internal/filelock` shared package |
 | ~~**High**~~ | ~~MCP handler bypasses Blackboard locking~~ *(resolved: `Blackboard.ReadRaw()` added, `readStateResource()` uses flock-protected read)* | | |
@@ -582,7 +586,7 @@ Liza's architecture is well-suited to its constraints: a file-based multi-agent 
 
 **Pass 4 (Coverage lens)** adds quantitative depth: 75.3% statement coverage overall, with the uncovered 24.7% concentrated in two patterns — runtime orchestration code (supervisor Execute, MCP server dispatch) and I/O-coupled functions. The most actionable finding: `mcp/server.classifyError` and `HandleRequest` are pure logic at 0% that can be tested trivially without any refactoring. Similarly, `models/diagnostics.go` (127 LOC, 4 functions, no test file) is critical work-detection logic that's entirely untested despite being pure functions on `*State`. I/O coupling (already flagged as a Boundaries smell) is now quantitatively confirmed as the primary driver of untested critical paths — functions with hardwired `os.Stdin`/`os.Stdout`/`os/exec` account for the majority of the 0% coverage.
 
-The primary structural concerns in priority order: (1) `supervisor.go` god file, (2) commands presentation+logic coupling, (3) monolithic command functions, ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved). Items 2 and 3 are synergistic — decomposing commands into phases naturally creates the service layer that resolves the boundary issue.
+The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), (2) commands presentation+logic coupling, (3) monolithic command functions, ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved). Items 2 and 3 are synergistic — decomposing commands into phases naturally creates the service layer that resolves the boundary issue.
 
 ---
 
