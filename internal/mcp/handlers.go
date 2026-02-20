@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -60,6 +61,30 @@ func requireString(params map[string]any, key string) (string, error) {
 		return "", fmt.Errorf("%s parameter required", key)
 	}
 	return v, nil
+}
+
+// extractStringSlice extracts an optional []string from a JSON params map.
+// JSON arrays arrive as []any; non-string elements are silently skipped.
+func extractStringSlice(params map[string]any, key string) []string {
+	raw, ok := params[key].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// appendWarnings appends warning lines to a message string.
+func appendWarnings(msg string, warnings []string) string {
+	for _, w := range warnings {
+		msg += "\nWarning: " + w
+	}
+	return msg
 }
 
 // requireTaskAndAgent extracts the common task_id + agent_id pair.
@@ -222,18 +247,11 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 		priority = p
 	}
 
-	var dependsOn []string
-	if deps, ok := params["depends"].([]any); ok {
-		for _, dep := range deps {
-			if depStr, ok := dep.(string); ok {
-				dependsOn = append(dependsOn, depStr)
-			}
-		}
-	}
+	dependsOn := extractStringSlice(params, "depends")
 
 	taskType, _ := params["type"].(string)
 
-	input := &commands.TaskInput{
+	input := &ops.AddTaskInput{
 		ID:          id,
 		Type:        taskType,
 		Description: description,
@@ -245,11 +263,16 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 	}
 
 	statePath := paths.New(s.projectRoot).StatePath()
-	if err := commands.AddTaskCommand(statePath, s.logPath, input, agentID); err != nil {
+	result, err := ops.AddTask(statePath, s.logPath, input, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("add task failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Task %s added successfully", id))
+	msg := fmt.Sprintf("Task %s added successfully", id)
+	for _, w := range result.Warnings {
+		msg += fmt.Sprintf("\nwarning: %s", w)
+	}
+	return textResult(msg)
 }
 
 // handleClaimTask implements the liza_claim_task tool
@@ -260,12 +283,13 @@ func (s *Server) handleClaimTask(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// TODO: migrate to ops.ClaimTask() to avoid stdout prints corrupting JSON-RPC transport
-	if err := commands.ClaimTaskCommand(s.projectRoot, taskID, agentID); err != nil {
+	result, err := ops.ClaimTask(s.projectRoot, taskID, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("claim task failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Task %s claimed by %s", taskID, agentID))
+	return textResult(fmt.Sprintf("Task %s claimed by %s (from %s), worktree: %s",
+		result.TaskID, result.AgentID, result.SourceStatus, result.WorktreeRel))
 }
 
 // handleSubmitForReview implements the liza_submit_for_review tool
@@ -286,11 +310,12 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := commands.SubmitForReviewCommand(s.projectRoot, taskID, commitSHA, agentID); err != nil {
+	result, err := ops.SubmitForReview(s.projectRoot, taskID, commitSHA, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("submit for review failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Task %s submitted for review", taskID))
+	return textResult(fmt.Sprintf("Task %s submitted for review (commit: %s)", result.TaskID, result.ReviewCommit))
 }
 
 // handleHandoff implements the liza_handoff tool
@@ -311,11 +336,12 @@ func (s *Server) handleHandoff(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := commands.HandoffCommand(s.projectRoot, taskID, summary, nextAction, agentID); err != nil {
+	result, err := ops.Handoff(s.projectRoot, taskID, summary, nextAction, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("handoff failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Handoff initiated for task %s", taskID))
+	return textResult(fmt.Sprintf("Handoff initiated for task %s by %s", result.TaskID, result.AgentID))
 }
 
 // handleSubmitVerdict implements the liza_submit_verdict tool
@@ -338,11 +364,12 @@ func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {
 
 	reason, _ := params["reason"].(string)
 
-	if err := commands.SubmitVerdictCommand(s.projectRoot, taskID, verdict, reason, agentID); err != nil {
+	result, err := ops.SubmitVerdict(s.projectRoot, taskID, verdict, reason, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("submit verdict failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Verdict %s submitted for task %s", verdict, taskID))
+	return textResult(fmt.Sprintf("Verdict %s submitted for task %s", result.Verdict, result.TaskID))
 }
 
 // handleMarkBlocked implements the liza_mark_blocked tool
@@ -358,19 +385,13 @@ func (s *Server) handleMarkBlocked(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	var questions []string
-	if questionsRaw, ok := params["questions"].([]any); ok {
-		for _, q := range questionsRaw {
-			if qStr, ok := q.(string); ok {
-				questions = append(questions, qStr)
-			}
-		}
-	}
+	questions := extractStringSlice(params, "questions")
 	if len(questions) == 0 {
 		return nil, fmt.Errorf("questions parameter required (1-3 questions)")
 	}
 
-	if err := commands.MarkBlockedCommand(s.projectRoot, taskID, reason, questions, agentID); err != nil {
+	_, err = ops.MarkBlocked(s.projectRoot, taskID, reason, questions, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("mark blocked failed: %w", err)
 	}
 
@@ -398,11 +419,20 @@ func (s *Server) handleReleaseClaim(params map[string]any) (any, error) {
 	reason, _ := params["reason"].(string)
 	force, _ := params["force"].(bool)
 
-	if err := commands.ReleaseClaimCommand(s.projectRoot, taskID, role, force, reason, agentID); err != nil {
+	result, err := ops.ReleaseClaim(s.projectRoot, taskID, role, force, reason, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("release claim failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Claim released for task %s", taskID))
+	msg := "Claim released for task " + result.TaskID
+	if result.ReleasedReviewer && result.ReleasedCoder {
+		msg = "Released reviewer and coder claims for task " + result.TaskID
+	} else if result.ReleasedReviewer {
+		msg = "Released reviewer claim for task " + result.TaskID
+	} else if result.ReleasedCoder {
+		msg = "Released coder claim for task " + result.TaskID
+	}
+	return textResult(msg)
 }
 
 // handleSupersede implements the liza_supersede_task tool
@@ -418,20 +448,14 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	var replacementIDs []string
-	if ids, ok := params["replacement_ids"].([]any); ok {
-		for _, id := range ids {
-			if idStr, ok := id.(string); ok {
-				replacementIDs = append(replacementIDs, idStr)
-			}
-		}
-	}
+	replacementIDs := extractStringSlice(params, "replacement_ids")
 
-	if err := commands.SupersedeTaskCommand(s.projectRoot, taskID, replacementIDs, reason, agentID); err != nil {
+	result, err := ops.SupersedeTask(s.projectRoot, taskID, replacementIDs, reason, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("supersede task failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Task %s superseded", taskID))
+	return textResult(fmt.Sprintf("Task %s superseded (was %s)", result.TaskID, result.OriginalStatus))
 }
 
 // handleWtCreate implements the liza_wt_create tool
@@ -444,10 +468,14 @@ func (s *Server) handleWtCreate(params map[string]any) (any, error) {
 
 	fresh, _ := params["fresh"].(bool)
 
-	if err := commands.WtCreateCommand(s.projectRoot, taskID, fresh); err != nil {
+	result, err := ops.CreateWorktree(s.projectRoot, taskID, fresh)
+	if err != nil {
 		return nil, fmt.Errorf("wt-create failed: %w", err)
 	}
 
+	if result.AlreadyExisted {
+		return textResult(fmt.Sprintf("Worktree already exists for task %s", taskID))
+	}
 	return textResult(fmt.Sprintf("Worktree created for task %s", taskID))
 }
 
@@ -459,11 +487,19 @@ func (s *Server) handleWtDelete(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := commands.WtDeleteCommand(s.projectRoot, taskID); err != nil {
+	result, err := ops.DeleteWorktree(s.projectRoot, taskID)
+	if err != nil {
 		return nil, fmt.Errorf("wt-delete failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Worktree deleted for task %s", taskID))
+	if !result.Existed {
+		return textResult(fmt.Sprintf("No worktree for task %s", taskID))
+	}
+
+	return textResult(appendWarnings(
+		fmt.Sprintf("Worktree deleted for task %s", taskID),
+		result.Warnings,
+	))
 }
 
 // handleWtMerge implements the liza_wt_merge tool
@@ -474,49 +510,68 @@ func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// TODO: migrate to ops.MergeWorktree() to avoid stdout/stderr prints corrupting JSON-RPC transport
-	if err := commands.WtMergeCommand(s.projectRoot, taskID, agentID); err != nil {
+	result, err := ops.MergeWorktree(s.projectRoot, taskID, agentID)
+	if err != nil {
 		return nil, fmt.Errorf("wt-merge failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Task %s merged to integration branch", taskID))
+	return textResult(appendWarnings(
+		fmt.Sprintf("Task %s merged to integration branch (commit: %s)", result.TaskID, result.MergeCommit),
+		result.Warnings,
+	))
 }
 
 // handleAnalyze implements the liza_analyze tool
 // Maps to: liza analyze
 func (s *Server) handleAnalyze(params map[string]any) (any, error) {
-	if err := commands.AnalyzeCommand(s.projectRoot); err != nil {
+	result, err := ops.Analyze(s.projectRoot)
+	if err != nil {
 		return nil, fmt.Errorf("analyze failed: %w", err)
 	}
 
-	return textResult("Circuit breaker analysis complete")
+	if !result.Triggered {
+		return textResult("Circuit breaker: OK — no patterns detected")
+	}
+
+	return textResult(fmt.Sprintf("Circuit breaker TRIGGERED: pattern=%s, severity=%s, report=%s",
+		result.Pattern, result.Severity, result.ReportPath))
 }
 
 // handleCheckpoint implements the liza_checkpoint tool
 // Maps to: liza checkpoint
 func (s *Server) handleCheckpoint(params map[string]any) (any, error) {
-	if err := commands.CheckpointCommand(s.projectRoot); err != nil {
+	result, err := ops.Checkpoint(s.projectRoot)
+	if err != nil {
 		return nil, fmt.Errorf("checkpoint failed: %w", err)
 	}
 
-	return textResult("Sprint checkpoint created. Agents will pause at their next check.")
+	return textResult(fmt.Sprintf("Sprint checkpoint created at %s. Report: %s. Agents will pause at their next check.",
+		result.CheckpointAt.Format("2006-01-02T15:04:05Z07:00"), result.ReportPath))
 }
 
 // handleUpdateSprintMetrics implements the liza_update_sprint_metrics tool
 // Maps to: liza update-sprint-metrics
 func (s *Server) handleUpdateSprintMetrics(params map[string]any) (any, error) {
-	// TODO: migrate to ops.UpdateSprintMetrics() to avoid stdout prints corrupting JSON-RPC transport
-	if err := commands.UpdateSprintMetricsCommand(s.projectRoot); err != nil {
+	metrics, err := ops.UpdateSprintMetrics(s.projectRoot)
+	if err != nil {
 		return nil, fmt.Errorf("update sprint metrics failed: %w", err)
 	}
 
-	return textResult("Sprint metrics updated successfully")
+	msg := fmt.Sprintf("Sprint metrics updated: %d done, %d in progress, %d blocked",
+		metrics.TasksDone, metrics.TasksInProgress, metrics.TasksBlocked)
+
+	warnings := ops.CheckSuspiciousRates(metrics)
+	for _, w := range warnings {
+		msg += "\n" + w
+	}
+
+	return textResult(msg)
 }
 
 // handleClearStaleReviews implements the liza_clear_stale_review_claims tool
 // Maps to: liza clear-stale-review-claims
 func (s *Server) handleClearStaleReviews(params map[string]any) (any, error) {
-	count, err := commands.ClearStaleReviewClaimsCommand(s.projectRoot)
+	count, err := ops.ClearStaleReviewClaims(s.projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("clear stale review claims failed: %w", err)
 	}
@@ -539,9 +594,10 @@ func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {
 
 	force, _ := params["force"].(bool)
 
-	if err := commands.DeleteAgentCommand(s.projectRoot, agentID, force, reason); err != nil {
+	result, err := ops.DeleteAgent(s.projectRoot, agentID, force, false, reason)
+	if err != nil {
 		return nil, fmt.Errorf("delete agent failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Agent %s deleted", agentID))
+	return textResult(fmt.Sprintf("Agent %s deleted", result.AgentID))
 }

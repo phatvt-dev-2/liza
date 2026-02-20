@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 )
 
 // inspectAgentsOptions contains options for agent inspection
@@ -113,7 +114,7 @@ func buildagentInfo(agentID string, agent *models.Agent, currentTask *models.Tas
 	info.PID = agent.PID
 	if agent.PID == 0 {
 		info.ProcessStatus = "n/a"
-	} else if isAgentProcessAlive(agent.PID) {
+	} else if ops.IsProcessAlive(agent.PID) {
 		info.ProcessStatus = "running"
 	} else {
 		info.ProcessStatus = "not found"

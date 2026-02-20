@@ -106,14 +106,9 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 
 	// Read state
 	bb := db.New(statePath)
-	state, err := bb.Read()
+	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read state: %w", err)
-	}
-
-	task := state.FindTask(taskID)
-	if task == nil {
-		return nil, fmt.Errorf("task not found: %s", taskID)
+		return nil, err
 	}
 
 	if task.Status != models.TaskStatusApproved {

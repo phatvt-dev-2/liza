@@ -4,79 +4,26 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/git"
-	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 )
 
-// WtDeleteCommand deletes a worktree for a task.
-// For safety, deletion is only allowed for BLOCKED, ABANDONED, SUPERSEDED, or MERGED tasks.
-// This prevents accidental destruction of in-progress work.
+// WtDeleteCommand deletes a worktree for a task and prints the result to stdout.
+// Delegates business logic to ops.DeleteWorktree.
 func WtDeleteCommand(projectRoot, taskID string) error {
-	// Validate input
-	if taskID == "" {
-		return fmt.Errorf("task ID is required")
-	}
-
-	// Setup paths
-	statePath := projectRoot + "/.liza/state.yaml"
-
-	// Read state
-	bb := db.New(statePath)
-	state, err := bb.Read()
+	result, err := ops.DeleteWorktree(projectRoot, taskID)
 	if err != nil {
-		return fmt.Errorf("failed to read state: %w", err)
+		return fmt.Errorf("delete worktree: %w", err)
 	}
 
-	task := state.FindTask(taskID)
-	if task == nil {
-		return fmt.Errorf("task not found: %s", taskID)
-	}
-
-	// Validate task status - only allow deletion for safe statuses
-	switch task.Status {
-	case models.TaskStatusBlocked, models.TaskStatusAbandoned, models.TaskStatusSuperseded:
-		// Safe to delete
-	case models.TaskStatusMerged:
-		// Allow deletion but warn
-		fmt.Fprintf(os.Stderr, "Warning: Task %s is MERGED — worktree should already be cleaned\n", taskID)
-	default:
-		return fmt.Errorf("cannot delete worktree for task %s (status: %s), deletion only allowed for: BLOCKED, ABANDONED, SUPERSEDED, MERGED", taskID, task.Status)
-	}
-
-	// Check if task has worktree
-	if task.Worktree == nil {
-		fmt.Printf("No worktree for task %s\n", taskID)
+	if !result.Existed {
+		fmt.Printf("No worktree for task %s\n", result.TaskID)
 		return nil
 	}
 
-	// Initialize git wrapper
-	gitWrapper := git.New(projectRoot)
-
-	// Remove worktree
-	if err := gitWrapper.RemoveWorktree(taskID); err != nil {
-		// Log error but continue - directory might already be gone
-		fmt.Fprintf(os.Stderr, "Warning: failed to remove worktree: %v\n", err)
+	for _, w := range result.Warnings {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 	}
 
-	// Delete branch (ignore errors if branch doesn't exist)
-	branchName := "task/" + taskID
-	_ = gitWrapper.DeleteBranch(branchName)
-
-	// Update task.worktree to null in state
-	err = bb.Modify(func(state *models.State) error {
-		task := state.FindTask(taskID)
-		if task == nil {
-			return fmt.Errorf("task not found: %s", taskID)
-		}
-		task.Worktree = nil
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to update state: %w", err)
-	}
-
-	fmt.Printf("Deleted worktree for %s (was %s)\n", taskID, task.Status)
+	fmt.Printf("Deleted worktree for %s (was %s)\n", result.TaskID, result.PreviousStatus)
 	return nil
 }

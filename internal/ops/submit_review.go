@@ -1,0 +1,163 @@
+package ops
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/git"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
+)
+
+// SubmitForReviewResult contains the outcome of submitting a task for review.
+type SubmitForReviewResult struct {
+	TaskID       string
+	ReviewCommit string
+	AgentID      string
+}
+
+// SubmitForReview rebases the task branch onto the integration branch to catch
+// conflicts early, then atomically transitions the task to READY_FOR_REVIEW.
+// No terminal I/O.
+func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitForReviewResult, error) {
+	if taskID == "" {
+		return nil, fmt.Errorf("task ID is required")
+	}
+	if commitSHA == "" {
+		return nil, fmt.Errorf("commit SHA is required")
+	}
+	if agentID == "" {
+		return nil, fmt.Errorf("LIZA_AGENT_ID is required")
+	}
+
+	lp := paths.New(projectRoot)
+	bb := db.New(lp.StatePath())
+
+	// Phase 1: Read state to get config and validate preconditions
+	state, task, err := readTaskState(bb, taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	if task.Status != models.TaskStatusImplementing {
+		return nil, fmt.Errorf("task %s is not IMPLEMENTING (current status: %s)", taskID, task.Status)
+	}
+
+	if task.AssignedTo == nil || *task.AssignedTo != agentID {
+		currentAgent := "none"
+		if task.AssignedTo != nil {
+			currentAgent = *task.AssignedTo
+		}
+		return nil, fmt.Errorf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)
+	}
+
+	if task.Worktree == nil {
+		return nil, fmt.Errorf("task %s has no worktree", taskID)
+	}
+
+	// Phase 2: Execute git operations outside the lock
+	g := git.New(projectRoot)
+	wtPath := g.GetWorktreePath(taskID)
+
+	if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("worktree directory does not exist: %s", wtPath)
+	}
+
+	wtBranch, err := g.GetWorktreeBranch(wtPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get worktree branch: %w", err)
+	}
+
+	expectedBranch := "task/" + taskID
+	if wtBranch != expectedBranch {
+		if wtBranch == "" {
+			return nil, fmt.Errorf("worktree is in detached HEAD state (expected branch: %s)", expectedBranch)
+		}
+		return nil, fmt.Errorf("worktree is on branch %s (expected: %s)", wtBranch, expectedBranch)
+	}
+
+	integrationBranch := state.Config.IntegrationBranch
+	if err := g.FetchFromLocal(wtPath, integrationBranch); err != nil {
+		return nil, fmt.Errorf("failed to fetch integration branch: %w", err)
+	}
+
+	if err := g.RebaseOnto(wtPath, "FETCH_HEAD"); err != nil {
+		_ = g.AbortRebase(wtPath)
+
+		return nil, fmt.Errorf(`failed to submit task for review: rebase conflict detected
+
+Your task branch has conflicts with the latest integration branch.
+
+Worktree location: %s
+
+To resolve:
+  1. cd %s
+  2. git status (see conflicting files)
+  3. Edit files to resolve conflict markers
+  4. git add <resolved-files>
+  5. git rebase --continue
+  6. Return to project root and retry: liza submit-for-review %s
+
+Alternatively, abort the rebase and ask for help:
+  git rebase --abort`, wtPath, wtPath, taskID)
+	}
+
+	postRebaseCommit, err := g.GetWorktreeHEAD(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get post-rebase commit SHA: %w", err)
+	}
+
+	// Phase 3: Atomic update with new commit SHA
+	now := time.Now().UTC()
+
+	err = bb.Modify(func(state *models.State) error {
+		task := state.FindTask(taskID)
+		if task == nil {
+			return fmt.Errorf("task not found: %s", taskID)
+		}
+
+		if task.Status != models.TaskStatusImplementing {
+			return fmt.Errorf("task %s is not IMPLEMENTING (current status: %s)", taskID, task.Status)
+		}
+
+		if task.AssignedTo == nil || *task.AssignedTo != agentID {
+			currentAgent := "none"
+			if task.AssignedTo != nil {
+				currentAgent = *task.AssignedTo
+			}
+			return fmt.Errorf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)
+		}
+
+		if err := task.Transition(models.TaskStatusReadyForReview); err != nil {
+			return err
+		}
+		task.ReviewCommit = &postRebaseCommit
+
+		agentPtr := &agentID
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:  now,
+			Event: "submitted_for_review",
+			Agent: agentPtr,
+		})
+
+		if agent, ok := state.Agents[agentID]; ok {
+			agent.Status = models.AgentStatusWaiting
+			agent.LeaseExpires = nil
+			state.Agents[agentID] = agent
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to submit task for review: %w", err)
+	}
+
+	return &SubmitForReviewResult{
+		TaskID:       taskID,
+		ReviewCommit: postRebaseCommit,
+		AgentID:      agentID,
+	}, nil
+}

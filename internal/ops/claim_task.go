@@ -55,14 +55,9 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	var leaseDuration int
 
 	// Read state to validate (lock is acquired and released)
-	state, err := bb.Read()
+	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read state: %w", err)
-	}
-
-	task := state.FindTask(taskID)
-	if task == nil {
-		return nil, fmt.Errorf("task not found: %s", taskID)
+		return nil, err
 	}
 
 	switch task.Status {

@@ -41,18 +41,10 @@ Persistent record of issues identified by architectural analysis skills.
   - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
   - [Implicit State Machine](#implicit-state-machine)
 - [Code-Level Architectural Smells](#code-level-architectural-smells)
-  - [~~Supervisor God File~~](#supervisor-god-file)
-  - [~~Duplicated File-Locking Mechanism~~](#duplicated-file-locking-mechanism)
-  - [MCP Handler Bypasses Blackboard Locking](#mcp-handler-bypasses-blackboard-locking)
   - [Magic Number 1800 Scattered](#magic-number-1800-scattered)
   - [executeTemplate Panics on Error](#executetemplate-panics-on-error)
   - [Inconsistent NotFoundError Usage](#inconsistent-notfounderror-usage)
-  - [Commands Presentation+Logic Coupling](#commands-presentationlogic-coupling)
-  - [~~Agent → Commands Upward Dependency~~](#agent--commands-upward-dependency)
   - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
-  - [~~Pervasive Task-Lookup Duplication~~](#pervasive-task-lookup-duplication)
-  - [~~Untested MCP Server Dispatch Layer~~](#untested-mcp-server-dispatch-layer)
-  - [~~Untested Work Detection Logic~~](#untested-work-detection-logic)
 ---
 
 ## Structural Load-Bearing Elements
@@ -123,11 +115,6 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 **Issue:** The Go CLI migration (ADR-0012) replaced the entire operational layer (18 bash scripts → Go CLI) but only partially updated the documents that agents and humans read as operational truth. Remaining drift:
 - `DEMO.md` contains 9 `yq` commands as monitoring instructions — the Go CLI eliminated the `yq` dependency and provides `liza get`/`liza status` equivalents (documented in `RECIPES.md`)
 - Additional `yq` references persist in `TROUBLESHOOTING.md`, `USAGE_MULTI_AGENTS.md`, `sprint-governance.md`, `circuit-breaker.md`, `worktree-management.md`, `roles.md`
-
-Previously fixed:
-- ~~`liza handoff` missing~~ — CLI command + MCP tool implemented
-- ~~`code_reviewer` underscore~~ — fixed to `code-reviewer`
-- ~~Signal file references~~ — replaced with state field mutations
 
 **Implication:** For a system whose core value proposition is agents reading specs as source of truth, stale `yq` references cause confusion — users and agents encounter commands that require an eliminated dependency.
 
@@ -441,6 +428,7 @@ Long-term concerns about system evolution.
 - [x] Pervasive task-lookup duplication — `State.FindTask()` and `FindTaskIndex()` replace 35+ inline loops and 3 duplicate helpers *(software-architecture-review)*
 - [x] Supervisor god file — decomposed 1,426 LOC into 6 cohesive files within `internal/agent/` by responsibility *(software-architecture-review)*
 - [x] Agent → commands upward dependency — extracted business logic to `internal/ops/` package, `agent` no longer imports `commands` *(software-architecture-review)*
+- [x] Commands presentation+logic coupling — extracted all 15 MCP-exposed mutation commands to `internal/ops/`; MCP handlers call ops directly; commands are thin presentation wrappers *(software-architecture-review)*
 
 ---
 
@@ -560,36 +548,6 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 
 Issues identified through code-level architectural analysis (patterns, structure, duplication).
 
-### ~~Supervisor God File~~
-
-**Skill:** software-architecture-review
-**Category:** God class/module
-**Status:** RESOLVED — decomposed into 6 cohesive files within `internal/agent/`
-
-**Fix:** Split `supervisor.go` (1,426 LOC, 31 functions) into 6 files by responsibility:
-- `supervisor.go` (~270 LOC) — types, interfaces, main loop (`RunSupervisor`)
-- `registration.go` (~175 LOC) — agent identity and lifecycle
-- `waitforwork.go` (~300 LOC) — work detection with event-driven + polling
-- `claiming.go` (~230 LOC) — task claiming and merge handling
-- `prompt.go` (~95 LOC) — prompt assembly
-- `systemctl.go` (~160 LOC) — system control, execution, planner verification
-
-Test files split correspondingly. `supervisor_priority_test.go` renamed to `claiming_priority_test.go`. No signature changes, no behavior changes.
-
-### ~~Duplicated File-Locking Mechanism~~
-
-**Skill:** software-architecture-review
-**Category:** DRY violation / Shotgun surgery
-**Status:** RESOLVED — extracted to `internal/filelock` package
-
-**Fix:** Created `internal/filelock` package with the complete locking implementation (lock acquisition, PID-based stale lock detection, error classification, metrics). Both `internal/db` and `internal/log` now use `filelock.FileLock` instead of independent implementations. The log package gained stale lock recovery and error classification it previously lacked. Constants (`DefaultLockTimeout`, `LockCheckInterval`) exist in one place. No external consumers of the old `db.LockError` types existed, so no aliases were needed.
-
-### ~~MCP Handler Bypasses Blackboard Locking~~
-
-**Skill:** software-architecture-review
-**Category:** Leaky abstraction / Boundary violation
-**Status:** RESOLVED — `readStateResource()` now uses `Blackboard.ReadRaw()` under flock
-
 ### Magic Number 1800 Scattered
 
 **Skill:** software-architecture-review
@@ -623,56 +581,16 @@ Test files split correspondingly. `supervisor_priority_test.go` renamed to `clai
 
 **Direction:** Adopt `NotFoundError` consistently across `db/blackboard.go` and command files. The MCP `classifyError()` can then use `errors.As` instead of string matching.
 
-### Commands Presentation+Logic Coupling
-
-**Skill:** software-architecture-review
-**Category:** Leaky abstraction / Inappropriate intimacy
-
-**Issue:** The `commands` package serves three consumers with incompatible I/O expectations — CLI (terminal), MCP server (JSON-RPC over stdio), and supervisor (background process) — but embeds terminal assumptions: 40+ `fmt.Print*` calls to stdout/stderr and 5+ direct `os.Stdin` reads in non-test production code. Functions like `ClaimTaskCommand()` print success messages, `SetupCommand()` prompts for confirmation, and `DeleteTaskCommand()` reads interactive input.
-
-**Implication:** MCP server calls commands via `handlers.go` that print to stdout, which is the JSON-RPC transport channel — stdout writes from commands could corrupt the protocol stream. Supervisor calls (`commands.ClaimTaskCommand()`, `commands.WtMergeCommand()`) mix operational output with supervisor logs. Tests must monkey-patch `os.Stdin` (8+ test files use `os.Stdin = r` / `defer func() { os.Stdin = oldStdin }()`) — fragile and not concurrency-safe.
-
-**Direction:** Separate business logic from presentation. Command functions return structured results; callers handle output. The MCP adapter already does this partially — `StatusCommand()` returns a string. Extend pattern to mutation commands. This also resolves the agent→commands coupling (see below).
-
-### ~~Agent → Commands Upward Dependency~~
-
-**Skill:** software-architecture-review
-**Category:** Leaky abstraction
-**Status:** RESOLVED — extracted to `internal/ops` package
-
-**Fix:** Created `internal/ops/` package with pure business logic functions: `ClaimTask()` returning `*ClaimResult`, `MergeWorktree()` returning `*MergeResult`, `ClearStaleReviewClaims()` returning `(int, error)`, and `UpdateSprintMetrics()` returning `(SprintMetrics, error)`. `IntegrationFailedError` moved to `ops`. Command files in `internal/commands/` became thin presentation wrappers that call `ops` functions and format output. `internal/agent/` now imports `ops` instead of `commands` — the upward dependency is eliminated. Integration test subprocess output captured to `bytes.Buffer` in the ops layer (included in `MergeResult.TestOutput` and `IntegrationFailedError.TestOutput`) instead of wired to terminal.
-
 ### Interactive Stdin in Library Packages
 
 **Skill:** software-architecture-review
 **Category:** Untestable by design
+**Status:** PARTIALLY RESOLVED — MCP-exposed commands no longer read stdin (business logic in ops); remaining stdin reads are in CLI-only commands not exposed to MCP
 
 **Issue:** Direct `os.Stdin` reads via `bufio.NewReader(os.Stdin)` or `bufio.NewScanner(os.Stdin)` in: `embedded/embedded.go` (2 locations: `WriteClaudeSettings`, `WriteMCPSettings`), `commands/setup.go` (2 locations), `commands/init.go` (1), `commands/delete_task.go` (2), `commands/delete_agent.go` (1). Total: 8 locations across 5 files in 2 packages.
 
-**Implication:** Functions with hardwired stdin cannot be used non-interactively (e.g., from MCP server or automated scripts). Tests work around this by replacing `os.Stdin` with pipe readers (observed in 8+ test files) — this pattern is fragile and not safe for concurrent test execution.
+**Current state:** The ops extraction resolved the MCP protocol corruption risk — MCP handlers now call `ops.*` functions that have zero I/O. The remaining stdin reads are in CLI-only interactive commands (`setup`, `init`, `delete_task`) and `embedded/` settings management, none of which are MCP-exposed. `delete_agent.go` retains interactive confirmation at the CLI wrapper level but delegates business logic to `ops.DeleteAgent()`.
 
-**Direction:** Accept an `io.Reader` parameter or a `Confirmer` callback for interactive prompts. Default to `os.Stdin` at the CLI call site in `cmd/liza/main.go`. This makes the same functions usable from non-interactive contexts (MCP, automation, tests).
+**Remaining concern:** Functions with hardwired stdin still cannot be used non-interactively. Tests work around this by replacing `os.Stdin` with pipe readers (observed in 8+ test files) — fragile and not safe for concurrent test execution.
 
-### ~~Pervasive Task-Lookup Duplication~~
-
-**Skill:** software-architecture-review
-**Category:** DRY violation / Shotgun surgery
-**Status:** RESOLVED — `State.FindTask()` and `FindTaskIndex()` added to `internal/models/state.go`
-
-**Fix:** Added `FindTask(taskID string) *Task` and `FindTaskIndex(taskID string) int` methods to `*models.State`. Migrated all ~35 inline ID-lookup loops in non-test production code across `commands/`, `agent/`, `db/`, and `models/` packages. Removed 3 duplicate private helper functions (`findTaskByID` in `supervisor.go` and `inspect_agents.go`, `findTask` in `validate.go`). `Blackboard.GetTask()` and `UpdateTask()` now delegate to `State.FindTask()` internally. Bug fixes to task-lookup logic now require changing one method instead of 35+ locations.
-
-### ~~Untested MCP Server Dispatch Layer~~
-
-**Skill:** software-architecture-review
-**Category:** Untested critical path
-**Status:** RESOLVED — `internal/mcp/server_dispatch_test.go` added
-
-**Fix:** Added `server_dispatch_test.go` with table-driven tests covering: `HandleRequest` routing (all 4 method branches + unknown method), `handleToolCall` (invalid params, missing name, unknown tool, successful handler, nil arguments, handler error with classification), `handleResourceRead` (invalid params), `classifyError` (all 5 classification branches: not found, lock timeout, race condition, validation, internal — 14 test cases), leak prevention (raw error strings never exposed), `handleNotification` (known and unknown). Request ID preservation verified.
-
-### ~~Untested Work Detection Logic~~
-
-**Skill:** software-architecture-review
-**Category:** Untested critical path
-**Status:** RESOLVED — `internal/models/diagnostics_test.go` added
-
-**Fix:** Added `diagnostics_test.go` with table-driven tests covering all 4 functions: `CountClaimableTasks` (empty state, role filtering, mixed statuses, dependency blocking/satisfaction), `CountReviewableTasks` (empty state, status filtering, role filtering), `GetCoderWorkDiagnostics` (claimable found, blocked-by-deps, in-progress, combined), `GetReviewerWorkDiagnostics` (unassigned, expired leases, active reviews, nil lease handling).
+**Direction:** Accept an `io.Reader` parameter or a `Confirmer` callback for interactive prompts. Default to `os.Stdin` at the CLI call site in `cmd/liza/main.go`.

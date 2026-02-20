@@ -9,6 +9,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"gopkg.in/yaml.v3"
 )
 
@@ -482,9 +483,9 @@ func TestIsAgentProcessAlive_InspectAgents(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isAgentProcessAlive(tt.pid)
+			got := ops.IsProcessAlive(tt.pid)
 			if got != tt.wantAlive {
-				t.Errorf("isAgentProcessAlive(%d) = %v, want %v", tt.pid, got, tt.wantAlive)
+				t.Errorf("ops.IsProcessAlive(%d) = %v, want %v", tt.pid, got, tt.wantAlive)
 			}
 		})
 	}

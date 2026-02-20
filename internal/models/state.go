@@ -527,6 +527,59 @@ func (sm SystemMode) IsValid() bool {
 	return sm == SystemModeRunning || sm == SystemModePaused || sm == SystemModeStopped || sm == SystemModeCircuitBreakerTripped
 }
 
+// systemModeTransition defines allowed source modes and rejection messages for a target mode.
+type systemModeTransition struct {
+	AllowedFrom []SystemMode
+	Rejections  map[SystemMode]string
+}
+
+// systemModeTransitions declares the valid mode transition graph, keyed by target mode.
+// Callers say "transition TO X"; the table says which source modes are valid and what
+// error message to return for known-invalid sources.
+var systemModeTransitions = map[SystemMode]systemModeTransition{
+	SystemModeRunning: {
+		AllowedFrom: []SystemMode{SystemModeStopped},
+		Rejections: map[SystemMode]string{
+			SystemModeRunning: "system is already RUNNING",
+			SystemModePaused:  "system is PAUSED - use 'liza resume' instead",
+		},
+	},
+	SystemModeStopped: {
+		AllowedFrom: []SystemMode{SystemModeRunning, SystemModePaused, SystemModeCircuitBreakerTripped},
+		Rejections: map[SystemMode]string{
+			SystemModeStopped: "system is already STOPPED",
+		},
+	},
+	SystemModePaused: {
+		AllowedFrom: []SystemMode{SystemModeRunning, SystemModeCircuitBreakerTripped},
+		Rejections: map[SystemMode]string{
+			SystemModePaused:  "system is already PAUSED",
+			SystemModeStopped: "cannot pause: system is STOPPED (use resume only from PAUSED state)",
+		},
+	},
+}
+
+// ValidateTransition checks whether transitioning from sm to the target mode is valid.
+// Returns nil if allowed, or a descriptive error for known rejections / unknown sources.
+func (sm SystemMode) ValidateTransition(to SystemMode) error {
+	tr, ok := systemModeTransitions[to]
+	if !ok {
+		return fmt.Errorf("unknown target mode: %s", to)
+	}
+
+	if msg, rejected := tr.Rejections[sm]; rejected {
+		return fmt.Errorf("%s", msg)
+	}
+
+	for _, allowed := range tr.AllowedFrom {
+		if sm == allowed {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("can only transition to %s from %v (current: %s)", to, tr.AllowedFrom, sm)
+}
+
 // Config holds system configuration parameters
 type Config struct {
 	MaxCoderIterations   int        `yaml:"max_coder_iterations"`

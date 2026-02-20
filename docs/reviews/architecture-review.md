@@ -76,37 +76,41 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - ~~**Upward dependency on commands**: supervisor calls `commands.ClaimTaskCommand()`, `commands.WtMergeCommand()`, `commands.ClearStaleReviewClaimsCommand()` directly — orchestration layer depends on CLI handler layer~~ *(pass 3, Boundaries lens — resolved: extracted to `internal/ops/` package, agent now imports `ops` instead of `commands`)*
 - **Core execution paths untested**: `Execute()`, `ExecuteInteractive()`, `handleApprovedMerges()`, `logTaskSubmissionIfCompleted()` at 0% statement coverage; `resumeHandoffTask()` at 11.4%. These are the actual agent loop entry points — tested indirectly via `TestSupervisorBasicLoop` with mock executor but not at statement level *(pass 4, Coverage lens)*
 
-#### ops (`internal/ops/`) — ~900 LOC
+#### ops (`internal/ops/`) — ~2,500 LOC (17 files)
 
-**Purpose:** Pure business logic layer for task workflow operations. Returns structured results with no terminal I/O side effects.
+**Purpose:** Pure business logic layer for all task workflow and system operations. Returns structured results with no terminal I/O side effects.
 
-**Pattern:** Service layer — extracted from `commands` to break the agent→commands upward dependency.
-
-**Observations:**
-- `ClaimTask()` returns `*ClaimResult` (3-phase TOCTOU-safe claim with worktree setup)
-- `MergeWorktree()` returns `*MergeResult` with `IntegrationFailedError` for merge/test failures
-- `ClearStaleReviewClaims()` — review lease cleanup
-- `UpdateSprintMetrics()` returns `(models.SprintMetrics, error)` — sprint metric computation
-- Integration test subprocess output captured to `bytes.Buffer` instead of piped to terminal
-- Two consumers: `agent/` (orchestration — uses structured results) and `commands/` (CLI — adds presentation)
-- Depends on: `db`, `models`, `git`, `log` — same layer as `commands` minus presentation concerns
-
-#### commands (`internal/commands/`) — ~4,550 LOC
-
-**Purpose:** CLI command implementations. Each command is a standalone function.
-
-**Pattern:** Function-per-command, each creates its own `Blackboard` instance, validates preconditions, mutates state under lock.
+**Pattern:** Service layer — extracted from `commands` to break the agent→commands upward dependency and eliminate MCP protocol corruption risk.
 
 **Observations:**
-- 25+ command implementations (add-task, claim-task, submit-review, submit-verdict, wt-merge, watch, validate, status, etc.)
+- 17 operations covering all mutation commands:
+  - Task workflow: `ClaimTask`, `SubmitForReview`, `SubmitVerdict`, `Handoff`, `MarkBlocked`, `ReleaseClaim`, `SupersedeTask`, `AddTask`
+  - Agent lifecycle: `DeleteAgent`, `IsAgentProcessRunning`
+  - System mode: `Start`, `Stop`, `Pause`, `Resume`
+  - Worktree: `CreateWorktree`, `DeleteWorktree`, `MergeWorktree`
+  - Sprint: `UpdateSprintMetrics`, `Checkpoint`, `Analyze`
+  - Maintenance: `ClearStaleReviewClaims`
+- Each function returns a typed result struct (e.g., `*VerdictResult`, `*HandoffResult`, `*ModeChangeResult`)
+- Zero `fmt.Print*` or `os.Stdin` calls — verified by grep
+- Three consumers: `agent/` (orchestration), `commands/` (CLI presentation), `mcp/` (JSON-RPC adapter)
+- Depends on: `db`, `models`, `git`, `log`, `paths`, `analysis` — same layer as `commands` minus presentation concerns
+
+#### commands (`internal/commands/`) — ~2,800 LOC
+
+**Purpose:** CLI presentation wrappers over `ops/` business logic, plus read-only query commands.
+
+**Pattern:** Thin wrapper per command: call `ops.*`, format and print result. Read-only commands (inspect, status, validate) retain their own logic since they already return structured data.
+
+**Observations:**
+- 25+ command implementations — mutation commands are thin wrappers (~20-50 LOC each), read-only commands retain logic
 - `watch.go` (516 LOC): 11 health checks with alert deduplication, comprehensive monitoring
 - `validate.go` (457 LOC): 9 validators checking all state invariants, largest function `validateTaskInvariants` at 142 LOC *(pass 2)*
-- `wt_merge.go` (356 LOC): merge workflow with rollback on test failure
+- ~~`wt_merge.go` (356 LOC)~~ now ~60 LOC wrapper over `ops.MergeWorktree()`
 - `format.go` (164 LOC): centralized JSON/YAML/table formatting
 - Templates in `commands/templates/`: status_dashboard, agent_value, metrics_value
-- **Monolithic command functions** — 4 commands exceed 180 LOC as single functions: `WtMergeCommand` (319), `ClaimTaskCommand` (310), `DeleteTaskCommand` (220), `SubmitForReviewCommand` (183). Each mixes validation, state read, business logic, state mutation, and error handling with no internal decomposition. *(pass 2, Complexity lens)*
-- **Presentation+logic coupling** — 40+ `fmt.Print*` calls to stdout/stderr in non-test code; 5+ direct `os.Stdin` reads (`setup.go`, `init.go`, `delete_task.go`, `delete_agent.go`). Commands are consumed by two callers (CLI, MCP handlers) ~~and formerly supervisor~~ but embed terminal I/O assumptions *(pass 3, Boundaries lens)*
-- **Self-constructing infrastructure** — each command function creates fresh `paths.New()`, `db.New()`, `git.New()` instances internally; no dependency injection. When supervisor calls commands, it creates parallel Blackboard instances that don't share cache *(pass 3, Boundaries lens)*
+- ~~**Monolithic command functions**~~ — *(pass 2, Complexity lens — largely resolved)* Most monolithic commands extracted to `ops/`. `DeleteTaskCommand` (220 LOC) and CLI-only interactive commands remain as the largest functions.
+- ~~**Presentation+logic coupling**~~ — *(pass 3, Boundaries lens — resolved for MCP-exposed commands)* All mutation commands now delegate to `ops/` for business logic. Remaining `fmt.Print*` calls are legitimate presentation in thin wrappers. `os.Stdin` reads remain only in CLI-only commands (`setup.go`, `init.go`, `delete_task.go`, `delete_agent.go`) — not MCP-exposed.
+- **Self-constructing infrastructure** — each command function creates fresh `paths.New()`, `db.New()`, `git.New()` instances internally; no dependency injection *(pass 3, Boundaries lens)*
 
 #### cmd (`cmd/`) — 1,344 LOC
 
@@ -122,10 +126,10 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 
 **Observations:**
 - `server.go` (704 LOC): tool/resource registration, request dispatch. `registerMutationTools()` is 242 LOC of declarative tool schema definitions — LOC is mostly boilerplate, not algorithmic complexity *(pass 2, Complexity lens)*
-- `handlers.go` (547 LOC, 29 functions): tool implementations delegating to `commands` package. 14% branch density — each handler is thin. *(pass 2)*
+- `handlers.go` (~550 LOC, 29 functions): tool implementations delegating to `ops` package for mutations, `commands` package for read-only queries. 14% branch density — each handler is thin. *(pass 2; pass 5: updated — ops import added)*
 - `protocol/` subpackage (232 LOC): clean DTO types, stdio transport, error codes
 - 4 registration categories: read-only tools, read-only resources, mutation tools, complex operations
-- Clean adapter boundary: mcp translates JSON-RPC into commands calls, adds error classification, holds no business logic *(pass 3, Boundaries lens)*
+- Clean adapter boundary: mcp translates JSON-RPC into `ops` calls (mutations) and `commands` calls (queries), adds error classification, holds no business logic *(pass 3, Boundaries lens; pass 5: updated — handlers now import ops directly for all mutations)*
 - **Server dispatch layer untested**: `server_test.go` has only 4 tests (initialization/registration). The entire request dispatch layer — `HandleRequest`, `Run`, `classifyError`, `handleToolCall`, `handleResourceRead`, `handleNotification` — is at 0% coverage. Handlers tested directly via `handlers_test.go` (1,298 LOC), but the routing/error-classification layer has no tests *(pass 4, Coverage lens)*
 - `protocol/` entirely untested: all 6 error constructors and the stdio transport (`NewStdioTransport`, `ReadRequest`, `WriteResponse`, `WriteError`) at 0% — hardwired `os.Stdin`/`os.Stdout` prevents testing *(pass 4, Coverage lens)*
 
@@ -216,16 +220,17 @@ db/ (stable core)
 ops/ (service layer — pure logic, no I/O)
    ↑
    ├── agent/ (orchestration — uses structured results)
-   └── commands/ (CLI — adds presentation)
+   ├── commands/ (CLI — adds presentation)
+   └── mcp/handlers (adapter — mutations via ops)
 
 commands/ (volatile, high-level)
    ↑
-   └── mcp/handlers (adapter — clean boundary)
+   └── mcp/handlers (adapter — read-only queries via commands)
 ```
 
 **No import cycles.** Dependency graph is a clean DAG. Leaf packages: `models`, `paths`, `errors`, `filelock`, `identity`, `mcp/protocol`.
 
-**Two consumers of `commands`** *(pass 3, Boundaries lens — updated)*: CLI (`cmd/liza`) and MCP server (`mcp/handlers`). ~~Supervisor (`agent/supervisor`) was a third consumer~~ — resolved by extracting business logic to `ops/`. Commands still embed terminal I/O assumptions for CLI and MCP consumers.
+**Two consumers of `commands`** *(pass 3, Boundaries lens — updated; pass 5: updated)*: CLI (`cmd/liza`) and MCP server (`mcp/handlers` — read-only queries only). ~~Supervisor (`agent/supervisor`) was a third consumer~~ — resolved by extracting business logic to `ops/`. ~~Commands still embed terminal I/O assumptions for CLI and MCP consumers~~ — resolved: MCP handlers now call `ops` directly for all mutations; `commands` only used by MCP for read-only queries (status, inspect, validate) which already return structured data.
 
 ### 1.4 Coverage Checkpoint
 
@@ -313,10 +318,10 @@ commands/ (volatile, high-level)
 | `embedded` | paths | 0 | 2 (commands, liza-mcp) |
 | `analysis` | models | yaml.v3 | 1 package |
 | `prompts` | models | 0 | 1 package |
-| `ops` | 4 packages (db, models, git, log) | 0 | 2 (agent, commands) |
-| `commands` | **8 packages** (incl. ops) | yaml.v3 | 2 (mcp, liza) |
+| `ops` | 6 packages (db, models, git, log, paths, analysis) | 0 | 3 (agent, commands, mcp) |
+| `commands` | **8 packages** (incl. ops) | yaml.v3 | 2 (mcp queries, liza) |
 | `agent` | **5 packages** (incl. ops) | 0 | 1 binary |
-| `mcp` | commands, mcp/protocol, paths | 0 | 1 binary |
+| `mcp` | ops, commands, mcp/protocol, paths | 0 | 1 binary |
 
 ---
 
@@ -334,7 +339,7 @@ commands/ (volatile, high-level)
 | 6 | **Expected lifespan?** | Active development, evolving. v1 with accepted limitations documented. |
 | 7 | **Concurrency model?** | Multiple supervisor processes, single shared file with flock. No in-process concurrency beyond heartbeat goroutine. |
 | 8 | **Data ownership?** | `state.yaml` owned by Blackboard. Git state owned by worktree operations. Prompts are read-only derived. |
-| 9 | **Boundaries?** | Domain layer (`models`) clean. Persistence layer (`db`) clean. Transport layers (`mcp`, `cmd`) clean. Service layer (`ops`) clean — pure business logic, no I/O. **Remaining boundary concern**: `commands` still mixes business logic with terminal I/O for commands not yet extracted to `ops`. ~~`agent` reaches down into CLI handlers~~ (resolved: agent imports `ops`). *(pass 3: updated; ops extraction)* |
+| 9 | **Boundaries?** | Domain layer (`models`) clean. Persistence layer (`db`) clean. Transport layers (`mcp`, `cmd`) clean. Service layer (`ops`) clean — pure business logic, no I/O. ~~**Remaining boundary concern**: `commands` still mixes business logic with terminal I/O for commands not yet extracted to `ops`~~ (resolved: all MCP-exposed mutations extracted to ops; commands are thin presentation wrappers; MCP imports ops directly for mutations). ~~`agent` reaches down into CLI handlers~~ (resolved: agent imports `ops`). *(pass 3: updated; pass 5: resolved — ops extraction complete)* |
 | 10 | **Runtime constraints?** | Filesystem I/O bound. Lock contention under concurrent agents. Git operations can be slow on large repos. |
 
 ### 2.2 Strengths
@@ -379,13 +384,13 @@ The `mcp` package is a textbook adapter: it translates JSON-RPC wire format into
 
 **Fix:** Decomposed into 6 cohesive files within `internal/agent/`: `supervisor.go` (types + main loop), `registration.go` (identity + lifecycle), `waitforwork.go` (work detection), `claiming.go` (task claiming + merges), `prompt.go` (prompt assembly), `systemctl.go` (system control + execution + verification). Test files split correspondingly. No signature or behavior changes.
 
-#### Smell: Monolithic command functions *(pass 2, Complexity lens)*
+#### ~~Smell: Monolithic command functions~~ *(pass 2, Complexity lens — largely resolved)*
 
-**Signal:** ~~4 command functions exceed 180 LOC~~ 2 remaining command functions exceed 180 LOC with no internal decomposition: `DeleteTaskCommand` (220 LOC), `SubmitForReviewCommand` (183 LOC). ~~`WtMergeCommand` (319 LOC) and `ClaimTaskCommand` (310 LOC)~~ *(resolved: extracted to `ops/` as `MergeWorktree` and `ClaimTask`; command wrappers now ~55-60 LOC)*. Each remaining monolith mixes validation, state read, business logic, state mutation, and error handling in a single function body.
+**Signal:** ~~4 command functions exceed 180 LOC~~ *(resolved: all 4 extracted to `ops/`)*. `WtMergeCommand` (319→~60 LOC), `ClaimTaskCommand` (310→~55 LOC), `SubmitForReviewCommand` (183→~30 LOC) are now thin wrappers. `DeleteTaskCommand` (220 LOC) remains as a CLI-only interactive command (not MCP-exposed, deferred from ops extraction).
 
-**Impact:** Functions this long resist comprehension, make code review difficult, and inhibit targeted testing of individual phases. Scope reduced from 4 files to 2 after `ops/` extraction.
+**Impact:** Scope reduced from 4 monolithic commands to 1 remaining. The remaining `DeleteTaskCommand` is CLI-only with interactive stdin, so it doesn't pose an MCP protocol corruption risk.
 
-**Direction:** Decompose remaining monoliths into phases using the same pattern established by `ops/` extraction. Apply to DeleteTask and SubmitForReview.
+**Direction:** Extract `DeleteTaskCommand` to ops when tackling the interactive stdin issue (requires callback/decisions pattern).
 
 #### ~~Smell: Pervasive task-lookup duplication~~ *(pass 2, Complexity lens — resolved)*
 
@@ -393,16 +398,11 @@ The `mcp` package is a textbook adapter: it translates JSON-RPC wire format into
 
 **Fix:** Added `State.FindTask(taskID string) *Task` and `State.FindTaskIndex(taskID string) int` methods to `internal/models/state.go`. Migrated all ~35 inline ID-lookup loops in non-test production code across `commands/`, `agent/`, `db/`, and `models/` packages. Removed all 3 duplicate private helpers (`findTaskByID` in supervisor.go and inspect_agents.go, `findTask` in validate.go). `Blackboard.GetTask()` and `UpdateTask()` now delegate to `State.FindTask()` internally. Filtering loops (iterating all tasks with complex conditions) were correctly left as-is — they're a different pattern.
 
-#### Smell: Commands as presentation+logic hybrid *(pass 3, Boundaries lens)*
+#### ~~Smell: Commands as presentation+logic hybrid~~ *(pass 3, Boundaries lens — resolved)*
 
-**Signal:** The `commands` package serves three consumers with different I/O expectations: CLI (terminal), MCP server (JSON-RPC over stdio), and supervisor (background process). Yet command functions contain **40+ `fmt.Print*` calls** to stdout/stderr and **5+ direct `os.Stdin` reads** in non-test production code. Functions like `ClaimTaskCommand()` print success messages, `SetupCommand()` prompts for confirmation, and `DeleteTaskCommand()` reads interactive input.
+**Signal:** The `commands` package served three consumers with different I/O expectations — CLI (terminal), MCP server (JSON-RPC over stdio), and supervisor (background process) — but embedded terminal I/O assumptions.
 
-**Impact:**
-- MCP server: commands called via `handlers.go` print to stdout, which is the JSON-RPC transport channel — stdout writes from commands could corrupt the protocol stream
-- Supervisor: `commands.ClaimTaskCommand()` and `commands.WtMergeCommand()` called from `supervisor.go` print to the supervisor's terminal, mixing operational output with supervisor logs
-- Testability: tests must monkey-patch `os.Stdin` (observed in 8+ test files replacing `os.Stdin` with pipe readers) rather than injecting I/O dependencies
-
-**Direction:** Separate business logic from presentation. Options: (1) command functions return structured results, callers handle presentation; (2) inject an `io.Writer` for output; (3) use a `Writer` field on a command context struct. The MCP adapter already does this partially — `handleStatus()` calls `StatusCommand()` which returns a string. *(Partially addressed: `ClaimTask`, `WtMerge`, `ClearStaleReviewClaims`, `UpdateSprintMetrics` extracted to `ops/` with structured results — commands are now thin wrappers. Remaining commands still embed I/O.)*
+**Fix:** Extracted business logic from all 15 MCP-exposed mutation commands into `internal/ops/` package. Each ops function returns a typed result struct with zero I/O. Command files became thin presentation wrappers (~20-50 LOC). MCP handlers now call `ops` directly for all mutations. `handlers.go` imports `commands` only for read-only queries (InspectCommand, StatusCommand, ValidateCommand) which already return structured data. The MCP protocol corruption risk is eliminated — no `fmt.Print*` calls exist in ops functions. Remaining `os.Stdin` reads are in CLI-only interactive commands not exposed to MCP (see Interactive stdin smell).
 
 #### ~~Smell: Upward dependency — agent → commands~~ *(pass 3, Boundaries lens — resolved)*
 
@@ -410,18 +410,20 @@ The `mcp` package is a textbook adapter: it translates JSON-RPC wire format into
 
 **Fix:** Extracted business logic from `ClaimTaskCommand`, `WtMergeCommand`, `ClearStaleReviewClaimsCommand`, and `UpdateSprintMetricsCommand` into `internal/ops/` package. Functions return structured results (`ClaimResult`, `MergeResult`, `IntegrationFailedError`) with no terminal I/O side effects. Agent package now imports `ops` instead of `commands`. Commands package rewired as thin presentation wrappers over `ops` functions.
 
-#### Smell: Interactive stdin in library packages *(pass 3, Boundaries lens)*
+#### Smell: Interactive stdin in library packages *(pass 3, Boundaries lens — partially resolved)*
 
 **Signal:** Direct `os.Stdin` reads via `bufio.NewReader(os.Stdin)` or `bufio.NewScanner(os.Stdin)` in:
 - `embedded/embedded.go`: `WriteClaudeSettings()` (line 253), `WriteMCPSettings()` (line 389)
 - `commands/setup.go`: setup confirmation (line 58), per-file overwrite (line 76)
 - `commands/init.go`: worktree conflict resolution (line 110)
 - `commands/delete_task.go`: deletion confirmation (lines 91, 126)
-- `commands/delete_agent.go`: force-delete confirmation (line 76)
+- `commands/delete_agent.go`: force-delete confirmation (line 76) — business logic extracted to `ops.DeleteAgent()`; stdin only at CLI wrapper level
 
 Tests work around this by replacing `os.Stdin` with pipe readers (8+ test files use `os.Stdin = r` / `defer func() { os.Stdin = oldStdin }()` pattern).
 
-**Impact:** Functions with hardwired stdin cannot be used non-interactively (e.g., from MCP server or automated scripts) without the monkey-patching workaround. The `os.Stdin` swap pattern in tests is fragile and not concurrency-safe.
+**Partial fix:** The ops extraction resolved the MCP protocol corruption risk — MCP handlers now call `ops.*` functions with zero I/O. Remaining stdin reads are in CLI-only commands not exposed to MCP. `delete_agent.go` retains interactive confirmation at the CLI level but delegates business logic to `ops.DeleteAgent()`.
+
+**Remaining impact:** Functions with hardwired stdin still cannot be used non-interactively. The `os.Stdin` monkey-patching test pattern remains.
 
 **Direction:** Accept an `io.Reader` parameter (or a `Confirmer` interface/callback) for interactive prompts. Default to `os.Stdin` at the call site in `cmd/liza/main.go`.
 
@@ -569,19 +571,10 @@ The 24.7% uncovered code concentrates in two patterns:
 
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
-| ~~**High**~~ | ~~`supervisor.go` god file (1,428 LOC, 19% branch density)~~ *(resolved: decomposed into 6 cohesive files within `internal/agent/`)* | | |
-| **High** | Monolithic command functions *(pass 2 — partially resolved: `ClaimTask` and `WtMerge` extracted to `ops/`; `DeleteTaskCommand` 220 LOC and `SubmitForReviewCommand` 183 LOC remain)* | 2 remaining commands resist comprehension and targeted testing | Extend `ops/` extraction pattern to DeleteTask, SubmitForReview |
-| **High** | Duplicated flock mechanism (db + log) | Constants and logic can diverge silently | Extract `internal/filelock` shared package |
-| ~~**High**~~ | ~~MCP handler bypasses Blackboard locking~~ *(resolved: `Blackboard.ReadRaw()` added, `readStateResource()` uses flock-protected read)* | | |
-| ~~**High**~~ | ~~Untested MCP server dispatch + `classifyError`~~ *(pass 4 — resolved: `server_dispatch_test.go` covers `HandleRequest` routing, `classifyError` all 5 branches, `handleToolCall`, `handleResourceRead`, `handleNotification`)* | | |
-| ~~**High**~~ | ~~Untested `models/diagnostics.go`~~ *(pass 4 — resolved: `diagnostics_test.go` covers all 4 functions with table-driven tests)* | | |
-| **Medium** | Commands presentation+logic coupling *(pass 3 — partially resolved: 4 commands extracted to `ops/` with structured results; remaining commands still embed I/O)* | 2 consumers with different I/O expectations; MCP stdout corruption risk for non-extracted commands | Extend `ops/` pattern to remaining mutation commands |
-| ~~**Medium**~~ | ~~agent → commands upward dependency~~ *(pass 3 — resolved: extracted business logic to `internal/ops/` package; agent imports `ops` instead of `commands`)* | | |
-| ~~**Medium**~~ | ~~Task-lookup duplication (55+ inline loops)~~ *(pass 2 — resolved: `State.FindTask()` + `FindTaskIndex()` added, all inline lookups migrated, 3 duplicate helpers removed)* | | |
 | **Medium** | Magic number 1800 (lease default) | Scattered across 3 files, easy to make inconsistent | Define named constant in one location |
 | **Medium** | `executeTemplate` panics (2 locations) | Crashes long-running supervisor process | Return error instead |
 | **Medium** | Inconsistent `NotFoundError` usage (25+ ad-hoc instances) | Prevents reliable programmatic error distinction | Adopt `NotFoundError` consistently, pair with `State.FindTask()` |
-| **Medium** | Interactive stdin in library packages *(pass 3)* | 8 locations hardwired to terminal; tests use fragile monkey-patching | Accept `io.Reader`/callback for prompts |
+| **Medium** | Interactive stdin in library packages *(pass 3 — partially resolved: MCP-exposed commands no longer read stdin; remaining reads in CLI-only commands)* | Remaining 7 locations hardwired to terminal; tests use fragile monkey-patching | Accept `io.Reader`/callback for prompts |
 | **Medium** | Poll/wait fallback magic numbers | 6 invisible defaults in `getRoleWaitConfig` | Define named constants |
 | **Medium** | `validate.validateAnomalies` at 13.3% coverage *(pass 4)* | Only 1 of 5 anomaly type validators exercised; relates to "Anomaly Detail Validation Incomplete" issue | Add test cases for all 5 anomaly type branches |
 | **Medium** | `supervisor.resumeHandoffTask` at 11.4% coverage *(pass 4)* | Complex handoff resumption with minimal test exercising | Increase test coverage for handoff scenarios |
@@ -608,7 +601,7 @@ Liza's architecture is well-suited to its constraints: a file-based multi-agent 
 
 **Pass 4 (Coverage lens)** adds quantitative depth: 75.3% statement coverage overall, with the uncovered 24.7% concentrated in two patterns — runtime orchestration code (supervisor Execute, MCP server dispatch) and I/O-coupled functions. The most actionable finding: `mcp/server.classifyError` and `HandleRequest` are pure logic at 0% that can be tested trivially without any refactoring. Similarly, `models/diagnostics.go` (127 LOC, 4 functions, no test file) is critical work-detection logic that's entirely untested despite being pure functions on `*State`. I/O coupling (already flagged as a Boundaries smell) is now quantitatively confirmed as the primary driver of untested critical paths — functions with hardwired `os.Stdin`/`os.Stdout`/`os/exec` account for the majority of the 0% coverage.
 
-The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), (2) commands presentation+logic coupling (partially addressed — `ClaimTask`, `WtMerge`, `ClearStaleReviewClaims`, `UpdateSprintMetrics` extracted to `ops/`; remaining commands still mix I/O), (3) monolithic command functions (partially addressed — extracted commands now thin wrappers; `DeleteTaskCommand` and `SubmitForReviewCommand` still monolithic), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). Items 2 and 3 remain synergistic — decomposing the remaining commands into phases extends the service layer pattern established by `ops/`.
+The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), ~~(2) commands presentation+logic coupling~~ (resolved — all 15 MCP-exposed mutation commands extracted to `internal/ops/`; MCP handlers call ops directly; protocol corruption risk eliminated), ~~(3) monolithic command functions~~ (largely resolved — all 4 monolithic commands extracted to ops; only `DeleteTaskCommand` 220 LOC remains as CLI-only interactive command), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). The ops layer now contains 17 operations (~2,500 LOC) serving 3 consumers (agent, commands, mcp). Remaining concerns: interactive stdin in CLI-only commands (partially resolved — no MCP risk), magic numbers, `executeTemplate` panic, inconsistent `NotFoundError` usage.
 
 ---
 

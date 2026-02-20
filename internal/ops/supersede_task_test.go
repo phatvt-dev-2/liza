@@ -1,0 +1,193 @@
+package ops
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+func TestSupersedeTask_Validation(t *testing.T) {
+	tests := []struct {
+		name           string
+		taskID         string
+		replacementIDs []string
+		reason         string
+		errContains    string
+	}{
+		{
+			name: "empty task ID", replacementIDs: []string{"r1"}, reason: "r",
+			errContains: "task ID is required",
+		},
+		{
+			name: "no replacements", taskID: "t1", replacementIDs: []string{}, reason: "r",
+			errContains: "at least one replacement",
+		},
+		{
+			name: "empty reason", taskID: "t1", replacementIDs: []string{"r1"},
+			errContains: "rescope reason is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := SupersedeTask("/nonexistent", tt.taskID, tt.replacementIDs, tt.reason, "planner-1")
+			if err == nil {
+				t.Fatal("Expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.errContains) {
+				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.errContains)
+			}
+		})
+	}
+}
+
+func TestSupersedeTask_FromBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2", "task-3"}, "Split into smaller tasks", "planner-1")
+	if err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+
+	if result.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+	if result.OriginalStatus != models.TaskStatusBlocked {
+		t.Errorf("OriginalStatus = %v, want BLOCKED", result.OriginalStatus)
+	}
+	if len(result.ReplacementIDs) != 2 {
+		t.Errorf("ReplacementIDs len = %d, want 2", len(result.ReplacementIDs))
+	}
+
+	// Verify state
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusSuperseded {
+		t.Errorf("Status = %v, want SUPERSEDED", task.Status)
+	}
+	if len(task.SupersededBy) != 2 || task.SupersededBy[0] != "task-2" {
+		t.Errorf("SupersededBy = %v, want [task-2 task-3]", task.SupersededBy)
+	}
+	if task.RescopeReason == nil || *task.RescopeReason != "Split into smaller tasks" {
+		t.Error("RescopeReason not set correctly")
+	}
+	if task.AssignedTo != nil {
+		t.Error("AssignedTo should be nil after superseding")
+	}
+
+	lastHistory := task.History[len(task.History)-1]
+	if lastHistory.Event != "superseded" {
+		t.Errorf("History event = %q, want %q", lastHistory.Event, "superseded")
+	}
+}
+
+func TestSupersedeTask_FromRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "Rewrite needed", "planner-1")
+	if err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+	if result.OriginalStatus != models.TaskStatusRejected {
+		t.Errorf("OriginalStatus = %v, want REJECTED", result.OriginalStatus)
+	}
+}
+
+func TestSupersedeTask_FromReady(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "No longer needed", "planner-1")
+	if err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+}
+
+func TestSupersedeTask_WrongStatus(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "reason", "planner-1")
+	if err == nil {
+		t.Fatal("Expected error for IMPLEMENTING task")
+	}
+	if !strings.Contains(err.Error(), "cannot supersede") {
+		t.Errorf("Error = %q, want to contain 'cannot supersede'", err.Error())
+	}
+}
+
+func TestSupersedeTask_TaskNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := SupersedeTask(tmpDir, "nonexistent", []string{"task-2"}, "reason", "planner-1")
+	if err == nil {
+		t.Fatal("Expected error for nonexistent task")
+	}
+	if !strings.Contains(err.Error(), "task not found") {
+		t.Errorf("Error = %q, want to contain 'task not found'", err.Error())
+	}
+}
+
+func TestSupersedeTask_DefaultPlannerID(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Empty agentID should default to "planner-1"
+	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "reason", "")
+	if err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -44,9 +45,9 @@ func TestIsAgentProcessAlive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			alive := isAgentProcessAlive(tt.pid)
+			alive := ops.IsProcessAlive(tt.pid)
 			if alive != tt.wantAlive {
-				t.Errorf("isAgentProcessAlive(%d) = %v, want %v", tt.pid, alive, tt.wantAlive)
+				t.Errorf("ops.IsProcessAlive(%d) = %v, want %v", tt.pid, alive, tt.wantAlive)
 			}
 		})
 	}

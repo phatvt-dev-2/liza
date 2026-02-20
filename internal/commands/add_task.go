@@ -3,13 +3,8 @@ package commands
 import (
 	"fmt"
 	"os"
-	"slices"
-	"strings"
-	"time"
 
-	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/log"
-	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"gopkg.in/yaml.v3"
 )
 
@@ -41,125 +36,26 @@ func LoadTaskInputFromFile(path string) (*TaskInput, error) {
 	return &input, nil
 }
 
-// AddTaskCommand adds a new task to the state.yaml file.
-// It validates inputs, checks for duplicate task IDs, atomically adds the task,
-// updates sprint.scope.planned and goal.alignment_history, logs the action,
-// and runs validation.
+// AddTaskCommand adds a new task and runs validation.
+// Delegates business logic to ops.AddTask.
 func AddTaskCommand(statePath, logPath string, input *TaskInput, plannerID string) error {
-	if plannerID == "" {
-		plannerID = "planner-1"
-	}
-	// Validate required fields
-	if input.ID == "" {
-		return fmt.Errorf("task ID is required")
-	}
-	if input.Description == "" {
-		return fmt.Errorf("description is required")
-	}
-	if input.SpecRef == "" {
-		return fmt.Errorf("spec_ref is required")
-	}
-	if input.DoneWhen == "" {
-		return fmt.Errorf("done_when is required")
-	}
-	if input.Scope == "" {
-		return fmt.Errorf("scope is required")
-	}
-	if input.Priority < 1 {
-		return fmt.Errorf("priority must be positive, got %d", input.Priority)
-	}
-
-	// Default task type to "coding" if empty
-	if input.Type == "" {
-		input.Type = string(models.TaskTypeCoding)
-	}
-
-	// Validate task type
-	taskType := models.TaskType(input.Type)
-	if !taskType.IsValid() {
-		return fmt.Errorf("unknown task type %q", input.Type)
-	}
-
-	// Normalize dependencies (trim whitespace, remove empty strings)
-	normalizedDeps := []string{}
-	for _, dep := range input.DependsOn {
-		trimmed := strings.TrimSpace(dep)
-		if trimmed != "" {
-			normalizedDeps = append(normalizedDeps, trimmed)
-		}
-	}
-
-	// Get current time
-	now := time.Now().UTC()
-
-	// Use provided planner ID (already has default of "planner-1")
-	agentID := plannerID
-
-	// Create blackboard instance
-	bb := db.New(statePath)
-
-	// Check for duplicate task ID
-	existingTask, err := bb.GetTask(input.ID)
-	if err != nil {
-		return fmt.Errorf("failed to check for existing task: %w", err)
-	}
-	if existingTask != nil {
-		return fmt.Errorf("task '%s' already exists in %s", input.ID, statePath)
-	}
-
-	// Create new task
-	newTask := models.Task{
+	opsInput := &ops.AddTaskInput{
 		ID:          input.ID,
-		Type:        taskType,
+		Type:        input.Type,
 		Description: input.Description,
-		Status:      models.TaskStatusReady,
-		Priority:    input.Priority,
 		SpecRef:     input.SpecRef,
 		DoneWhen:    input.DoneWhen,
 		Scope:       input.Scope,
-		DependsOn:   normalizedDeps,
-		Created:     now,
-		History:     []models.TaskHistoryEntry{},
+		Priority:    input.Priority,
+		DependsOn:   input.DependsOn,
 	}
 
-	// Atomically add task and update state
-	err = bb.Modify(func(state *models.State) error {
-		// Add task to tasks list
-		state.Tasks = append(state.Tasks, newTask)
-
-		// Update sprint.scope.planned (add taskID if not already present)
-		if !slices.Contains(state.Sprint.Scope.Planned, input.ID) {
-			state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, input.ID)
-		}
-
-		// Add to goal.alignment_history
-		alignmentEntry := models.AlignmentHistory{
-			Timestamp: now,
-			Event:     "planning",
-			Summary:   fmt.Sprintf("Added task %s: %s", input.ID, input.Description),
-		}
-		state.Goal.AlignmentHistory = append(state.Goal.AlignmentHistory, alignmentEntry)
-
-		return nil
-	})
-
+	result, err := ops.AddTask(statePath, logPath, opsInput, plannerID)
 	if err != nil {
-		return fmt.Errorf("failed to add task: %w", err)
+		return fmt.Errorf("add task: %w", err)
 	}
-
-	// Log the action
-	logger := log.New(logPath)
-	logEntry := log.Entry{
-		Timestamp: now,
-		Agent:     agentID,
-		Action:    "task_added",
-		Task:      &input.ID,
-		Detail:    input.Description,
-	}
-
-	if err := logger.Append(logEntry); err != nil {
-		// Log error but don't fail the command
-		fmt.Fprintf(os.Stderr, "Warning: failed to log action: %v\n", err)
+	for _, w := range result.Warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 
 	// Run validation
