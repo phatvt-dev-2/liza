@@ -1,0 +1,196 @@
+package ops
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+func TestClearStaleReviewClaims_NoStale(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	setupLogFile(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// REVIEWING task with future lease — not stale
+	futureLease := now.Add(30 * time.Minute)
+	reviewer := "reviewer-1"
+	state.Tasks = []models.Task{
+		{
+			ID: "t1", Description: "Active review", Status: models.TaskStatusReviewing,
+			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			ReviewingBy: &reviewer, ReviewLeaseExpires: &futureLease,
+			History: []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	cleared, err := ClearStaleReviewClaims(tmpDir)
+	if err != nil {
+		t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+	}
+	if cleared != 0 {
+		t.Errorf("cleared = %d, want 0", cleared)
+	}
+}
+
+func TestClearStaleReviewClaims_ExpiredLease(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	setupLogFile(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// REVIEWING task with expired lease
+	expiredLease := now.Add(-5 * time.Minute)
+	reviewer := "reviewer-1"
+	coder := "coder-1"
+	state.Tasks = []models.Task{
+		{
+			ID: "t1", Description: "Stale review", Status: models.TaskStatusReviewing,
+			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			AssignedTo: &coder, ReviewingBy: &reviewer, ReviewLeaseExpires: &expiredLease,
+			History: []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	cleared, err := ClearStaleReviewClaims(tmpDir)
+	if err != nil {
+		t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+	}
+	if cleared != 1 {
+		t.Errorf("cleared = %d, want 1", cleared)
+	}
+
+	// Verify state: should be READY_FOR_REVIEW, reviewer cleared
+	readState := readStateForTest(t, stateFile)
+	task := readState.FindTask("t1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusReadyForReview {
+		t.Errorf("Status = %v, want READY_FOR_REVIEW", task.Status)
+	}
+	if task.ReviewingBy != nil {
+		t.Errorf("ReviewingBy should be nil, got %v", *task.ReviewingBy)
+	}
+	if task.ReviewLeaseExpires != nil {
+		t.Error("ReviewLeaseExpires should be nil")
+	}
+}
+
+func TestClearStaleReviewClaims_MissingLease(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	setupLogFile(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// REVIEWING task with reviewer but no lease (malformed state)
+	reviewer := "reviewer-1"
+	state.Tasks = []models.Task{
+		{
+			ID: "t1", Description: "Malformed review", Status: models.TaskStatusReviewing,
+			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			ReviewingBy: &reviewer, // no ReviewLeaseExpires
+			History:     []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	cleared, err := ClearStaleReviewClaims(tmpDir)
+	if err != nil {
+		t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+	}
+	if cleared != 1 {
+		t.Errorf("cleared = %d, want 1 (malformed lease treated as expired)", cleared)
+	}
+}
+
+func TestClearStaleReviewClaims_SkipsNonReviewing(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	setupLogFile(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// IMPLEMENTING task should be skipped entirely
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("t1", models.TaskStatusImplementing, now),
+		testhelpers.BuildTaskByStatus("t2", models.TaskStatusReady, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	cleared, err := ClearStaleReviewClaims(tmpDir)
+	if err != nil {
+		t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+	}
+	if cleared != 0 {
+		t.Errorf("cleared = %d, want 0", cleared)
+	}
+}
+
+func TestClearStaleReviewClaims_MultipleStale(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	setupLogFile(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	expiredLease := now.Add(-10 * time.Minute)
+	reviewer1 := "reviewer-1"
+	reviewer2 := "reviewer-2"
+	state.Tasks = []models.Task{
+		{
+			ID: "t1", Description: "Stale 1", Status: models.TaskStatusReviewing,
+			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			ReviewingBy: &reviewer1, ReviewLeaseExpires: &expiredLease,
+			History: []models.TaskHistoryEntry{},
+		},
+		{
+			ID: "t2", Description: "Stale 2", Status: models.TaskStatusReviewing,
+			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			ReviewingBy: &reviewer2, ReviewLeaseExpires: &expiredLease,
+			History: []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	cleared, err := ClearStaleReviewClaims(tmpDir)
+	if err != nil {
+		t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+	}
+	if cleared != 2 {
+		t.Errorf("cleared = %d, want 2", cleared)
+	}
+}
+
+// setupLogFile creates the log.yaml file that ClearStaleReviewClaims needs.
+func setupLogFile(t *testing.T, tmpDir string) {
+	t.Helper()
+	logPath := filepath.Join(tmpDir, ".liza", "log.yaml")
+	if err := os.WriteFile(logPath, []byte(""), 0644); err != nil {
+		t.Fatalf("Failed to create log file: %v", err)
+	}
+	// Also create the lock file for log
+	lockPath := logPath + ".lock"
+	if err := os.WriteFile(lockPath, []byte(""), 0644); err != nil {
+		t.Fatalf("Failed to create log lock file: %v", err)
+	}
+}

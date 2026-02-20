@@ -260,6 +260,7 @@ func (s *Server) handleClaimTask(params map[string]any) (any, error) {
 		return nil, err
 	}
 
+	// TODO: migrate to ops.ClaimTask() to avoid stdout prints corrupting JSON-RPC transport
 	if err := commands.ClaimTaskCommand(s.projectRoot, taskID, agentID); err != nil {
 		return nil, fmt.Errorf("claim task failed: %w", err)
 	}
@@ -473,6 +474,7 @@ func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 		return nil, err
 	}
 
+	// TODO: migrate to ops.MergeWorktree() to avoid stdout/stderr prints corrupting JSON-RPC transport
 	if err := commands.WtMergeCommand(s.projectRoot, taskID, agentID); err != nil {
 		return nil, fmt.Errorf("wt-merge failed: %w", err)
 	}
@@ -503,6 +505,7 @@ func (s *Server) handleCheckpoint(params map[string]any) (any, error) {
 // handleUpdateSprintMetrics implements the liza_update_sprint_metrics tool
 // Maps to: liza update-sprint-metrics
 func (s *Server) handleUpdateSprintMetrics(params map[string]any) (any, error) {
+	// TODO: migrate to ops.UpdateSprintMetrics() to avoid stdout prints corrupting JSON-RPC transport
 	if err := commands.UpdateSprintMetricsCommand(s.projectRoot); err != nil {
 		return nil, fmt.Errorf("update sprint metrics failed: %w", err)
 	}

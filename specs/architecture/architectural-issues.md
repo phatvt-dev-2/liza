@@ -48,7 +48,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [executeTemplate Panics on Error](#executetemplate-panics-on-error)
   - [Inconsistent NotFoundError Usage](#inconsistent-notfounderror-usage)
   - [Commands Presentation+Logic Coupling](#commands-presentationlogic-coupling)
-  - [Agent → Commands Upward Dependency](#agent--commands-upward-dependency)
+  - [~~Agent → Commands Upward Dependency~~](#agent--commands-upward-dependency)
   - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
   - [~~Pervasive Task-Lookup Duplication~~](#pervasive-task-lookup-duplication)
   - [~~Untested MCP Server Dispatch Layer~~](#untested-mcp-server-dispatch-layer)
@@ -440,6 +440,7 @@ Long-term concerns about system evolution.
 - [x] Duplicated file-locking mechanism — extracted to `internal/filelock` package, both `db` and `log` use shared implementation *(software-architecture-review)*
 - [x] Pervasive task-lookup duplication — `State.FindTask()` and `FindTaskIndex()` replace 35+ inline loops and 3 duplicate helpers *(software-architecture-review)*
 - [x] Supervisor god file — decomposed 1,426 LOC into 6 cohesive files within `internal/agent/` by responsibility *(software-architecture-review)*
+- [x] Agent → commands upward dependency — extracted business logic to `internal/ops/` package, `agent` no longer imports `commands` *(software-architecture-review)*
 
 ---
 
@@ -633,16 +634,13 @@ Test files split correspondingly. `supervisor_priority_test.go` renamed to `clai
 
 **Direction:** Separate business logic from presentation. Command functions return structured results; callers handle output. The MCP adapter already does this partially — `StatusCommand()` returns a string. Extend pattern to mutation commands. This also resolves the agent→commands coupling (see below).
 
-### Agent → Commands Upward Dependency
+### ~~Agent → Commands Upward Dependency~~
 
 **Skill:** software-architecture-review
 **Category:** Leaky abstraction
+**Status:** RESOLVED — extracted to `internal/ops` package
 
-**Issue:** The supervisor (`internal/agent/supervisor.go`) directly calls three `commands` package functions: `ClaimTaskCommand()` (line 926), `WtMergeCommand()` (line 1250), `ClearStaleReviewClaimsCommand()` (line 383). It also imports `commands.IntegrationFailedError` for error type checking. The `commands` package doc.go states "Each command corresponds to a subcommand in the liza CLI" — the supervisor is an unintended consumer of CLI-specific handlers.
-
-**Implication:** The orchestration layer (agent) depends on the CLI handler layer (commands), creating a conceptual inversion. The supervisor inherits presentation side effects — when it calls `ClaimTaskCommand()`, it gets terminal output it doesn't want. This coupling means changes to command presentation (e.g., adding progress indicators) leak into the supervisor.
-
-**Direction:** Extract business logic from `ClaimTaskCommand`, `WtMergeCommand`, and `ClearStaleReviewClaimsCommand` into service functions that return structured results (no I/O side effects). Both `commands` and `agent` call these functions. Synergistic with monolithic command decomposition — the "phases" extracted from commands become the shared service layer.
+**Fix:** Created `internal/ops/` package with pure business logic functions: `ClaimTask()` returning `*ClaimResult`, `MergeWorktree()` returning `*MergeResult`, `ClearStaleReviewClaims()` returning `(int, error)`, and `UpdateSprintMetrics()` returning `(SprintMetrics, error)`. `IntegrationFailedError` moved to `ops`. Command files in `internal/commands/` became thin presentation wrappers that call `ops` functions and format output. `internal/agent/` now imports `ops` instead of `commands` — the upward dependency is eliminated. Integration test subprocess output captured to `bytes.Buffer` in the ops layer (included in `MergeResult.TestOutput` and `IntegrationFailedError.TestOutput`) instead of wired to terminal.
 
 ### Interactive Stdin in Library Packages
 

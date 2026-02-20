@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 )
 
 // selectHighestPriorityTask returns the highest-priority task from candidates,
@@ -55,21 +55,13 @@ func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, wor
 		return "", "", fmt.Errorf("no claimable tasks found")
 	}
 
-	if err := commands.ClaimTaskCommand(projectRoot, task.ID, agentID); err != nil {
+	result, err := ops.ClaimTask(projectRoot, task.ID, agentID)
+	if err != nil {
 		logger.Error("Claim error", "error", err)
 		return "", "", err
 	}
 
-	state, err = bb.Read()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to read state after claim: %w", err)
-	}
-
-	if claimed := state.FindTask(task.ID); claimed != nil && claimed.Worktree != nil {
-		return task.ID, *claimed.Worktree, nil
-	}
-
-	return "", "", fmt.Errorf("task worktree not set after claim")
+	return result.TaskID, result.WorktreeRel, nil
 }
 
 // resumeHandoffTask looks for a handoff task assigned to agentID and resumes it.
@@ -147,7 +139,7 @@ func claimReviewerTask(agentID string, leaseDuration int, bb *db.Blackboard) (ta
 	err = bb.Modify(func(state *models.State) error {
 		// Find reviewable task with highest priority
 		// READY_FOR_REVIEW tasks are available for claiming (stale REVIEWING leases
-		// are reverted to READY_FOR_REVIEW by ClearStaleReviewClaimsCommand)
+		// are reverted to READY_FOR_REVIEW by ops.ClearStaleReviewClaims)
 		var candidates []*models.Task
 		for i := range state.Tasks {
 			if state.Tasks[i].IsClaimable(models.RoleCodeReviewer, state.Tasks) {
@@ -213,13 +205,24 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard) error 
 
 			GetLogger().Info("Merging approved task", "task_id", task.ID)
 
-			// Execute merge - WtMergeCommand handles all validation and state updates
-			err := commands.WtMergeCommand(projectRoot, task.ID, agentID)
+			// Execute merge - ops.MergeWorktree handles all validation and state updates
+			result, err := ops.MergeWorktree(projectRoot, task.ID, agentID)
 			if err != nil {
 				// Check if this is an integration failure (merge conflict or test failure)
-				var integrationErr *commands.IntegrationFailedError
+				var integrationErr *ops.IntegrationFailedError
 				if errors.As(err, &integrationErr) {
-					// Integration failed - state already updated, no success message
+					// Integration failed - state already updated
+					logArgs := []any{
+						"task_id", task.ID,
+						"reason", integrationErr.Reason,
+					}
+					if integrationErr.TestOutput != "" {
+						logArgs = append(logArgs, "test_output", integrationErr.TestOutput)
+					}
+					if integrationErr.RollbackError != nil {
+						logArgs = append(logArgs, "rollback_error", integrationErr.RollbackError)
+					}
+					logger.Warn("Integration failed", logArgs...)
 					continue
 				}
 				// Other error - log and continue
@@ -227,6 +230,11 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard) error 
 					"task_id", task.ID,
 					"error", err)
 				continue
+			}
+
+			// Log non-fatal warnings from cleanup
+			for _, w := range result.Warnings {
+				logger.Warn("Merge cleanup warning", "task_id", task.ID, "warning", w)
 			}
 
 			// Merge succeeded

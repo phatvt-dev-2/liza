@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 )
 
 // validateIdentity validates agent ID format: {role}-{number}
@@ -84,7 +84,7 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 
 	// If code-reviewer: clear stale review claims
 	if role == "code-reviewer" {
-		if _, err := commands.ClearStaleReviewClaimsCommand(projectRoot); err != nil {
+		if _, err := ops.ClearStaleReviewClaims(projectRoot); err != nil {
 			logger.Warn("Failed to clear stale review claims", "error", err, "role", role)
 		}
 	}

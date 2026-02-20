@@ -73,8 +73,23 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `heartbeat.go`: independent Blackboard instance, 60s tick, extends lease
 - `workdetection.go` (117 LOC): 6 planner wake trigger types
 - `logging.go`: package-level singleton `slog.Logger`, hardcoded to stdout
-- **Upward dependency on commands**: supervisor calls `commands.ClaimTaskCommand()`, `commands.WtMergeCommand()`, `commands.ClearStaleReviewClaimsCommand()` directly — orchestration layer depends on CLI handler layer *(pass 3, Boundaries lens)*
+- ~~**Upward dependency on commands**: supervisor calls `commands.ClaimTaskCommand()`, `commands.WtMergeCommand()`, `commands.ClearStaleReviewClaimsCommand()` directly — orchestration layer depends on CLI handler layer~~ *(pass 3, Boundaries lens — resolved: extracted to `internal/ops/` package, agent now imports `ops` instead of `commands`)*
 - **Core execution paths untested**: `Execute()`, `ExecuteInteractive()`, `handleApprovedMerges()`, `logTaskSubmissionIfCompleted()` at 0% statement coverage; `resumeHandoffTask()` at 11.4%. These are the actual agent loop entry points — tested indirectly via `TestSupervisorBasicLoop` with mock executor but not at statement level *(pass 4, Coverage lens)*
+
+#### ops (`internal/ops/`) — ~900 LOC
+
+**Purpose:** Pure business logic layer for task workflow operations. Returns structured results with no terminal I/O side effects.
+
+**Pattern:** Service layer — extracted from `commands` to break the agent→commands upward dependency.
+
+**Observations:**
+- `ClaimTask()` returns `*ClaimResult` (3-phase TOCTOU-safe claim with worktree setup)
+- `MergeWorktree()` returns `*MergeResult` with `IntegrationFailedError` for merge/test failures
+- `ClearStaleReviewClaims()` — review lease cleanup
+- `UpdateSprintMetrics()` returns `(models.SprintMetrics, error)` — sprint metric computation
+- Integration test subprocess output captured to `bytes.Buffer` instead of piped to terminal
+- Two consumers: `agent/` (orchestration — uses structured results) and `commands/` (CLI — adds presentation)
+- Depends on: `db`, `models`, `git`, `log` — same layer as `commands` minus presentation concerns
 
 #### commands (`internal/commands/`) — ~4,550 LOC
 
@@ -90,7 +105,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `format.go` (164 LOC): centralized JSON/YAML/table formatting
 - Templates in `commands/templates/`: status_dashboard, agent_value, metrics_value
 - **Monolithic command functions** — 4 commands exceed 180 LOC as single functions: `WtMergeCommand` (319), `ClaimTaskCommand` (310), `DeleteTaskCommand` (220), `SubmitForReviewCommand` (183). Each mixes validation, state read, business logic, state mutation, and error handling with no internal decomposition. *(pass 2, Complexity lens)*
-- **Presentation+logic coupling** — 40+ `fmt.Print*` calls to stdout/stderr in non-test code; 5+ direct `os.Stdin` reads (`setup.go`, `init.go`, `delete_task.go`, `delete_agent.go`). Commands are consumed by three callers (CLI, MCP handlers, supervisor) but embed terminal I/O assumptions *(pass 3, Boundaries lens)*
+- **Presentation+logic coupling** — 40+ `fmt.Print*` calls to stdout/stderr in non-test code; 5+ direct `os.Stdin` reads (`setup.go`, `init.go`, `delete_task.go`, `delete_agent.go`). Commands are consumed by two callers (CLI, MCP handlers) ~~and formerly supervisor~~ but embed terminal I/O assumptions *(pass 3, Boundaries lens)*
 - **Self-constructing infrastructure** — each command function creates fresh `paths.New()`, `db.New()`, `git.New()` instances internally; no dependency injection. When supervisor calls commands, it creates parallel Blackboard instances that don't share cache *(pass 3, Boundaries lens)*
 
 #### cmd (`cmd/`) — 1,344 LOC
@@ -171,13 +186,15 @@ models/ (stable, leaf)              paths/ (stable, leaf)
    ├── db/                             ├── db/
    ├── agent/                          ├── agent/
    ├── commands/                       ├── commands/
+   ├── ops/                            ├── ops/
    ├── prompts/                        ├── git/
    ├── analysis/                       └── embedded/
    └── testhelpers/
 
 errors/ (stable, leaf)              log/ (stable, leaf)
    ↑                                   ↑
-   └── commands/                       └── commands/
+   └── commands/                       ├── commands/
+                                       └── ops/
 
 filelock/ (stable, leaf)            mcp/protocol/ (stable, leaf)
    ↑                                   ↑
@@ -186,23 +203,29 @@ filelock/ (stable, leaf)            mcp/protocol/ (stable, leaf)
 
 git/ (volatile)                     prompts/ (stable)
    ↑                                   ↑
-   └── commands/                       └── agent/
+   ├── commands/                       └── agent/
+   └── ops/
 
 db/ (stable core)
    ↑
    ├── agent/
    ├── commands/
+   ├── ops/
    └── testhelpers/
+
+ops/ (service layer — pure logic, no I/O)
+   ↑
+   ├── agent/ (orchestration — uses structured results)
+   └── commands/ (CLI — adds presentation)
 
 commands/ (volatile, high-level)
    ↑
-   ├── agent/supervisor (upward dependency — see Boundaries findings)
    └── mcp/handlers (adapter — clean boundary)
 ```
 
 **No import cycles.** Dependency graph is a clean DAG. Leaf packages: `models`, `paths`, `errors`, `filelock`, `identity`, `mcp/protocol`.
 
-**Three consumers of `commands`** *(pass 3, Boundaries lens)*: CLI (`cmd/liza`), MCP server (`mcp/handlers`), and supervisor (`agent/supervisor`). Each has different I/O expectations — terminal, JSON-RPC stdio, and background process — but commands embed terminal assumptions.
+**Two consumers of `commands`** *(pass 3, Boundaries lens — updated)*: CLI (`cmd/liza`) and MCP server (`mcp/handlers`). ~~Supervisor (`agent/supervisor`) was a third consumer~~ — resolved by extracting business logic to `ops/`. Commands still embed terminal I/O assumptions for CLI and MCP consumers.
 
 ### 1.4 Coverage Checkpoint
 
@@ -271,8 +294,8 @@ commands/ (volatile, high-level)
 | handlers.go | 547 | 29 | 14% | — |
 | state.go | 543 | 19 | 9% | — |
 | watch.go | 516 | 15 | 14% | — |
-| **claim_task.go** | **328** | **1** | — | **ClaimTaskCommand (310)** |
-| **wt_merge.go** | **356** | **3** | — | **WtMergeCommand (319)** |
+| ~~claim_task.go~~ | ~~328~~ | ~~1~~ | — | ~~ClaimTaskCommand (310)~~ *(resolved: business logic extracted to `ops/claim_task.go`; command is now ~55 LOC presentation wrapper)* |
+| ~~wt_merge.go~~ | ~~356~~ | ~~3~~ | — | ~~WtMergeCommand (319)~~ *(resolved: business logic extracted to `ops/wt_merge.go`; command is now ~60 LOC presentation wrapper)* |
 
 **Boundaries lens import analysis** *(pass 3)*:
 
@@ -290,8 +313,9 @@ commands/ (volatile, high-level)
 | `embedded` | paths | 0 | 2 (commands, liza-mcp) |
 | `analysis` | models | yaml.v3 | 1 package |
 | `prompts` | models | 0 | 1 package |
-| `commands` | **8 packages** | yaml.v3 | 3 (agent, mcp, liza) |
-| `agent` | **5 packages** (incl. commands) | 0 | 1 binary |
+| `ops` | 4 packages (db, models, git, log) | 0 | 2 (agent, commands) |
+| `commands` | **8 packages** (incl. ops) | yaml.v3 | 2 (mcp, liza) |
+| `agent` | **5 packages** (incl. ops) | 0 | 1 binary |
 | `mcp` | commands, mcp/protocol, paths | 0 | 1 binary |
 
 ---
@@ -310,7 +334,7 @@ commands/ (volatile, high-level)
 | 6 | **Expected lifespan?** | Active development, evolving. v1 with accepted limitations documented. |
 | 7 | **Concurrency model?** | Multiple supervisor processes, single shared file with flock. No in-process concurrency beyond heartbeat goroutine. |
 | 8 | **Data ownership?** | `state.yaml` owned by Blackboard. Git state owned by worktree operations. Prompts are read-only derived. |
-| 9 | **Boundaries?** | Domain layer (`models`) clean. Persistence layer (`db`) clean. Transport layers (`mcp`, `cmd`) clean. **Orchestration/command boundary is blurred**: `commands` mixes business logic with terminal I/O, and `agent` reaches down into CLI handlers rather than a service layer. *(pass 3: updated)* |
+| 9 | **Boundaries?** | Domain layer (`models`) clean. Persistence layer (`db`) clean. Transport layers (`mcp`, `cmd`) clean. Service layer (`ops`) clean — pure business logic, no I/O. **Remaining boundary concern**: `commands` still mixes business logic with terminal I/O for commands not yet extracted to `ops`. ~~`agent` reaches down into CLI handlers~~ (resolved: agent imports `ops`). *(pass 3: updated; ops extraction)* |
 | 10 | **Runtime constraints?** | Filesystem I/O bound. Lock contention under concurrent agents. Git operations can be slow on large repos. |
 
 ### 2.2 Strengths
@@ -357,11 +381,11 @@ The `mcp` package is a textbook adapter: it translates JSON-RPC wire format into
 
 #### Smell: Monolithic command functions *(pass 2, Complexity lens)*
 
-**Signal:** 4 command functions exceed 180 LOC with no internal decomposition: `WtMergeCommand` (319 LOC), `ClaimTaskCommand` (310 LOC), `DeleteTaskCommand` (220 LOC), `SubmitForReviewCommand` (183 LOC). Each mixes validation, state read, business logic, state mutation, and error handling in a single function body.
+**Signal:** ~~4 command functions exceed 180 LOC~~ 2 remaining command functions exceed 180 LOC with no internal decomposition: `DeleteTaskCommand` (220 LOC), `SubmitForReviewCommand` (183 LOC). ~~`WtMergeCommand` (319 LOC) and `ClaimTaskCommand` (310 LOC)~~ *(resolved: extracted to `ops/` as `MergeWorktree` and `ClaimTask`; command wrappers now ~55-60 LOC)*. Each remaining monolith mixes validation, state read, business logic, state mutation, and error handling in a single function body.
 
-**Impact:** Functions this long resist comprehension, make code review difficult, and inhibit targeted testing of individual phases (e.g., cannot test the validation phase of ClaimTask independently). More pervasive than supervisor.go because it affects 4+ files, not one.
+**Impact:** Functions this long resist comprehension, make code review difficult, and inhibit targeted testing of individual phases. Scope reduced from 4 files to 2 after `ops/` extraction.
 
-**Direction:** Decompose into phases. `ClaimTaskCommand` already documents its three-phase structure in comments ("Phase 1: Validate Under Lock", "Phase 2: Handle worktree outside lock", "Phase 3: Re-validate and commit under lock") — extract each phase into a named function. Apply same pattern to WtMerge, DeleteTask, SubmitForReview.
+**Direction:** Decompose remaining monoliths into phases using the same pattern established by `ops/` extraction. Apply to DeleteTask and SubmitForReview.
 
 #### ~~Smell: Pervasive task-lookup duplication~~ *(pass 2, Complexity lens — resolved)*
 
@@ -378,15 +402,13 @@ The `mcp` package is a textbook adapter: it translates JSON-RPC wire format into
 - Supervisor: `commands.ClaimTaskCommand()` and `commands.WtMergeCommand()` called from `supervisor.go` print to the supervisor's terminal, mixing operational output with supervisor logs
 - Testability: tests must monkey-patch `os.Stdin` (observed in 8+ test files replacing `os.Stdin` with pipe readers) rather than injecting I/O dependencies
 
-**Direction:** Separate business logic from presentation. Options: (1) command functions return structured results, callers handle presentation; (2) inject an `io.Writer` for output; (3) use a `Writer` field on a command context struct. The MCP adapter already does this partially — `handleStatus()` calls `StatusCommand()` which returns a string. Extend this pattern to mutation commands.
+**Direction:** Separate business logic from presentation. Options: (1) command functions return structured results, callers handle presentation; (2) inject an `io.Writer` for output; (3) use a `Writer` field on a command context struct. The MCP adapter already does this partially — `handleStatus()` calls `StatusCommand()` which returns a string. *(Partially addressed: `ClaimTask`, `WtMerge`, `ClearStaleReviewClaims`, `UpdateSprintMetrics` extracted to `ops/` with structured results — commands are now thin wrappers. Remaining commands still embed I/O.)*
 
-#### Smell: Upward dependency — agent → commands *(pass 3, Boundaries lens)*
+#### ~~Smell: Upward dependency — agent → commands~~ *(pass 3, Boundaries lens — resolved)*
 
 **Signal:** The supervisor (`internal/agent/supervisor.go`) directly calls three `commands` package functions: `ClaimTaskCommand()` (line 926), `WtMergeCommand()` (line 1250), `ClearStaleReviewClaimsCommand()` (line 383). It also imports `commands.IntegrationFailedError` for error type checking (line 1253).
 
-**Impact:** The `commands` package was designed as CLI handlers (evidenced by doc.go: "Each command corresponds to a subcommand in the liza CLI"). Having the orchestration layer (`agent`) depend on the CLI layer creates a conceptual inversion: the higher-abstraction supervisor depends on lower-abstraction CLI plumbing. This also inherits the presentation coupling — when the supervisor calls `ClaimTaskCommand()`, it gets terminal output as a side effect.
-
-**Direction:** Extract the business logic from `ClaimTaskCommand`, `WtMergeCommand`, and `ClearStaleReviewClaimsCommand` into functions that return structured results (no I/O). Both `commands` and `agent` can call these functions. This aligns with the monolithic command function decomposition — the "phases" extracted from commands become the shared service layer.
+**Fix:** Extracted business logic from `ClaimTaskCommand`, `WtMergeCommand`, `ClearStaleReviewClaimsCommand`, and `UpdateSprintMetricsCommand` into `internal/ops/` package. Functions return structured results (`ClaimResult`, `MergeResult`, `IntegrationFailedError`) with no terminal I/O side effects. Agent package now imports `ops` instead of `commands`. Commands package rewired as thin presentation wrappers over `ops` functions.
 
 #### Smell: Interactive stdin in library packages *(pass 3, Boundaries lens)*
 
@@ -548,13 +570,13 @@ The 24.7% uncovered code concentrates in two patterns:
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
 | ~~**High**~~ | ~~`supervisor.go` god file (1,428 LOC, 19% branch density)~~ *(resolved: decomposed into 6 cohesive files within `internal/agent/`)* | | |
-| **High** | Monolithic command functions (310-319 LOC single functions) *(pass 2)* | 4+ commands resist comprehension, review, and targeted testing | Decompose into named phase functions (validate → execute → commit) |
+| **High** | Monolithic command functions *(pass 2 — partially resolved: `ClaimTask` and `WtMerge` extracted to `ops/`; `DeleteTaskCommand` 220 LOC and `SubmitForReviewCommand` 183 LOC remain)* | 2 remaining commands resist comprehension and targeted testing | Extend `ops/` extraction pattern to DeleteTask, SubmitForReview |
 | **High** | Duplicated flock mechanism (db + log) | Constants and logic can diverge silently | Extract `internal/filelock` shared package |
 | ~~**High**~~ | ~~MCP handler bypasses Blackboard locking~~ *(resolved: `Blackboard.ReadRaw()` added, `readStateResource()` uses flock-protected read)* | | |
 | ~~**High**~~ | ~~Untested MCP server dispatch + `classifyError`~~ *(pass 4 — resolved: `server_dispatch_test.go` covers `HandleRequest` routing, `classifyError` all 5 branches, `handleToolCall`, `handleResourceRead`, `handleNotification`)* | | |
 | ~~**High**~~ | ~~Untested `models/diagnostics.go`~~ *(pass 4 — resolved: `diagnostics_test.go` covers all 4 functions with table-driven tests)* | | |
-| **Medium** | Commands presentation+logic coupling *(pass 3)* | 3 consumers with incompatible I/O expectations; MCP stdout corruption risk | Commands return structured results; callers handle presentation |
-| **Medium** | agent → commands upward dependency *(pass 3)* | Orchestration depends on CLI layer; inherits presentation side effects | Extract shared business logic from commands into service functions |
+| **Medium** | Commands presentation+logic coupling *(pass 3 — partially resolved: 4 commands extracted to `ops/` with structured results; remaining commands still embed I/O)* | 2 consumers with different I/O expectations; MCP stdout corruption risk for non-extracted commands | Extend `ops/` pattern to remaining mutation commands |
+| ~~**Medium**~~ | ~~agent → commands upward dependency~~ *(pass 3 — resolved: extracted business logic to `internal/ops/` package; agent imports `ops` instead of `commands`)* | | |
 | ~~**Medium**~~ | ~~Task-lookup duplication (55+ inline loops)~~ *(pass 2 — resolved: `State.FindTask()` + `FindTaskIndex()` added, all inline lookups migrated, 3 duplicate helpers removed)* | | |
 | **Medium** | Magic number 1800 (lease default) | Scattered across 3 files, easy to make inconsistent | Define named constant in one location |
 | **Medium** | `executeTemplate` panics (2 locations) | Crashes long-running supervisor process | Return error instead |
@@ -582,11 +604,11 @@ Liza's architecture is well-suited to its constraints: a file-based multi-agent 
 
 **Pass 2 (Complexity lens)** added two structural findings: (1) Monolithic command functions — `WtMergeCommand` and `ClaimTaskCommand` at 310-319 LOC each are the system's longest single functions, resisting comprehension and targeted testing. ~~(2) Task-lookup duplication — the same 6-line loop appears 55+ times, making it the largest DRY violation in the codebase~~ (resolved: `State.FindTask()` and `FindTaskIndex()` added, all inline lookups migrated).
 
-**Pass 3 (Boundaries lens)** reveals the `commands` package as the system's central boundary concern. It serves three consumers (CLI, MCP, supervisor) with incompatible I/O expectations but embeds terminal assumptions (40+ stdout writes, 5+ stdin reads). The supervisor's upward dependency on `commands` compounds this — orchestration logic inherits CLI presentation side effects. The MCP adapter layer is clean (textbook adapter pattern), and the domain/persistence boundaries are well-drawn. The recommended path forward is separating business logic from presentation in the commands layer, which would simultaneously resolve the agent→commands coupling, enable clean MCP delegation, and eliminate the stdin monkey-patching test pattern.
+**Pass 3 (Boundaries lens)** reveals the `commands` package as the system's central boundary concern. It serves two consumers (CLI, MCP) with different I/O expectations but embeds terminal assumptions (40+ stdout writes, 5+ stdin reads). ~~The supervisor's upward dependency on `commands` compounded this — orchestration logic inherited CLI presentation side effects~~ (resolved: business logic extracted to `internal/ops/` service layer; agent now imports `ops` instead of `commands`). The MCP adapter layer is clean (textbook adapter pattern), and the domain/persistence boundaries are well-drawn. The remaining path forward is separating business logic from presentation in the remaining commands, which would enable clean MCP delegation and eliminate the stdin monkey-patching test pattern.
 
 **Pass 4 (Coverage lens)** adds quantitative depth: 75.3% statement coverage overall, with the uncovered 24.7% concentrated in two patterns — runtime orchestration code (supervisor Execute, MCP server dispatch) and I/O-coupled functions. The most actionable finding: `mcp/server.classifyError` and `HandleRequest` are pure logic at 0% that can be tested trivially without any refactoring. Similarly, `models/diagnostics.go` (127 LOC, 4 functions, no test file) is critical work-detection logic that's entirely untested despite being pure functions on `*State`. I/O coupling (already flagged as a Boundaries smell) is now quantitatively confirmed as the primary driver of untested critical paths — functions with hardwired `os.Stdin`/`os.Stdout`/`os/exec` account for the majority of the 0% coverage.
 
-The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), (2) commands presentation+logic coupling, (3) monolithic command functions, ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved). Items 2 and 3 are synergistic — decomposing commands into phases naturally creates the service layer that resolves the boundary issue.
+The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), (2) commands presentation+logic coupling (partially addressed — `ClaimTask`, `WtMerge`, `ClearStaleReviewClaims`, `UpdateSprintMetrics` extracted to `ops/`; remaining commands still mix I/O), (3) monolithic command functions (partially addressed — extracted commands now thin wrappers; `DeleteTaskCommand` and `SubmitForReviewCommand` still monolithic), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). Items 2 and 3 remain synergistic — decomposing the remaining commands into phases extends the service layer pattern established by `ops/`.
 
 ---
 
@@ -597,6 +619,7 @@ The primary structural concerns in priority order: ~~(1) `supervisor.go` god fil
 | Domain model | `internal/models/` |
 | State persistence | `internal/db/` |
 | Agent supervisor | `internal/agent/` |
+| Task operations | `internal/ops/` |
 | CLI commands | `internal/commands/` |
 | MCP server | `internal/mcp/` |
 | MCP protocol types | `internal/mcp/protocol/` |

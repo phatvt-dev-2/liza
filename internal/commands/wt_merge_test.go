@@ -405,69 +405,6 @@ func TestWtMergeCommand(t *testing.T) {
 	}
 }
 
-func TestAppendUniqueAgentID(t *testing.T) {
-	tests := []struct {
-		name     string
-		failedBy []string
-		agentID  string
-		want     []string
-	}{
-		{
-			name:     "first append adds ID",
-			failedBy: []string{},
-			agentID:  "agent-1",
-			want:     []string{"agent-1"},
-		},
-		{
-			name:     "duplicate append is no-op",
-			failedBy: []string{"agent-1"},
-			agentID:  "agent-1",
-			want:     []string{"agent-1"},
-		},
-		{
-			name:     "different ID appends correctly",
-			failedBy: []string{"agent-1"},
-			agentID:  "agent-2",
-			want:     []string{"agent-1", "agent-2"},
-		},
-		{
-			name:     "empty slice behavior",
-			failedBy: nil,
-			agentID:  "agent-1",
-			want:     []string{"agent-1"},
-		},
-		{
-			name:     "multiple existing IDs, no duplicate",
-			failedBy: []string{"agent-1", "agent-2", "agent-3"},
-			agentID:  "agent-4",
-			want:     []string{"agent-1", "agent-2", "agent-3", "agent-4"},
-		},
-		{
-			name:     "multiple existing IDs, duplicate in middle",
-			failedBy: []string{"agent-1", "agent-2", "agent-3"},
-			agentID:  "agent-2",
-			want:     []string{"agent-1", "agent-2", "agent-3"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := appendUniqueAgentID(tt.failedBy, tt.agentID)
-
-			if len(got) != len(tt.want) {
-				t.Errorf("appendUniqueAgentID() length = %v, want %v", len(got), len(tt.want))
-				return
-			}
-
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("appendUniqueAgentID()[%d] = %v, want %v", i, got[i], tt.want[i])
-				}
-			}
-		})
-	}
-}
-
 func TestWtMergeCommand_PreventsDuplicateFailedBy(t *testing.T) {
 	// Create temp directory
 	tmpDir := t.TempDir()
