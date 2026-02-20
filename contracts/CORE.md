@@ -837,6 +837,8 @@ Any → RESET              : on violation
 
 **Forbidden:** ANALYSIS → EXECUTION (skipping gate), EXECUTION → DONE (skipping validation)
 
+**After context compaction:** Re-read CORE.md and active mode contract before next action.
+
 ### Quick Self-Check
 
 Before any action:
