@@ -1,4 +1,4 @@
-package db
+package filelock
 
 import (
 	"errors"
@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// TestLockErrorType tests error type classification
 func TestLockErrorType(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -71,7 +70,6 @@ func TestLockErrorType(t *testing.T) {
 	}
 }
 
-// TestLockErrorError tests the Error() method
 func TestLockErrorError(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -108,7 +106,6 @@ func TestLockErrorError(t *testing.T) {
 	}
 }
 
-// TestLockErrorUnwrap tests error unwrapping
 func TestLockErrorUnwrap(t *testing.T) {
 	underlyingErr := errors.New("underlying error")
 	lockErr := &LockError{
@@ -123,7 +120,6 @@ func TestLockErrorUnwrap(t *testing.T) {
 	}
 }
 
-// TestLockErrorIs tests error comparison with errors.Is
 func TestLockErrorIs(t *testing.T) {
 	underlyingErr := syscall.EACCES
 	lockErr := &LockError{
@@ -137,7 +133,6 @@ func TestLockErrorIs(t *testing.T) {
 	}
 }
 
-// TestIsLockErrorType tests type checking helper
 func TestIsLockErrorType(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -187,7 +182,6 @@ func TestIsLockErrorType(t *testing.T) {
 	}
 }
 
-// TestClassifyLockError tests error classification from various error types
 func TestClassifyLockError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -253,57 +247,54 @@ func TestClassifyLockError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lockErr := classifyLockError(tt.err)
+			lockErr := ClassifyLockError(tt.err)
 
 			if lockErr.Type != tt.wantType {
-				t.Errorf("classifyLockError().Type = %v, want %v", lockErr.Type, tt.wantType)
+				t.Errorf("ClassifyLockError().Type = %v, want %v", lockErr.Type, tt.wantType)
 			}
 
 			if lockErr.Message != tt.wantMsg {
-				t.Errorf("classifyLockError().Message = %q, want %q", lockErr.Message, tt.wantMsg)
+				t.Errorf("ClassifyLockError().Message = %q, want %q", lockErr.Message, tt.wantMsg)
 			}
 
 			if lockErr.Err != tt.err {
-				t.Errorf("classifyLockError().Err = %v, want %v", lockErr.Err, tt.err)
+				t.Errorf("ClassifyLockError().Err = %v, want %v", lockErr.Err, tt.err)
 			}
 		})
 	}
 }
 
-// TestLockErrorTimeout tests timeout error creation
-func TestLockErrorTimeout(t *testing.T) {
+func TestNewLockTimeout(t *testing.T) {
 	err := errors.New("timeout waiting for lock")
-	lockErr := newLockTimeout(err)
+	lockErr := NewLockTimeout(err)
 
 	if lockErr.Type != LockErrorTimeout {
-		t.Errorf("newLockTimeout().Type = %v, want %v", lockErr.Type, LockErrorTimeout)
+		t.Errorf("NewLockTimeout().Type = %v, want %v", lockErr.Type, LockErrorTimeout)
 	}
 
 	if lockErr.Err != err {
-		t.Errorf("newLockTimeout().Err = %v, want %v", lockErr.Err, err)
+		t.Errorf("NewLockTimeout().Err = %v, want %v", lockErr.Err, err)
 	}
 
 	if lockErr.Message != "lock acquisition timed out" {
-		t.Errorf("newLockTimeout().Message = %q, want %q", lockErr.Message, "lock acquisition timed out")
+		t.Errorf("NewLockTimeout().Message = %q, want %q", lockErr.Message, "lock acquisition timed out")
 	}
 }
 
-// TestLockErrorStale tests stale lock error creation
-func TestLockErrorStale(t *testing.T) {
+func TestNewLockStale(t *testing.T) {
 	pid := 12345
-	lockErr := newLockStale(pid)
+	lockErr := NewLockStale(pid)
 
 	if lockErr.Type != LockErrorStale {
-		t.Errorf("newLockStale().Type = %v, want %v", lockErr.Type, LockErrorStale)
+		t.Errorf("NewLockStale().Type = %v, want %v", lockErr.Type, LockErrorStale)
 	}
 
 	expectedMsg := fmt.Sprintf("lock held by dead process (PID %d)", pid)
 	if lockErr.Message != expectedMsg {
-		t.Errorf("newLockStale().Message = %q, want %q", lockErr.Message, expectedMsg)
+		t.Errorf("NewLockStale().Message = %q, want %q", lockErr.Message, expectedMsg)
 	}
 }
 
-// TestLockErrorTypeString tests string representation of error types
 func TestLockErrorTypeString(t *testing.T) {
 	tests := []struct {
 		errType LockErrorType

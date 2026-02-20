@@ -1,4 +1,4 @@
-package db
+package filelock
 
 import (
 	"fmt"
@@ -6,61 +6,59 @@ import (
 	"time"
 )
 
-// lockMetrics captures timing information for a lock operation
-type lockMetrics struct {
+// Metrics captures timing information for a lock operation.
+type Metrics struct {
 	Operation       string        // Name of the operation that held the lock
 	AcquisitionTime time.Duration // Time spent waiting to acquire the lock
 	HoldTime        time.Duration // Time the lock was held
 }
 
-// String returns a formatted string representation of the metrics
-func (m *lockMetrics) String() string {
+// String returns a formatted string representation of the metrics.
+func (m *Metrics) String() string {
 	return fmt.Sprintf("Lock metrics [%s]: acquisition=%v, hold=%v",
 		m.Operation,
 		m.AcquisitionTime.Round(time.Millisecond),
 		m.HoldTime.Round(time.Millisecond))
 }
 
-// lockMetricsRecorder collects lock metrics for analysis
-type lockMetricsRecorder struct {
+// MetricsRecorder collects lock metrics for analysis.
+type MetricsRecorder struct {
 	mu      sync.RWMutex
-	metrics []*lockMetrics
+	metrics []*Metrics
 }
 
-// newLockMetricsRecorder creates a new metrics recorder
-func newLockMetricsRecorder() *lockMetricsRecorder {
-	return &lockMetricsRecorder{
-		metrics: make([]*lockMetrics, 0),
-	}
+// NewMetricsRecorder creates a new metrics recorder.
+func NewMetricsRecorder() *MetricsRecorder {
+	return &MetricsRecorder{}
 }
 
-// Record adds a metric to the recorder
-func (r *lockMetricsRecorder) Record(m *lockMetrics) {
+// Record adds a metric to the recorder.
+func (r *MetricsRecorder) Record(m *Metrics) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.metrics = append(r.metrics, m)
 }
 
-// GetMetrics returns all recorded metrics
-func (r *lockMetricsRecorder) GetMetrics() []*lockMetrics {
+// GetMetrics returns all recorded metrics.
+func (r *MetricsRecorder) GetMetrics() []*Metrics {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	// Return a copy to prevent external modification
-	result := make([]*lockMetrics, len(r.metrics))
+	result := make([]*Metrics, len(r.metrics))
 	copy(result, r.metrics)
 	return result
 }
 
-// Clear removes all recorded metrics
-func (r *lockMetricsRecorder) Clear() {
+// Clear removes all recorded metrics.
+func (r *MetricsRecorder) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.metrics = make([]*lockMetrics, 0)
+	r.metrics = nil
 }
 
-// lockMetricsStats contains aggregate statistics
-type lockMetricsStats struct {
+// MetricsStats contains aggregate statistics.
+type MetricsStats struct {
 	Count              int
 	AvgAcquisitionTime time.Duration
 	AvgHoldTime        time.Duration
@@ -68,13 +66,13 @@ type lockMetricsStats struct {
 	MaxHoldTime        time.Duration
 }
 
-// GetStats computes aggregate statistics from recorded metrics
-func (r *lockMetricsRecorder) GetStats() lockMetricsStats {
+// GetStats computes aggregate statistics from recorded metrics.
+func (r *MetricsRecorder) GetStats() MetricsStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	if len(r.metrics) == 0 {
-		return lockMetricsStats{}
+		return MetricsStats{}
 	}
 
 	var totalAcq, totalHold time.Duration
@@ -93,7 +91,7 @@ func (r *lockMetricsRecorder) GetStats() lockMetricsStats {
 	}
 
 	count := len(r.metrics)
-	return lockMetricsStats{
+	return MetricsStats{
 		Count:              count,
 		AvgAcquisitionTime: totalAcq / time.Duration(count),
 		AvgHoldTime:        totalHold / time.Duration(count),
@@ -102,8 +100,8 @@ func (r *lockMetricsRecorder) GetStats() lockMetricsStats {
 	}
 }
 
-// String returns a formatted string representation of the stats
-func (s lockMetricsStats) String() string {
+// String returns a formatted string representation of the stats.
+func (s MetricsStats) String() string {
 	return fmt.Sprintf("Lock statistics: count=%d, avg_acq=%v, avg_hold=%v, max_acq=%v, max_hold=%v",
 		s.Count,
 		s.AvgAcquisitionTime.Round(time.Millisecond),

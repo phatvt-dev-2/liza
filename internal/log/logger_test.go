@@ -323,13 +323,19 @@ func TestLoggerWithLockTimeout(t *testing.T) {
 	// Create logger with custom timeout
 	customLogger := logger.WithLockTimeout(customTimeout)
 
-	if customLogger.lockTimeout != customTimeout {
-		t.Errorf("lockTimeout = %v, want %v", customLogger.lockTimeout, customTimeout)
-	}
-
 	// Verify path is preserved
 	if customLogger.logPath != logPath {
 		t.Errorf("logPath = %q, want %q", customLogger.logPath, logPath)
+	}
+
+	// Verify the custom logger works (functional test instead of field inspection)
+	entry := Entry{
+		Agent:  "test-agent",
+		Action: "test_action",
+		Detail: "test detail",
+	}
+	if err := customLogger.Append(entry); err != nil {
+		t.Fatalf("Append with custom timeout failed: %v", err)
 	}
 }
 
@@ -476,6 +482,59 @@ func TestLoggerReadCorruptedFile(t *testing.T) {
 	_, err := logger.Read()
 	if err == nil {
 		t.Error("Expected error reading corrupted file, got nil")
+	}
+}
+
+// TestLoggerStaleLockRecovery verifies the logger recovers when a stale lock
+// (left by a dead process) is present. Zero timeout bypasses the polling loop
+// and goes straight to stale detection, where the dead PID triggers cleanup
+// and successful re-acquisition.
+func TestLoggerStaleLockRecovery(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "log.yaml")
+	lockPath := logPath + ".lock"
+	pidPath := logPath + ".lock.pid"
+
+	// Simulate stale lock: lock file exists + PID file with non-existent process
+	if err := os.WriteFile(lockPath, []byte{}, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pidPath, []byte("99999999"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Zero timeout skips polling loop → straight to stale detection
+	logger := New(logPath).WithLockTimeout(0)
+
+	entry := Entry{
+		Agent:  "test-agent",
+		Action: "stale_recovery",
+		Detail: "entry after stale lock recovery",
+	}
+
+	if err := logger.Append(entry); err != nil {
+		t.Fatalf("Append() should succeed after stale lock recovery, got: %v", err)
+	}
+
+	// Verify entry was written
+	entries, err := logger.Read()
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].Agent != "test-agent" {
+		t.Errorf("Agent = %q, want %q", entries[0].Agent, "test-agent")
+	}
+
+	// Verify stale PID was replaced (acquireLockWithPID writes current PID)
+	pidData, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatalf("PID file should exist after recovery, got: %v", err)
+	}
+	if string(pidData) == "99999999" {
+		t.Error("PID file still contains stale PID, expected current process PID")
 	}
 }
 

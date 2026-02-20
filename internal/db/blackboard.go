@@ -4,25 +4,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/gofrs/flock"
+	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	DefaultLockTimeout = 10 * time.Second
-	LockCheckInterval  = 100 * time.Millisecond
-)
-
 // Blackboard provides thread-safe access to the state.yaml file
 type Blackboard struct {
-	statePath   string
-	lockTimeout time.Duration
+	statePath string
+	fileLock  *filelock.FileLock
 
 	// Cache fields for performance optimization
 	// We cache raw YAML bytes (not a parsed struct) so that each ReadCached
@@ -31,17 +24,13 @@ type Blackboard struct {
 	cacheMu     sync.RWMutex
 	cachedData  []byte
 	cachedMtime time.Time
-
-	// Metrics collection (optional)
-	metricsRecorder *lockMetricsRecorder
-	enableMetrics   bool
 }
 
 // New creates a Blackboard backed by the given state file path.
 func New(statePath string) *Blackboard {
 	return &Blackboard{
-		statePath:   statePath,
-		lockTimeout: DefaultLockTimeout,
+		statePath: statePath,
+		fileLock:  filelock.New(statePath),
 	}
 }
 
@@ -54,7 +43,7 @@ func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 
 	newBB := &Blackboard{
 		statePath:   bb.statePath,
-		lockTimeout: timeout,
+		fileLock:    filelock.New(bb.statePath).WithTimeout(timeout),
 		cachedData:  cachedData,
 		cachedMtime: cachedMtime,
 	}
@@ -63,163 +52,23 @@ func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 
 // EnableMetrics enables lock metrics collection.
 func (bb *Blackboard) EnableMetrics() {
-	if bb.metricsRecorder == nil {
-		bb.metricsRecorder = newLockMetricsRecorder()
-	}
-	bb.enableMetrics = true
+	bb.fileLock.EnableMetrics()
 }
 
 // DisableMetrics disables lock metrics collection.
 func (bb *Blackboard) DisableMetrics() {
-	bb.enableMetrics = false
+	bb.fileLock.DisableMetrics()
 }
 
 // GetMetricsRecorder returns the metrics recorder, or nil if not enabled.
-func (bb *Blackboard) GetMetricsRecorder() *lockMetricsRecorder {
-	return bb.metricsRecorder
-}
-
-func (bb *Blackboard) lockPath() string {
-	return bb.statePath + ".lock"
-}
-
-func (bb *Blackboard) pidPath() string {
-	return bb.statePath + ".lock.pid"
-}
-
-func (bb *Blackboard) acquireLockWithPID() (*flock.Flock, error) {
-	lock := flock.New(bb.lockPath())
-	acquired, err := lock.TryLock()
-	if err != nil {
-		return nil, classifyLockError(err)
-	}
-	if !acquired {
-		return nil, fmt.Errorf("lock not acquired")
-	}
-
-	pid := os.Getpid()
-	pidData := []byte(strconv.Itoa(pid))
-	if err := os.WriteFile(bb.pidPath(), pidData, 0644); err != nil {
-		lock.Unlock()
-		return nil, classifyLockError(err)
-	}
-
-	return lock, nil
-}
-
-func isProcessAlive(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-
-	// Send signal 0 to check if process exists (Unix-specific)
-	// On Unix, this checks process existence without actually sending a signal
-	err = process.Signal(syscall.Signal(0))
-	return err == nil
-}
-
-func (bb *Blackboard) isLockStale() (bool, int) {
-	pidData, err := os.ReadFile(bb.pidPath())
-	if err != nil {
-		// No PID file or can't read it - assume not stale
-		return false, 0
-	}
-
-	pid, err := strconv.Atoi(string(pidData))
-	if err != nil {
-		// Invalid PID format - assume not stale
-		return false, 0
-	}
-
-	return !isProcessAlive(pid), pid
-}
-
-// cleanupStaleLock cleans up after a dead process's lock.
-// Only the PID file is removed. The lock file is truncated but preserved
-// to maintain inode identity — deleting it would re-introduce the flock
-// race described in withLockOperation's defer block.
-func (bb *Blackboard) cleanupStaleLock() error {
-	os.Remove(bb.pidPath())
-	// Truncate lock file (release flock state) without deleting the inode
-	if err := os.Truncate(bb.lockPath(), 0); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to truncate stale lock file: %w", err)
-	}
-	return nil
-}
-
-func (bb *Blackboard) withLock(fn func() error) error {
-	return bb.withLockOperation("unknown", fn)
-}
-
-func (bb *Blackboard) withLockOperation(operation string, fn func() error) error {
-	var lock *flock.Flock
-	var err error
-
-	acquisitionStart := time.Now()
-	deadline := time.Now().Add(bb.lockTimeout)
-	locked := false
-
-	for time.Now().Before(deadline) {
-		lock, err = bb.acquireLockWithPID()
-		if err == nil {
-			locked = true
-			break
-		}
-		// If it's a non-retryable error (permission, disk full, etc.), fail immediately
-		if lockErr, ok := err.(*LockError); ok {
-			switch lockErr.Type {
-			case LockErrorPermission, LockErrorDiskFull, LockErrorFilesystem:
-				return lockErr
-			}
-		}
-		time.Sleep(LockCheckInterval)
-	}
-
-	if !locked {
-		isStale, stalePID := bb.isLockStale()
-		if isStale {
-			bb.cleanupStaleLock()
-			lock, err = bb.acquireLockWithPID()
-			if err != nil {
-				return newLockStale(stalePID)
-			}
-			locked = true
-		} else {
-			return newLockTimeout(fmt.Errorf("lock held by live process after %v", bb.lockTimeout))
-		}
-	}
-
-	acquisitionTime := time.Since(acquisitionStart)
-	holdStart := time.Now()
-
-	// We intentionally do NOT remove the lock file or PID file here.
-	// Removing the lock file after unlock creates a race: another process can
-	// create a new file (different inode) and acquire flock on it, then this
-	// process deletes that file, allowing a third process to create yet another
-	// file — resulting in two processes holding flock on different inodes
-	// simultaneously. Leaving the file in place ensures all processes flock
-	// the same inode. Stale lock cleanup happens only in cleanupStaleLock().
-	defer func() {
-		lock.Unlock()
-
-		if bb.enableMetrics && bb.metricsRecorder != nil {
-			holdTime := time.Since(holdStart)
-			bb.metricsRecorder.Record(&lockMetrics{
-				Operation:       operation,
-				AcquisitionTime: acquisitionTime,
-				HoldTime:        holdTime,
-			})
-		}
-	}()
-
-	return fn()
+func (bb *Blackboard) GetMetricsRecorder() *filelock.MetricsRecorder {
+	return bb.fileLock.GetMetricsRecorder()
 }
 
 // Read returns the current state under an exclusive file lock.
 func (bb *Blackboard) Read() (*models.State, error) {
 	var state models.State
-	err := bb.withLock(func() error {
+	err := bb.fileLock.WithLockOperation("read", func() error {
 		data, err := os.ReadFile(bb.statePath)
 		if err != nil {
 			return err
@@ -245,7 +94,7 @@ func (bb *Blackboard) Read() (*models.State, error) {
 // to avoid reading partially-written data.
 func (bb *Blackboard) ReadRaw() ([]byte, error) {
 	var data []byte
-	err := bb.withLock(func() error {
+	err := bb.fileLock.WithLockOperation("read-raw", func() error {
 		var readErr error
 		data, readErr = os.ReadFile(bb.statePath)
 		return readErr
@@ -353,7 +202,7 @@ func (bb *Blackboard) writeStateData(data []byte) error {
 
 // Write writes the state to the state file atomically with fsync
 func (bb *Blackboard) Write(state *models.State) error {
-	err := bb.withLock(func() error {
+	err := bb.fileLock.WithLockOperation("write", func() error {
 		data, err := yaml.Marshal(state)
 		if err != nil {
 			return fmt.Errorf("failed to marshal state: %w", err)
@@ -370,7 +219,7 @@ func (bb *Blackboard) Write(state *models.State) error {
 
 // Modify performs an atomic read-modify-write operation
 func (bb *Blackboard) Modify(fn func(*models.State) error) error {
-	err := bb.withLock(func() error {
+	err := bb.fileLock.WithLockOperation("modify", func() error {
 		data, err := os.ReadFile(bb.statePath)
 		if err != nil {
 			return fmt.Errorf("failed to read state: %w", err)

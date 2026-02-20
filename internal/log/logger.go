@@ -6,15 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/gofrs/flock"
+	"github.com/liza-mas/liza/internal/filelock"
 	"gopkg.in/yaml.v3"
-)
-
-const (
-	// DefaultLockTimeout is the default maximum time to wait for a file lock
-	DefaultLockTimeout = 10 * time.Second
-	// LockCheckInterval is how often to check for lock acquisition
-	LockCheckInterval = 100 * time.Millisecond
 )
 
 // Entry represents a single log entry
@@ -39,58 +32,24 @@ func (e *Entry) Validate() error {
 
 // Logger provides atomic append operations to log.yaml
 type Logger struct {
-	logPath     string
-	lockTimeout time.Duration
+	logPath  string
+	fileLock *filelock.FileLock
 }
 
 // New creates a new Logger for the given log file path
 func New(logPath string) *Logger {
 	return &Logger{
-		logPath:     logPath,
-		lockTimeout: DefaultLockTimeout,
+		logPath:  logPath,
+		fileLock: filelock.New(logPath),
 	}
 }
 
 // WithLockTimeout returns a new Logger with a custom lock timeout
 func (l *Logger) WithLockTimeout(timeout time.Duration) *Logger {
 	return &Logger{
-		logPath:     l.logPath,
-		lockTimeout: timeout,
+		logPath:  l.logPath,
+		fileLock: filelock.New(l.logPath).WithTimeout(timeout),
 	}
-}
-
-// lockPath returns the path to the lock file
-func (l *Logger) lockPath() string {
-	return l.logPath + ".lock"
-}
-
-// withLock executes a function while holding an exclusive lock on the log file
-func (l *Logger) withLock(fn func() error) error {
-	lock := flock.New(l.lockPath())
-
-	// Try to acquire lock with timeout
-	deadline := time.Now().Add(l.lockTimeout)
-	locked := false
-
-	for time.Now().Before(deadline) {
-		acquired, err := lock.TryLock()
-		if err != nil {
-			return fmt.Errorf("failed to try lock: %w", err)
-		}
-		if acquired {
-			locked = true
-			break
-		}
-		time.Sleep(LockCheckInterval)
-	}
-
-	if !locked {
-		return fmt.Errorf("lock acquisition timeout after %v", l.lockTimeout)
-	}
-
-	defer lock.Unlock()
-
-	return fn()
 }
 
 // Append adds a log entry to the log file atomically.
@@ -106,7 +65,7 @@ func (l *Logger) Append(entry Entry) error {
 		entry.Timestamp = time.Now().UTC()
 	}
 
-	return l.withLock(func() error {
+	return l.fileLock.WithLockOperation("append", func() error {
 		// Read existing entries
 		var entries []Entry
 

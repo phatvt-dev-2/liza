@@ -42,7 +42,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [Implicit State Machine](#implicit-state-machine)
 - [Code-Level Architectural Smells](#code-level-architectural-smells)
   - [Supervisor God File](#supervisor-god-file)
-  - [Duplicated File-Locking Mechanism](#duplicated-file-locking-mechanism)
+  - [~~Duplicated File-Locking Mechanism~~](#duplicated-file-locking-mechanism)
   - [MCP Handler Bypasses Blackboard Locking](#mcp-handler-bypasses-blackboard-locking)
   - [Magic Number 1800 Scattered](#magic-number-1800-scattered)
   - [executeTemplate Panics on Error](#executetemplate-panics-on-error)
@@ -436,6 +436,7 @@ Long-term concerns about system evolution.
 - [x] Untested MCP server dispatch layer — `server_dispatch_test.go` covers `HandleRequest` routing, `classifyError` all 5 branches, `handleToolCall`, `handleResourceRead`, `handleNotification` *(software-architecture-review)*
 - [x] Untested work detection logic — `diagnostics_test.go` covers all 4 functions (`CountClaimableTasks`, `CountReviewableTasks`, `GetCoderWorkDiagnostics`, `GetReviewerWorkDiagnostics`) *(software-architecture-review)*
 - [x] MCP handler bypasses Blackboard locking — `readStateResource()` now uses `Blackboard.ReadRaw()` under flock instead of direct `os.ReadFile` *(software-architecture-review)*
+- [x] Duplicated file-locking mechanism — extracted to `internal/filelock` package, both `db` and `log` use shared implementation *(software-architecture-review)*
 
 ---
 
@@ -566,16 +567,13 @@ Issues identified through code-level architectural analysis (patterns, structure
 
 **Direction:** Extract cohesive pieces — lease management, prompt assembly, and agent spawning are candidates for standalone packages or files within `internal/agent/`.
 
-### Duplicated File-Locking Mechanism
+### ~~Duplicated File-Locking Mechanism~~
 
 **Skill:** software-architecture-review
 **Category:** DRY violation / Shotgun surgery
+**Status:** RESOLVED — extracted to `internal/filelock` package
 
-**Issue:** `internal/db/blackboard.go` and `internal/log/logger.go` independently implement identical file-locking with `gofrs/flock`: same constants (`DefaultLockTimeout=10s`, `LockCheckInterval=100ms`), same polling loop pattern (`withLock` / `withLockOperation`). The db version has additional stale-lock recovery and metrics; the log version does not.
-
-**Implication:** If the polling interval, timeout, or recovery logic is patched in one package, the other silently diverges. The log package also lacks the stale-lock recovery that db has, creating inconsistent failure modes under the same stress conditions.
-
-**Direction:** Extract to a shared `internal/filelock` utility using the db package's enriched version as the basis.
+**Fix:** Created `internal/filelock` package with the complete locking implementation (lock acquisition, PID-based stale lock detection, error classification, metrics). Both `internal/db` and `internal/log` now use `filelock.FileLock` instead of independent implementations. The log package gained stale lock recovery and error classification it previously lacked. Constants (`DefaultLockTimeout`, `LockCheckInterval`) exist in one place. No external consumers of the old `db.LockError` types existed, so no aliases were needed.
 
 ### ~~MCP Handler Bypasses Blackboard Locking~~
 

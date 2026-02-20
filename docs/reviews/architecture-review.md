@@ -41,7 +41,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 
 #### db (`internal/db/`) — 864 LOC
 
-**Purpose:** Thread-safe YAML state access with file locking via `gofrs/flock`.
+**Purpose:** Thread-safe YAML state access with file locking via `internal/filelock`.
 
 **Pattern:** Repository pattern — `Blackboard` wraps file I/O with atomic read-modify-write.
 
@@ -150,7 +150,8 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 
 #### Other leaf packages
 
-- `log/` (179 LOC): YAML append log with flock (separate from db's locking)
+- `log/` (179 LOC): YAML append log with flock (via shared `filelock` package)
+- `filelock/` (new): Shared file-locking with flock, PID-based stale detection, error classification, metrics
 - `analysis/` (260 LOC): Circuit breaker pattern detection (6 patterns)
 - `identity/` (140 LOC): Agent ID resolution and validation
 - `errors/` (45 LOC): Exit codes and `NotFoundError` type
@@ -172,13 +173,18 @@ errors/ (stable, leaf)              log/ (stable, leaf)
    ↑                                   ↑
    └── commands/                       └── commands/
 
-git/ (volatile)                     mcp/protocol/ (stable, leaf)
+filelock/ (stable, leaf)            mcp/protocol/ (stable, leaf)
    ↑                                   ↑
-   └── commands/                       └── mcp/server
+   ├── db/                             └── mcp/server
+   └── log/
 
-db/ (stable core)                   prompts/ (stable)
+git/ (volatile)                     prompts/ (stable)
    ↑                                   ↑
-   ├── agent/                          └── agent/
+   └── commands/                       └── agent/
+
+db/ (stable core)
+   ↑
+   ├── agent/
    ├── commands/
    └── testhelpers/
 
@@ -188,7 +194,7 @@ commands/ (volatile, high-level)
    └── mcp/handlers (adapter — clean boundary)
 ```
 
-**No import cycles.** Dependency graph is a clean DAG. Leaf packages: `models`, `paths`, `errors`, `log`, `identity`, `mcp/protocol`.
+**No import cycles.** Dependency graph is a clean DAG. Leaf packages: `models`, `paths`, `errors`, `filelock`, `identity`, `mcp/protocol`.
 
 **Three consumers of `commands`** *(pass 3, Boundaries lens)*: CLI (`cmd/liza`), MCP server (`mcp/handlers`), and supervisor (`agent/supervisor`). Each has different I/O expectations — terminal, JSON-RPC stdio, and background process — but commands embed terminal assumptions.
 
@@ -213,7 +219,7 @@ commands/ (volatile, high-level)
 - `commands/status.go` (469 LOC): status dashboard rendering — read via templates
 
 **What requires cross-file comparison?**
-- Flock locking pattern in db/ vs log/ (duplicated — confirmed by cross-file analysis)
+- ~~Flock locking pattern in db/ vs log/ (duplicated — confirmed by cross-file analysis)~~ *(resolved: extracted to `internal/filelock`)*
 - `leaseDuration = 1800` fallback in supervisor.go (x2) and claim_task.go (x1) (duplicated)
 - `NotFoundError` structured type vs ad-hoc `fmt.Errorf("task not found: %s")` — **25+ instances** of the ad-hoc form in non-test code *(pass 2: quantified)*
 - `derefString()` in prompts/builder.go duplicates `deref` template function
@@ -271,8 +277,9 @@ commands/ (volatile, high-level)
 | `errors` | 0 | 0 | 1 package |
 | `identity` | 0 | 0 | 1 binary |
 | `mcp/protocol` | 0 | 0 | 1 package |
-| `log` | 0 | flock, yaml.v3 | 1 package |
-| `db` | models | flock, fsnotify, yaml.v3 | 3 packages |
+| `filelock` | 0 | flock | 2 packages |
+| `log` | filelock | yaml.v3 | 1 package |
+| `db` | models, filelock | fsnotify, yaml.v3 | 3 packages |
 | `git` | paths | 0 | 1 package |
 | `embedded` | paths | 0 | 2 (commands, liza-mcp) |
 | `analysis` | models | yaml.v3 | 1 package |
@@ -394,13 +401,11 @@ Tests work around this by replacing `os.Stdin` with pipe readers (8+ test files 
 
 **Direction:** Accept an `io.Reader` parameter (or a `Confirmer` interface/callback) for interactive prompts. Default to `os.Stdin` at the call site in `cmd/liza/main.go`.
 
-#### Smell: Duplicated file locking mechanism
+#### ~~Smell: Duplicated file locking mechanism~~ *(resolved)*
 
-**Signal:** `db/blackboard.go` and `log/logger.go` independently define identical `DefaultLockTimeout` (10s) and `LockCheckInterval` (100ms) constants, and implement structurally identical flock polling loops.
+**Signal:** `db/blackboard.go` and `log/logger.go` independently defined identical `DefaultLockTimeout` (10s) and `LockCheckInterval` (100ms) constants, and implemented structurally identical flock polling loops.
 
-**Impact:** Constants can diverge silently. Bug fixes to locking behavior must be applied in two places.
-
-**Direction:** Extract to `internal/filelock` package with the db package's enriched version (stale lock recovery, metrics) as the basis. Both packages import the shared implementation.
+**Fix:** Extracted to `internal/filelock` package with the db package's enriched version (stale lock recovery, PID tracking, error classification, metrics) as the basis. Both `db.Blackboard` and `log.Logger` now delegate to `filelock.FileLock`. The log package gained stale lock recovery and error classification it previously lacked. No external consumers of the old `db.LockError` types existed, so no aliases were needed.
 
 #### Smell: Hardcoded configuration — magic number 1800
 
