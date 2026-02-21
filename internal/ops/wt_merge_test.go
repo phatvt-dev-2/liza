@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -279,6 +280,23 @@ func TestMergeWorktree_Validation(t *testing.T) {
 				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.errContains)
 			}
 		})
+	}
+}
+
+func TestMergeWorktree_TaskNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := MergeWorktree(tmpDir, "nonexistent", "coder-1")
+	if err == nil {
+		t.Fatal("Expected error for nonexistent task")
+	}
+	if !lizaerrors.IsNotFound(err) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
 	}
 }
 

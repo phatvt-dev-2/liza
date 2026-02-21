@@ -1,13 +1,13 @@
 package ops
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"os"
-
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -33,8 +33,8 @@ func TestDeleteAgent_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for nonexistent agent")
 	}
-	if !strings.Contains(err.Error(), "agent not found") {
-		t.Errorf("Error = %q, want to contain 'agent not found'", err.Error())
+	if !errors.IsNotFound(err) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
 	}
 }
 
@@ -200,6 +200,22 @@ func TestDeleteAgent_AllowRunningPID_BypassesPIDWithNoLease(t *testing.T) {
 	}
 	if _, exists := readState.Agents["coder-1"]; exists {
 		t.Error("Agent should be removed from state")
+	}
+}
+
+func TestIsAgentProcessRunning_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, _, err := IsAgentProcessRunning(tmpDir, "nonexistent")
+	if err == nil {
+		t.Fatal("Expected error for nonexistent agent")
+	}
+	if !errors.IsNotFound(err) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
 	}
 }
 

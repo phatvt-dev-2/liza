@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 )
 
@@ -105,6 +106,9 @@ func TestBuildPrompt(t *testing.T) {
 			}
 
 			if tt.wantErr {
+				if !errors.IsNotFound(err) {
+					t.Errorf("expected NotFoundError, got %T: %v", err, err)
+				}
 				return
 			}
 

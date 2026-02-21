@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -420,7 +421,45 @@ func TestSetAgentToPlanningStatusNonExistent(t *testing.T) {
 		t.Error("setAgentToPlanningStatus() should return error for non-existent agent")
 	}
 
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("Error should mention 'not found', got: %v", err)
+	if !errors.IsNotFound(err) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
+	}
+}
+
+// TestResetAgentToIdle_NotFound tests error handling for non-existent agent
+func TestResetAgentToIdle_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+
+	err := resetAgentToIdle(bb, "nonexistent")
+	if err == nil {
+		t.Fatal("Expected error for nonexistent agent")
+	}
+	if !errors.IsNotFound(err) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
+	}
+}
+
+// TestResetAgentAfterExit_NotFound tests error handling for non-existent agent
+func TestResetAgentAfterExit_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+
+	err := resetAgentAfterExit(bb, "nonexistent")
+	if err == nil {
+		t.Fatal("Expected error for nonexistent agent")
+	}
+	if !errors.IsNotFound(err) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
 	}
 }

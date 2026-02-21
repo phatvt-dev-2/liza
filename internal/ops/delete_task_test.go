@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -44,8 +45,8 @@ func TestCheckDeleteTask_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for nonexistent task")
 	}
-	if !strings.Contains(err.Error(), "task not found") {
-		t.Errorf("Error = %q, want to contain 'task not found'", err.Error())
+	if !errors.IsNotFound(err) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
 	}
 }
 
