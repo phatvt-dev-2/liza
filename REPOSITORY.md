@@ -62,7 +62,7 @@ specs/
 ├── build/                              # Build specifications (system implementation)
 │   └── 0 - Vision.md                   # Philosophy, success criteria, foundation spec
 ├── functional/                         # Functional domain specifications
-│   ├── 0 - Liza.md                     # Liza system overview
+│   ├── 1 - Liza.md                     # Liza system overview
 │   └── 1.1.md - 1.6.md                 # Domain-specific specs
 ├── architecture/
 │   ├── overview.md                     # Components, data flow, directory structure

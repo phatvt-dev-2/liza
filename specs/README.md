@@ -12,7 +12,7 @@
 
 | Document                                        | Purpose |
 |-------------------------------------------------|---------|
-| [Product Description](<functional/0 - Liza.md>) | What Liza is, domains, key integrations, scope |
+| [Product Description](<functional/1 - Liza.md>) | What Liza is, domains, key integrations, scope |
 
 ### Architecture
 
@@ -51,7 +51,7 @@
 
 **For understanding the system:**
 1. [Vision](<build/0 - Vision.md>) — philosophy and rationale
-2. [Product Description](<functional/0 - Liza.md>) — what Liza is today
+2. [Product Description](<functional/1 - Liza.md>) — what Liza is today
 3. [Architecture Overview](architecture/overview.md) — components and flow
 4. [Roles](architecture/roles.md) — who does what
 5. [Task Lifecycle](protocols/task-lifecycle.md) — how work flows
