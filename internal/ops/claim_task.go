@@ -54,6 +54,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	var baseCommit string
 	var integrationBranch string
 	var leaseDuration int
+	var maxCoderIterations int
 
 	// Read state to validate (lock is acquired and released)
 	state, task, err := readTaskState(bb, taskID)
@@ -96,6 +97,23 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	leaseDuration = state.Config.LeaseDuration
 	if leaseDuration == 0 {
 		leaseDuration = models.DefaultLeaseDurationSeconds
+	}
+	maxCoderIterations = effectiveCoderIterationLimit(task, state.Config)
+
+	// Enforce coder iteration limits before doing any filesystem work.
+	// A REJECTED task at/over the limit is escalated to BLOCKED for planner action.
+	if taskStatus == models.TaskStatusRejected && task.Iteration >= maxCoderIterations {
+		blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus)
+		if err != nil {
+			return nil, fmt.Errorf("failed to enforce iteration limit: %w", err)
+		}
+
+		return nil, fmt.Errorf(
+			"task %s reached max iterations (%d/%d) and was transitioned to BLOCKED",
+			taskID,
+			blockedIteration,
+			blockedLimit,
+		)
 	}
 
 	// --- Phase 2: Handle Worktree ---
@@ -296,4 +314,66 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		PreviousAssignee:  previousAssignee,
 		WorktreeRecreated: worktreeDeleted && worktreeCreated,
 	}, nil
+}
+
+func enforceRejectedIterationLimit(
+	bb *db.Blackboard,
+	taskID, agentID string,
+	expectedStatus models.TaskStatus,
+) (int, int, error) {
+	now := time.Now().UTC()
+	blockedIteration := 0
+	blockedLimit := 0
+
+	err := bb.Modify(func(state *models.State) error {
+		task := state.FindTask(taskID)
+		if task == nil {
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if task.Status != expectedStatus {
+			return fmt.Errorf("race condition: task status changed from %s to %s", expectedStatus, task.Status)
+		}
+
+		blockedLimit = effectiveCoderIterationLimit(task, state.Config)
+		if task.Iteration < blockedLimit {
+			return fmt.Errorf(
+				"race condition: task iteration no longer at limit (%d/%d)",
+				task.Iteration,
+				blockedLimit,
+			)
+		}
+
+		blockedIteration = task.Iteration
+		blockedReason := iterationLimitBlockedReason(task.Iteration, blockedLimit)
+		questions := defaultIterationLimitBlockedQuestions()
+
+		if err := task.Transition(models.TaskStatusBlocked); err != nil {
+			return err
+		}
+		task.BlockedReason = &blockedReason
+		task.BlockedQuestions = questions
+		task.LeaseExpires = nil
+
+		if task.AssignedTo != nil {
+			previous := *task.AssignedTo
+			state.ReleaseAgent(previous)
+		}
+		task.AssignedTo = nil
+
+		agentPtr := &agentID
+		reasonPtr := &blockedReason
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:   now,
+			Event:  "blocked",
+			Agent:  agentPtr,
+			Reason: reasonPtr,
+		})
+
+		return nil
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return blockedIteration, blockedLimit, nil
 }

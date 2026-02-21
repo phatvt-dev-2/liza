@@ -299,6 +299,62 @@ func TestClaimTask_RejectedSameCoder(t *testing.T) {
 	}
 }
 
+func TestClaimTask_RejectedAtIterationLimitTransitionsToBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.MaxCoderIterations = 3
+
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	task.Iteration = 3
+	state.Tasks = []models.Task{task}
+
+	taskRef := "task-1"
+	state.Agents["coder-1"] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWaiting,
+		CurrentTask: &taskRef,
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err == nil {
+		t.Fatal("Expected iteration-limit error")
+	}
+	if !strings.Contains(err.Error(), "transitioned to BLOCKED") {
+		t.Errorf("Error = %q, want to contain 'transitioned to BLOCKED'", err.Error())
+	}
+
+	readState := readClaimStateForTest(t, stateFile)
+	blockedTask := readState.FindTask("task-1")
+	if blockedTask == nil {
+		t.Fatal("Task not found in state")
+	}
+	if blockedTask.Status != models.TaskStatusBlocked {
+		t.Errorf("Task status = %v, want BLOCKED", blockedTask.Status)
+	}
+	if blockedTask.AssignedTo != nil {
+		t.Error("AssignedTo should be cleared when task is blocked")
+	}
+	if blockedTask.BlockedReason == nil || !strings.Contains(*blockedTask.BlockedReason, "max iterations") {
+		t.Errorf("BlockedReason = %v, want max-iterations reason", blockedTask.BlockedReason)
+	}
+	if len(blockedTask.BlockedQuestions) == 0 {
+		t.Error("BlockedQuestions should be populated")
+	}
+
+	agent := readState.Agents["coder-1"]
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Agent status = %v, want IDLE", agent.Status)
+	}
+	if agent.CurrentTask != nil {
+		t.Error("Agent CurrentTask should be cleared after limit-based block")
+	}
+}
+
 // readClaimStateForTest reads state for claim test verification.
 func readClaimStateForTest(t *testing.T, stateFile string) *models.State {
 	t.Helper()

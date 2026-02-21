@@ -26,5 +26,11 @@ func printVerdictResult(r *ops.VerdictResult) {
 		fmt.Printf("REJECTED: %s\n", r.TaskID)
 		fmt.Printf("  rejection_reason: %s\n", r.Reason)
 		fmt.Printf("  reviewed_by: %s\n", r.AgentID)
+		if r.EscalatedToBlocked {
+			fmt.Println("  escalated_to: BLOCKED")
+			if r.BlockedReason != "" {
+				fmt.Printf("  blocked_reason: %s\n", r.BlockedReason)
+			}
+		}
 	}
 }

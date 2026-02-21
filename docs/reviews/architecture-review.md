@@ -754,13 +754,14 @@ These are operational tuning parameters with no path to `models.Config`.
 
 **Direction:** Replace fixed sleeps with event-driven synchronization where possible, add explicit reset helpers for global state between tests, and introduce `t.Parallel()` selectively in pure/stateless tests to increase confidence and reduce runtime.
 
-#### Smell: Configured iteration limits are declarative but unenforced *(Adversarial pass, entry: config/)*
+#### Smell: Configured iteration limits are declarative but unenforced *(Adversarial pass, entry: config/; resolved)*
 
-**Signal:** `config.max_coder_iterations` and `config.max_review_cycles` are defined in `models.Config` and documented as control limits, but runtime task flow does not enforce either limit before continuing loops. `SubmitVerdict` increments review counters without threshold handling, and no non-test production path reads `MaxCoderIterations` or `MaxReviewCycles`. `task.max_iterations` exists in the `Task` model and specs but has no runtime consumer.
+**Signal:** ~~`config.max_coder_iterations` and `config.max_review_cycles` are defined in `models.Config` and documented as control limits, but runtime task flow does not enforce either limit before continuing loops. `SubmitVerdict` increments review counters without threshold handling, and no non-test production path reads `MaxCoderIterations` or `MaxReviewCycles`. `task.max_iterations` exists in the `Task` model and specs but has no runtime consumer.~~
+Resolved: `ops.ClaimTask` now enforces coder iteration ceilings (effective policy: `task.max_iterations` override, else `config.max_coder_iterations`) and transitions exhausted REJECTED tasks to BLOCKED. `ops.SubmitVerdict` now enforces review-cycle ceilings (`config.max_review_cycles`) and iteration ceilings in rejection flow, transitioning exhausted tasks to BLOCKED with explicit escalation metadata.
 
-**Impact:** High. Operators can tune iteration limits in `state.yaml` and receive no behavioral change. This creates false safety assumptions around runaway loops and escalation behavior.
+**Impact:** ~~High. Operators can tune iteration limits in `state.yaml` and receive no behavioral change. This creates false safety assumptions around runaway loops and escalation behavior.~~ Closed.
 
-**Direction:** Implement an effective-limit policy (`task.max_iterations` override else `config.max_coder_iterations`) and enforce at loop transition points (claim/reclaim and rejection flow). Apply equivalent enforcement for review cycles using `config.max_review_cycles`, with explicit BLOCKED/escalation transitions when limits are reached.
+**Direction:** Closed — enforcement now exists in claim/reclaim and rejection paths, with explicit BLOCKED escalation transitions and test coverage in `internal/ops/claim_task_test.go` and `internal/ops/submit_verdict_test.go`.
 
 #### Smell: `heartbeat_interval` config is modeled/documented but ignored at runtime *(Adversarial pass, entry: config/)*
 
@@ -933,7 +934,6 @@ The 24.7% uncovered code concentrates in two patterns:
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
 | **High** | Pairing initialization doc pointer drift (`docs/USAGE.md`) *(Adversarial pass, entry: specs/)* | Session Initialization in `PAIRING_MODE.md` requires a non-existent file; startup protocol can fail before task execution | Point initialization to canonical docs (`USAGE_PAIRING.md` and/or `docs/README.md`) |
-| **High** | Iteration-limit config drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) *(Adversarial pass, entry: config/)* | Limits are modeled and documented but not enforced in runtime task/review loops | Implement effective-limit enforcement and explicit BLOCKED/escalation transitions |
 | **High** | MCP parse-error response write failure ignored *(Adversarial pass, entry: error handling)* | Server drops `WriteError` failure and keeps looping, hiding protocol output failure | Make parse-error response write failure terminal (`Run` should return error) |
 | **High** | `submit-for-review` `commit_sha` contract drift *(Adversarial pass, entry: data flow)* | CLI/MCP require SHA input but runtime ignores it and persists computed post-rebase HEAD | Align contract: remove SHA input from surfaces or enforce strict SHA validation against worktree HEAD |
 | **High** | REJECTED reassignment can orphan worktree on recreate failure *(Adversarial pass, entry: documented smells)* | Different-coder REJECTED claim deletes old worktree/branch before confirming replacement create succeeds | Reorder reassignment flow to secure replacement before teardown, or persist compensating recovery state |
@@ -1000,6 +1000,7 @@ The 24.7% uncovered code concentrates in two patterns:
 | MCP state read bypassed Blackboard lock | High | `af911ed` | 2026-02-21 | MCP state resource now reads via lock-safe `Blackboard.ReadRaw()` |
 | MCP dispatch/diagnostics critical-path test gaps | Medium | `40ef645` | 2026-02-21 | Added dispatch classification tests and diagnostics coverage |
 | Task-state-machine spec drift (`BLOCKED -> READY`) | High | `0f6fe19` | 2026-02-21 | Spec now forbids `BLOCKED -> READY` and matches runtime transition map (`BLOCKED -> SUPERSEDED|ABANDONED`) |
+| Iteration-limit config drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) | High | `5fceaad` | 2026-02-21 | `ClaimTask` + `SubmitVerdict` now enforce effective limits and transition exhausted loops to BLOCKED (clean-code follow-up: `be93dee`) |
 
 ---
 
@@ -1027,7 +1028,7 @@ The primary structural concerns in priority order: ~~(1) `supervisor.go` god fil
 
 **Adversarial pass (entry: tests/)** highlighted a distinct quality boundary: the suite strongly validates command/ops internals but under-exercises the binary CLI contract (`cmd/liza/main.go` wiring, flag/env precedence, command-tree registration). It also surfaced temporal coupling signals (0 `t.Parallel()` usage and 21 explicit sleeps across 93 test files) that point to a serialized, timing-dependent test architecture. Neither issue is immediately blocking, but both will become higher-cost as command surface and concurrency grow.
 
-**Adversarial pass (entry: config/)** exposed a config-contract gap cluster: key control knobs are modeled and documented but not always executable. In particular, iteration limits (`config.max_coder_iterations`, `config.max_review_cycles`, and `task.max_iterations`) are not enforced in runtime task/review flow, and `heartbeat_interval` is currently ignored in favor of a hardcoded 60s scheduler. This is high leverage because it affects operational control semantics directly: users can tune state and observe no behavior change. Secondary drift found: `LIZA_LOG_LEVEL` is documented but unimplemented, and `get config.*` only projects a subset of `models.Config`.
+**Adversarial pass (entry: config/)** exposed a config-contract gap cluster: key control knobs are modeled and documented but not always executable. One high-priority gap is now closed: ~~iteration limits (`config.max_coder_iterations`, `config.max_review_cycles`, and `task.max_iterations`) are not enforced in runtime task/review flow~~ (resolved in `5fceaad` via `ClaimTask`/`SubmitVerdict` enforcement; clean-code-only refactor follow-up in `be93dee`). Remaining open config drift: `heartbeat_interval` is still ignored in favor of a hardcoded 60s scheduler, `LIZA_LOG_LEVEL` remains unimplemented, and `get config.*` still projects only a subset of `models.Config`.
 
 **Adversarial pass (entry: error handling)** surfaced a reliability-observability gap cluster: protocol and cleanup error paths are intentionally or accidentally lossy. Most notably, MCP parse-error response write failures are currently ignored (now prioritized as terminal), and several rebase/worktree cleanup flows suppress secondary failures that can leave residual dirty state. Lock stale-cleanup errors are also dropped before retry, and some `os.Stat` checks under-handle non-`IsNotExist` filesystem errors. The architecture is still sound, but these error-path blind spots weaken operational diagnosis under failure pressure.
 

@@ -123,6 +123,7 @@ func TestCanTransition(t *testing.T) {
 		{TaskStatusReviewing, TaskStatusRejected, true},
 		{TaskStatusReviewing, TaskStatusReadyForReview, true},
 		{TaskStatusRejected, TaskStatusImplementing, true},
+		{TaskStatusRejected, TaskStatusBlocked, true},
 		{TaskStatusRejected, TaskStatusSuperseded, true},
 		{TaskStatusRejected, TaskStatusAbandoned, true},
 		{TaskStatusApproved, TaskStatusMerged, true},

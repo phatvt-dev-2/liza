@@ -13,10 +13,12 @@ import (
 
 // VerdictResult contains the outcome of a successful verdict submission.
 type VerdictResult struct {
-	TaskID  string
-	Verdict string // "APPROVED" or "REJECTED"
-	AgentID string
-	Reason  string // non-empty for rejections
+	TaskID             string
+	Verdict            string // "APPROVED" or "REJECTED"
+	AgentID            string
+	Reason             string // non-empty for rejections
+	EscalatedToBlocked bool
+	BlockedReason      string
 }
 
 // SubmitVerdict atomically applies a review verdict: APPROVED transitions to
@@ -45,6 +47,8 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
+	escalatedToBlocked := false
+	blockedReasonOut := ""
 
 	err := bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
@@ -85,6 +89,44 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 				Agent:  agentPtr,
 				Reason: reasonPtr,
 			})
+
+			reviewLimit := effectiveReviewCycleLimit(state.Config)
+			iterationLimit := effectiveCoderIterationLimit(task, state.Config)
+
+			escalation, shouldEscalate := classifyLimitEscalation(
+				task.ReviewCyclesCurrent,
+				reviewLimit,
+				task.Iteration,
+				iterationLimit,
+			)
+			if shouldEscalate {
+				if err := task.Transition(models.TaskStatusBlocked); err != nil {
+					return err
+				}
+
+				blockedReason := escalation.reason
+				task.BlockedReason = &blockedReason
+				task.BlockedQuestions = escalation.questions
+				task.LeaseExpires = nil
+				escalatedToBlocked = true
+				blockedReasonOut = blockedReason
+
+				if task.AssignedTo != nil {
+					assignedCoder := *task.AssignedTo
+					if assignedCoder != agentID {
+						state.ReleaseAgent(assignedCoder)
+					}
+				}
+				task.AssignedTo = nil
+
+				blockedReasonPtr := &blockedReason
+				task.History = append(task.History, models.TaskHistoryEntry{
+					Time:   now,
+					Event:  "blocked",
+					Agent:  agentPtr,
+					Reason: blockedReasonPtr,
+				})
+			}
 		}
 
 		task.ReviewingBy = nil
@@ -99,9 +141,11 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	}
 
 	return &VerdictResult{
-		TaskID:  taskID,
-		Verdict: verdict,
-		AgentID: agentID,
-		Reason:  reason,
+		TaskID:             taskID,
+		Verdict:            verdict,
+		AgentID:            agentID,
+		Reason:             reason,
+		EscalatedToBlocked: escalatedToBlocked,
+		BlockedReason:      blockedReasonOut,
 	}, nil
 }

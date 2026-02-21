@@ -58,6 +58,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [Multi-State Claiming](#multi-state-claiming)
   - [Approval Rate Monitoring](#approval-rate-monitoring)
   - [Root Cause Required Before Rescope](#root-cause-required-before-rescope)
+  - [Iteration-Limit Config Drift](#iteration-limit-config-drift)
   - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
   - [Implicit State Machine](#implicit-state-machine)
   - [Multi-Instance Blackboard Coherence](#multi-instance-blackboard-coherence)
@@ -398,6 +399,7 @@ Issues identified through code-level architectural analysis (patterns, structure
 - [x] Multi-state claiming *(systemic-thinking)*
 - [x] Approval rate monitoring *(systemic-thinking)*
 - [x] Root cause required before rescope *(systemic-thinking)*
+- [x] Iteration-limit config drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) — enforce effective limits in `ClaimTask`/`SubmitVerdict` with explicit BLOCKED escalation *(software-architecture-review)*
 - [x] flock inode race — stop deleting lock/PID files after unlock *(code-review)*
 - [x] ReadCached shared mutable pointer — cache raw bytes, return fresh structs *(code-review)*
 - [x] Watcher AfterFunc panic — check closed flag under mutex before channel send *(code-review)*
@@ -472,6 +474,7 @@ Commit SHA where issue details were first marked as fixed (proxy for actual fix 
 | Pervasive Task-Lookup Duplication | `363b440` |
 | Untested MCP Server Dispatch Layer | `40ef645` |
 | Untested Work Detection Logic | `40ef645` |
+| Iteration-Limit Config Drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) | `5fceaad` |
 
 ---
 
@@ -588,6 +591,19 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 **Original issue:** Hypothesis exhaustion forced rescope without diagnosing cause, leading to task churn.
 
 **Fix:** Planner must document root cause before rescoping and include it in `rescope_reason` and the rescope log entry (task lifecycle + roles).
+
+### Iteration-Limit Config Drift
+
+**Skill:** software-architecture-review
+**Category:** Hardcoded configuration / Runtime contract drift
+
+**Original issue:** Iteration controls were declarative only. `config.max_coder_iterations`, `config.max_review_cycles`, and task-level `max_iterations` were modeled/documented but not enforced in runtime flow, so operators could tune limits with no effect.
+
+**Fix:** Added runtime enforcement in `internal/ops`:
+- `ClaimTask` now enforces effective coder iteration limit (`task.max_iterations` override, else `config.max_coder_iterations`) before REJECTED reclaim; exhausted tasks transition to `BLOCKED`.
+- `SubmitVerdict` now enforces review-cycle and iteration ceilings during rejection flow; exhausted tasks transition to `BLOCKED` with explicit `blocked_reason`/`blocked_questions`.
+- State machine updated to allow `REJECTED -> BLOCKED` transitions; tests added in `internal/ops/claim_task_test.go`, `internal/ops/submit_verdict_test.go`, and `internal/models/state_test.go`.
+- Follow-up clean-code refactor in `be93dee` extracted escalation helpers (`enforceRejectedIterationLimit`, `classifyLimitEscalation`) with no behavioral change.
 
 ### Error Classification Lost at Agent Interface
 

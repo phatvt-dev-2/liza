@@ -113,7 +113,7 @@ var taskTransitions = map[TaskStatus][]TaskStatus{
 	TaskStatusImplementing:      {TaskStatusReadyForReview, TaskStatusBlocked, TaskStatusReady},
 	TaskStatusReadyForReview:    {TaskStatusReviewing},
 	TaskStatusReviewing:         {TaskStatusApproved, TaskStatusRejected, TaskStatusReadyForReview},
-	TaskStatusRejected:          {TaskStatusImplementing, TaskStatusSuperseded, TaskStatusAbandoned},
+	TaskStatusRejected:          {TaskStatusImplementing, TaskStatusBlocked, TaskStatusSuperseded, TaskStatusAbandoned},
 	TaskStatusApproved:          {TaskStatusMerged, TaskStatusIntegrationFailed},
 	TaskStatusBlocked:           {TaskStatusSuperseded, TaskStatusAbandoned},
 	TaskStatusIntegrationFailed: {TaskStatusImplementing, TaskStatusAbandoned},
@@ -600,6 +600,8 @@ func (sm SystemMode) ValidateTransition(to SystemMode) error {
 
 // Default configuration values (seconds) used as fallbacks when config fields are unset.
 const (
+	DefaultMaxCoderIterations   = 10
+	DefaultMaxReviewCycles      = 5
 	DefaultLeaseDurationSeconds = 1800 // 30 minutes
 	DefaultCoderPollInterval    = 30
 	DefaultCoderMaxWait         = 1800 // 30 minutes
