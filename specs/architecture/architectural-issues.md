@@ -27,7 +27,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
 - [Fragility](#fragility)
   - [Cross-Script State Mutation](#cross-script-state-mutation)
-  - [YAML Round-Trip Data Loss](#yaml-round-trip-data-loss)
+  - [~~YAML Round-Trip Data Loss~~](#yaml-round-trip-data-loss)
 - [Trajectory](#trajectory)
   - [Blackboard Growth Without Pruning](#blackboard-growth-without-pruning)
   - [Anomaly Detail Validation Incomplete](#anomaly-detail-validation-incomplete)
@@ -277,22 +277,12 @@ Partial failure modes with unclear recovery.
 - Transaction log for rollback capability
 - Centralized state mutation through single entry point
 
-### YAML Round-Trip Data Loss
+### ~~YAML Round-Trip Data Loss~~ *(resolved)*
 
 **Skill:** systemic-thinking
 **Category:** FRAGILITY
 
-**Issue:** The Go struct for `state.yaml` (`internal/models/state.go`) uses standard `yaml.Unmarshal`/`yaml.Marshal` with no unknown-field preservation. Any field present in `state.yaml` but absent from the Go struct is silently dropped on the next write. In the bash era, `yq` mutations preserved all fields. The Go CLI destroys them. This means:
-- Manual human additions to `state.yaml` survive one read but are erased on next write
-- Schema evolution requires struct changes before any new field can survive
-- There is no runtime warning when data is discarded
-
-**Implication:** The blackboard becomes a "closed world" — only what the binary knows about survives. Any out-of-band state enrichment (human notes added via editor, future tool extensions, experimental fields) is silently erased on next CLI write.
-
-**Future options:**
-- Use a YAML library that preserves unknown fields (e.g., round-trip aware parser)
-- Store auxiliary/extension fields in a separate section with pass-through semantics
-- Warn on fields present in file but absent from struct
+**Fix:** Added `Extra map[string]any` with `yaml:",inline"` tag to all model structs in `internal/models/state.go`. The yaml.v3 inline map captures unknown YAML keys during unmarshal and emits them back during marshal. Known struct fields take priority (no duplication). Nil maps produce zero output (no change to existing YAML). Unknown fields at all nesting levels (root, task, agent, config, etc.) now survive `Blackboard.Modify()` and `Read()`+`Write()` round-trips.
 
 ---
 
@@ -417,6 +407,7 @@ Long-term concerns about system evolution.
 - [x] executeTemplate panics on error — changed to return `(string, error)` in both `prompts/templates.go` and `commands/templates.go`; propagated through all callers *(software-architecture-review)*
 - [x] Multi-instance Blackboard coherence — `db.For()` process-level singleton constructor; all ~30 production `db.New()` calls replaced; tests retain `db.New()` for isolation *(systemic-thinking)*
 - [x] Documentation/Implementation Desynchronization — replaced all operational `yq` references across 8 docs/specs files with `liza` CLI equivalents or tool-agnostic instructions *(systemic-thinking)*
+- [x] YAML Round-Trip Data Loss — added `Extra map[string]any` with `yaml:",inline"` to all model structs; unknown YAML fields now survive round-trips *(systemic-thinking)*
 - [x] Inconsistent NotFoundError Usage — added `ID` field to `NotFoundError`, migrated 25+ ad-hoc string errors to structured type across `ops/`, `db/`, `agent/`, `commands/`; `IsNotFound()` uses `errors.As`; MCP `classifyError()` uses type-based detection with string fallback *(software-architecture-review)*
 
 ---

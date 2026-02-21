@@ -20,6 +20,7 @@ type State struct {
 	Sprint         Sprint                 `yaml:"sprint"`
 	CircuitBreaker CircuitBreaker         `yaml:"circuit_breaker"`
 	Config         Config                 `yaml:"config"`
+	Extra          map[string]any         `yaml:",inline"`
 }
 
 // TaskType represents the kind of task, determining which roles participate in its lifecycle.
@@ -172,6 +173,7 @@ type Task struct {
 	MaxIterations       int                `yaml:"max_iterations,omitempty"`
 	Created             time.Time          `yaml:"created"`
 	History             []TaskHistoryEntry `yaml:"history"`
+	Extra               map[string]any     `yaml:",inline"`
 }
 
 // EffectiveType returns the task's type, defaulting to TaskTypeCoding when empty (backward compat).
@@ -224,13 +226,14 @@ func (t *Task) IsClaimable(role string, allTasks []Task) bool {
 
 // TaskHistoryEntry represents a single event in a task's history
 type TaskHistoryEntry struct {
-	Time             time.Time `yaml:"time"`
-	Event            string    `yaml:"event"`
-	Agent            *string   `yaml:"agent,omitempty"`
-	PreviousAssignee *string   `yaml:"previous_assignee,omitempty"`
-	Reason           *string   `yaml:"reason,omitempty"`
-	Commit           *string   `yaml:"commit,omitempty"`
-	Note             *string   `yaml:"note,omitempty"`
+	Time             time.Time      `yaml:"time"`
+	Event            string         `yaml:"event"`
+	Agent            *string        `yaml:"agent,omitempty"`
+	PreviousAssignee *string        `yaml:"previous_assignee,omitempty"`
+	Reason           *string        `yaml:"reason,omitempty"`
+	Commit           *string        `yaml:"commit,omitempty"`
+	Note             *string        `yaml:"note,omitempty"`
+	Extra            map[string]any `yaml:",inline"`
 }
 
 // AgentStatus represents the state of an agent
@@ -308,15 +311,16 @@ func (s *State) AllPlannedTasksTerminal() bool {
 
 // Agent represents an agent (coder, reviewer, planner) in the system
 type Agent struct {
-	Role            string      `yaml:"role"`
-	Status          AgentStatus `yaml:"status"`
-	CurrentTask     *string     `yaml:"current_task,omitempty"`
-	LeaseExpires    *time.Time  `yaml:"lease_expires,omitempty"`
-	Heartbeat       time.Time   `yaml:"heartbeat"`
-	Terminal        string      `yaml:"terminal"`
-	IterationsTotal int         `yaml:"iterations_total"`
-	ContextPercent  int         `yaml:"context_percent"`
-	PID             int         `yaml:"pid,omitempty"`
+	Role            string         `yaml:"role"`
+	Status          AgentStatus    `yaml:"status"`
+	CurrentTask     *string        `yaml:"current_task,omitempty"`
+	LeaseExpires    *time.Time     `yaml:"lease_expires,omitempty"`
+	Heartbeat       time.Time      `yaml:"heartbeat"`
+	Terminal        string         `yaml:"terminal"`
+	IterationsTotal int            `yaml:"iterations_total"`
+	ContextPercent  int            `yaml:"context_percent"`
+	PID             int            `yaml:"pid,omitempty"`
+	Extra           map[string]any `yaml:",inline"`
 }
 
 // GoalStatus represents the state of a goal
@@ -341,13 +345,15 @@ type Goal struct {
 	Created          time.Time          `yaml:"created"`
 	Status           GoalStatus         `yaml:"status"`
 	AlignmentHistory []AlignmentHistory `yaml:"alignment_history"`
+	Extra            map[string]any     `yaml:",inline"`
 }
 
 // AlignmentHistory tracks goal alignment events
 type AlignmentHistory struct {
-	Timestamp time.Time `yaml:"timestamp"`
-	Event     string    `yaml:"event"`
-	Summary   string    `yaml:"summary"`
+	Timestamp time.Time      `yaml:"timestamp"`
+	Event     string         `yaml:"event"`
+	Summary   string         `yaml:"summary"`
+	Extra     map[string]any `yaml:",inline"`
 }
 
 // SprintStatus represents the state of a sprint
@@ -378,48 +384,53 @@ type Sprint struct {
 	Status        SprintStatus   `yaml:"status"`
 	Metrics       SprintMetrics  `yaml:"metrics"`
 	Retrospective *string        `yaml:"retrospective,omitempty"`
+	Extra         map[string]any `yaml:",inline"`
 }
 
 // SprintScope defines planned and stretch tasks
 type SprintScope struct {
-	Planned []string `yaml:"planned"`
-	Stretch []string `yaml:"stretch"`
+	Planned []string       `yaml:"planned"`
+	Stretch []string       `yaml:"stretch"`
+	Extra   map[string]any `yaml:",inline"`
 }
 
 // SprintTimeline defines sprint timing
 type SprintTimeline struct {
-	Started      time.Time  `yaml:"started"`
-	Deadline     time.Time  `yaml:"deadline"`
-	CheckpointAt *time.Time `yaml:"checkpoint_at,omitempty"`
-	Ended        *time.Time `yaml:"ended,omitempty"`
+	Started      time.Time      `yaml:"started"`
+	Deadline     time.Time      `yaml:"deadline"`
+	CheckpointAt *time.Time     `yaml:"checkpoint_at,omitempty"`
+	Ended        *time.Time     `yaml:"ended,omitempty"`
+	Extra        map[string]any `yaml:",inline"`
 }
 
 // SprintMetrics tracks sprint progress and quality
 type SprintMetrics struct {
-	TasksDone                        int `yaml:"tasks_done"`
-	TasksInProgress                  int `yaml:"tasks_in_progress"`
-	TasksBlocked                     int `yaml:"tasks_blocked"`
-	IterationsTotal                  int `yaml:"iterations_total"`
-	ReviewCyclesTotal                int `yaml:"review_cycles_total"`
-	ReviewVerdictApprovals           int `yaml:"review_verdict_approvals"`
-	ReviewVerdictRejections          int `yaml:"review_verdict_rejections"`
-	ReviewVerdictCount               int `yaml:"review_verdict_count"`
-	ReviewVerdictApprovalRatePercent int `yaml:"review_verdict_approval_rate_percent"`
-	TaskSubmittedForReviewCount      int `yaml:"task_submitted_for_review_count"`
-	TaskOutcomeApprovalRatePercent   int `yaml:"task_outcome_approval_rate_percent"`
+	TasksDone                        int            `yaml:"tasks_done"`
+	TasksInProgress                  int            `yaml:"tasks_in_progress"`
+	TasksBlocked                     int            `yaml:"tasks_blocked"`
+	IterationsTotal                  int            `yaml:"iterations_total"`
+	ReviewCyclesTotal                int            `yaml:"review_cycles_total"`
+	ReviewVerdictApprovals           int            `yaml:"review_verdict_approvals"`
+	ReviewVerdictRejections          int            `yaml:"review_verdict_rejections"`
+	ReviewVerdictCount               int            `yaml:"review_verdict_count"`
+	ReviewVerdictApprovalRatePercent int            `yaml:"review_verdict_approval_rate_percent"`
+	TaskSubmittedForReviewCount      int            `yaml:"task_submitted_for_review_count"`
+	TaskOutcomeApprovalRatePercent   int            `yaml:"task_outcome_approval_rate_percent"`
+	Extra                            map[string]any `yaml:",inline"`
 }
 
 // Discovery represents a finding by an agent during work
 type Discovery struct {
-	ID              string    `yaml:"id"`
-	By              string    `yaml:"by"`
-	During          string    `yaml:"during"`
-	Description     string    `yaml:"description"`
-	Severity        string    `yaml:"severity"`
-	Urgency         string    `yaml:"urgency"`
-	Recommendation  string    `yaml:"recommendation"`
-	Created         time.Time `yaml:"created"`
-	ConvertedToTask *string   `yaml:"converted_to_task,omitempty"`
+	ID              string         `yaml:"id"`
+	By              string         `yaml:"by"`
+	During          string         `yaml:"during"`
+	Description     string         `yaml:"description"`
+	Severity        string         `yaml:"severity"`
+	Urgency         string         `yaml:"urgency"`
+	Recommendation  string         `yaml:"recommendation"`
+	Created         time.Time      `yaml:"created"`
+	ConvertedToTask *string        `yaml:"converted_to_task,omitempty"`
+	Extra           map[string]any `yaml:",inline"`
 }
 
 // IsValidSeverity checks if the discovery severity is valid
@@ -435,30 +446,33 @@ func (d *Discovery) IsValidUrgency() bool {
 
 // HandoffNote represents context handoff between agents
 type HandoffNote struct {
-	Agent         string    `yaml:"agent"`
-	ContextUsed   int       `yaml:"context_used"`
-	Timestamp     time.Time `yaml:"timestamp"`
-	Summary       string    `yaml:"summary"`
-	NextAction    string    `yaml:"next_action"`
-	Approach      *string   `yaml:"approach,omitempty"`
-	Blockers      *string   `yaml:"blockers,omitempty"`
-	FilesModified []string  `yaml:"files_modified,omitempty"`
-	NextSteps     []string  `yaml:"next_steps,omitempty"`
+	Agent         string         `yaml:"agent"`
+	ContextUsed   int            `yaml:"context_used"`
+	Timestamp     time.Time      `yaml:"timestamp"`
+	Summary       string         `yaml:"summary"`
+	NextAction    string         `yaml:"next_action"`
+	Approach      *string        `yaml:"approach,omitempty"`
+	Blockers      *string        `yaml:"blockers,omitempty"`
+	FilesModified []string       `yaml:"files_modified,omitempty"`
+	NextSteps     []string       `yaml:"next_steps,omitempty"`
+	Extra         map[string]any `yaml:",inline"`
 }
 
 // HumanNote represents a note from a human to agents
 type HumanNote struct {
-	Timestamp time.Time `yaml:"timestamp"`
-	Message   string    `yaml:"message"`
-	For       string    `yaml:"for"`
+	Timestamp time.Time      `yaml:"timestamp"`
+	Message   string         `yaml:"message"`
+	For       string         `yaml:"for"`
+	Extra     map[string]any `yaml:",inline"`
 }
 
 // SpecChange tracks modifications to specification documents
 type SpecChange struct {
-	Timestamp   time.Time `yaml:"timestamp"`
-	Spec        string    `yaml:"spec"`
-	Change      string    `yaml:"change"`
-	TriggeredBy string    `yaml:"triggered_by"`
+	Timestamp   time.Time      `yaml:"timestamp"`
+	Spec        string         `yaml:"spec"`
+	Change      string         `yaml:"change"`
+	TriggeredBy string         `yaml:"triggered_by"`
+	Extra       map[string]any `yaml:",inline"`
 }
 
 // Anomaly represents an execution anomaly that may trigger circuit breaker
@@ -468,6 +482,7 @@ type Anomaly struct {
 	Reporter  string         `yaml:"reporter"`
 	Type      string         `yaml:"type"`
 	Details   map[string]any `yaml:"details"`
+	Extra     map[string]any `yaml:",inline"`
 }
 
 // IsValidType checks if the anomaly type is valid
@@ -487,6 +502,7 @@ type CircuitBreaker struct {
 	Status         string                  `yaml:"status"` // "OK" or "TRIGGERED"
 	CurrentTrigger *CircuitBreakerTrigger  `yaml:"current_trigger,omitempty"`
 	History        []CircuitBreakerHistory `yaml:"history"`
+	Extra          map[string]any          `yaml:",inline"`
 }
 
 // IsValidStatus checks if the circuit breaker status is valid
@@ -496,20 +512,22 @@ func (cb *CircuitBreaker) IsValidStatus() bool {
 
 // CircuitBreakerTrigger represents an active circuit breaker trigger
 type CircuitBreakerTrigger struct {
-	Timestamp  time.Time `yaml:"timestamp"`
-	Pattern    string    `yaml:"pattern"`
-	Severity   string    `yaml:"severity"`
-	ReportFile string    `yaml:"report_file"`
+	Timestamp  time.Time      `yaml:"timestamp"`
+	Pattern    string         `yaml:"pattern"`
+	Severity   string         `yaml:"severity"`
+	ReportFile string         `yaml:"report_file"`
+	Extra      map[string]any `yaml:",inline"`
 }
 
 // CircuitBreakerHistory tracks historical circuit breaker checks
 type CircuitBreakerHistory struct {
-	Timestamp  time.Time  `yaml:"timestamp"`
-	Pattern    *string    `yaml:"pattern,omitempty"`
-	Severity   *string    `yaml:"severity,omitempty"`
-	Result     string     `yaml:"result"` // "OK" or "TRIGGERED"
-	Resolution *string    `yaml:"resolution,omitempty"`
-	ResolvedAt *time.Time `yaml:"resolved_at,omitempty"`
+	Timestamp  time.Time      `yaml:"timestamp"`
+	Pattern    *string        `yaml:"pattern,omitempty"`
+	Severity   *string        `yaml:"severity,omitempty"`
+	Result     string         `yaml:"result"` // "OK" or "TRIGGERED"
+	Resolution *string        `yaml:"resolution,omitempty"`
+	ResolvedAt *time.Time     `yaml:"resolved_at,omitempty"`
+	Extra      map[string]any `yaml:",inline"`
 }
 
 // SystemMode represents the operational mode of the Liza system
@@ -593,20 +611,21 @@ const (
 
 // Config holds system configuration parameters
 type Config struct {
-	MaxCoderIterations   int        `yaml:"max_coder_iterations"`
-	MaxReviewCycles      int        `yaml:"max_review_cycles"`
-	HeartbeatInterval    int        `yaml:"heartbeat_interval"`
-	LeaseDuration        int        `yaml:"lease_duration"`
-	CoderPollInterval    int        `yaml:"coder_poll_interval"`
-	CoderMaxWait         int        `yaml:"coder_max_wait"`
-	PlannerPollInterval  int        `yaml:"planner_poll_interval"`
-	PlannerMaxWait       int        `yaml:"planner_max_wait"`
-	ReviewerPollInterval int        `yaml:"reviewer_poll_interval"`
-	ReviewerMaxWait      int        `yaml:"reviewer_max_wait"`
-	IntegrationBranch    string     `yaml:"integration_branch"`
-	EscalationWebhook    *string    `yaml:"escalation_webhook,omitempty"`
-	Mode                 SystemMode `yaml:"mode,omitempty"`
-	ModeChangedAt        *time.Time `yaml:"mode_changed_at,omitempty"`
-	ModeChangedBy        *string    `yaml:"mode_changed_by,omitempty"`
-	DiagnosticLogging    bool       `yaml:"diagnostic_logging,omitempty"`
+	MaxCoderIterations   int            `yaml:"max_coder_iterations"`
+	MaxReviewCycles      int            `yaml:"max_review_cycles"`
+	HeartbeatInterval    int            `yaml:"heartbeat_interval"`
+	LeaseDuration        int            `yaml:"lease_duration"`
+	CoderPollInterval    int            `yaml:"coder_poll_interval"`
+	CoderMaxWait         int            `yaml:"coder_max_wait"`
+	PlannerPollInterval  int            `yaml:"planner_poll_interval"`
+	PlannerMaxWait       int            `yaml:"planner_max_wait"`
+	ReviewerPollInterval int            `yaml:"reviewer_poll_interval"`
+	ReviewerMaxWait      int            `yaml:"reviewer_max_wait"`
+	IntegrationBranch    string         `yaml:"integration_branch"`
+	EscalationWebhook    *string        `yaml:"escalation_webhook,omitempty"`
+	Mode                 SystemMode     `yaml:"mode,omitempty"`
+	ModeChangedAt        *time.Time     `yaml:"mode_changed_at,omitempty"`
+	ModeChangedBy        *string        `yaml:"mode_changed_by,omitempty"`
+	DiagnosticLogging    bool           `yaml:"diagnostic_logging,omitempty"`
+	Extra                map[string]any `yaml:",inline"`
 }

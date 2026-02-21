@@ -1552,3 +1552,183 @@ func BenchmarkBlackboardReadUncached(b *testing.B) {
 		}
 	}
 }
+
+// TestBlackboardModifyPreservesUnknownFields verifies that YAML fields not present
+// in the Go structs survive a Modify round-trip (read → unmarshal → mutate → marshal → write).
+func TestBlackboardModifyPreservesUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	// Write YAML with unknown fields at root, task, and agent levels,
+	// including nested structures (maps, lists) to exercise recursive preservation.
+	yamlWithExtras := `version: 1
+custom_root_field: preserved
+custom_nested:
+    key_a: 1
+    key_b:
+        - alpha
+        - beta
+goal:
+    id: goal-1
+    description: Test goal
+    spec_ref: spec.md
+    created: 2025-01-17T14:00:00Z
+    status: IN_PROGRESS
+tasks:
+    - id: task-1
+      description: Test task
+      status: READY
+      priority: 1
+      spec_ref: spec.md
+      done_when: Tests pass
+      scope: small
+      created: 2025-01-17T14:00:00Z
+      history: []
+      custom_task_field: also preserved
+agents:
+    agent-1:
+        role: coder
+        status: IDLE
+        heartbeat: 2025-01-17T14:00:00Z
+        terminal: /dev/pts/1
+        iterations_total: 0
+        context_percent: 0
+        custom_agent_field: agent extra
+config:
+    max_coder_iterations: 5
+    max_review_cycles: 3
+    heartbeat_interval: 30
+    lease_duration: 300
+    coder_poll_interval: 10
+    coder_max_wait: 600
+    integration_branch: main
+    custom_config_field: config extra
+circuit_breaker:
+    last_check: 2025-01-17T14:00:00Z
+    status: "OK"
+sprint:
+    id: sprint-1
+    goal_ref: goal-1
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: 2025-01-17T14:00:00Z
+        deadline: 2025-01-24T14:00:00Z
+    status: IN_PROGRESS
+    metrics:
+        tasks_done: 0
+`
+	if err := os.WriteFile(statePath, []byte(yamlWithExtras), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+
+	// Modify a known field (task description) — this triggers a full round-trip.
+	err := bb.Modify(func(s *models.State) error {
+		if len(s.Tasks) == 0 {
+			return fmt.Errorf("no tasks found")
+		}
+		s.Tasks[0].Description = "Modified description"
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Modify failed: %v", err)
+	}
+
+	// Read back raw YAML and verify unknown fields survived.
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	content := string(data)
+
+	checks := []struct {
+		label string
+		field string
+	}{
+		{"root-level unknown field", "custom_root_field: preserved"},
+		{"root-level nested map key", "key_a: 1"},
+		{"root-level nested list", "- alpha"},
+		{"task-level unknown field", "custom_task_field: also preserved"},
+		{"agent-level unknown field", "custom_agent_field: agent extra"},
+		{"config-level unknown field", "custom_config_field: config extra"},
+	}
+	for _, check := range checks {
+		if !strings.Contains(content, check.field) {
+			t.Errorf("%s lost during round-trip; expected %q in output:\n%s", check.label, check.field, content)
+		}
+	}
+
+	// Also verify the modification actually applied.
+	if !strings.Contains(content, "Modified description") {
+		t.Error("Modification not applied: expected 'Modified description' in output")
+	}
+}
+
+// TestBlackboardWritePreservesUnknownFields verifies that a Read+Write cycle
+// preserves unknown fields (as opposed to Modify which does it atomically).
+func TestBlackboardWritePreservesUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	yamlWithExtras := `version: 1
+experimental_section: {key: value}
+goal:
+    id: goal-1
+    description: Test
+    spec_ref: spec.md
+    created: 2025-01-17T14:00:00Z
+    status: IN_PROGRESS
+tasks: []
+agents: {}
+config:
+    max_coder_iterations: 5
+    max_review_cycles: 3
+    heartbeat_interval: 30
+    lease_duration: 300
+    coder_poll_interval: 10
+    coder_max_wait: 600
+    integration_branch: main
+circuit_breaker:
+    last_check: 2025-01-17T14:00:00Z
+    status: "OK"
+sprint:
+    id: sprint-1
+    goal_ref: goal-1
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: 2025-01-17T14:00:00Z
+        deadline: 2025-01-24T14:00:00Z
+    status: IN_PROGRESS
+    metrics:
+        tasks_done: 0
+`
+	if err := os.WriteFile(statePath, []byte(yamlWithExtras), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+
+	// Read → mutate → Write (the non-atomic path).
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	state.Version = 2
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Verify unknown field survived.
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if !strings.Contains(string(data), "experimental_section") {
+		t.Errorf("Unknown field lost during Read+Write round-trip:\n%s", string(data))
+	}
+}
