@@ -429,6 +429,7 @@ Long-term concerns about system evolution.
 - [x] Supervisor god file — decomposed 1,426 LOC into 6 cohesive files within `internal/agent/` by responsibility *(software-architecture-review)*
 - [x] Agent → commands upward dependency — extracted business logic to `internal/ops/` package, `agent` no longer imports `commands` *(software-architecture-review)*
 - [x] Commands presentation+logic coupling — extracted all 15 MCP-exposed mutation commands to `internal/ops/`; MCP handlers call ops directly; commands are thin presentation wrappers *(software-architecture-review)*
+- [x] Monolithic DeleteTaskCommand — extracted business logic to `ops.CheckDeleteTask()` + `ops.DeleteTask()` (220→~75 LOC); interactive confirmation remains at CLI level *(software-architecture-review)*
 
 ---
 
@@ -589,7 +590,7 @@ Issues identified through code-level architectural analysis (patterns, structure
 
 **Issue:** Direct `os.Stdin` reads via `bufio.NewReader(os.Stdin)` or `bufio.NewScanner(os.Stdin)` in: `embedded/embedded.go` (2 locations: `WriteClaudeSettings`, `WriteMCPSettings`), `commands/setup.go` (2 locations), `commands/init.go` (1), `commands/delete_task.go` (2), `commands/delete_agent.go` (1). Total: 8 locations across 5 files in 2 packages.
 
-**Current state:** The ops extraction resolved the MCP protocol corruption risk — MCP handlers now call `ops.*` functions that have zero I/O. The remaining stdin reads are in CLI-only interactive commands (`setup`, `init`, `delete_task`) and `embedded/` settings management, none of which are MCP-exposed. `delete_agent.go` retains interactive confirmation at the CLI wrapper level but delegates business logic to `ops.DeleteAgent()`.
+**Current state:** The ops extraction resolved the MCP protocol corruption risk — MCP handlers now call `ops.*` functions that have zero I/O. The remaining stdin reads are in CLI-only interactive commands (`setup`, `init`, `delete_task`, `delete_agent`) and `embedded/` settings management, none of which are MCP-exposed. Both `delete_task.go` and `delete_agent.go` retain interactive confirmation at the CLI wrapper level but delegate business logic to `ops.CheckDeleteTask()` + `ops.DeleteTask()` and `ops.DeleteAgent()` respectively — business logic is fully testable without stdin.
 
 **Remaining concern:** Functions with hardwired stdin still cannot be used non-interactively. Tests work around this by replacing `os.Stdin` with pipe readers (observed in 8+ test files) — fragile and not safe for concurrent test execution.
 

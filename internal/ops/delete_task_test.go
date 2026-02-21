@@ -1,0 +1,440 @@
+package ops
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+// setupStateWithDeps creates state containing a target task and a dependent task.
+func setupStateWithDeps(t *testing.T, tmpDir string) string {
+	t.Helper()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()))
+	dep := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, time.Now().UTC())
+	dep.DependsOn = []string{"task-1"}
+	state.Tasks = append(state.Tasks, dep)
+	testhelpers.WriteInitialState(t, stateFile, state)
+	return stateFile
+}
+
+// --- CheckDeleteTask tests ---
+
+func TestCheckDeleteTask_Validation(t *testing.T) {
+	_, err := CheckDeleteTask("/nonexistent", "", false)
+	if err == nil {
+		t.Fatal("Expected error for empty task ID")
+	}
+	if !strings.Contains(err.Error(), "task ID required") {
+		t.Errorf("Error = %q, want to contain 'task ID required'", err.Error())
+	}
+}
+
+func TestCheckDeleteTask_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.WriteInitialState(t, stateFile, testhelpers.CreateValidState())
+
+	_, err := CheckDeleteTask(tmpDir, "nonexistent", false)
+	if err == nil {
+		t.Fatal("Expected error for nonexistent task")
+	}
+	if !strings.Contains(err.Error(), "task not found") {
+		t.Errorf("Error = %q, want to contain 'task not found'", err.Error())
+	}
+}
+
+func TestCheckDeleteTask_StatusBlocked(t *testing.T) {
+	now := time.Now().UTC()
+	validLease := now.Add(1 * time.Hour)
+
+	tests := []struct {
+		name       string
+		status     models.TaskStatus
+		lease      *time.Time // non-nil sets LeaseExpires
+		wantErrMsg string
+	}{
+		{"MERGED", models.TaskStatusMerged, nil, "cannot delete MERGED task"},
+		{"IMPLEMENTING with active lease", models.TaskStatusImplementing, &validLease, "actively being worked on"},
+		{"READY_FOR_REVIEW", models.TaskStatusReadyForReview, nil, "under review"},
+		{"REVIEWING", models.TaskStatusReviewing, nil, "under review"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			state := testhelpers.CreateValidState()
+			task := testhelpers.BuildTaskByStatus("task-1", tt.status, now)
+			task.LeaseExpires = tt.lease
+			state.Tasks = append(state.Tasks, task)
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			_, err := CheckDeleteTask(tmpDir, "task-1", false)
+			if err == nil {
+				t.Fatalf("Expected error for %s task", tt.status)
+			}
+			if !strings.Contains(err.Error(), tt.wantErrMsg) {
+				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.wantErrMsg)
+			}
+		})
+	}
+}
+
+func TestCheckDeleteTask_MergedForce(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC()))
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	info, err := CheckDeleteTask(tmpDir, "task-1", true)
+	if err != nil {
+		t.Fatalf("CheckDeleteTask() error: %v", err)
+	}
+	if info.Status != models.TaskStatusMerged {
+		t.Errorf("Status = %q, want MERGED", info.Status)
+	}
+}
+
+func TestCheckDeleteTask_DependentsBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupStateWithDeps(t, tmpDir)
+
+	_, err := CheckDeleteTask(tmpDir, "task-1", false)
+	if err == nil {
+		t.Fatal("Expected error for task with dependents")
+	}
+	if !strings.Contains(err.Error(), "depend on it") {
+		t.Errorf("Error = %q, want to contain 'depend on it'", err.Error())
+	}
+}
+
+func TestCheckDeleteTask_DependentsForce(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupStateWithDeps(t, tmpDir)
+
+	info, err := CheckDeleteTask(tmpDir, "task-1", true)
+	if err != nil {
+		t.Fatalf("CheckDeleteTask() error: %v", err)
+	}
+	if len(info.DependentTasks) != 1 || info.DependentTasks[0] != "task-2" {
+		t.Errorf("DependentTasks = %v, want [task-2]", info.DependentTasks)
+	}
+}
+
+func TestCheckDeleteTask_ReturnsInfo(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusApproved, time.Now().UTC())
+	wt := "worktrees/task-1"
+	task.Worktree = &wt
+	state.Tasks = append(state.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	info, err := CheckDeleteTask(tmpDir, "task-1", false)
+	if err != nil {
+		t.Fatalf("CheckDeleteTask() error: %v", err)
+	}
+	if info.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", info.TaskID, "task-1")
+	}
+	if info.Status != models.TaskStatusApproved {
+		t.Errorf("Status = %q, want APPROVED", info.Status)
+	}
+	if !info.HasWorktree {
+		t.Error("HasWorktree should be true")
+	}
+}
+
+// --- DeleteTask tests ---
+
+func TestDeleteTask_Validation(t *testing.T) {
+	_, err := DeleteTask("/nonexistent", "", false, false, "reason")
+	if err == nil {
+		t.Fatal("Expected error for empty task ID")
+	}
+	if !strings.Contains(err.Error(), "task ID required") {
+		t.Errorf("Error = %q, want to contain 'task ID required'", err.Error())
+	}
+}
+
+func TestDeleteTask_SuccessfulDeletion(t *testing.T) {
+	for _, status := range []models.TaskStatus{models.TaskStatusDraft, models.TaskStatusReady} {
+		t.Run(string(status), func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			state := testhelpers.CreateValidState()
+			state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-1", status, time.Now().UTC()))
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			result, err := DeleteTask(tmpDir, "task-1", false, false, "test deletion")
+			if err != nil {
+				t.Fatalf("DeleteTask() error: %v", err)
+			}
+			if result.PreviousStatus != status {
+				t.Errorf("PreviousStatus = %q, want %q", result.PreviousStatus, status)
+			}
+
+			bb := db.New(stateFile)
+			readState, err := bb.Read()
+			if err != nil {
+				t.Fatalf("Failed to read state: %v", err)
+			}
+			if readState.FindTask("task-1") != nil {
+				t.Error("Task should be removed from state")
+			}
+		})
+	}
+}
+
+func TestDeleteTask_ForceMerged(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC()))
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := DeleteTask(tmpDir, "task-1", true, false, "forced deletion")
+	if err != nil {
+		t.Fatalf("DeleteTask() error: %v", err)
+	}
+	if result.PreviousStatus != models.TaskStatusMerged {
+		t.Errorf("PreviousStatus = %q, want MERGED", result.PreviousStatus)
+	}
+}
+
+func TestDeleteTask_ClearsAgentState(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraft, time.Now().UTC())
+	agentID := "coder-1"
+	task.AssignedTo = &agentID
+	state.Tasks = append(state.Tasks, task)
+	taskRef := "task-1"
+	state.Agents["coder-1"] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: &taskRef,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := DeleteTask(tmpDir, "task-1", false, false, "cleanup")
+	if err != nil {
+		t.Fatalf("DeleteTask() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	agent, exists := readState.Agents["coder-1"]
+	if !exists {
+		t.Fatal("Agent should still exist")
+	}
+	if agent.CurrentTask != nil {
+		t.Errorf("Agent CurrentTask should be nil, got %v", agent.CurrentTask)
+	}
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Agent Status = %q, want idle", agent.Status)
+	}
+}
+
+func TestDeleteTask_RemovesFromSprintScope(t *testing.T) {
+	for _, scope := range []string{"planned", "stretch"} {
+		t.Run(scope, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			state := testhelpers.CreateValidState()
+			state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()))
+			switch scope {
+			case "planned":
+				state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, "task-1")
+			case "stretch":
+				state.Sprint.Scope.Stretch = append(state.Sprint.Scope.Stretch, "task-1")
+			}
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			_, err := DeleteTask(tmpDir, "task-1", false, false, "test")
+			if err != nil {
+				t.Fatalf("DeleteTask() error: %v", err)
+			}
+
+			bb := db.New(stateFile)
+			readState, err := bb.Read()
+			if err != nil {
+				t.Fatalf("Failed to read state: %v", err)
+			}
+			var ids []string
+			switch scope {
+			case "planned":
+				ids = readState.Sprint.Scope.Planned
+			case "stretch":
+				ids = readState.Sprint.Scope.Stretch
+			}
+			for _, id := range ids {
+				if id == "task-1" {
+					t.Errorf("Task should have been removed from sprint.scope.%s", scope)
+				}
+			}
+		})
+	}
+}
+
+func TestDeleteTask_AddsAuditTrail(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Tasks = append(state.Tasks, testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraft, time.Now().UTC()))
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := DeleteTask(tmpDir, "task-1", false, false, "no longer needed")
+	if err != nil {
+		t.Fatalf("DeleteTask() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if len(readState.HumanNotes) == 0 {
+		t.Fatal("Expected human note to be added")
+	}
+	lastNote := readState.HumanNotes[len(readState.HumanNotes)-1]
+	if !strings.Contains(lastNote.Message, "task-1") {
+		t.Errorf("Note message = %q, want to contain task ID", lastNote.Message)
+	}
+	if !strings.Contains(lastNote.Message, "no longer needed") {
+		t.Errorf("Note message = %q, want to contain reason", lastNote.Message)
+	}
+	if lastNote.For != "all" {
+		t.Errorf("Note For = %q, want 'all'", lastNote.For)
+	}
+}
+
+// --- DeleteTask precondition enforcement (direct calls bypassing CheckDeleteTask) ---
+
+func TestDeleteTask_StatusBlocked(t *testing.T) {
+	now := time.Now().UTC()
+	validLease := now.Add(1 * time.Hour)
+
+	tests := []struct {
+		name       string
+		status     models.TaskStatus
+		lease      *time.Time
+		wantErrMsg string
+	}{
+		{"MERGED", models.TaskStatusMerged, nil, "cannot delete MERGED task"},
+		{"IMPLEMENTING with active lease", models.TaskStatusImplementing, &validLease, "actively being worked on"},
+		{"READY_FOR_REVIEW", models.TaskStatusReadyForReview, nil, "under review"},
+		{"REVIEWING", models.TaskStatusReviewing, nil, "under review"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			state := testhelpers.CreateValidState()
+			task := testhelpers.BuildTaskByStatus("task-1", tt.status, now)
+			task.LeaseExpires = tt.lease
+			state.Tasks = append(state.Tasks, task)
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			_, err := DeleteTask(tmpDir, "task-1", false, false, "test")
+			if err == nil {
+				t.Fatalf("Expected error for %s task", tt.status)
+			}
+			if !strings.Contains(err.Error(), tt.wantErrMsg) {
+				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.wantErrMsg)
+			}
+		})
+	}
+}
+
+func TestDeleteTask_DependentsBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile := setupStateWithDeps(t, tmpDir)
+
+	_, err := DeleteTask(tmpDir, "task-1", false, false, "test")
+	if err == nil {
+		t.Fatal("Expected error for task with dependents")
+	}
+	if !strings.Contains(err.Error(), "depends on it") {
+		t.Errorf("Error = %q, want to contain 'depends on it'", err.Error())
+	}
+
+	// Verify task was NOT deleted
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.FindTask("task-1") == nil {
+		t.Error("Task should still exist after blocked deletion")
+	}
+}
+
+func TestDeleteTask_DependentsForce(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupStateWithDeps(t, tmpDir)
+
+	result, err := DeleteTask(tmpDir, "task-1", true, false, "forced")
+	if err != nil {
+		t.Fatalf("DeleteTask() error: %v", err)
+	}
+	if result.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+}
+
+// --- Worktree handling ---
+
+func TestDeleteTask_NoWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraft, time.Now().UTC())
+	task.Worktree = nil
+	state.Tasks = append(state.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := DeleteTask(tmpDir, "task-1", false, false, "test")
+	if err != nil {
+		t.Fatalf("DeleteTask() error: %v", err)
+	}
+	if result.WorktreeDeleted {
+		t.Error("WorktreeDeleted should be false when no worktree")
+	}
+	if result.WorktreePreserved {
+		t.Error("WorktreePreserved should be false when no worktree")
+	}
+}
+
+func TestDeleteTask_WorktreePreserved(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraft, time.Now().UTC())
+	wt := "worktrees/task-1"
+	task.Worktree = &wt
+	state.Tasks = append(state.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := DeleteTask(tmpDir, "task-1", false, false, "test")
+	if err != nil {
+		t.Fatalf("DeleteTask() error: %v", err)
+	}
+	if result.WorktreeDeleted {
+		t.Error("WorktreeDeleted should be false when deleteWorktree=false")
+	}
+	if !result.WorktreePreserved {
+		t.Error("WorktreePreserved should be true when worktree exists but deleteWorktree=false")
+	}
+}
