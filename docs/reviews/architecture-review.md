@@ -1,7 +1,7 @@
 # Architecture Review — Liza
 
 **Date:** 2026-02-21
-**Mode:** Adversarial (after pass 7)
+**Mode:** Adversarial (after pass 12)
 **Reviewer:** software-architecture-review skill
 
 ---
@@ -683,6 +683,154 @@ These are operational tuning parameters with no path to `models.Config`.
 
 **Direction:** Document current behavior accurately now. Optionally add explicit `testing.Short()` guards later if the desired behavior is to skip integration tests in short mode.
 
+#### Smell: Pairing initialization doc pointer drift (`docs/USAGE.md`) *(Adversarial pass, entry: specs/)*
+
+**Signal:** `contracts/PAIRING_MODE.md` Session Initialization still requires reading `docs/USAGE.md`, but that file does not exist. Canonical docs are now split (`docs/USAGE_PAIRING.md`, `docs/USAGE_MULTI_AGENTS.md`, indexed in `docs/README.md`).
+
+**Impact:** High. The contract's startup procedure can fail on a missing file before work begins, producing avoidable initialization breaks and inconsistent behavior across agents.
+
+**Direction:** Update Session Initialization to reference canonical docs (`docs/USAGE_PAIRING.md` minimum, or `docs/README.md` as resolver + mode-specific usage doc).
+
+#### Smell: Watch stall detection parses YAML text directly *(Adversarial pass, entry: specs/)*
+
+**Signal:** `internal/commands/watch.go` `checkStalled()` reads `log.yaml` with `os.ReadFile`, then scans lines for raw `timestamp:` text. A typed parser already exists in `internal/log/logger.go` (`Logger.Read()` unmarshals YAML entries).
+
+**Impact:** Medium. Stall detection depends on a brittle text pattern rather than schema parsing; formatting changes or malformed lines can silently produce false negatives.
+
+**Direction:** Reuse `internal/log` typed parsing (`Logger.Read`) or move `last_activity` to explicit state instead of scraping log text.
+
+#### Smell: Sprint governance Vision link is broken *(Adversarial pass, entry: specs/)*
+
+**Signal:** `specs/protocols/sprint-governance.md` links to `../vision.md`, while canonical Vision in this repo is `specs/build/0 - Vision.md` (as indexed in `specs/README.md`).
+
+**Impact:** Low. Navigation drift weakens spec coherence and slows onboarding/review.
+
+**Direction:** Update the related-doc link to the canonical Vision path.
+
+#### Smell: CLI contract coverage gap in `cmd/liza/main.go` *(Adversarial pass, entry: tests/)*
+
+**Signal:** The command tree defines 31 cobra commands in `cmd/liza/main.go`, but CLI parser/wiring execution is covered only by `cmd/liza/get_test.go` through `rootCmd.SetArgs(...); rootCmd.Execute()`. Most command behavior is validated at `internal/commands/*_test.go` level (direct function calls), which bypasses cobra parsing, flag wiring, and env/flag precedence paths. Helper paths like `requireAgentID()` and `resolveChangedBy()` are currently uncovered in statement-level coverage.
+
+**Impact:** Medium. A regression in CLI contract wiring (flag names, env fallback precedence, command registration) can pass package-level command tests and fail only in the actual binary invocation path.
+
+**Direction:** Add focused `cmd/liza` command-tree tests for representative mutation commands (`wt-merge`, `claim-task`, `submit-verdict`) and identity resolution paths (`--agent-id`, `LIZA_AGENT_ID`, `--changed-by`) to validate the CLI surface, not just command internals.
+
+#### Smell: Temporal test coupling and non-parallelizable suite *(Adversarial pass, entry: tests/)*
+
+**Signal:** Test suite currently has 93 `_test.go` files with 0 uses of `t.Parallel()` and 21 explicit `time.Sleep()` calls (notably in watcher/heartbeat paths). Shared process-level globals exist (`db.instances` singleton map and package-level `rootCmd`), which encourages serial execution and timing-based synchronization.
+
+**Impact:** Medium. Timing-sensitive tests are more brittle and slower, and the all-serial suite limits scalability as test volume grows. This is an architectural testability concern rather than a single flaky test.
+
+**Direction:** Replace fixed sleeps with event-driven synchronization where possible, add explicit reset helpers for global state between tests, and introduce `t.Parallel()` selectively in pure/stateless tests to increase confidence and reduce runtime.
+
+#### Smell: Configured iteration limits are declarative but unenforced *(Adversarial pass, entry: config/)*
+
+**Signal:** `config.max_coder_iterations` and `config.max_review_cycles` are defined in `models.Config` and documented as control limits, but runtime task flow does not enforce either limit before continuing loops. `SubmitVerdict` increments review counters without threshold handling, and no non-test production path reads `MaxCoderIterations` or `MaxReviewCycles`. `task.max_iterations` exists in the `Task` model and specs but has no runtime consumer.
+
+**Impact:** High. Operators can tune iteration limits in `state.yaml` and receive no behavioral change. This creates false safety assumptions around runaway loops and escalation behavior.
+
+**Direction:** Implement an effective-limit policy (`task.max_iterations` override else `config.max_coder_iterations`) and enforce at loop transition points (claim/reclaim and rejection flow). Apply equivalent enforcement for review cycles using `config.max_review_cycles`, with explicit BLOCKED/escalation transitions when limits are reached.
+
+#### Smell: `heartbeat_interval` config is modeled/documented but ignored at runtime *(Adversarial pass, entry: config/)*
+
+**Signal:** `Config.HeartbeatInterval` is exposed in schema/docs and inspect output, but supervisor heartbeat startup passes a hardcoded `60s` interval (`HeartbeatConfig{Interval: 60 * time.Second}`).
+
+**Impact:** Medium. Performance tuning guidance and operational expectations are misleading; changing `config.heartbeat_interval` has no effect on heartbeat frequency.
+
+**Direction:** Source heartbeat interval from `state.Config.HeartbeatInterval` with fallback to `DefaultHeartbeatInterval`, and validate bounds in state validation.
+
+#### Smell: `LIZA_LOG_LEVEL` is documented but not implemented *(Adversarial pass, entry: config/)*
+
+**Signal:** Docs define `LIZA_LOG_LEVEL`, but no runtime code path reads it; agent logger is initialized at fixed `slog.LevelInfo`.
+
+**Impact:** Low-medium. Documented observability control is a no-op, causing confusion during debugging/operations.
+
+**Direction:** Either implement environment-driven level selection (with validation and defaults) or remove this variable from docs to keep contract-to-runtime alignment.
+
+#### Smell: MCP parse-error response write failure is ignored *(Adversarial pass, entry: error handling)*
+
+**Signal:** `internal/mcp/server.go:252` calls `transport.WriteError(...)` and discards its return value in the parse-error path.
+
+**Impact:** High. If stdout/transport write is broken, the server silently continues after failing to send protocol errors, leaving the MCP session in an unobservable degraded state.
+
+**Direction:** Make this path terminal: if `WriteError` fails, return an error and stop the server loop.
+
+#### Smell: Cleanup failures are suppressed in rebase/worktree recovery paths *(Adversarial pass, entry: error handling)*
+
+**Signal:** Best-effort cleanup drops failures in multiple mutation flows:
+- `internal/ops/submit_review.go:88` ignores `AbortRebase` error
+- `internal/git/worktree.go:145`, `internal/git/worktree.go:183`, `internal/git/worktree.go:187` ignore cleanup errors
+- `internal/ops/claim_task.go:282-283` drops cleanup errors on failed claim commit
+- `internal/ops/wt_delete.go:61` ignores branch-deletion error
+
+**Impact:** Medium. Primary operation failures are reported, but cleanup failures that can leave repo state partially dirty are hidden from callers and operators.
+
+**Direction:** Keep best-effort semantics where appropriate, but surface cleanup outcomes as warning/error in result structs and command output. Escalate to error when cleanup failure can leave the system in a materially inconsistent state.
+
+#### Smell: Stale-lock cleanup errors are discarded during lock recovery *(Adversarial pass, entry: error handling)*
+
+**Signal:** `internal/filelock/filelock.go:170` calls `cleanupStaleLock()` without checking its error before retrying lock acquisition.
+
+**Impact:** Medium. Permission/filesystem failures during stale-lock recovery are masked, reducing diagnosability and conflating cleanup failure with ordinary stale-lock contention.
+
+**Direction:** Check and propagate `cleanupStaleLock()` failure (classified as filesystem lock error) before retrying lock acquisition.
+
+#### Smell: File existence checks often collapse non-existence with other stat failures *(Adversarial pass, entry: error handling)*
+
+**Signal:** Several paths only branch on `err == nil` or `os.IsNotExist(err)` (for example `internal/commands/setup.go:33`, `internal/commands/init.go:32`, `internal/commands/init.go:38`, `internal/git/worktree.go:162`) without explicit handling for permission/I/O errors.
+
+**Impact:** Low-medium. Permission or transient filesystem errors can be misreported as simple presence/absence outcomes, producing misleading diagnostics and control flow.
+
+**Direction:** Use explicit triage on `os.Stat` calls: exists, not-exist, and other-error (returned with context).
+
+#### Smell: `submit-for-review` commit input is required but not authoritative *(Adversarial pass, entry: data flow)*
+
+**Signal:** `submit-for-review` interfaces require `commit_sha` (`cmd/liza/main.go:248`, `internal/mcp/server.go:425`, `internal/ops/submit_review.go:29`), but runtime does not validate it against worktree HEAD and always persists post-rebase HEAD as `review_commit` (`internal/ops/submit_review.go:108`, `internal/ops/submit_review.go:137`).
+
+**Impact:** High. API/CLI contracts imply caller-provided commit authority while execution ignores that value after non-empty validation. This creates interface-to-runtime drift and weakens traceability of reviewed content.
+
+**Direction:** Align contract and runtime semantics: either remove `commit_sha` from command/tool surfaces and docs (derive internally), or enforce strict equality between provided `commit_sha` and pre-rebase worktree HEAD.
+
+#### Smell: `DeleteTask` side effects can outpace state commit under race *(Adversarial pass, entry: data flow)*
+
+**Signal:** `internal/ops/delete_task.go` performs worktree/branch side effects before atomic state mutation (`internal/ops/delete_task.go:136`, `internal/ops/delete_task.go:162`). If lock-time revalidation fails (`internal/ops/delete_task.go:168`), the function returns error after side effects may already have executed (`internal/ops/delete_task.go:207`).
+
+**Impact:** Medium. Under concurrency, task metadata can remain in blackboard while associated worktree/branch is already deleted, breaking state↔filesystem consistency.
+
+**Direction:** Make destructive side effects transactional in effect: move git side effects after successful state mutation, or add compensating reconciliation when post-side-effect state commit fails.
+
+#### Smell: REJECTED reassignment deletes old worktree before replacement is secured *(Adversarial pass, entry: documented smells)*
+
+**Signal:** In `internal/ops/claim_task.go`, the different-coder REJECTED path removes existing worktree/branch (`internal/ops/claim_task.go:149`, `internal/ops/claim_task.go:150`) before attempting new worktree creation (`internal/ops/claim_task.go:153`). If creation fails, Phase 3 never commits state, but prior artifacts may already be gone.
+
+**Impact:** High. The task can remain REJECTED in state while its previous worktree has been deleted. This directly conflicts with reclaim paths that expect REJECTED worktree presence and creates state↔filesystem drift under failure.
+
+**Direction:** Make reassignment replacement atomic in effect: create/validate replacement first, then retire old artifacts; or add explicit compensating recovery markers when delete succeeded but recreate failed.
+
+#### Smell: Planner max-wait config is modeled but not authoritative *(Adversarial pass, entry: documented smells)*
+
+**Signal:** `Config.PlannerMaxWait` is defined and loaded (`internal/models/state.go:621`, `internal/agent/waitforwork.go:28`) but planner role unconditionally overrides effective max wait to one year (`internal/agent/waitforwork.go:50`).
+
+**Impact:** Medium. Operator tuning via config is misleading for planner wait behavior; `planner_max_wait` appears configurable but is effectively ignored in runtime semantics.
+
+**Direction:** Either honor configured `planner_max_wait` for planner agents or explicitly codify planner as infinite-wait and remove/deprecate the config knob.
+
+#### Smell: Watch stall detection and YAML append logging form O(n) growth paths *(Adversarial pass, entry: documented smells)*
+
+**Signal:** Watcher stall check reads/scans full `log.yaml` every cycle (`internal/commands/watch.go:409`, `internal/commands/watch.go:415`). `internal/log.Logger.Append` reads and rewrites full YAML entries on each append (`internal/log/logger.go:75`, `internal/log/logger.go:96`).
+
+**Impact:** Medium. As log volume grows, both periodic monitoring and append operations degrade with file size, creating avoidable I/O pressure in long-running sessions.
+
+**Direction:** Avoid full-file scans/rewrites for hot paths: track last activity in state, use typed incremental tailing, or move to append-friendly log format with bounded read windows.
+
+#### Smell: MCP stdio transport has no frame-size guard *(Adversarial pass, entry: documented smells)*
+
+**Signal:** `ReadRequest` uses `ReadBytes('\\n')` on stdio (`internal/mcp/protocol/stdio.go:27`) with no explicit maximum request size.
+
+**Impact:** Medium. A malformed or oversized single-line payload can force unbounded buffer growth, creating memory-pressure/DoS risk at the protocol boundary.
+
+**Direction:** Add a bounded reader/decoder with explicit max request size and fail-fast parse handling for oversized frames.
+
 ### 2.4 Patterns
 
 | Pattern | Where Used | Purpose |
@@ -721,6 +869,7 @@ These are operational tuning parameters with no path to `models.Config`.
 - `cmd/liza/main.go` (1,275 LOC): only 376 LOC tests (0.3:1) — CLI wiring, hard to unit test
 - `internal/models/diagnostics.go` (127 LOC): zero tests, no test file — work detection functions used by supervisor *(pass 4)*
 - `internal/mcp/protocol/errors.go` (68 LOC): zero tests, no test file *(pass 4)*
+- CLI contract coverage is narrow: only `get` is exercised through cobra `rootCmd.Execute()` path; most commands are validated below CLI layer *(Adversarial pass, entry: tests/)*
 
 **Critical 0% coverage paths** *(pass 4, Coverage lens)*:
 The 24.7% uncovered code concentrates in two patterns:
@@ -742,6 +891,8 @@ The 24.7% uncovered code concentrates in two patterns:
 
 **Test patterns:** Table-driven (dominant), filesystem isolation, hand-written mocks (no frameworks), real git operations. No property-based or fuzz testing. *(pass 3: `os.Stdin` monkey-patching pattern noted as testing boundary smell — 8+ test files)*
 
+**Temporal coupling signal** *(Adversarial pass, entry: tests/)*: 21 explicit `time.Sleep()` calls and 0 `t.Parallel()` uses across 93 test files indicate a mostly serialized, timing-driven suite. Combined with package-level global state (`rootCmd`, `db` singleton map), this creates avoidable runtime and brittleness pressure.
+
 **`check-testhelpers` build guard** *(pass 4)*: Makefile target prevents `testhelpers` import in production code — good practice for maintaining test/production boundary.
 
 ---
@@ -751,11 +902,26 @@ The 24.7% uncovered code concentrates in two patterns:
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
 | **High** | Task-state-machine spec drift (`BLOCKED -> READY`) *(Adversarial pass)* | `state-machines.md` and runtime transition map disagreed on valid lifecycle edge | Keep one source of truth: either implement `BLOCKED -> READY` end-to-end or keep docs/spec aligned to runtime (`SUPERSEDED`/`ABANDONED`) |
+| **High** | Pairing initialization doc pointer drift (`docs/USAGE.md`) *(Adversarial pass, entry: specs/)* | Session Initialization in `PAIRING_MODE.md` requires a non-existent file; startup protocol can fail before task execution | Point initialization to canonical docs (`USAGE_PAIRING.md` and/or `docs/README.md`) |
+| **High** | Iteration-limit config drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) *(Adversarial pass, entry: config/)* | Limits are modeled and documented but not enforced in runtime task/review loops | Implement effective-limit enforcement and explicit BLOCKED/escalation transitions |
+| **High** | MCP parse-error response write failure ignored *(Adversarial pass, entry: error handling)* | Server drops `WriteError` failure and keeps looping, hiding protocol output failure | Make parse-error response write failure terminal (`Run` should return error) |
+| **High** | `submit-for-review` `commit_sha` contract drift *(Adversarial pass, entry: data flow)* | CLI/MCP require SHA input but runtime ignores it and persists computed post-rebase HEAD | Align contract: remove SHA input from surfaces or enforce strict SHA validation against worktree HEAD |
+| **High** | REJECTED reassignment can orphan worktree on recreate failure *(Adversarial pass, entry: documented smells)* | Different-coder REJECTED claim deletes old worktree/branch before confirming replacement create succeeds | Reorder reassignment flow to secure replacement before teardown, or persist compensating recovery state |
 | ~~**Medium**~~ | ~~Magic number 1800 (lease default)~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constant in one location~~ |
 | ~~**Medium**~~ | ~~`executeTemplate` panics (2 locations)~~ *(resolved)* | Both `executeTemplate` and `executeCommandTemplate` return `(string, error)` | ~~Return error instead~~ |
 | ~~**Medium**~~ | ~~Inconsistent `NotFoundError` usage (25+ ad-hoc instances)~~ *(resolved)* | All sites migrated to `NotFoundError` with `ID` field; `classifyError` uses `errors.As` | ~~Adopt `NotFoundError` consistently~~ |
+| **Medium** | Cleanup failures suppressed in rebase/worktree recovery paths *(Adversarial pass, entry: error handling)* | Best-effort cleanup uses ignored errors across claim/review/worktree flows, masking residual dirty state | Surface cleanup outcomes as warning/error and escalate when inconsistency risk is material |
+| **Medium** | Stale-lock cleanup error is ignored before retry *(Adversarial pass, entry: error handling)* | Lock recovery drops `cleanupStaleLock()` failure context | Propagate cleanup failure as lock/filesystem error before retry |
+| **Medium** | Planner max-wait config is effectively ignored *(Adversarial pass, entry: documented smells)* | Planner wait loop overrides configured max wait with a fixed near-infinite duration | Either enforce `planner_max_wait` or remove/deprecate knob and document infinite planner semantics |
+| **Medium** | `heartbeat_interval` config not wired to heartbeat scheduler *(Adversarial pass, entry: config/)* | Runtime uses fixed `60s` heartbeat despite configurable field and docs | Source heartbeat interval from `state.Config.HeartbeatInterval` with bounds validation |
 | **Medium** | Troubleshooting worktree recovery branch mismatch *(Adversarial pass)* | Recovery command used `task-1`; runtime expects `task/<id>` | Standardize docs to `task/<id>` branch naming |
 | **Medium** | Testing `-short` behavior mismatch *(Adversarial pass)* | Docs implied integration tests skip in short mode; implementation currently runs them | Correct docs now; optionally add `testing.Short()` guards in integration tests if skip semantics are desired |
+| **Medium** | CLI contract coverage gap in `cmd/liza/main.go` *(Adversarial pass, entry: tests/)* | Command logic is tested, but cobra parsing/wiring/env precedence paths are barely exercised | Add `cmd/liza` parser/wiring tests for representative mutation commands and identity flags/env fallback |
+| **Medium** | Temporal test coupling and all-serial execution *(Adversarial pass, entry: tests/)* | 21 `time.Sleep()` calls, 0 `t.Parallel()`, and shared globals increase brittleness and slow feedback | Replace fixed sleeps with event signals, isolate globals, and parallelize stateless tests |
+| **Medium** | Watch/log paths scale with full-file scans and rewrites *(Adversarial pass, entry: documented smells)* | Stall detection scans entire `log.yaml` periodically and logger append rewrites full YAML | Move to incremental/append-friendly telemetry path and bounded reads |
+| **Medium** | MCP stdio request framing has no size cap *(Adversarial pass, entry: documented smells)* | `ReadBytes('\\n')` accepts unbounded line size at transport boundary | Add bounded decode path with explicit request-size limits |
+| **Medium** | Watch stall detection bypasses typed log parsing *(Adversarial pass, entry: specs/)* | `checkStalled` scans raw `timestamp:` lines instead of using structured log entries | Use `internal/log` typed parser or an explicit activity timestamp field |
+| **Medium** | `DeleteTask` side effects can desync state/worktree under race *(Adversarial pass, entry: data flow)* | Worktree/branch may be deleted before final lock-time state commit succeeds | Reorder side effects post-commit or add compensating reconciliation on commit failure |
 | **Medium** | Interactive stdin in library packages *(pass 3 — partially resolved: MCP-exposed commands no longer read stdin; remaining reads in CLI-only commands)* | Remaining 7 locations hardwired to terminal; tests use fragile monkey-patching | Accept `io.Reader`/callback for prompts |
 | ~~**Medium**~~ | ~~Poll/wait fallback magic numbers~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constants~~ |
 | **Medium** | `validate.validateAnomalies` at 13.3% coverage *(pass 4)* | Only 1 of 5 anomaly type validators exercised; relates to "Anomaly Detail Validation Incomplete" issue | Add test cases for all 5 anomaly type branches |
@@ -772,12 +938,16 @@ The 24.7% uncovered code concentrates in two patterns:
 | **Low** | `PlannerContextConfig` empty struct | Premature abstraction | Remove or document intent |
 | **Low** | Duplicated template execution pattern *(pass 3)* | `commands/templates.go` and `prompts/templates.go` near-identical | Extract shared template infrastructure or accept as coincidental similarity |
 | **Low** | `derefString` duplicated | In builder.go and templates.go funcMap | Use template func only |
+| **Low** | `LIZA_LOG_LEVEL` documentation drift *(Adversarial pass, entry: config/)* | Env var documented but no runtime reader; logger is fixed at INFO | Implement env-driven log level or remove from docs |
+| **Low** | `os.Stat` existence checks under-handle non-`IsNotExist` errors *(Adversarial pass, entry: error handling)* | Some presence checks classify only exists/missing and miss permission/I/O distinctions | Standardize tri-state handling (exists / missing / other error) with contextual wrapping |
+| **Low** | `get config.*` projection drift *(Adversarial pass, entry: config/)* | `inspect_field.getConfigField` exposes only a subset of `models.Config` fields | Expose the full config surface (or document intentionally hidden fields) |
 | **Low** | `validateTaskInvariants` monolithic if-chain *(pass 7)* | 142 LOC, ~15 checks ungrouped by status; hard to verify completeness | Group checks by status or use switch |
 | **Low** | High nesting in `claiming.go` helpers *(pass 7)* | `handleApprovedMerges` depth 6, `resumeHandoffTask` depth 5 despite short LOC | Extract inner merge-attempt body |
 | **Low** | `cmd/liza/main.go` (1,275 LOC) *(pass 2)* | Organizational god file; behavioral complexity is low | Consider splitting cobra definitions into per-command files if growth continues |
 | **Low** | No interface-based seams *(pass 3)* | Deliberate simplicity; acceptable for v1 | Monitor test suite time; introduce seams if needed |
 | **Low** | Mutable package-level version variables *(pass 3)* | `mcp.Version = embedded.Version` cross-assignment | Consider constructor parameter or build-time injection |
 | **Low** | Regenerate `coverage.out` *(pass 4)* | Report shows 0% for functions with thorough tests; may predate recent commits | Run `make test` to update |
+| **Low** | Broken Vision link in sprint governance spec *(Adversarial pass, entry: specs/)* | `../vision.md` target is missing; canonical Vision is under `specs/build/` | Fix link to canonical Vision path |
 | **Low** | Ops Modify-callback task guard *(pass 5, Duplication lens)* | 10 files repeat identical FindTask+NotFoundError inside Modify callbacks | Consider `modifyTask(bb, taskID, fn)` helper; evaluate clarity vs indirection |
 | **Low** | Command test `initialState` construction *(pass 5, Duplication lens)* | 23 near-identical State constructions with same Config values | Add `testhelpers.DefaultState()` returning pre-configured State |
 | **Low** | Watch thresholds not configurable *(pass 6)* | 10 operational constants bypass `models.Config` pattern | Add to Config with current values as defaults |
@@ -808,6 +978,18 @@ The primary structural concerns in priority order: ~~(1) `supervisor.go` god fil
 **Pass 7 (Complexity lens)** revisits complexity with the benefit of 6 prior passes of context. The earlier Complexity lens (pass 2) correctly identified the monolithic commands and task-lookup duplication — both now resolved. This pass reveals the complexity that *replaced* them: `ops/claim_task.go:ClaimTask` at 265 LOC is now the longest function in the codebase (inheriting from the resolved `ClaimTaskCommand`), with nesting depth 6 and dependency-checking logic intentionally duplicated across its TOCTOU phases. `ops/wt_merge.go:MergeWorktree` at 189 LOC is the second-longest. Both are architecturally correct — the three-phase pattern prevents race conditions — but their internal complexity makes them the hardest code to safely modify. A new finding not in previous passes: `commands/inspect_field.go` (327 LOC, 9 switch statements) is a hand-written reflection system where every model field requires a manual switch case. This is a maintenance trap — adding a field to `SprintMetrics` without updating the switch silently makes it inaccessible via `liza inspect`, with no compiler warning. LOC figures updated: production code is ~15,300 LOC (stable), test code grew to ~36,700 LOC (2.4:1 ratio, up from 2:1 at pass 1), and `commands/` is 4,300 LOC (up from 2,800 recorded earlier, likely due to test growth during ops extraction). All existing findings verified as current.
 
 **Adversarial pass (entry: docs/)** forced a doc-first path and surfaced contract-level drift missed by prior code-centric passes: (1) state-machine spec said `BLOCKED -> READY` while runtime disallowed it, (2) a troubleshooting recovery command used non-canonical branch naming (`task-1` vs `task/<id>`), and (3) testing docs overstated `go test -short` behavior for integration tests. These are medium-to-high leverage because they affect operator behavior and architectural understanding directly, not just implementation internals.
+
+**Adversarial pass (entry: specs/)** surfaced three additional coherence gaps: (1) Pairing Session Initialization still references `docs/USAGE.md` even though docs were split into `USAGE_PAIRING.md` and `USAGE_MULTI_AGENTS.md`, (2) watcher stall detection parses raw `log.yaml` text for `timestamp:` instead of using typed log parsing, and (3) sprint governance links Vision via `../vision.md` while canonical Vision lives in `specs/build/0 - Vision.md`. Together these are mostly documentation/protocol-integrity issues, but the initialization-path drift is high leverage because it can break startup behavior before execution begins.
+
+**Adversarial pass (entry: tests/)** highlighted a distinct quality boundary: the suite strongly validates command/ops internals but under-exercises the binary CLI contract (`cmd/liza/main.go` wiring, flag/env precedence, command-tree registration). It also surfaced temporal coupling signals (0 `t.Parallel()` usage and 21 explicit sleeps across 93 test files) that point to a serialized, timing-dependent test architecture. Neither issue is immediately blocking, but both will become higher-cost as command surface and concurrency grow.
+
+**Adversarial pass (entry: config/)** exposed a config-contract gap cluster: key control knobs are modeled and documented but not always executable. In particular, iteration limits (`config.max_coder_iterations`, `config.max_review_cycles`, and `task.max_iterations`) are not enforced in runtime task/review flow, and `heartbeat_interval` is currently ignored in favor of a hardcoded 60s scheduler. This is high leverage because it affects operational control semantics directly: users can tune state and observe no behavior change. Secondary drift found: `LIZA_LOG_LEVEL` is documented but unimplemented, and `get config.*` only projects a subset of `models.Config`.
+
+**Adversarial pass (entry: error handling)** surfaced a reliability-observability gap cluster: protocol and cleanup error paths are intentionally or accidentally lossy. Most notably, MCP parse-error response write failures are currently ignored (now prioritized as terminal), and several rebase/worktree cleanup flows suppress secondary failures that can leave residual dirty state. Lock stale-cleanup errors are also dropped before retry, and some `os.Stat` checks under-handle non-`IsNotExist` filesystem errors. The architecture is still sound, but these error-path blind spots weaken operational diagnosis under failure pressure.
+
+**Adversarial pass (entry: data flow)** traced the task lifecycle across CLI/MCP inputs, state transitions, and git side effects. Two new integrity gaps emerged: `submit-for-review` treats caller `commit_sha` as required input but runtime authority comes from computed post-rebase HEAD, and `DeleteTask` can apply destructive git side effects before final lock-time state commit. Both findings are about contract-to-runtime consistency and state↔filesystem coherence under concurrency.
+
+**Adversarial pass (entry: documented smells)** started from already-documented smell clusters and found adjacent blind spots at boundary seams: (1) REJECTED reassignment teardown happens before replacement creation is secured, (2) planner max-wait is modeled but runtime-overridden, (3) watch/log paths rely on full-file scans and rewrites that scale poorly with log growth, and (4) MCP stdio framing has no explicit request-size guard. These are not conceptual architecture failures, but they are high-leverage reliability/operability gaps because they sit on failure paths and long-running control loops.
 
 ---
 

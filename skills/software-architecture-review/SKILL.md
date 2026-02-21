@@ -227,6 +227,7 @@ Do NOT proceed with enrichment without explicit user choice. The prompt exists b
 **Process:**
 
 1. **Randomized Entry Point** — Do NOT start with directory tree. Pick using `1 + (current_minute mod 7)` or choose the entry point you're *least* naturally drawn to — the goal is to break your default exploration pattern:
+
    | # | Entry Point |
    |---|-------------|
    | 1 | Start from tests — what are they testing? What's NOT tested? |
