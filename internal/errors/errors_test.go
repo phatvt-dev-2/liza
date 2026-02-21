@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -8,13 +9,13 @@ func TestNotFoundError(t *testing.T) {
 	tests := []struct {
 		name   string
 		entity string
+		id     string
 		field  string
 		want   string
 	}{
 		{
 			name:   "entity only",
 			entity: "task",
-			field:  "",
 			want:   "task not found",
 		},
 		{
@@ -24,10 +25,23 @@ func TestNotFoundError(t *testing.T) {
 			want:   "config field 'mode' not found",
 		},
 		{
+			name:   "entity with id",
+			entity: "task",
+			id:     "task-42",
+			want:   "task not found: task-42",
+		},
+		{
 			name:   "agent with id",
-			entity: "agent coder-1",
-			field:  "",
-			want:   "agent coder-1 not found",
+			entity: "agent",
+			id:     "coder-1",
+			want:   "agent not found: coder-1",
+		},
+		{
+			name:   "entity with id and field",
+			entity: "agent",
+			id:     "coder-1",
+			field:  "status",
+			want:   "agent coder-1 field 'status' not found",
 		},
 	}
 
@@ -35,6 +49,7 @@ func TestNotFoundError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := &NotFoundError{
 				Entity: tt.entity,
+				ID:     tt.id,
 				Field:  tt.field,
 			}
 
@@ -54,6 +69,21 @@ func TestIsNotFound(t *testing.T) {
 		{
 			name: "NotFoundError",
 			err:  &NotFoundError{Entity: "task"},
+			want: true,
+		},
+		{
+			name: "NotFoundError with ID",
+			err:  &NotFoundError{Entity: "task", ID: "task-42"},
+			want: true,
+		},
+		{
+			name: "wrapped NotFoundError",
+			err:  fmt.Errorf("modification function failed: %w", &NotFoundError{Entity: "task", ID: "task-42"}),
+			want: true,
+		},
+		{
+			name: "double-wrapped NotFoundError",
+			err:  fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", &NotFoundError{Entity: "agent", ID: "coder-1"})),
 			want: true,
 		},
 		{

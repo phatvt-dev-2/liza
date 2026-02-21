@@ -179,7 +179,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `filelock/` (new): Shared file-locking with flock, PID-based stale detection, error classification, metrics
 - `analysis/` (260 LOC): Circuit breaker pattern detection (6 patterns)
 - `identity/` (140 LOC): Agent ID resolution and validation
-- `errors/` (45 LOC): Exit codes and `NotFoundError` type
+- `errors/` (55 LOC): Exit codes and `NotFoundError` type (with `Entity`, `ID`, `Field` fields)
 - `testhelpers/` (733 LOC): Fixtures, git setup, assertions, utilities
 
 ### 1.3 Dependency Map
@@ -197,8 +197,11 @@ models/ (stable, leaf)              paths/ (stable, leaf)
 
 errors/ (stable, leaf)              log/ (stable, leaf)
    ↑                                   ↑
-   └── commands/                       ├── commands/
-                                       └── ops/
+   ├── db/                             ├── commands/
+   ├── ops/                            └── ops/
+   ├── agent/
+   ├── commands/
+   └── mcp/
 
 filelock/ (stable, leaf)            mcp/protocol/ (stable, leaf)
    ↑                                   ↑
@@ -255,7 +258,7 @@ commands/ (volatile, high-level)
 **What requires cross-file comparison?**
 - ~~Flock locking pattern in db/ vs log/ (duplicated — confirmed by cross-file analysis)~~ *(resolved: extracted to `internal/filelock`)*
 - ~~`leaseDuration = 1800` fallback in supervisor.go (x2) and claim_task.go (x1) (duplicated)~~ *(resolved: `models.DefaultLeaseDurationSeconds` constant)*
-- `NotFoundError` structured type vs ad-hoc `fmt.Errorf("task not found: %s")` — **25+ instances** of the ad-hoc form in non-test code *(pass 2: quantified)*
+- ~~`NotFoundError` structured type vs ad-hoc `fmt.Errorf("task not found: %s")` — **25+ instances** of the ad-hoc form in non-test code~~ *(resolved: all sites migrated to `NotFoundError` with `ID` field)*
 - `derefString()` in prompts/builder.go duplicates `deref` template function
 - ~~Inline task-lookup loop duplicated 55+ times across commands, agent, db packages~~ *(pass 2, Complexity lens — resolved: `State.FindTask()`)*
 - Template execution pattern in `commands/templates.go` vs `prompts/templates.go` — nearly identical: embed.FS + funcMap with `deref` + template.Must + executeTemplate that panics *(pass 3, Boundaries lens)*
@@ -308,7 +311,7 @@ commands/ (volatile, high-level)
 |---------|-----------------|------------------|-----------|
 | `models` | 0 | 0 | 6 packages |
 | `paths` | 0 | 0 | 6 packages |
-| `errors` | 0 | 0 | 1 package |
+| `errors` | 0 | 0 | 7 packages (ops, db, agent, commands, mcp, testhelpers, prompts) |
 | `identity` | 0 | 0 | 1 binary |
 | `mcp/protocol` | 0 | 0 | 1 package |
 | `filelock` | 0 | flock | 2 packages |
@@ -443,13 +446,11 @@ Tests work around this by replacing `os.Stdin` with pipe readers (8+ test files 
 
 **Fix:** Added `Blackboard.ReadRaw()` method that reads raw bytes under flock. `Server` struct now holds a `*db.Blackboard` instance. `readStateResource()` uses `s.bb.ReadRaw()` instead of `os.ReadFile()`. `ReadRaw` (rather than `Read` + re-marshal) avoids the YAML round-trip data loss issue.
 
-#### Smell: Inconsistent "not found" error types
+#### ~~Smell: Inconsistent "not found" error types~~ *(resolved)*
 
-**Signal:** `internal/errors` defines `NotFoundError` struct, but **25+ call sites** use `fmt.Errorf("task not found: %s", id)`. The structured type is used only by inspect commands. *(pass 2: quantified — 25+ instances vs "most call sites")*
+**Signal:** `internal/errors` defines `NotFoundError` struct, but **25+ call sites** used `fmt.Errorf("task not found: %s", id)`. The structured type was only used by inspect commands. *(pass 2: quantified — 25+ instances vs "most call sites")*
 
-**Impact:** Callers cannot reliably distinguish "not found" from other errors without string matching. Scale of the inconsistency (25+) means adoption requires systematic migration.
-
-**Direction:** Use `NotFoundError` consistently across db and commands packages. Consider a `State.FindTask()` method that returns `NotFoundError` by default.
+**Fix:** Added `ID` field to `NotFoundError` (error message format `"task not found: task-42"` matches old ad-hoc format). Migrated all 25+ sites across `ops/` (12 files), `db/blackboard.go`, `agent/` (4 files), and `commands/inspect_*.go` (3 files). `IsNotFound()` updated to use `errors.As` (supports wrapped errors from `bb.Modify`). MCP `classifyError()` now checks `errors.As(&NotFoundError{})` first, with string fallback retained for external errors (git, etc.).
 
 #### ~~Smell: `executeTemplate` panics on error~~ *(resolved)*
 
@@ -565,7 +566,7 @@ The 24.7% uncovered code concentrates in two patterns:
 |----------|-------|-----------|--------|
 | ~~**Medium**~~ | ~~Magic number 1800 (lease default)~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constant in one location~~ |
 | ~~**Medium**~~ | ~~`executeTemplate` panics (2 locations)~~ *(resolved)* | Both `executeTemplate` and `executeCommandTemplate` return `(string, error)` | ~~Return error instead~~ |
-| **Medium** | Inconsistent `NotFoundError` usage (25+ ad-hoc instances) | Prevents reliable programmatic error distinction | Adopt `NotFoundError` consistently, pair with `State.FindTask()` |
+| ~~**Medium**~~ | ~~Inconsistent `NotFoundError` usage (25+ ad-hoc instances)~~ *(resolved)* | All sites migrated to `NotFoundError` with `ID` field; `classifyError` uses `errors.As` | ~~Adopt `NotFoundError` consistently~~ |
 | **Medium** | Interactive stdin in library packages *(pass 3 — partially resolved: MCP-exposed commands no longer read stdin; remaining reads in CLI-only commands)* | Remaining 7 locations hardwired to terminal; tests use fragile monkey-patching | Accept `io.Reader`/callback for prompts |
 | ~~**Medium**~~ | ~~Poll/wait fallback magic numbers~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constants~~ |
 | **Medium** | `validate.validateAnomalies` at 13.3% coverage *(pass 4)* | Only 1 of 5 anomaly type validators exercised; relates to "Anomaly Detail Validation Incomplete" issue | Add test cases for all 5 anomaly type branches |
@@ -593,7 +594,7 @@ Liza's architecture is well-suited to its constraints: a file-based multi-agent 
 
 **Pass 4 (Coverage lens)** adds quantitative depth: 75.3% statement coverage overall, with the uncovered 24.7% concentrated in two patterns — runtime orchestration code (supervisor Execute, MCP server dispatch) and I/O-coupled functions. The most actionable finding: `mcp/server.classifyError` and `HandleRequest` are pure logic at 0% that can be tested trivially without any refactoring. Similarly, `models/diagnostics.go` (127 LOC, 4 functions, no test file) is critical work-detection logic that's entirely untested despite being pure functions on `*State`. I/O coupling (already flagged as a Boundaries smell) is now quantitatively confirmed as the primary driver of untested critical paths — functions with hardwired `os.Stdin`/`os.Stdout`/`os/exec` account for the majority of the 0% coverage.
 
-The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), ~~(2) commands presentation+logic coupling~~ (resolved — all 15 MCP-exposed mutation commands extracted to `internal/ops/`; MCP handlers call ops directly; protocol corruption risk eliminated), ~~(3) monolithic command functions~~ (resolved — all 4 monolithic commands extracted to ops; `DeleteTaskCommand` was the last, using the two-function pre-check + action pattern from `DeleteAgentCommand`), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). The ops layer now contains 19 operations (~2,700 LOC) serving 3 consumers (agent, commands, mcp). Remaining concerns: interactive stdin in CLI-only commands (partially resolved — no MCP risk), inconsistent `NotFoundError` usage.
+The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), ~~(2) commands presentation+logic coupling~~ (resolved — all 15 MCP-exposed mutation commands extracted to `internal/ops/`; MCP handlers call ops directly; protocol corruption risk eliminated), ~~(3) monolithic command functions~~ (resolved — all 4 monolithic commands extracted to ops; `DeleteTaskCommand` was the last, using the two-function pre-check + action pattern from `DeleteAgentCommand`), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). The ops layer now contains 19 operations (~2,700 LOC) serving 3 consumers (agent, commands, mcp). Remaining concerns: interactive stdin in CLI-only commands (partially resolved — no MCP risk).
 
 ---
 

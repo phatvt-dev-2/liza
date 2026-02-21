@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/prompts"
 )
@@ -33,7 +34,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 	case "coder":
 		task := state.FindTask(taskID)
 		if task == nil {
-			return "", fmt.Errorf("task not found: %s", taskID)
+			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
 		var handoffNote *models.HandoffNote
@@ -57,7 +58,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 	case "code-reviewer":
 		task := state.FindTask(taskID)
 		if task == nil {
-			return "", fmt.Errorf("task not found: %s", taskID)
+			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
 		reviewerConfig := prompts.ReviewerContextConfig{

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 )
@@ -83,7 +84,7 @@ func resumeHandoffTask(bb *db.Blackboard, state *models.State, agentID string) (
 		err := bb.Modify(func(s *models.State) error {
 			t := s.FindTask(id)
 			if t == nil {
-				return fmt.Errorf("task %s not found while resuming handoff", id)
+				return &lizaerrors.NotFoundError{Entity: "task", ID: id}
 			}
 			if t.Status != models.TaskStatusImplementing {
 				return fmt.Errorf("task %s is no longer IMPLEMENTING", id)

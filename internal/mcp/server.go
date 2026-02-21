@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/db"
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/mcp/protocol"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -178,9 +179,15 @@ func (s *Server) handleResourceRead(req *protocol.JSONRPCRequest) *protocol.JSON
 // Maps internal error patterns to JSON-RPC error codes for intelligent client handling.
 // All branches use sanitized messages — raw err.Error() is never exposed to clients.
 func (s *Server) classifyError(err error) *protocol.JSONRPCError {
+	// Type-based checks first (preferred)
+	var nfe *lizaerrors.NotFoundError
+	if errors.As(err, &nfe) {
+		return protocol.NewError(protocol.NotFound, "resource not found", nil)
+	}
+
 	msg := err.Error()
 
-	// Not found errors
+	// String fallback for errors from external packages (git, etc.)
 	if strings.Contains(msg, "not found") || strings.Contains(msg, "does not exist") {
 		return protocol.NewError(protocol.NotFound, "resource not found", nil)
 	}

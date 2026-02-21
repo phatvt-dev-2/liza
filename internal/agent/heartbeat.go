@@ -2,10 +2,10 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 )
 
@@ -81,7 +81,7 @@ func (h *Heartbeat) beat() error {
 	return h.bb.Modify(func(state *models.State) error {
 		agent, exists := state.Agents[h.agentID]
 		if !exists {
-			return fmt.Errorf("agent %s not found", h.agentID)
+			return &errors.NotFoundError{Entity: "agent", ID: h.agentID}
 		}
 
 		agent.Heartbeat = now

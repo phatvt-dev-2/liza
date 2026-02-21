@@ -77,7 +77,7 @@ func inspectAgent(state *models.State, agentID string, opts inspectAgentsOptions
 	// Find the agent
 	agent, exists := state.Agents[agentID]
 	if !exists {
-		return nil, &errors.NotFoundError{Entity: fmt.Sprintf("agent %s", agentID)}
+		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
 	}
 
 	// Find the task this agent is working on (if any)

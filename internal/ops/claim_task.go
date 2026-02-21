@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -171,7 +172,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		// Re-check task exists and status hasn't changed
 		task := state.FindTask(taskID)
 		if task == nil {
-			return fmt.Errorf("task not found: %s", taskID)
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
 		if task.Status != taskStatus {

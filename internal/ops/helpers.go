@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 )
 
@@ -16,7 +17,7 @@ func readTaskState(bb *db.Blackboard, taskID string) (*models.State, *models.Tas
 	}
 	task := state.FindTask(taskID)
 	if task == nil {
-		return nil, nil, fmt.Errorf("task not found: %s", taskID)
+		return nil, nil, &errors.NotFoundError{Entity: "task", ID: taskID}
 	}
 	return state, task, nil
 }

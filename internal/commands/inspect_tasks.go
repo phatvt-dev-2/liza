@@ -63,7 +63,7 @@ func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
 func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (any, error) {
 	foundTask := state.FindTask(taskID)
 	if foundTask == nil {
-		return nil, &errors.NotFoundError{Entity: fmt.Sprintf("task %s", taskID)}
+		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
 	}
 
 	// Build taskInfo with computed fields

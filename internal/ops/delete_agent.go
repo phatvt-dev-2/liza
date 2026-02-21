@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -51,7 +52,7 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 
 	agent, exists := state.Agents[agentID]
 	if !exists {
-		return nil, fmt.Errorf("agent not found: %s", agentID)
+		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
 	}
 
 	now := time.Now().UTC()
@@ -72,7 +73,7 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 	err = bb.Modify(func(state *models.State) error {
 		agent, exists := state.Agents[agentID]
 		if !exists {
-			return fmt.Errorf("agent not found: %s", agentID)
+			return &errors.NotFoundError{Entity: "agent", ID: agentID}
 		}
 
 		now := time.Now().UTC()
@@ -120,7 +121,7 @@ func IsAgentProcessRunning(projectRoot, agentID string) (bool, int, error) {
 
 	agent, exists := state.Agents[agentID]
 	if !exists {
-		return false, 0, fmt.Errorf("agent not found: %s", agentID)
+		return false, 0, &errors.NotFoundError{Entity: "agent", ID: agentID}
 	}
 
 	if agent.PID != 0 && IsProcessAlive(agent.PID) {

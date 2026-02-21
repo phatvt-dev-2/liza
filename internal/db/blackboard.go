@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"gopkg.in/yaml.v3"
@@ -312,7 +313,7 @@ func (bb *Blackboard) UpdateTask(taskID string, fn func(*models.Task) error) err
 	return bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return fmt.Errorf("task not found: %s", taskID)
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 		return fn(task)
 	})
@@ -323,7 +324,7 @@ func (bb *Blackboard) UpdateAgent(agentID string, fn func(*models.Agent) error) 
 	return bb.Modify(func(state *models.State) error {
 		agent, ok := state.Agents[agentID]
 		if !ok {
-			return fmt.Errorf("agent not found: %s", agentID)
+			return &errors.NotFoundError{Entity: "agent", ID: agentID}
 		}
 
 		if err := fn(&agent); err != nil {

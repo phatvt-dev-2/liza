@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/errors"
@@ -286,7 +285,7 @@ func getSprintComputedField(state *models.State, field string) (any, error) {
 func getAgentComputedField(state *models.State, agentID, field string) (any, error) {
 	agent, ok := state.Agents[agentID]
 	if !ok {
-		return nil, &errors.NotFoundError{Entity: fmt.Sprintf("agent %s", agentID), Field: ""}
+		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
 	}
 
 	switch field {
@@ -303,7 +302,7 @@ func getAgentComputedField(state *models.State, agentID, field string) (any, err
 		}
 		return "0s", nil
 	default:
-		return nil, &errors.NotFoundError{Entity: fmt.Sprintf("agent %s", agentID), Field: field}
+		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID, Field: field}
 	}
 }
 
@@ -311,7 +310,7 @@ func getAgentComputedField(state *models.State, agentID, field string) (any, err
 func getTaskComputedField(state *models.State, taskID, field string) (any, error) {
 	task := state.FindTask(taskID)
 	if task == nil {
-		return nil, &errors.NotFoundError{Entity: fmt.Sprintf("task %s", taskID), Field: ""}
+		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
 	}
 
 	switch field {
@@ -323,6 +322,6 @@ func getTaskComputedField(state *models.State, taskID, field string) (any, error
 		duration := calculateTimeOnTask(task)
 		return formatDuration(duration), nil
 	default:
-		return nil, &errors.NotFoundError{Entity: fmt.Sprintf("task %s", taskID), Field: field}
+		return nil, &errors.NotFoundError{Entity: "task", ID: taskID, Field: field}
 	}
 }

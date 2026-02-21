@@ -3,8 +3,10 @@ package mcp
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/mcp/protocol"
 )
 
@@ -264,7 +266,7 @@ func TestHandleRequest_ToolCall_HandlerError(t *testing.T) {
 		Description: "A tool that fails",
 		InputSchema: protocol.InputSchema{Type: "object"},
 	}, func(params map[string]any) (any, error) {
-		return nil, errors.New("task not found: task-42")
+		return nil, &lizaerrors.NotFoundError{Entity: "task", ID: "task-42"}
 	})
 
 	req := &protocol.JSONRPCRequest{
@@ -352,10 +354,23 @@ func TestClassifyError(t *testing.T) {
 		wantCode int
 		wantMsg  string
 	}{
-		// Not found
+		// Not found (typed)
 		{
-			name:     "task not found",
-			err:      errors.New("task not found: task-42"),
+			name:     "typed NotFoundError",
+			err:      &lizaerrors.NotFoundError{Entity: "task", ID: "task-42"},
+			wantCode: protocol.NotFound,
+			wantMsg:  "resource not found",
+		},
+		{
+			name:     "wrapped NotFoundError",
+			err:      fmt.Errorf("modification function failed: %w", &lizaerrors.NotFoundError{Entity: "agent", ID: "coder-1"}),
+			wantCode: protocol.NotFound,
+			wantMsg:  "resource not found",
+		},
+		// Not found (string fallback for external errors)
+		{
+			name:     "string not found fallback",
+			err:      errors.New("branch not found"),
 			wantCode: protocol.NotFound,
 			wantMsg:  "resource not found",
 		},

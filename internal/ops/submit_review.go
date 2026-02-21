@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -115,7 +116,7 @@ Alternatively, abort the rebase and ask for help:
 	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return fmt.Errorf("task not found: %s", taskID)
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
 		if task.Status != models.TaskStatusImplementing {

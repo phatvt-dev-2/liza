@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -70,7 +71,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return fmt.Errorf("task not found: %s", taskID)
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 		task.BaseCommit = &baseCommit
 		return nil

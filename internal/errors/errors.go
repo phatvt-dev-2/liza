@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
@@ -24,22 +25,28 @@ func ExitWithCode(code int, format string, args ...any) {
 
 // NotFoundError represents an error where an entity or field was not found
 type NotFoundError struct {
-	Entity string
-	Field  string
+	Entity string // "task", "agent", "config"
+	ID     string // optional: "task-42", "planner-1"
+	Field  string // optional: field name
 }
 
 func (e *NotFoundError) Error() string {
+	base := e.Entity
+	if e.ID != "" {
+		base += " " + e.ID
+	}
 	if e.Field != "" {
-		return fmt.Sprintf("%s field '%s' not found", e.Entity, e.Field)
+		return fmt.Sprintf("%s field '%s' not found", base, e.Field)
+	}
+	if e.ID != "" {
+		return fmt.Sprintf("%s not found: %s", e.Entity, e.ID)
 	}
 	return fmt.Sprintf("%s not found", e.Entity)
 }
 
-// IsNotFound checks if an error is a NotFoundError
+// IsNotFound checks if an error is a NotFoundError.
+// Supports wrapped errors (e.g. from bb.Modify).
 func IsNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	_, ok := err.(*NotFoundError)
-	return ok
+	var nfe *NotFoundError
+	return errors.As(err, &nfe)
 }

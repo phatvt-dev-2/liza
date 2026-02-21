@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -53,7 +54,7 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 	err = bb.Modify(func(state *models.State) error {
 		currentTask := state.FindTask(taskID)
 		if currentTask == nil {
-			return fmt.Errorf("task not found: %s", taskID)
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
 		if currentTask.Status != originalStatus {

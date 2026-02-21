@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -161,7 +162,7 @@ func DeleteTask(projectRoot, taskID string, force, deleteWorktree bool, reason s
 	err = bb.Modify(func(state *models.State) error {
 		taskIndex := state.FindTaskIndex(taskID)
 		if taskIndex == -1 {
-			return fmt.Errorf("task not found: %s", taskID)
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
 		// Re-check preconditions under lock (race prevention)

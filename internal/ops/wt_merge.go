@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -62,7 +63,7 @@ func markIntegrationFailed(bb *db.Blackboard, taskID, agentID, reason, mergeComm
 	return bb.Modify(func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
-			return fmt.Errorf("task not found: %s", taskID)
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 		if t.Status != models.TaskStatusApproved {
 			return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
@@ -226,7 +227,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	err = bb.Modify(func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
-			return fmt.Errorf("task not found: %s", taskID)
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 		// Re-validate status under lock to prevent concurrent transition
 		if t.Status != models.TaskStatusApproved {

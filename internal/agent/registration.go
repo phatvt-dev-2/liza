@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 )
@@ -112,7 +113,7 @@ func resetAgentToIdle(bb *db.Blackboard, agentID string) error {
 	return bb.Modify(func(state *models.State) error {
 		agent, exists := state.Agents[agentID]
 		if !exists {
-			return fmt.Errorf("agent %s not found", agentID)
+			return &errors.NotFoundError{Entity: "agent", ID: agentID}
 		}
 
 		// Reset to IDLE state
@@ -133,7 +134,7 @@ func resetAgentAfterExit(bb *db.Blackboard, agentID string) error {
 	return bb.Modify(func(state *models.State) error {
 		agent, exists := state.Agents[agentID]
 		if !exists {
-			return fmt.Errorf("agent %s not found", agentID)
+			return &errors.NotFoundError{Entity: "agent", ID: agentID}
 		}
 
 		switch agent.Status {
@@ -158,7 +159,7 @@ func setAgentToPlanningStatus(bb *db.Blackboard, agentID string) error {
 	return bb.Modify(func(state *models.State) error {
 		agent, exists := state.Agents[agentID]
 		if !exists {
-			return fmt.Errorf("agent %s not found", agentID)
+			return &errors.NotFoundError{Entity: "agent", ID: agentID}
 		}
 
 		// Set to PLANNING state

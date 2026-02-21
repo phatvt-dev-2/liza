@@ -43,7 +43,7 @@ Persistent record of issues identified by architectural analysis skills.
 - [Code-Level Architectural Smells](#code-level-architectural-smells)
   - [Magic Number 1800 Scattered](#magic-number-1800-scattered)
   - [executeTemplate Panics on Error](#executetemplate-panics-on-error)
-  - [Inconsistent NotFoundError Usage](#inconsistent-notfounderror-usage)
+  - [~~Inconsistent NotFoundError Usage~~](#inconsistent-notfounderror-usage)
   - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
 ---
 
@@ -417,6 +417,7 @@ Long-term concerns about system evolution.
 - [x] executeTemplate panics on error — changed to return `(string, error)` in both `prompts/templates.go` and `commands/templates.go`; propagated through all callers *(software-architecture-review)*
 - [x] Multi-instance Blackboard coherence — `db.For()` process-level singleton constructor; all ~30 production `db.New()` calls replaced; tests retain `db.New()` for isolation *(systemic-thinking)*
 - [x] Documentation/Implementation Desynchronization — replaced all operational `yq` references across 8 docs/specs files with `liza` CLI equivalents or tool-agnostic instructions *(systemic-thinking)*
+- [x] Inconsistent NotFoundError Usage — added `ID` field to `NotFoundError`, migrated 25+ ad-hoc string errors to structured type across `ops/`, `db/`, `agent/`, `commands/`; `IsNotFound()` uses `errors.As`; MCP `classifyError()` uses type-based detection with string fallback *(software-architecture-review)*
 
 ---
 
@@ -559,16 +560,12 @@ Issues identified through code-level architectural analysis (patterns, structure
 
 **Fix:** Changed `executeTemplate` in `internal/prompts/templates.go` and `executeCommandTemplate` in `internal/commands/templates.go` to return `(string, error)` instead of panicking. Propagated error returns through all callers: `Build{BasePrompt,PlannerContext,CoderContext,ReviewerContext}` in `prompts/builder.go`, `buildInstructionsForWakeTrigger`, `format{AgentValue,MetricsValue}` in `commands/`, and `buildPrompt` in `agent/prompt.go`. All callers already returned `(string, error)` or were internal — propagation was straightforward.
 
-### Inconsistent NotFoundError Usage
+### ~~Inconsistent NotFoundError Usage~~ *(resolved)*
 
 **Skill:** software-architecture-review
 **Category:** Primitive obsession / Unstable interface
 
-**Issue:** `internal/errors` defines a structured `NotFoundError` with `IsNotFound()` check, but most "not found" scenarios use ad-hoc `fmt.Errorf("task not found: %s", taskID)` strings. The structured type is only used by inspect commands (`inspect_tasks.go`, `inspect_agents.go`, `inspect_field.go`); other commands and the db package use string-based errors for the same semantic meaning.
-
-**Implication:** Callers cannot reliably distinguish "not found" from other errors programmatically. The MCP `classifyError()` already does pattern matching on error strings — fragile and will break if wording changes.
-
-**Direction:** Adopt `NotFoundError` consistently across `db/blackboard.go` and command files. The MCP `classifyError()` can then use `errors.As` instead of string matching.
+**Fix:** Added `ID` field to `NotFoundError` (producing `"task not found: task-42"` matching the ad-hoc format). Migrated 25+ ad-hoc `fmt.Errorf("...not found...")` sites across `ops/` (12 files), `db/blackboard.go`, `agent/` (4 files), and `commands/inspect_*.go` (3 files) to use `&errors.NotFoundError{Entity: ..., ID: ...}`. Updated `IsNotFound()` to use `errors.As` (supports wrapped errors from `bb.Modify`). MCP `classifyError()` now uses type-based `errors.As` check first, with string fallback retained for external errors (git, etc.).
 
 ### Interactive Stdin in Library Packages
 
