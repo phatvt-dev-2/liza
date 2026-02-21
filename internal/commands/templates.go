@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"embed"
+	"fmt"
 	"text/template"
 )
 
@@ -22,10 +23,10 @@ var cmdTmpl = template.Must(
 	template.New("").Funcs(cmdFuncMap).ParseFS(templatesFS, "templates/*.tmpl"),
 )
 
-func executeCommandTemplate(name string, data any) string {
+func executeCommandTemplate(name string, data any) (string, error) {
 	var buf bytes.Buffer
 	if err := cmdTmpl.ExecuteTemplate(&buf, name, data); err != nil {
-		panic("template: " + err.Error())
+		return "", fmt.Errorf("template %s: %w", name, err)
 	}
-	return buf.String()
+	return buf.String(), nil
 }

@@ -167,7 +167,7 @@ func formatMetricsOutput(metrics metricsInfo, format string) (string, error) {
 	case "yaml":
 		return formatYAML(metrics)
 	case "value":
-		return formatMetricsValue(metrics), nil
+		return formatMetricsValue(metrics)
 	case "table":
 		// Table format doesn't make sense for single metrics object
 		return "", fmt.Errorf("table format not supported for metrics (use json, yaml, or value)")
@@ -199,7 +199,7 @@ func formatAgentMetricsOutput(metrics []AgentmetricsInfo, format string) (string
 }
 
 // formatMetricsValue formats sprint metrics as key-value pairs
-func formatMetricsValue(metrics metricsInfo) string {
+func formatMetricsValue(metrics metricsInfo) (string, error) {
 	return executeCommandTemplate("metrics_value", metrics)
 }
 

@@ -23,7 +23,10 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 		GoalSpecRef: state.Goal.SpecRef,
 	}
 
-	prompt := prompts.BuildBasePrompt(baseConfig)
+	prompt, err := prompts.BuildBasePrompt(baseConfig)
+	if err != nil {
+		return "", fmt.Errorf("building base prompt: %w", err)
+	}
 
 	// Add role-specific context
 	switch config.Role {
@@ -45,7 +48,11 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 			IntegrationBranch: state.Config.IntegrationBranch,
 			HandoffNote:       handoffNote,
 		}
-		prompt += prompts.BuildCoderContext(task, coderConfig)
+		context, err := prompts.BuildCoderContext(task, coderConfig)
+		if err != nil {
+			return "", fmt.Errorf("building coder context: %w", err)
+		}
+		prompt += context
 
 	case "code-reviewer":
 		task := state.FindTask(taskID)
@@ -57,11 +64,19 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 			ProjectRoot: config.ProjectRoot,
 			AgentID:     config.AgentID,
 		}
-		prompt += prompts.BuildReviewerContext(task, reviewerConfig)
+		context, err := prompts.BuildReviewerContext(task, reviewerConfig)
+		if err != nil {
+			return "", fmt.Errorf("building reviewer context: %w", err)
+		}
+		prompt += context
 
 	case "planner":
 		plannerConfig := prompts.PlannerContextConfig{}
-		prompt += prompts.BuildPlannerContext(state, plannerConfig)
+		context, err := prompts.BuildPlannerContext(state, plannerConfig)
+		if err != nil {
+			return "", fmt.Errorf("building planner context: %w", err)
+		}
+		prompt += context
 	}
 
 	// Add resume context if initial task

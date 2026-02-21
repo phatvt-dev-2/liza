@@ -107,7 +107,10 @@ func TestBuildBasePrompt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildBasePrompt(tt.config)
+			result, err := BuildBasePrompt(tt.config)
+			if err != nil {
+				t.Fatalf("BuildBasePrompt() error: %v", err)
+			}
 
 			for _, want := range tt.wantContains {
 				if !strings.Contains(result, want) {
@@ -289,7 +292,10 @@ func TestBuildPlannerContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildPlannerContext(tt.state, tt.config)
+			result, err := BuildPlannerContext(tt.state, tt.config)
+			if err != nil {
+				t.Fatalf("BuildPlannerContext() error: %v", err)
+			}
 
 			for _, want := range tt.wantContains {
 				if !strings.Contains(result, want) {
@@ -554,7 +560,10 @@ func TestBuildCoderContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildCoderContext(tt.task, tt.config)
+			result, err := BuildCoderContext(tt.task, tt.config)
+			if err != nil {
+				t.Fatalf("BuildCoderContext() error: %v", err)
+			}
 
 			for _, want := range tt.wantContains {
 				if !strings.Contains(result, want) {
@@ -716,7 +725,10 @@ func TestBuildReviewerContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildReviewerContext(tt.task, tt.config)
+			result, err := BuildReviewerContext(tt.task, tt.config)
+			if err != nil {
+				t.Fatalf("BuildReviewerContext() error: %v", err)
+			}
 
 			for _, want := range tt.wantContains {
 				if !strings.Contains(result, want) {
@@ -744,7 +756,10 @@ func TestPlannerPromptHasAutonomyGuidance(t *testing.T) {
 	}
 
 	config := PlannerContextConfig{}
-	prompt := BuildPlannerContext(state, config)
+	prompt, err := BuildPlannerContext(state, config)
+	if err != nil {
+		t.Fatalf("BuildPlannerContext() error: %v", err)
+	}
 
 	// Verify autonomy banner present
 	if !strings.Contains(prompt, "AUTONOMY NOTICE") {
@@ -804,7 +819,10 @@ func TestBasePromptHasStrongAutonomy(t *testing.T) {
 		GoalSpecRef: ".liza/specs/goal.md",
 	}
 
-	prompt := BuildBasePrompt(config)
+	prompt, err := BuildBasePrompt(config)
+	if err != nil {
+		t.Fatalf("BuildBasePrompt() error: %v", err)
+	}
 
 	// Verify strong autonomy language
 	requiredPhrases := []string{
@@ -840,7 +858,10 @@ func TestReviewerPromptHasAutonomyGuidance(t *testing.T) {
 		ProjectRoot: "/project",
 		AgentID:     "code-reviewer-1",
 	}
-	prompt := BuildReviewerContext(&task, config)
+	prompt, err := BuildReviewerContext(&task, config)
+	if err != nil {
+		t.Fatalf("BuildReviewerContext() error: %v", err)
+	}
 
 	// Verify autonomy banner present
 	if !strings.Contains(prompt, "AUTONOMY NOTICE") {
@@ -990,7 +1011,10 @@ func TestPlannerPromptAutonomyForAllWakeTriggers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := PlannerContextConfig{}
-			prompt := BuildPlannerContext(tt.state, config)
+			prompt, err := BuildPlannerContext(tt.state, config)
+			if err != nil {
+				t.Fatalf("BuildPlannerContext() error: %v", err)
+			}
 
 			// Verify correct trigger
 			if !strings.Contains(prompt, "WAKE TRIGGER: "+tt.wantTrigger) {

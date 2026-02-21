@@ -465,5 +465,5 @@ func formatStatusDashboard(data statusData) (string, error) {
 		AgentsSection: agentsBuf.String(),
 		AnomalyList:   anomalyList,
 	}
-	return executeCommandTemplate("status_dashboard", tmplData), nil
+	return executeCommandTemplate("status_dashboard", tmplData)
 }

@@ -36,7 +36,7 @@ type ReviewerContextConfig struct {
 }
 
 // BuildBasePrompt creates the base bootstrap prompt for all agents
-func BuildBasePrompt(config BasePromptConfig) string {
+func BuildBasePrompt(config BasePromptConfig) (string, error) {
 	return executeTemplate("base_prompt", config)
 }
 
@@ -55,7 +55,7 @@ type plannerContextData struct {
 }
 
 // BuildPlannerContext creates planner-specific context with sprint state
-func BuildPlannerContext(state *models.State, config PlannerContextConfig) string {
+func BuildPlannerContext(state *models.State, config PlannerContextConfig) (string, error) {
 	totalTasks := len(state.Tasks)
 	merged := countTasksByStatus(state.Tasks, models.TaskStatusMerged)
 	blocked := countTasksByStatus(state.Tasks, models.TaskStatusBlocked)
@@ -82,6 +82,11 @@ func BuildPlannerContext(state *models.State, config PlannerContextConfig) strin
 
 	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, state.AllPlannedTasksTerminal())
 
+	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, state.Goal.SpecRef)
+	if err != nil {
+		return "", fmt.Errorf("building wake instructions: %w", err)
+	}
+
 	data := plannerContextData{
 		WakeTrigger:          wakeTrigger,
 		TotalTasks:           totalTasks,
@@ -92,7 +97,7 @@ func BuildPlannerContext(state *models.State, config PlannerContextConfig) strin
 		IntegrationFailed:    integrationFailed,
 		HypothesisExhausted:  hypothesisExhausted,
 		ImmediateDiscoveries: immediateDiscoveries,
-		WakeInstructions:     buildInstructionsForWakeTrigger(wakeTrigger, state.Goal.SpecRef),
+		WakeInstructions:     wakeInstructions,
 	}
 	return executeTemplate("planner_context", data)
 }
@@ -106,7 +111,7 @@ type coderContextData struct {
 }
 
 // BuildCoderContext creates coder-specific context with task details
-func BuildCoderContext(task *models.Task, config CoderContextConfig) string {
+func BuildCoderContext(task *models.Task, config CoderContextConfig) (string, error) {
 	worktreePath := ""
 	if task.Worktree != nil {
 		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
@@ -133,7 +138,7 @@ type reviewerContextData struct {
 }
 
 // BuildReviewerContext creates reviewer-specific context with review details
-func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) string {
+func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (string, error) {
 	worktreePath := ""
 	if task.Worktree != nil {
 		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
@@ -204,7 +209,7 @@ type wakeTemplateData struct {
 }
 
 // buildInstructionsForWakeTrigger returns trigger-specific instructions
-func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string) string {
+func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string) (string, error) {
 	switch wakeTrigger {
 	case "INITIAL_PLANNING":
 		return executeTemplate("wake_initial_planning", wakeTemplateData{GoalSpecRef: goalSpecRef})
@@ -219,6 +224,6 @@ func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string) string {
 	case "SPRINT_COMPLETE":
 		return executeTemplate("wake_sprint_complete", nil)
 	default:
-		return ""
+		return "", nil
 	}
 }

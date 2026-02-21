@@ -431,6 +431,7 @@ Long-term concerns about system evolution.
 - [x] Commands presentation+logic coupling — extracted all 15 MCP-exposed mutation commands to `internal/ops/`; MCP handlers call ops directly; commands are thin presentation wrappers *(software-architecture-review)*
 - [x] Monolithic DeleteTaskCommand — extracted business logic to `ops.CheckDeleteTask()` + `ops.DeleteTask()` (220→~75 LOC); interactive confirmation remains at CLI level *(software-architecture-review)*
 - [x] Magic number 1800 scattered — defined `Default{LeaseDurationSeconds,*PollInterval,*MaxWait}` constants in `models/state.go`; all 9 fallback sites now reference named constants *(software-architecture-review)*
+- [x] executeTemplate panics on error — changed to return `(string, error)` in both `prompts/templates.go` and `commands/templates.go`; propagated through all callers *(software-architecture-review)*
 
 ---
 
@@ -557,16 +558,12 @@ Issues identified through code-level architectural analysis (patterns, structure
 
 **Fix:** Defined `DefaultLeaseDurationSeconds`, `Default{Coder,Planner,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside the `Config` struct. All 3 lease-duration fallback sites and 6 poll/wait fallbacks in `getRoleWaitConfig` now reference the named constants. `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds` (single source of truth).
 
-### executeTemplate Panics on Error
+### ~~executeTemplate Panics on Error~~ *(resolved)*
 
 **Skill:** software-architecture-review
 **Category:** Leaky abstraction / Non-idempotent operations
 
-**Issue:** `internal/prompts/templates.go` calls `panic("template: " + err.Error())` when template execution fails, instead of returning an error. In a long-running supervisor process, this crashes the entire binary on malformed template data.
-
-**Implication:** Template execution errors (missing fields, type mismatches) are unrecoverable. The supervisor cannot gracefully handle or retry — the process dies and must be restarted externally.
-
-**Direction:** Change `executeTemplate` to return `(string, error)`. Callers already handle errors from prompt building; propagation is straightforward.
+**Fix:** Changed `executeTemplate` in `internal/prompts/templates.go` and `executeCommandTemplate` in `internal/commands/templates.go` to return `(string, error)` instead of panicking. Propagated error returns through all callers: `Build{BasePrompt,PlannerContext,CoderContext,ReviewerContext}` in `prompts/builder.go`, `buildInstructionsForWakeTrigger`, `format{AgentValue,MetricsValue}` in `commands/`, and `buildPrompt` in `agent/prompt.go`. All callers already returned `(string, error)` or were internal — propagation was straightforward.
 
 ### Inconsistent NotFoundError Usage
 

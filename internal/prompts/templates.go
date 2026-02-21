@@ -3,6 +3,7 @@ package prompts
 import (
 	"bytes"
 	"embed"
+	"fmt"
 	"text/template"
 )
 
@@ -25,10 +26,10 @@ var tmpl = template.Must(
 	template.New("").Funcs(funcMap).ParseFS(templatesFS, "templates/*.tmpl"),
 )
 
-func executeTemplate(name string, data any) string {
+func executeTemplate(name string, data any) (string, error) {
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, name, data); err != nil {
-		panic("template: " + err.Error())
+		return "", fmt.Errorf("template %s: %w", name, err)
 	}
-	return buf.String()
+	return buf.String(), nil
 }

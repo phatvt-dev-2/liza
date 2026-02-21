@@ -175,7 +175,7 @@ func formatAgentOutput(agent agentInfo, format string) (string, error) {
 	case "yaml":
 		return formatYAML(agent)
 	case "value":
-		return formatAgentValue(agent), nil
+		return formatAgentValue(agent)
 	case "table":
 		// Single agent in table format
 		return formatAgentsTable([]agentInfo{agent}), nil
@@ -230,6 +230,6 @@ func formatAgentsTable(agents []agentInfo) string {
 }
 
 // formatAgentValue formats a single agent as key-value pairs
-func formatAgentValue(agent agentInfo) string {
+func formatAgentValue(agent agentInfo) (string, error) {
 	return executeCommandTemplate("agent_value", agent)
 }

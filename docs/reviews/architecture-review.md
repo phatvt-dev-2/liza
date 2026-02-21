@@ -451,13 +451,11 @@ Tests work around this by replacing `os.Stdin` with pipe readers (8+ test files 
 
 **Direction:** Use `NotFoundError` consistently across db and commands packages. Consider a `State.FindTask()` method that returns `NotFoundError` by default.
 
-#### Smell: `executeTemplate` panics on error
+#### ~~Smell: `executeTemplate` panics on error~~ *(resolved)*
 
-**Signal:** `prompts/templates.go:31` and `commands/templates.go:28` both call `panic("template: " + err.Error())` on template execution failure.
+**Signal:** `prompts/templates.go:31` and `commands/templates.go:28` both called `panic("template: " + err.Error())` on template execution failure.
 
-**Impact:** In the supervisor's long-running process, a malformed template crashes the entire agent rather than surfacing a recoverable error. *(pass 3: noted that `commands/templates.go` has the same pattern)*
-
-**Direction:** Return error, let caller handle.
+**Fix:** Both `executeTemplate` (prompts) and `executeCommandTemplate` (commands) now return `(string, error)`. Error propagated through all callers: `Build{BasePrompt,PlannerContext,CoderContext,ReviewerContext}`, `buildInstructionsForWakeTrigger`, `format{AgentValue,MetricsValue}`, and `agent/prompt.go:buildPrompt`. All callers already returned `(string, error)` — propagation required no architectural changes.
 
 #### Smell: Non-injectable stdio in MCP transport
 
@@ -566,7 +564,7 @@ The 24.7% uncovered code concentrates in two patterns:
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
 | ~~**Medium**~~ | ~~Magic number 1800 (lease default)~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constant in one location~~ |
-| **Medium** | `executeTemplate` panics (2 locations) | Crashes long-running supervisor process | Return error instead |
+| ~~**Medium**~~ | ~~`executeTemplate` panics (2 locations)~~ *(resolved)* | Both `executeTemplate` and `executeCommandTemplate` return `(string, error)` | ~~Return error instead~~ |
 | **Medium** | Inconsistent `NotFoundError` usage (25+ ad-hoc instances) | Prevents reliable programmatic error distinction | Adopt `NotFoundError` consistently, pair with `State.FindTask()` |
 | **Medium** | Interactive stdin in library packages *(pass 3 — partially resolved: MCP-exposed commands no longer read stdin; remaining reads in CLI-only commands)* | Remaining 7 locations hardwired to terminal; tests use fragile monkey-patching | Accept `io.Reader`/callback for prompts |
 | ~~**Medium**~~ | ~~Poll/wait fallback magic numbers~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constants~~ |
@@ -595,7 +593,7 @@ Liza's architecture is well-suited to its constraints: a file-based multi-agent 
 
 **Pass 4 (Coverage lens)** adds quantitative depth: 75.3% statement coverage overall, with the uncovered 24.7% concentrated in two patterns — runtime orchestration code (supervisor Execute, MCP server dispatch) and I/O-coupled functions. The most actionable finding: `mcp/server.classifyError` and `HandleRequest` are pure logic at 0% that can be tested trivially without any refactoring. Similarly, `models/diagnostics.go` (127 LOC, 4 functions, no test file) is critical work-detection logic that's entirely untested despite being pure functions on `*State`. I/O coupling (already flagged as a Boundaries smell) is now quantitatively confirmed as the primary driver of untested critical paths — functions with hardwired `os.Stdin`/`os.Stdout`/`os/exec` account for the majority of the 0% coverage.
 
-The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), ~~(2) commands presentation+logic coupling~~ (resolved — all 15 MCP-exposed mutation commands extracted to `internal/ops/`; MCP handlers call ops directly; protocol corruption risk eliminated), ~~(3) monolithic command functions~~ (resolved — all 4 monolithic commands extracted to ops; `DeleteTaskCommand` was the last, using the two-function pre-check + action pattern from `DeleteAgentCommand`), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). The ops layer now contains 19 operations (~2,700 LOC) serving 3 consumers (agent, commands, mcp). Remaining concerns: interactive stdin in CLI-only commands (partially resolved — no MCP risk), magic numbers, `executeTemplate` panic, inconsistent `NotFoundError` usage.
+The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), ~~(2) commands presentation+logic coupling~~ (resolved — all 15 MCP-exposed mutation commands extracted to `internal/ops/`; MCP handlers call ops directly; protocol corruption risk eliminated), ~~(3) monolithic command functions~~ (resolved — all 4 monolithic commands extracted to ops; `DeleteTaskCommand` was the last, using the two-function pre-check + action pattern from `DeleteAgentCommand`), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). The ops layer now contains 19 operations (~2,700 LOC) serving 3 consumers (agent, commands, mcp). Remaining concerns: interactive stdin in CLI-only commands (partially resolved — no MCP risk), inconsistent `NotFoundError` usage.
 
 ---
 
