@@ -205,10 +205,7 @@ Retrospectives are **data-driven**, not feeling-based. The blackboard provides t
 
 **Owner:** Human produces the retrospective, using data from blackboard (log.yaml, anomalies, metrics). Agents provide raw data; human synthesizes patterns and actions.
 
-**Write Mechanism:** Human edits `state.yaml` directly to populate `sprint.retrospective` field. Use any text editor or yq:
-```bash
-yq -i '.sprint.retrospective = load("retrospective.yaml")' .liza/state.yaml
-```
+**Write Mechanism:** Human edits `.liza/state.yaml` directly to populate the `sprint.retrospective` field. Use any text editor to paste the retrospective YAML structure into the sprint section.
 
 ### Retrospective Timing
 

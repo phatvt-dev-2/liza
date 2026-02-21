@@ -59,7 +59,7 @@ liza claim-task task-1 coder-1
 cd .worktrees/task-1
 
 # Read rejection reason
-yq '.tasks[] | select(.id == "task-1") | .rejection_reason' ../../.liza/state.yaml
+liza get tasks task-1   # shows all fields including rejection_reason
 
 # Fix issues, commit, resubmit
 git add . && git commit -m "Address review feedback"

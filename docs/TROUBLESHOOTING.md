@@ -22,7 +22,7 @@ ERROR: Failed to register agent planner-1 (collision?)
 
 2. **Manual cleanup** — Remove the stale agent entry:
    ```bash
-   yq -i 'del(.agents."planner-1")' .liza/state.yaml
+   liza delete agent planner-1 --force
    ```
 
 3. **Use a different agent ID:**
@@ -157,26 +157,28 @@ This is normal — the three-phase claim pattern detected a race condition and w
 
 **Error:** `INVALID: IMPLEMENTING task without assigned_to: task-1`
 
-**Fix the invariant:**
-```bash
-# Option 1: Assign the agent
-yq -i '(.tasks[] | select(.id == "task-1")).assigned_to = "coder-1"' .liza/state.yaml
+**Fix the invariant** (edit `.liza/state.yaml` directly):
+```yaml
+# Option 1: Set assigned_to on the task
+# Find the task entry and set:
+assigned_to: coder-1
 
 # Option 2: Reset to READY
-yq -i '(.tasks[] | select(.id == "task-1")).status = "READY"' .liza/state.yaml
+# Find the task entry and set:
+status: READY
 ```
 
 ### Circular dependency detected
 
 **Identify the cycle:**
 ```bash
-yq '.tasks[] | {id, depends_on}' .liza/state.yaml | grep -A5 task-1
+liza get tasks --format table   # Shows depends_on for each task
 # Example cycle: task-1 → task-2 → task-3 → task-1
 ```
 
-**Break cycle:** Remove one dependency:
-```bash
-yq -i 'del(.tasks[] | select(.id == "task-3") | .depends_on[] | select(. == "task-1"))' .liza/state.yaml
+**Break cycle** (edit `.liza/state.yaml` directly):
+```yaml
+# Find task-3 and remove "task-1" from its depends_on list
 ```
 
 ### Spec file not found
@@ -185,8 +187,9 @@ yq -i 'del(.tasks[] | select(.id == "task-3") | .depends_on[] | select(. == "tas
 # Option 1: Create the spec file
 mkdir -p specs && vi specs/vision.md
 
-# Option 2: Update spec reference in state
-yq -i '(.tasks[] | select(.id == "task-1")) |= .spec_ref = "docs/requirements.md"' .liza/state.yaml
+# Option 2: Update spec reference in state (edit .liza/state.yaml directly)
+# Find the task entry and set:
+#   spec_ref: docs/requirements.md
 ```
 
 ---
@@ -199,11 +202,12 @@ yq -i '(.tasks[] | select(.id == "task-1")) |= .spec_ref = "docs/requirements.md
 
 **Recreate:** `git worktree add .worktrees/task-1 -b task-1`
 
-**Or reset task** (if work was lost):
-```bash
-yq -i '(.tasks[] | select(.id == "task-1")).status = "READY"' .liza/state.yaml
-yq -i '(.tasks[] | select(.id == "task-1")).assigned_to = null' .liza/state.yaml
-yq -i '(.tasks[] | select(.id == "task-1")).worktree = null' .liza/state.yaml
+**Or reset task** (if work was lost — edit `.liza/state.yaml` directly):
+```yaml
+# Find the task-1 entry and set:
+status: READY
+assigned_to: null
+worktree: null
 ```
 
 ### Worktree already exists
@@ -434,11 +438,10 @@ liza init "Goal description"
 
 ```bash
 # Clear agent entry
-yq -i 'del(.agents."coder-1")' .liza/state.yaml
+liza delete agent coder-1 --force
 
 # Reset task to READY (loses uncommitted work)
-yq -i '(.tasks[] | select(.assigned_to == "coder-1")).status = "READY"' .liza/state.yaml
-yq -i '(.tasks[] | select(.assigned_to == "coder-1")).assigned_to = null' .liza/state.yaml
+liza release-claim <task-id> --role coder
 
 # Or keep IMPLEMENTING and restart with same agent ID (preserves worktree)
 ```

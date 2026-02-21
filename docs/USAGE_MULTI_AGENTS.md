@@ -109,7 +109,7 @@ liza watch
 
 ```bash
 # Watch blackboard state
-watch -n 2 'yq ".tasks[] | pick([\"id\", \"status\", \"description\"])" .liza/state.yaml'
+watch -n 2 'liza get tasks --format table'
 ```
 
 **4. Human Interventions**

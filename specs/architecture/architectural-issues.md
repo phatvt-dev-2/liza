@@ -13,7 +13,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate)
 - [Systemic Tensions](#systemic-tensions)
   - [Spec Completeness vs Reality](#spec-completeness-vs-reality)
-  - [Documentation/Implementation Desynchronization](#documentationimplementation-desynchronization)
+  - [~~Documentation/Implementation Desynchronization~~](#documentationimplementation-desynchronization)
 - [Feedback Loops](#feedback-loops)
   - [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause)
   - [Restart/Lease Churn Under Load](#restartlease-churn-under-load)
@@ -107,22 +107,19 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 - Planner-assisted spec drafting from coder discoveries
 - Graceful degradation when specs incomplete (proceed with explicit assumptions)
 
-### Documentation/Implementation Desynchronization
+### ~~Documentation/Implementation Desynchronization~~ *(resolved)*
 
 **Skill:** systemic-thinking
 **Category:** TENSION
 
-**Issue:** The Go CLI migration (ADR-0012) replaced the entire operational layer (18 bash scripts → Go CLI) but only partially updated the documents that agents and humans read as operational truth. Remaining drift:
-- `DEMO.md` contains 9 `yq` commands as monitoring instructions — the Go CLI eliminated the `yq` dependency and provides `liza get`/`liza status` equivalents (documented in `RECIPES.md`)
-- Additional `yq` references persist in `TROUBLESHOOTING.md`, `USAGE_MULTI_AGENTS.md`, `sprint-governance.md`, `circuit-breaker.md`, `worktree-management.md`, `roles.md`
+**Fix:** Complete documentation sweep replacing all operational `yq` commands across 8 files:
+- Read-only queries → `liza get`/`liza status` equivalents
+- Agent deletion → `liza delete agent`
+- Task claim release → `liza release-claim`
+- Manual state repairs → tool-agnostic "edit state.yaml" instructions
+- Protocol pseudo-code → notes referencing Go implementation
 
-**Implication:** For a system whose core value proposition is agents reading specs as source of truth, stale `yq` references cause confusion — users and agents encounter commands that require an eliminated dependency.
-
-**Current mitigation:** `RECIPES.md` documents all `liza get` equivalents for former `yq` queries.
-
-**Future options:**
-- Complete documentation sweep replacing `yq` commands with `liza get`/`liza status` equivalents
-- Automated doc-code consistency check (grep for removed patterns)
+Remaining `yq` references are historical only (ADRs, release notes, benchmark traces) or in independent tooling (spec-backfill scripts).
 
 ---
 
@@ -419,6 +416,7 @@ Long-term concerns about system evolution.
 - [x] Magic number 1800 scattered — defined `Default{LeaseDurationSeconds,*PollInterval,*MaxWait}` constants in `models/state.go`; all 9 fallback sites now reference named constants *(software-architecture-review)*
 - [x] executeTemplate panics on error — changed to return `(string, error)` in both `prompts/templates.go` and `commands/templates.go`; propagated through all callers *(software-architecture-review)*
 - [x] Multi-instance Blackboard coherence — `db.For()` process-level singleton constructor; all ~30 production `db.New()` calls replaced; tests retain `db.New()` for isolation *(systemic-thinking)*
+- [x] Documentation/Implementation Desynchronization — replaced all operational `yq` references across 8 docs/specs files with `liza` CLI equivalents or tool-agnostic instructions *(systemic-thinking)*
 
 ---
 

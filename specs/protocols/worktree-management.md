@@ -110,10 +110,10 @@ base_commit=$(git rev-parse integration)
 # Stored in task.base_commit
 ```
 
-**At merge:**
+**At merge** (implemented by `liza wt-merge`):
 ```bash
 current_integration=$(git rev-parse integration)
-base_commit=$(yq ".tasks[] | select(.id == \"$TASK_ID\") | .base_commit" .liza/state.yaml)
+base_commit=<task.base_commit from blackboard>
 drift_commits=$(git rev-list --count $base_commit..$current_integration)
 ```
 
@@ -181,16 +181,14 @@ Blackboard records `review_commit: $COMMIT_SHA`. Code Reviewer verifies this SHA
 
 ## Commit SHA Verification
 
-Code Reviewer must verify before examining work:
+Code Reviewer must verify before examining work (implemented by supervisor at review claim time):
 
-```bash
-ACTUAL=$(git -C $WORKTREE rev-parse HEAD | cut -c1-7)
-EXPECTED=$(yq ".tasks[] | select(.id == \"$TASK_ID\") | .review_commit" .liza/state.yaml)
+```
+ACTUAL  = git -C $WORKTREE rev-parse HEAD
+EXPECTED = task.review_commit from blackboard
 
-if [ "$ACTUAL" != "$EXPECTED" ]; then
-    echo "ERROR: Worktree modified since review requested"
-    exit 1
-fi
+if ACTUAL != EXPECTED:
+    ERROR: Worktree modified since review requested
 ```
 
 ## Related Documents

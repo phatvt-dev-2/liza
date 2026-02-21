@@ -447,31 +447,12 @@ agents:
 
 ### Collision Prevention
 
-```bash
-register_agent() {
-    local agent_id="$LIZA_AGENT_ID"
-    local now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    local lease=$(date -u -d "+5 minutes" +%Y-%m-%dT%H:%M:%SZ)
-
-    # Check for active agent with same ID
-    local existing_lease=$(yq -r ".agents.\"$agent_id\".lease_expires // \"\"" "$STATE")
-    if [ -n "$existing_lease" ] && [ "$existing_lease" != "null" ]; then
-        if [ "$(date -d "$existing_lease" +%s)" -gt "$(date +%s)" ]; then
-            echo "ERROR: Agent $agent_id already registered with active lease until $existing_lease"
-            exit 1
-        fi
-    fi
-
-    # Register (within lock)
-    yq -i ".agents.\"$agent_id\" = {
-        \"role\": \"$LIZA_ROLE\",
-        \"status\": \"STARTING\",
-        \"lease_expires\": \"$lease\",
-        \"heartbeat\": \"$now\",
-        \"terminal\": \"$(tty)\"
-    }" "$STATE"
-}
-```
+Implemented by `liza agent` (see `internal/agent/registration.go`). The supervisor:
+1. Acquires file lock on `state.yaml`
+2. Checks if agent ID exists with active (non-expired) lease
+3. If active lease found: exits with `COLLISION` error
+4. If no conflict: writes agent entry with role, status, lease, heartbeat
+5. Releases lock
 
 ### Identity Validation
 

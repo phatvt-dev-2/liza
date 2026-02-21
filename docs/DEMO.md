@@ -172,7 +172,7 @@ The Planner will:
 Watch the blackboard update:
 ```bash
 # In another terminal
-watch -n 2 'yq ".tasks[] | pick([\"id\", \"status\", \"title\"])" .liza/state.yaml'
+watch -n 2 'liza get tasks --format table'
 ```
 
 Expected tasks (Planner decides, but likely):
@@ -225,14 +225,14 @@ The Code Reviewer will:
 
 With all three agents running, watch the system:
 
-** Task status:**
+**Task status:**
 ```bash
-watch -n 2 'yq ".tasks[] | pick([\"id\", \"status\", \"title\"])" .liza/state.yaml'
+watch -n 2 'liza get tasks --format table'
 ```
 
 **Blackboard state:**
 ```bash
-watch -n 5 'yq . .liza/state.yaml | head -80'
+watch -n 5 'liza status'
 ```
 
 **Activity log:**
@@ -288,7 +288,7 @@ Once all tasks reach MERGED status:
 
 ```bash
 # Check task states
-yq '.tasks[] | pick(["id", "status"])' .liza/state.yaml
+liza get tasks --format table
 
 # Switch to integration branch
 git checkout integration
@@ -324,7 +324,7 @@ Unregistering agent: planner-1
 
 **Final Task States:**
 ```bash
-yq '.tasks[] | pick(["id", "status", "title"])' .liza/state.yaml
+liza get tasks --format table
 ```
 
 ```yaml
@@ -355,7 +355,7 @@ l0m1n2o Initial commit: vision spec
 
 **Sprint Metrics:**
 ```bash
-yq '.sprint' .liza/state.yaml
+liza get metrics
 ```
 
 ```yaml
@@ -381,7 +381,7 @@ retrospective: null
 
 **Agent Activity Summary:**
 ```bash
-yq '.agents' .liza/state.yaml
+liza get agents --format table
 ```
 
 After completion, the agents section will be empty (agents unregister on exit):
@@ -431,12 +431,12 @@ liza stop
 
 **Coder stuck?**
 - Check worktree exists: `ls .worktrees/`
-- Check task status: `yq '.tasks[] | select(.status == "IMPLEMENTING")' .liza/state.yaml`
-- Look for BLOCKED status with `blocked_reason`
+- Check task status: `liza get tasks --format table` (look for IMPLEMENTING)
+- Look for BLOCKED status with `blocked_reason`: `liza get tasks <task-id>`
 
 **Review taking too long?**
 - Check Code Reviewer terminal
-- Verify task is READY_FOR_REVIEW: `yq '.tasks[] | select(.status == "READY_FOR_REVIEW")' .liza/state.yaml`
+- Verify task is READY_FOR_REVIEW: `liza get tasks --format table`
 
 **Debug agent interactively (-i option)**
 - Terminate the agent and release the task: `liza release-claim <task-id> --role both`

@@ -127,9 +127,9 @@ The pattern conditions use pseudo-functions for matching:
 
 | Function | v1 Implementation | v2 (Future) |
 |----------|-------------------|-------------|
-| `similar(field)` | **Exact match only** — script uses `group_by(.)` | String similarity threshold (Levenshtein ≥ 0.7) |
-| `same(field)` | **Exact match** — script compares string equality | Exact match after normalization |
-| `count(...)` | Script counts via yq queries | Same |
+| `similar(field)` | **Exact match only** — `liza analyze` uses `group_by(.)` | String similarity threshold (Levenshtein ≥ 0.7) |
+| `same(field)` | **Exact match** — string equality comparison | Exact match after normalization |
+| `count(...)` | Go implementation counts matching entries | Same |
 
 **v1 Limitations:**
 - ``liza analyze`` uses **exact string matching** for pattern detection
@@ -267,16 +267,22 @@ When circuit breaker is triggered:
 
 1. **Automatic:** ``liza analyze`` sets `status: TRIGGERED`, populates `current_trigger`
 2. **Human review:** Human analyzes report, takes corrective action (ADR, spec update, etc.)
-3. **Human resolves:** Human edits state.yaml directly:
-   ```bash
-   # Move current_trigger to history with resolution
-   yq -i '.circuit_breaker.history += [.circuit_breaker.current_trigger |
-     .resolution = "ADR-003 created" |
-     .resolved_at = "2025-01-18T19:00:00Z"]' .liza/state.yaml
+3. **Human resolves:** Edit `.liza/state.yaml` directly:
+   ```yaml
+   # 1. Copy current_trigger into history[] with resolution fields added:
+   circuit_breaker:
+     history:
+       - ...existing entries...
+       - timestamp: "2025-01-18T17:30:00Z"  # from current_trigger
+         pattern: retry_cluster
+         severity: ARCHITECTURE_FLAW
+         result: TRIGGERED
+         resolution: "ADR-003 created"       # added by human
+         resolved_at: "2025-01-18T19:00:00Z" # added by human
 
-   # Clear current trigger and reset status
-   yq -i '.circuit_breaker.current_trigger = null |
-     .circuit_breaker.status = "OK"' .liza/state.yaml
+   # 2. Clear current trigger and reset status:
+     current_trigger: null
+     status: OK
    ```
 4. **Human resumes:** `liza resume`
 5. **Agents resume**
