@@ -45,7 +45,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	worktreeRel := filepath.Join(paths.WorktreesDirName, taskID)
 	worktreeDir := filepath.Join(lp.ProjectRoot(), worktreeRel)
 
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 
 	// --- Phase 1: Validate Under Lock ---
 	var taskStatus models.TaskStatus

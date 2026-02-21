@@ -42,7 +42,7 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 
 	state, err := bb.Read()
 	if err != nil {
@@ -111,7 +111,7 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 // DeleteAgent to prompt for interactive confirmation.
 func IsAgentProcessRunning(projectRoot, agentID string) (bool, int, error) {
 	lp := paths.New(projectRoot)
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 
 	state, err := bb.Read()
 	if err != nil {

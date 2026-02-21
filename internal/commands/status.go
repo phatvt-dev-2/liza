@@ -100,7 +100,7 @@ func StatusCommand(opts StatusOptions) (string, error) {
 	statePath := paths.New(opts.ProjectRoot).StatePath()
 
 	// Read state
-	bb := db.New(statePath)
+	bb := db.For(statePath)
 	state, err := bb.Read()
 	if err != nil {
 		return "", fmt.Errorf("failed to read state: %w", err)

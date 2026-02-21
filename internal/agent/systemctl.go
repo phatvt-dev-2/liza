@@ -14,7 +14,7 @@ import (
 // checkAbort returns true if system mode is STOPPED
 func checkAbort(projectRoot string) bool {
 	statePath := paths.New(projectRoot).StatePath()
-	if bb := db.New(statePath); bb != nil {
+	if bb := db.For(statePath); bb != nil {
 		state, err := bb.Read()
 		if err == nil {
 			stopped, _ := isSystemStopped(state)
@@ -45,7 +45,7 @@ func waitWhilePaused(ctx context.Context, projectRoot string) error {
 		isPaused := false
 		pauseReason := ""
 
-		if bb := db.New(statePath); bb != nil {
+		if bb := db.For(statePath); bb != nil {
 			state, err := bb.Read()
 			if err == nil {
 				if state.Config.Mode == models.SystemModePaused {

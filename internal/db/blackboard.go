@@ -12,6 +12,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// instances holds per-path singleton Blackboard instances.
+// All production code should use For() to get a shared instance.
+var instances sync.Map
+
 // Blackboard provides thread-safe access to the state.yaml file
 type Blackboard struct {
 	statePath string
@@ -27,6 +31,8 @@ type Blackboard struct {
 }
 
 // New creates a Blackboard backed by the given state file path.
+// Use For() in production code to get a shared process-level singleton.
+// New is intended for tests that need independent instances.
 func New(statePath string) *Blackboard {
 	return &Blackboard{
 		statePath: statePath,
@@ -34,7 +40,36 @@ func New(statePath string) *Blackboard {
 	}
 }
 
-// WithLockTimeout creates a new instance; cached bytes are copied (not shared).
+// For returns a process-level singleton Blackboard for the given state path.
+// All callers sharing the same path within a process get the same instance,
+// ensuring cache coherence and preventing state fragmentation if Blackboard
+// gains in-process state in the future.
+//
+// The statePath is cleaned via filepath.Clean to ensure callers using
+// equivalent paths (e.g. with trailing slashes) share the same instance.
+func For(statePath string) *Blackboard {
+	key := filepath.Clean(statePath)
+	if v, ok := instances.Load(key); ok {
+		return v.(*Blackboard)
+	}
+	bb := New(key)
+	actual, _ := instances.LoadOrStore(key, bb)
+	return actual.(*Blackboard)
+}
+
+// ResetInstances clears all cached singleton instances.
+// Intended for test cleanup only.
+func ResetInstances() {
+	instances.Range(func(key, _ any) bool {
+		instances.Delete(key)
+		return true
+	})
+}
+
+// WithLockTimeout creates a new independent instance with a custom lock timeout;
+// cached bytes are copied at creation time but diverge afterward. The returned
+// instance is intentionally NOT registered in the singleton map — it is a
+// short-lived specialization for callers that need different lock behavior.
 func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 	bb.cacheMu.RLock()
 	cachedData := bb.cachedData

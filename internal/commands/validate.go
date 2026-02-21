@@ -22,7 +22,7 @@ func ValidateCommand(statePath string, skipSpecFileCheck bool) error {
 	lizaDir := filepath.Dir(statePath)
 	projectRoot := filepath.Dir(lizaDir)
 
-	bb := db.New(statePath)
+	bb := db.For(statePath)
 	state, err := bb.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read state file: %w", err)

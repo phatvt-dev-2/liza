@@ -99,7 +99,7 @@ func runChecks(_ context.Context, config WatchConfig) error {
 		return nil
 	}
 
-	bb := db.New(statePath)
+	bb := db.For(statePath)
 	state, err := bb.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read state: %w", err)

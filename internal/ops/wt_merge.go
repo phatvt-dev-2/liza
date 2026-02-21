@@ -105,7 +105,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	statePath := paths.New(projectRoot).StatePath()
 
 	// Read state
-	bb := db.New(statePath)
+	bb := db.For(statePath)
 	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err

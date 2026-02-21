@@ -23,7 +23,7 @@ func Checkpoint(projectRoot string) (*CheckpointResult, error) {
 	statePath := lizaPaths.StatePath()
 	reportPath := lizaPaths.SprintSummaryPath()
 
-	blackboard := db.New(statePath)
+	blackboard := db.For(statePath)
 
 	state, err := blackboard.Read()
 	if err != nil {

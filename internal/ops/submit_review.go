@@ -33,7 +33,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 
 	// Phase 1: Read state to get config and validate preconditions
 	state, task, err := readTaskState(bb, taskID)

@@ -38,7 +38,7 @@ func Pause(projectRoot, reason, changedBy string) (*ModeChangeResult, error) {
 // It validates the transition via the systemModeTransitions table and applies it.
 func changeMode(projectRoot, reason, changedBy string, target models.SystemMode) (*ModeChangeResult, error) {
 	statePath := paths.New(projectRoot).StatePath()
-	blackboard := db.New(statePath)
+	blackboard := db.For(statePath)
 
 	timestamp := time.Now()
 	var previousMode models.SystemMode
@@ -82,7 +82,7 @@ type ResumeResult struct {
 // and/or resumes sprint from CHECKPOINT to IN_PROGRESS. No terminal I/O.
 func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 	statePath := paths.New(projectRoot).StatePath()
-	blackboard := db.New(statePath)
+	blackboard := db.For(statePath)
 
 	timestamp := time.Now()
 	var resumedFrom string

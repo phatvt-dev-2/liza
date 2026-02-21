@@ -115,7 +115,7 @@ func (d *DefaultCLIExecutor) ExecuteInteractive(ctx context.Context, cliName str
 
 // RunSupervisor is the main entry point for the agent supervisor
 func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
-	bb := db.New(config.StatePath)
+	bb := db.For(config.StatePath)
 	lizaPaths := paths.New(config.ProjectRoot)
 
 	// Validate identity

@@ -75,7 +75,7 @@ func AddTask(statePath, logPath string, input *AddTaskInput, plannerID string) (
 	now := time.Now().UTC()
 	agentID := plannerID
 
-	bb := db.New(statePath)
+	bb := db.For(statePath)
 
 	existingTask, err := bb.GetTask(input.ID)
 	if err != nil {

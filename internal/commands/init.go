@@ -209,7 +209,7 @@ func InitCommand(description string, specRef string) error {
 	}
 
 	// Write state file
-	bb := db.New(lizaPaths.StatePath())
+	bb := db.For(lizaPaths.StatePath())
 	if err := bb.Write(state); err != nil {
 		cleanupInit()
 		return fmt.Errorf("failed to write state file: %w", err)

@@ -126,7 +126,7 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 
 	releasedReviewer := false
 	releasedCoder := false

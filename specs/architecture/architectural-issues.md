@@ -22,7 +22,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Human Availability as Bottleneck](#human-availability-as-bottleneck)
   - [Spec Maturity Dependency](#spec-maturity-dependency)
   - [Well-Formed Blackboard State](#well-formed-blackboard-state)
-  - [Multi-Instance Blackboard Coherence](#multi-instance-blackboard-coherence)
 - [Stress Points](#stress-points)
   - [Supervisor Contention](#supervisor-contention)
   - [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
@@ -40,6 +39,7 @@ Persistent record of issues identified by architectural analysis skills.
 - [Fix Details](#fix-details)
   - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
   - [Implicit State Machine](#implicit-state-machine)
+  - [Multi-Instance Blackboard Coherence](#multi-instance-blackboard-coherence)
 - [Code-Level Architectural Smells](#code-level-architectural-smells)
   - [Magic Number 1800 Scattered](#magic-number-1800-scattered)
   - [executeTemplate Panics on Error](#executetemplate-panics-on-error)
@@ -223,20 +223,6 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 - Schema validation on every state read
 - Auto-repair for common corruption patterns
 - Quarantine malformed entries rather than fail-stop
-
-### Multi-Instance Blackboard Coherence
-
-**Skill:** systemic-thinking
-**Category:** ASSUMPTION
-
-**Issue:** The supervisor (`internal/agent/supervisor.go`) creates multiple independent `Blackboard` instances during its lifecycle: one persistent instance for the main loop, plus fresh instances in `checkAbort()` and `waitWhilePaused()` on every call. Additionally, every `commands.*Command()` function creates its own `Blackboard` internally. Each instance has independent cache state (mtime-based) and independent lock timeout. This works today because the filesystem is the sole source of truth and mtime changes propagate correctly. But it creates an invisible constraint: `Blackboard` must remain stateless beyond its cache. If any future change adds in-process state (metrics aggregation, write batching, connection pooling, subscriptions), that state fragments silently across instances with no error signal.
-
-**Implication:** The proliferation of `Blackboard` instances is an invisible architectural constraint that will be discovered through subtle bugs rather than compilation errors if the `Blackboard`'s responsibilities grow.
-
-**Future options:**
-- Singleton `Blackboard` per process, passed via dependency injection
-- Document the "stateless beyond cache" constraint in the `db` package
-- Add a linter check for multiple `db.New()` calls in the same package
 
 ---
 
@@ -432,6 +418,7 @@ Long-term concerns about system evolution.
 - [x] Monolithic DeleteTaskCommand — extracted business logic to `ops.CheckDeleteTask()` + `ops.DeleteTask()` (220→~75 LOC); interactive confirmation remains at CLI level *(software-architecture-review)*
 - [x] Magic number 1800 scattered — defined `Default{LeaseDurationSeconds,*PollInterval,*MaxWait}` constants in `models/state.go`; all 9 fallback sites now reference named constants *(software-architecture-review)*
 - [x] executeTemplate panics on error — changed to return `(string, error)` in both `prompts/templates.go` and `commands/templates.go`; propagated through all callers *(software-architecture-review)*
+- [x] Multi-instance Blackboard coherence — `db.For()` process-level singleton constructor; all ~30 production `db.New()` calls replaced; tests retain `db.New()` for isolation *(systemic-thinking)*
 
 ---
 
@@ -544,6 +531,15 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 **Original issue:** Task state transitions were not enforced by a declared state machine. Each command independently checked its own preconditions, making the valid transition graph emergent from scattered conditional checks across 7 command files and `supervisor.go`. Adding or modifying a command could silently create invalid transition paths.
 
 **Fix:** Declared the complete transition graph as `taskTransitions` map in `internal/models/state.go` with `CanTransition()` and `Transition()` methods. All 14 production transition sites migrated from direct `task.Status = X` to `task.Transition(X)`, which validates against the declared graph and returns a descriptive error on invalid transitions. `IsClaimable()` rewritten to derive claimable statuses from `CanTransition()` instead of a hardcoded switch. Existing precondition checks in commands preserved as defense-in-depth.
+
+### Multi-Instance Blackboard Coherence
+
+**Skill:** systemic-thinking
+**Category:** ASSUMPTION
+
+**Original issue:** ~31 production `db.New()` call sites each created independent `Blackboard` instances with their own cache state and lock objects. This worked because `Blackboard` was stateless beyond its mtime-based cache, but created an invisible constraint: any future addition of in-process state (metrics, write batching, subscriptions) would fragment silently across instances with no error signal.
+
+**Fix:** Added `db.For(statePath)` — a process-level singleton constructor using `sync.Map`. All production `db.New()` calls replaced with `db.For()`. Callers sharing the same state path within a process now get the same `*Blackboard` instance, ensuring cache coherence and preventing future state fragmentation. `db.New()` retained for tests that need independent instances (natural isolation via unique temp directories). `db/doc.go` documents the instance management pattern.
 
 ---
 

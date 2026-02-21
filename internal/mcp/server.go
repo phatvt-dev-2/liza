@@ -29,7 +29,7 @@ func NewServer(projectRoot, logPath string) *Server {
 	s := &Server{
 		projectRoot: projectRoot,
 		logPath:     logPath,
-		bb:          db.New(paths.New(projectRoot).StatePath()),
+		bb:          db.For(paths.New(projectRoot).StatePath()),
 		tools:       make(map[string]protocol.Tool),
 		resources:   make(map[string]protocol.Resource),
 		handlers:    make(map[string]ToolHandler),

@@ -47,7 +47,7 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 
 	// Read state
 	statePath := paths.New(opts.ProjectRoot).StatePath()
-	blackboard := db.New(statePath)
+	blackboard := db.For(statePath)
 	state, err := blackboard.Read()
 	if err != nil {
 		return "", fmt.Errorf("failed to read state: %w", err)

@@ -12,7 +12,7 @@ import (
 // Returns the computed metrics. No terminal I/O.
 func UpdateSprintMetrics(projectRoot string) (models.SprintMetrics, error) {
 	statePath := paths.New(projectRoot).StatePath()
-	blackboard := db.New(statePath)
+	blackboard := db.For(statePath)
 
 	state, err := blackboard.Read()
 	if err != nil {

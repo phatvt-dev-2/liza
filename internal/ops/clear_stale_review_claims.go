@@ -18,7 +18,7 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 	lp := paths.New(projectRoot)
 
 	// Get database and logger instances
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 	logger := log.New(lp.LogPath())
 
 	// Track cleared claims

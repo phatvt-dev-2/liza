@@ -31,7 +31,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	worktreeRel := filepath.Join(paths.WorktreesDirName, taskID)
 	worktreeDir := filepath.Join(lp.ProjectRoot(), worktreeRel)
 
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err

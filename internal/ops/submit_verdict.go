@@ -42,7 +42,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
 
 	err := bb.Modify(func(state *models.State) error {

@@ -46,7 +46,7 @@ func NewHeartbeat(config HeartbeatConfig) *Heartbeat {
 
 	return &Heartbeat{
 		agentID:       config.AgentID,
-		bb:            db.New(config.StatePath),
+		bb:            db.For(config.StatePath),
 		interval:      interval,
 		leaseDuration: leaseDuration,
 	}

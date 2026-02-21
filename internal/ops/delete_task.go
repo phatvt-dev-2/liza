@@ -60,7 +60,7 @@ func CheckDeleteTask(projectRoot, taskID string, force bool) (*DeleteTaskInfo, e
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 
 	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
@@ -112,7 +112,7 @@ func DeleteTask(projectRoot, taskID string, force, deleteWorktree bool, reason s
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 
 	state, task, err := readTaskState(bb, taskID)
 	if err != nil {

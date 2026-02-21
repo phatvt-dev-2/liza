@@ -12,6 +12,47 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
+// TestFor verifies the process-level singleton behavior of For().
+func TestFor(t *testing.T) {
+	t.Cleanup(ResetInstances)
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	// Same path returns same instance
+	bb1 := For(statePath)
+	bb2 := For(statePath)
+	if bb1 != bb2 {
+		t.Error("For() with same path returned different instances")
+	}
+
+	// Different path returns different instance
+	otherPath := filepath.Join(dir, "other.yaml")
+	bb3 := For(otherPath)
+	if bb1 == bb3 {
+		t.Error("For() with different paths returned same instance")
+	}
+
+	// Equivalent paths (trailing slash normalization) share instance
+	bb4 := For(statePath + "/")
+	if bb1 != bb4 {
+		t.Error("For() with equivalent path (trailing slash) returned different instance")
+	}
+
+	// New() returns independent instance (not the singleton)
+	bb5 := New(statePath)
+	if bb1 == bb5 {
+		t.Error("New() returned the singleton instance")
+	}
+
+	// ResetInstances clears the cache
+	ResetInstances()
+	bb6 := For(statePath)
+	if bb1 == bb6 {
+		t.Error("For() after ResetInstances returned stale singleton")
+	}
+}
+
 // TestBlackboardBasicReadWrite tests basic read and write operations
 func TestBlackboardBasicReadWrite(t *testing.T) {
 	dir := t.TempDir()

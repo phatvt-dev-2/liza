@@ -34,7 +34,7 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 
 	// Phase 1: Read and Validate (no lock held)
 	_, task, err := readTaskState(bb, taskID)

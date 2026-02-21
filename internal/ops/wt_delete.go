@@ -25,7 +25,7 @@ func DeleteWorktree(projectRoot, taskID string) (*DeleteWorktreeResult, error) {
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.New(lp.StatePath())
+	bb := db.For(lp.StatePath())
 	_, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err
