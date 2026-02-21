@@ -24,14 +24,14 @@ func getRoleWaitConfig(state *models.State, role string) (pollInterval, maxWait 
 
 	switch role {
 	case "planner":
-		pollSeconds = nonZeroOr(state.Config.PlannerPollInterval, 60)
-		maxWaitSeconds = nonZeroOr(state.Config.PlannerMaxWait, 1800)
+		pollSeconds = nonZeroOr(state.Config.PlannerPollInterval, models.DefaultPlannerPollInterval)
+		maxWaitSeconds = nonZeroOr(state.Config.PlannerMaxWait, models.DefaultPlannerMaxWait)
 	case "code-reviewer":
-		pollSeconds = nonZeroOr(state.Config.ReviewerPollInterval, 30)
-		maxWaitSeconds = nonZeroOr(state.Config.ReviewerMaxWait, 1800)
+		pollSeconds = nonZeroOr(state.Config.ReviewerPollInterval, models.DefaultReviewerPollInterval)
+		maxWaitSeconds = nonZeroOr(state.Config.ReviewerMaxWait, models.DefaultReviewerMaxWait)
 	default:
-		pollSeconds = nonZeroOr(state.Config.CoderPollInterval, 30)
-		maxWaitSeconds = nonZeroOr(state.Config.CoderMaxWait, 1800)
+		pollSeconds = nonZeroOr(state.Config.CoderPollInterval, models.DefaultCoderPollInterval)
+		maxWaitSeconds = nonZeroOr(state.Config.CoderMaxWait, models.DefaultCoderMaxWait)
 	}
 
 	return time.Duration(pollSeconds) * time.Second, time.Duration(maxWaitSeconds) * time.Second

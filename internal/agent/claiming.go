@@ -95,7 +95,7 @@ func resumeHandoffTask(bb *db.Blackboard, state *models.State, agentID string) (
 			if t.LeaseExpires == nil || t.LeaseExpires.Before(now) {
 				leaseDuration := s.Config.LeaseDuration
 				if leaseDuration <= 0 {
-					leaseDuration = 1800
+					leaseDuration = models.DefaultLeaseDurationSeconds
 				}
 				renewed := now.Add(time.Duration(leaseDuration) * time.Second)
 				t.LeaseExpires = &renewed

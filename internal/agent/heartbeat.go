@@ -13,7 +13,7 @@ const (
 	// DefaultHeartbeatInterval is the default time between heartbeats
 	DefaultHeartbeatInterval = 60 * time.Second
 	// DefaultLeaseDuration is the default lease duration
-	DefaultLeaseDuration = 30 * time.Minute
+	DefaultLeaseDuration = time.Duration(models.DefaultLeaseDurationSeconds) * time.Second
 )
 
 // HeartbeatConfig contains configuration for the heartbeat mechanism

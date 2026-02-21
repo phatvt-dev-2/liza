@@ -580,6 +580,17 @@ func (sm SystemMode) ValidateTransition(to SystemMode) error {
 	return fmt.Errorf("can only transition to %s from %v (current: %s)", to, tr.AllowedFrom, sm)
 }
 
+// Default configuration values (seconds) used as fallbacks when config fields are unset.
+const (
+	DefaultLeaseDurationSeconds = 1800 // 30 minutes
+	DefaultCoderPollInterval    = 30
+	DefaultCoderMaxWait         = 1800 // 30 minutes
+	DefaultPlannerPollInterval  = 60
+	DefaultPlannerMaxWait       = 1800 // 30 minutes
+	DefaultReviewerPollInterval = 30
+	DefaultReviewerMaxWait      = 1800 // 30 minutes
+)
+
 // Config holds system configuration parameters
 type Config struct {
 	MaxCoderIterations   int        `yaml:"max_coder_iterations"`

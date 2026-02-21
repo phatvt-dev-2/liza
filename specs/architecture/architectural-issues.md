@@ -430,6 +430,7 @@ Long-term concerns about system evolution.
 - [x] Agent → commands upward dependency — extracted business logic to `internal/ops/` package, `agent` no longer imports `commands` *(software-architecture-review)*
 - [x] Commands presentation+logic coupling — extracted all 15 MCP-exposed mutation commands to `internal/ops/`; MCP handlers call ops directly; commands are thin presentation wrappers *(software-architecture-review)*
 - [x] Monolithic DeleteTaskCommand — extracted business logic to `ops.CheckDeleteTask()` + `ops.DeleteTask()` (220→~75 LOC); interactive confirmation remains at CLI level *(software-architecture-review)*
+- [x] Magic number 1800 scattered — defined `Default{LeaseDurationSeconds,*PollInterval,*MaxWait}` constants in `models/state.go`; all 9 fallback sites now reference named constants *(software-architecture-review)*
 
 ---
 
@@ -549,16 +550,12 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 
 Issues identified through code-level architectural analysis (patterns, structure, duplication).
 
-### Magic Number 1800 Scattered
+### ~~Magic Number 1800 Scattered~~ *(resolved)*
 
 **Skill:** software-architecture-review
 **Category:** Hardcoded configuration
 
-**Issue:** The default lease duration of 1800 seconds appears as an unnamed magic number in `internal/agent/supervisor.go` (lines 469, 860) and `internal/commands/claim_task.go` (line 104). All three use the same fallback pattern: `if leaseDuration <= 0 { leaseDuration = 1800 }`. Additionally, `supervisor.go` has 6 more magic numbers in `getRoleWaitConfig` for poll/wait defaults (30, 60, 1800).
-
-**Implication:** No single place to change the default lease duration. `internal/agent/heartbeat.go` already defines `DefaultLeaseDuration = 30 * time.Minute` as a named constant, but the three fallback sites use raw `1800` instead.
-
-**Direction:** Replace magic numbers with the existing `DefaultLeaseDuration` constant (converting to seconds where needed), or define `DefaultLeaseDurationSeconds` alongside it.
+**Fix:** Defined `DefaultLeaseDurationSeconds`, `Default{Coder,Planner,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside the `Config` struct. All 3 lease-duration fallback sites and 6 poll/wait fallbacks in `getRoleWaitConfig` now reference the named constants. `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds` (single source of truth).
 
 ### executeTemplate Panics on Error
 

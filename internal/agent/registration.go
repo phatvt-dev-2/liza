@@ -170,7 +170,7 @@ func setAgentToPlanningStatus(bb *db.Blackboard, agentID string) error {
 		// Renew lease
 		leaseDuration := state.Config.LeaseDuration
 		if leaseDuration <= 0 {
-			leaseDuration = 1800
+			leaseDuration = models.DefaultLeaseDurationSeconds
 		}
 		leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
 		agent.LeaseExpires = &leaseExpires

@@ -254,7 +254,7 @@ commands/ (volatile, high-level)
 
 **What requires cross-file comparison?**
 - ~~Flock locking pattern in db/ vs log/ (duplicated — confirmed by cross-file analysis)~~ *(resolved: extracted to `internal/filelock`)*
-- `leaseDuration = 1800` fallback in supervisor.go (x2) and claim_task.go (x1) (duplicated)
+- ~~`leaseDuration = 1800` fallback in supervisor.go (x2) and claim_task.go (x1) (duplicated)~~ *(resolved: `models.DefaultLeaseDurationSeconds` constant)*
 - `NotFoundError` structured type vs ad-hoc `fmt.Errorf("task not found: %s")` — **25+ instances** of the ad-hoc form in non-test code *(pass 2: quantified)*
 - `derefString()` in prompts/builder.go duplicates `deref` template function
 - ~~Inline task-lookup loop duplicated 55+ times across commands, agent, db packages~~ *(pass 2, Complexity lens — resolved: `State.FindTask()`)*
@@ -431,13 +431,11 @@ Tests work around this by replacing `os.Stdin` with pipe readers (8+ test files 
 
 **Fix:** Extracted to `internal/filelock` package with the db package's enriched version (stale lock recovery, PID tracking, error classification, metrics) as the basis. Both `db.Blackboard` and `log.Logger` now delegate to `filelock.FileLock`. The log package gained stale lock recovery and error classification it previously lacked. No external consumers of the old `db.LockError` types existed, so no aliases were needed.
 
-#### Smell: Hardcoded configuration — magic number 1800
+#### ~~Smell: Hardcoded configuration — magic number 1800~~ *(resolved)*
 
-**Signal:** `leaseDuration = 1800` appears as a fallback default in `supervisor.go` (lines 469, 860) and `claim_task.go` (line 104), all with identical `if leaseDuration <= 0 { leaseDuration = 1800 }` pattern.
+**Signal:** `leaseDuration = 1800` appeared as a fallback default in 3 locations, plus 6 more magic numbers in `getRoleWaitConfig`.
 
-**Impact:** Changing the default requires finding and updating 3 locations. The `heartbeat.go` package already defines `DefaultLeaseDuration = 30 * time.Minute` as a named constant but in `time.Duration` form, creating a semantic split.
-
-**Direction:** Define `DefaultLeaseDurationSeconds = 1800` alongside `Config` in models or use `heartbeat.DefaultLeaseDuration` consistently.
+**Fix:** Defined `DefaultLeaseDurationSeconds` and `Default{Coder,Planner,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside `Config`. All 9 fallback sites reference named constants. `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds`.
 
 #### ~~Smell: MCP handlers bypass Blackboard locking~~ *(resolved)*
 
@@ -469,13 +467,11 @@ Tests work around this by replacing `os.Stdin` with pipe readers (8+ test files 
 
 **Direction:** Accept `io.Reader`/`io.Writer` parameters.
 
-#### Smell: Scattered poll/wait magic numbers
+#### ~~Smell: Scattered poll/wait magic numbers~~ *(resolved)*
 
-**Signal:** `getRoleWaitConfig()` in supervisor.go has 6 inline fallback values (30, 60, 1800) for poll intervals and max wait durations.
+**Signal:** `getRoleWaitConfig()` had 6 inline fallback values (30, 60, 1800).
 
-**Impact:** Configuration defaults are invisible to code review and maintenance.
-
-**Direction:** Define named constants alongside the Config struct.
+**Fix:** Resolved together with magic number 1800 — all fallbacks now reference `models.Default*` constants.
 
 #### ~~Smell: Untested critical execution paths~~ *(pass 4, Coverage lens — partially resolved)*
 
@@ -569,11 +565,11 @@ The 24.7% uncovered code concentrates in two patterns:
 
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
-| **Medium** | Magic number 1800 (lease default) | Scattered across 3 files, easy to make inconsistent | Define named constant in one location |
+| ~~**Medium**~~ | ~~Magic number 1800 (lease default)~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constant in one location~~ |
 | **Medium** | `executeTemplate` panics (2 locations) | Crashes long-running supervisor process | Return error instead |
 | **Medium** | Inconsistent `NotFoundError` usage (25+ ad-hoc instances) | Prevents reliable programmatic error distinction | Adopt `NotFoundError` consistently, pair with `State.FindTask()` |
 | **Medium** | Interactive stdin in library packages *(pass 3 — partially resolved: MCP-exposed commands no longer read stdin; remaining reads in CLI-only commands)* | Remaining 7 locations hardwired to terminal; tests use fragile monkey-patching | Accept `io.Reader`/callback for prompts |
-| **Medium** | Poll/wait fallback magic numbers | 6 invisible defaults in `getRoleWaitConfig` | Define named constants |
+| ~~**Medium**~~ | ~~Poll/wait fallback magic numbers~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constants~~ |
 | **Medium** | `validate.validateAnomalies` at 13.3% coverage *(pass 4)* | Only 1 of 5 anomaly type validators exercised; relates to "Anomaly Detail Validation Incomplete" issue | Add test cases for all 5 anomaly type branches |
 | **Medium** | `supervisor.resumeHandoffTask` at 11.4% coverage *(pass 4)* | Complex handoff resumption with minimal test exercising | Increase test coverage for handoff scenarios |
 | **Low** | `StdioTransport` not injectable | Testing workaround needed | Accept `io.Reader`/`io.Writer` params |

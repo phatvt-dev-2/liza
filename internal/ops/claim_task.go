@@ -94,7 +94,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	integrationBranch = state.Config.IntegrationBranch
 	leaseDuration = state.Config.LeaseDuration
 	if leaseDuration == 0 {
-		leaseDuration = 1800 // default 30 minutes
+		leaseDuration = models.DefaultLeaseDurationSeconds
 	}
 
 	// --- Phase 2: Handle Worktree ---
