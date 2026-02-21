@@ -6,14 +6,22 @@ Persistent record of issues identified by architectural analysis skills.
 - `systemic-thinking` — Systemic coherence and risk analysis
 - `software-architecture-review` — Code-level architectural patterns and smells
 
+## Update Policy
+
+1. Keep unresolved concerns in their thematic sections (load-bearing, tensions, smells, etc.).
+2. When an issue is fixed, record it in `Completed Fixes` and `Fixed (Traceability)` with commit references.
+3. Do not delete resolved issues from this document without preserving traceability metadata.
+4. If a resolved issue is removed from an active section, add/update its `Fixed (Traceability)` entry in the same change.
+5. `Fix Details` keeps the long-form rationale; `Fixed (Traceability)` is the canonical index for historical closure.
+
 ## Table of Contents
 
+- [Update Policy](#update-policy)
 - [Structural Load-Bearing Elements](#structural-load-bearing-elements)
   - [Planner as Single Semantic Interpreter](#planner-as-single-semantic-interpreter)
   - [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate)
 - [Systemic Tensions](#systemic-tensions)
   - [Spec Completeness vs Reality](#spec-completeness-vs-reality)
-  - [~~Documentation/Implementation Desynchronization~~](#documentationimplementation-desynchronization)
 - [Feedback Loops](#feedback-loops)
   - [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause)
   - [Restart/Lease Churn Under Load](#restartlease-churn-under-load)
@@ -27,24 +35,43 @@ Persistent record of issues identified by architectural analysis skills.
   - [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
 - [Fragility](#fragility)
   - [Cross-Script State Mutation](#cross-script-state-mutation)
-  - [~~YAML Round-Trip Data Loss~~](#yaml-round-trip-data-loss)
 - [Trajectory](#trajectory)
   - [Blackboard Growth Without Pruning](#blackboard-growth-without-pruning)
   - [Anomaly Detail Validation Incomplete](#anomaly-detail-validation-incomplete)
   - [Task Type Registry is Partial Abstraction](#task-type-registry-is-partial-abstraction)
+- [Code-Level Architectural Smells](#code-level-architectural-smells)
+  - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
 - [Accepted v1 Limitations](#accepted-v1-limitations)
   - [Self-Reported Validation](#self-reported-validation)
   - [Kill Switch Granularity](#kill-switch-granularity)
 - [Completed Fixes](#completed-fixes)
+- [Fixed (Traceability)](#fixed-traceability)
 - [Fix Details](#fix-details)
+  - [Documentation/Implementation Desynchronization](#documentationimplementation-desynchronization)
+  - [YAML Round-Trip Data Loss](#yaml-round-trip-data-loss)
+  - [Merge Conflict Resolution](#merge-conflict-resolution)
+  - [Anomaly Log Reader](#anomaly-log-reader)
+  - [Human Role Clarification](#human-role-clarification)
+  - [Task Dependencies](#task-dependencies)
+  - [Supervisor Clarification](#supervisor-clarification)
+  - [Review Lease Validation](#review-lease-validation)
+  - [Multi-State Claiming](#multi-state-claiming)
+  - [Approval Rate Monitoring](#approval-rate-monitoring)
+  - [Root Cause Required Before Rescope](#root-cause-required-before-rescope)
   - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
   - [Implicit State Machine](#implicit-state-machine)
   - [Multi-Instance Blackboard Coherence](#multi-instance-blackboard-coherence)
-- [Code-Level Architectural Smells](#code-level-architectural-smells)
   - [Magic Number 1800 Scattered](#magic-number-1800-scattered)
   - [executeTemplate Panics on Error](#executetemplate-panics-on-error)
-  - [~~Inconsistent NotFoundError Usage~~](#inconsistent-notfounderror-usage)
-  - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
+  - [Inconsistent NotFoundError Usage](#inconsistent-notfounderror-usage)
+  - [Supervisor God File](#supervisor-god-file)
+  - [Duplicated File-Locking Mechanism](#duplicated-file-locking-mechanism)
+  - [MCP Handler Bypasses Blackboard Locking](#mcp-handler-bypasses-blackboard-locking)
+  - [Commands Presentation+Logic Coupling](#commands-presentationlogic-coupling)
+  - [Agent → Commands Upward Dependency](#agent--commands-upward-dependency)
+  - [Pervasive Task-Lookup Duplication](#pervasive-task-lookup-duplication)
+  - [Untested MCP Server Dispatch Layer](#untested-mcp-server-dispatch-layer)
+  - [Untested Work Detection Logic](#untested-work-detection-logic)
 ---
 
 ## Structural Load-Bearing Elements
@@ -106,20 +133,6 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 - Spike mode for spec discovery
 - Planner-assisted spec drafting from coder discoveries
 - Graceful degradation when specs incomplete (proceed with explicit assumptions)
-
-### ~~Documentation/Implementation Desynchronization~~ *(resolved)*
-
-**Skill:** systemic-thinking
-**Category:** TENSION
-
-**Fix:** Complete documentation sweep replacing all operational `yq` commands across 8 files:
-- Read-only queries → `liza get`/`liza status` equivalents
-- Agent deletion → `liza delete agent`
-- Task claim release → `liza release-claim`
-- Manual state repairs → tool-agnostic "edit state.yaml" instructions
-- Protocol pseudo-code → notes referencing Go implementation
-
-Remaining `yq` references are historical only (ADRs, release notes, benchmark traces) or in independent tooling (spec-backfill scripts).
 
 ---
 
@@ -277,13 +290,6 @@ Partial failure modes with unclear recovery.
 - Transaction log for rollback capability
 - Centralized state mutation through single entry point
 
-### ~~YAML Round-Trip Data Loss~~ *(resolved)*
-
-**Skill:** systemic-thinking
-**Category:** FRAGILITY
-
-**Fix:** Added `Extra map[string]any` with `yaml:",inline"` tag to all model structs in `internal/models/state.go`. The yaml.v3 inline map captures unknown YAML keys during unmarshal and emits them back during marshal. Known struct fields take priority (no duplication). Nil maps produce zero output (no change to existing YAML). Unknown fields at all nesting levels (root, task, agent, config, etc.) now survive `Blackboard.Modify()` and `Read()`+`Write()` round-trips.
-
 ---
 
 ## Trajectory
@@ -332,6 +338,28 @@ Long-term concerns about system evolution.
 - Extend registry to map `(TaskType, role)` → `[]TaskStatus` (claimable statuses)
 - Keep the switch but validate it against registry entries at init time
 - Accept the split as intentional separation of concerns (registry = participation, switch = claiming rules)
+
+---
+
+
+## Code-Level Architectural Smells
+
+Issues identified through code-level architectural analysis (patterns, structure, duplication).
+
+### Interactive Stdin in Library Packages
+
+**Skill:** software-architecture-review
+**Category:** Untestable by design
+**Status:** PARTIALLY RESOLVED — MCP-exposed commands no longer read stdin (business logic in ops); remaining stdin reads are in CLI-only commands not exposed to MCP
+
+**Issue:** Direct `os.Stdin` reads via `bufio.NewReader(os.Stdin)` or `bufio.NewScanner(os.Stdin)` in: `embedded/embedded.go` (2 locations: `WriteClaudeSettings`, `WriteMCPSettings`), `commands/setup.go` (2 locations), `commands/init.go` (1), `commands/delete_task.go` (2), `commands/delete_agent.go` (1). Total: 8 locations across 5 files in 2 packages.
+
+**Current state:** The ops extraction resolved the MCP protocol corruption risk — MCP handlers now call `ops.*` functions that have zero I/O. The remaining stdin reads are in CLI-only interactive commands (`setup`, `init`, `delete_task`, `delete_agent`) and `embedded/` settings management, none of which are MCP-exposed. Both `delete_task.go` and `delete_agent.go` retain interactive confirmation at the CLI wrapper level but delegate business logic to `ops.CheckDeleteTask()` + `ops.DeleteTask()` and `ops.DeleteAgent()` respectively — business logic is fully testable without stdin.
+
+**Remaining concern:** Functions with hardwired stdin still cannot be used non-interactively. Tests work around this by replacing `os.Stdin` with pipe readers (observed in 8+ test files) — fragile and not safe for concurrent test execution.
+
+**Direction:** Accept an `io.Reader` parameter or a `Confirmer` callback for interactive prompts. Default to `os.Stdin` at the CLI call site in `cmd/liza/main.go`.
+
 
 ---
 
@@ -412,7 +440,64 @@ Long-term concerns about system evolution.
 
 ---
 
+
+## Fixed (Traceability)
+
+Commit SHA where issue details were first marked as fixed (proxy for actual fix commit).
+
+| Issue | Marked Fixed In |
+|-------|-----------------|
+| Documentation/Implementation Desynchronization | `e9a932e` |
+| YAML Round-Trip Data Loss | `50056d2` |
+| Merge Conflict Resolution | `de4bebf` |
+| Anomaly Log Reader | `de4bebf` |
+| Human Role Clarification | `de4bebf` |
+| Task Dependencies | `de4bebf` |
+| Supervisor Clarification | `de4bebf` |
+| Review Lease Validation | `de4bebf` |
+| Multi-State Claiming | `de4bebf` |
+| Approval Rate Monitoring | `de4bebf` |
+| Root Cause Required Before Rescope | `de4bebf` |
+| Error Classification Lost at Agent Interface | `a1e347b` |
+| Implicit State Machine | `2b5d236` |
+| Multi-Instance Blackboard Coherence | `9d1890c` |
+| Magic Number 1800 Scattered | `150c4d0` |
+| executeTemplate Panics on Error | `ad3288c` |
+| Inconsistent NotFoundError Usage | `e6f7bd2` |
+| Supervisor God File | `c281430` |
+| Duplicated File-Locking Mechanism | `a0bd779` |
+| MCP Handler Bypasses Blackboard Locking | `af911ed` |
+| Commands Presentation+Logic Coupling | `bfe179d` |
+| Agent → Commands Upward Dependency | `c7e98d7` |
+| Pervasive Task-Lookup Duplication | `363b440` |
+| Untested MCP Server Dispatch Layer | `40ef645` |
+| Untested Work Detection Logic | `40ef645` |
+
+---
+
+
 ## Fix Details
+
+### Documentation/Implementation Desynchronization
+
+**Skill:** systemic-thinking
+**Category:** TENSION
+
+**Fix:** Complete documentation sweep replacing all operational `yq` commands across 8 files:
+- Read-only queries → `liza get`/`liza status` equivalents
+- Agent deletion → `liza delete agent`
+- Task claim release → `liza release-claim`
+- Manual state repairs → tool-agnostic "edit state.yaml" instructions
+- Protocol pseudo-code → notes referencing Go implementation
+
+Remaining `yq` references are historical only (ADRs, release notes, benchmark traces) or in independent tooling (spec-backfill scripts).
+
+### YAML Round-Trip Data Loss
+
+**Skill:** systemic-thinking
+**Category:** FRAGILITY
+
+**Fix:** Added `Extra map[string]any` with `yaml:",inline"` tag to all model structs in `internal/models/state.go`. The yaml.v3 inline map captures unknown YAML keys during unmarshal and emits them back during marshal. Known struct fields take priority (no duplication). Nil maps produce zero output (no change to existing YAML). Unknown fields at all nesting levels (root, task, agent, config, etc.) now survive `Blackboard.Modify()` and `Read()`+`Write()` round-trips.
 
 ### Merge Conflict Resolution
 
@@ -531,43 +616,99 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 
 **Fix:** Added `db.For(statePath)` — a process-level singleton constructor using `sync.Map`. All production `db.New()` calls replaced with `db.For()`. Callers sharing the same state path within a process now get the same `*Blackboard` instance, ensuring cache coherence and preventing future state fragmentation. `db.New()` retained for tests that need independent instances (natural isolation via unique temp directories). `db/doc.go` documents the instance management pattern.
 
----
-
-## Code-Level Architectural Smells
-
-Issues identified through code-level architectural analysis (patterns, structure, duplication).
-
-### ~~Magic Number 1800 Scattered~~ *(resolved)*
+### Magic Number 1800 Scattered
 
 **Skill:** software-architecture-review
 **Category:** Hardcoded configuration
 
 **Fix:** Defined `DefaultLeaseDurationSeconds`, `Default{Coder,Planner,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside the `Config` struct. All 3 lease-duration fallback sites and 6 poll/wait fallbacks in `getRoleWaitConfig` now reference the named constants. `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds` (single source of truth).
 
-### ~~executeTemplate Panics on Error~~ *(resolved)*
+### executeTemplate Panics on Error
 
 **Skill:** software-architecture-review
 **Category:** Leaky abstraction / Non-idempotent operations
 
 **Fix:** Changed `executeTemplate` in `internal/prompts/templates.go` and `executeCommandTemplate` in `internal/commands/templates.go` to return `(string, error)` instead of panicking. Propagated error returns through all callers: `Build{BasePrompt,PlannerContext,CoderContext,ReviewerContext}` in `prompts/builder.go`, `buildInstructionsForWakeTrigger`, `format{AgentValue,MetricsValue}` in `commands/`, and `buildPrompt` in `agent/prompt.go`. All callers already returned `(string, error)` or were internal — propagation was straightforward.
 
-### ~~Inconsistent NotFoundError Usage~~ *(resolved)*
+### Inconsistent NotFoundError Usage
 
 **Skill:** software-architecture-review
 **Category:** Primitive obsession / Unstable interface
 
 **Fix:** Added `ID` field to `NotFoundError` (producing `"task not found: task-42"` matching the ad-hoc format). Migrated 25+ ad-hoc `fmt.Errorf("...not found...")` sites across `ops/` (12 files), `db/blackboard.go`, `agent/` (4 files), and `commands/inspect_*.go` (3 files) to use `&errors.NotFoundError{Entity: ..., ID: ...}`. Updated `IsNotFound()` to use `errors.As` (supports wrapped errors from `bb.Modify`). MCP `classifyError()` now uses type-based `errors.As` check first, with string fallback retained for external errors (git, etc.).
 
-### Interactive Stdin in Library Packages
+### Supervisor God File
 
 **Skill:** software-architecture-review
-**Category:** Untestable by design
-**Status:** PARTIALLY RESOLVED — MCP-exposed commands no longer read stdin (business logic in ops); remaining stdin reads are in CLI-only commands not exposed to MCP
+**Category:** God class/module
+**Status:** RESOLVED — decomposed into 6 cohesive files within `internal/agent/`
 
-**Issue:** Direct `os.Stdin` reads via `bufio.NewReader(os.Stdin)` or `bufio.NewScanner(os.Stdin)` in: `embedded/embedded.go` (2 locations: `WriteClaudeSettings`, `WriteMCPSettings`), `commands/setup.go` (2 locations), `commands/init.go` (1), `commands/delete_task.go` (2), `commands/delete_agent.go` (1). Total: 8 locations across 5 files in 2 packages.
+**Fix:** Split `supervisor.go` (1,426 LOC, 31 functions) into 6 files by responsibility:
+- `supervisor.go` (~270 LOC) — types, interfaces, main loop (`RunSupervisor`)
+- `registration.go` (~175 LOC) — agent identity and lifecycle
+- `waitforwork.go` (~300 LOC) — work detection with event-driven + polling
+- `claiming.go` (~230 LOC) — task claiming and merge handling
+- `prompt.go` (~95 LOC) — prompt assembly
+- `systemctl.go` (~160 LOC) — system control, execution, planner verification
 
-**Current state:** The ops extraction resolved the MCP protocol corruption risk — MCP handlers now call `ops.*` functions that have zero I/O. The remaining stdin reads are in CLI-only interactive commands (`setup`, `init`, `delete_task`, `delete_agent`) and `embedded/` settings management, none of which are MCP-exposed. Both `delete_task.go` and `delete_agent.go` retain interactive confirmation at the CLI wrapper level but delegate business logic to `ops.CheckDeleteTask()` + `ops.DeleteTask()` and `ops.DeleteAgent()` respectively — business logic is fully testable without stdin.
+Test files split correspondingly. `supervisor_priority_test.go` renamed to `claiming_priority_test.go`. No signature changes, no behavior changes.
 
-**Remaining concern:** Functions with hardwired stdin still cannot be used non-interactively. Tests work around this by replacing `os.Stdin` with pipe readers (observed in 8+ test files) — fragile and not safe for concurrent test execution.
+### Duplicated File-Locking Mechanism
 
-**Direction:** Accept an `io.Reader` parameter or a `Confirmer` callback for interactive prompts. Default to `os.Stdin` at the CLI call site in `cmd/liza/main.go`.
+**Skill:** software-architecture-review
+**Category:** DRY violation / Shotgun surgery
+**Status:** RESOLVED — extracted to `internal/filelock` package
+
+**Fix:** Created `internal/filelock` package with the complete locking implementation (lock acquisition, PID-based stale lock detection, error classification, metrics). Both `internal/db` and `internal/log` now use `filelock.FileLock` instead of independent implementations. The log package gained stale lock recovery and error classification it previously lacked. Constants (`DefaultLockTimeout`, `LockCheckInterval`) exist in one place. No external consumers of the old `db.LockError` types existed, so no aliases were needed.
+
+### MCP Handler Bypasses Blackboard Locking
+
+**Skill:** software-architecture-review
+**Category:** Leaky abstraction / Boundary violation
+**Status:** RESOLVED — `readStateResource()` now uses `Blackboard.ReadRaw()` under flock
+
+### Commands Presentation+Logic Coupling
+
+**Skill:** software-architecture-review
+**Category:** Leaky abstraction / Inappropriate intimacy
+**Status:** RESOLVED — all MCP-exposed mutation commands extracted to `internal/ops/`
+
+**Issue:** The `commands` package serves three consumers with incompatible I/O expectations — CLI (terminal), MCP server (JSON-RPC over stdio), and supervisor (background process) — but embeds terminal assumptions: 40+ `fmt.Print*` calls to stdout/stderr and 5+ direct `os.Stdin` reads in non-test production code. Functions like `ClaimTaskCommand()` print success messages, `SetupCommand()` prompts for confirmation, and `DeleteTaskCommand()` reads interactive input.
+
+**Implication:** MCP server calls commands via `handlers.go` that print to stdout, which is the JSON-RPC transport channel — stdout writes from commands could corrupt the protocol stream. Supervisor calls (`commands.ClaimTaskCommand()`, `commands.WtMergeCommand()`) mix operational output with supervisor logs. Tests must monkey-patch `os.Stdin` (8+ test files use `os.Stdin = r` / `defer func() { os.Stdin = oldStdin }()`) — fragile and not concurrency-safe.
+
+**Direction:** Separate business logic from presentation. Command functions return structured results; callers handle output. The MCP adapter already does this partially — `StatusCommand()` returns a string. Extend pattern to mutation commands. This also resolves the agent→commands coupling (see below).
+
+### Agent → Commands Upward Dependency
+
+**Skill:** software-architecture-review
+**Category:** Leaky abstraction
+**Status:** RESOLVED — extracted to `internal/ops` package
+
+**Fix:** Created `internal/ops/` package with pure business logic functions: `ClaimTask()` returning `*ClaimResult`, `MergeWorktree()` returning `*MergeResult`, `ClearStaleReviewClaims()` returning `(int, error)`, and `UpdateSprintMetrics()` returning `(SprintMetrics, error)`. `IntegrationFailedError` moved to `ops`. Command files in `internal/commands/` became thin presentation wrappers that call `ops` functions and format output. `internal/agent/` now imports `ops` instead of `commands` — the upward dependency is eliminated. Integration test subprocess output captured to `bytes.Buffer` in the ops layer (included in `MergeResult.TestOutput` and `IntegrationFailedError.TestOutput`) instead of wired to terminal.
+
+### Pervasive Task-Lookup Duplication
+
+**Skill:** software-architecture-review
+**Category:** DRY violation / Shotgun surgery
+**Status:** RESOLVED — `State.FindTask()` and `FindTaskIndex()` added to `internal/models/state.go`
+
+**Fix:** Added `FindTask(taskID string) *Task` and `FindTaskIndex(taskID string) int` methods to `*models.State`. Migrated all ~35 inline ID-lookup loops in non-test production code across `commands/`, `agent/`, `db/`, and `models/` packages. Removed 3 duplicate private helper functions (`findTaskByID` in `supervisor.go` and `inspect_agents.go`, `findTask` in `validate.go`). `Blackboard.GetTask()` and `UpdateTask()` now delegate to `State.FindTask()` internally. Bug fixes to task-lookup logic now require changing one method instead of 35+ locations.
+
+### Untested MCP Server Dispatch Layer
+
+**Skill:** software-architecture-review
+**Category:** Untested critical path
+**Status:** RESOLVED — `internal/mcp/server_dispatch_test.go` added
+
+**Fix:** Added `server_dispatch_test.go` with table-driven tests covering: `HandleRequest` routing (all 4 method branches + unknown method), `handleToolCall` (invalid params, missing name, unknown tool, successful handler, nil arguments, handler error with classification), `handleResourceRead` (invalid params), `classifyError` (all 5 classification branches: not found, lock timeout, race condition, validation, internal — 14 test cases), leak prevention (raw error strings never exposed), `handleNotification` (known and unknown). Request ID preservation verified.
+
+### Untested Work Detection Logic
+
+**Skill:** software-architecture-review
+**Category:** Untested critical path
+**Status:** RESOLVED — `internal/models/diagnostics_test.go` added
+
+**Fix:** Added `diagnostics_test.go` with table-driven tests covering all 4 functions: `CountClaimableTasks` (empty state, role filtering, mixed statuses, dependency blocking/satisfaction), `CountReviewableTasks` (empty state, status filtering, role filtering), `GetCoderWorkDiagnostics` (claimable found, blocked-by-deps, in-progress, combined), `GetReviewerWorkDiagnostics` (unassigned, expired leases, active reviews, nil lease handling).
+
+---

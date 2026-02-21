@@ -6,6 +6,39 @@
 
 ---
 
+## Update Policy
+
+1. `Phase 3: Recommendations` tracks open issues only.
+2. When an issue is fixed, move it to `Fixed (Traceability)` with:
+   - original priority
+   - resolving commit(s)
+   - date moved
+   - concise evidence note
+3. Do not delete fixed issues from this document; keep an append-only trace history.
+4. Keep inline `*(resolved)*` annotations in historical sections for narrative continuity, but use `Fixed (Traceability)` as the canonical closure log.
+5. If resolution evidence is incomplete, keep the issue in Recommendations until trace data is added.
+
+---
+
+## Table of Contents
+
+- [Update Policy](#update-policy)
+- [Phase 1: Discovery](#phase-1-discovery)
+- [1.1 Overview](#11-overview)
+- [1.2 Component Walkthrough](#12-component-walkthrough)
+- [1.3 Dependency Map](#13-dependency-map)
+- [1.4 Coverage Checkpoint](#14-coverage-checkpoint)
+- [Phase 2: Analysis](#phase-2-analysis)
+- [2.1 Analysis Framework](#21-analysis-framework)
+- [2.2 Strengths](#22-strengths)
+- [2.3 Smells](#23-smells)
+- [2.4 Patterns](#24-patterns)
+- [2.5 Test Coverage](#25-test-coverage)
+- [Phase 3: Recommendations](#phase-3-recommendations)
+- [Fixed (Traceability)](#fixed-traceability)
+- [Summary](#summary)
+- [Appendix: File Reference](#appendix-file-reference)
+
 ## Phase 1: Discovery
 
 ### 1.1 Overview
@@ -659,13 +692,11 @@ These are operational tuning parameters with no path to `models.Config`.
 
 **Direction:** No action for v1 — the current approach works. If test suite time becomes a concern, introduce interfaces at package boundaries (particularly `db` and `git`) to enable in-memory test doubles.
 
-#### Smell: Task-state-machine spec drift (`BLOCKED -> READY`) *(Adversarial pass)*
+#### ~~Smell: Task-state-machine spec drift (`BLOCKED -> READY`)~~ *(Adversarial pass — resolved in `0f6fe19`)*
 
-**Signal:** `specs/architecture/state-machines.md` documented `BLOCKED -> READY` as valid, but the executable transition graph in `internal/models/state.go` only allows `BLOCKED -> SUPERSEDED|ABANDONED`. `TaskStatus.CanTransition()` tests align with code, not the doc.
+**Signal (historical):** `specs/architecture/state-machines.md` documented `BLOCKED -> READY` as valid, but the executable transition graph in `internal/models/state.go` only allows `BLOCKED -> SUPERSEDED|ABANDONED`. `TaskStatus.CanTransition()` tests align with code, not the doc.
 
-**Impact:** High. This is a contract drift between architecture spec and runtime behavior. Operators and contributors reading the spec can design recovery flows that the system rejects, creating avoidable operational failures and incorrect mental models.
-
-**Direction:** Keep one source of truth. Either (a) update specs/docs to match current runtime behavior, or (b) implement and test `BLOCKED -> READY` in `taskTransitions` plus corresponding ops behavior. Do not leave mixed semantics.
+**Status:** Resolved in `0f6fe19`. `specs/architecture/state-machines.md` now forbids `BLOCKED -> READY` and aligns with runtime (`BLOCKED -> SUPERSEDED|ABANDONED`).
 
 #### Smell: Worktree recovery doc uses non-canonical branch name *(Adversarial pass)*
 
@@ -901,15 +932,11 @@ The 24.7% uncovered code concentrates in two patterns:
 
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
-| **High** | Task-state-machine spec drift (`BLOCKED -> READY`) *(Adversarial pass)* | `state-machines.md` and runtime transition map disagreed on valid lifecycle edge | Keep one source of truth: either implement `BLOCKED -> READY` end-to-end or keep docs/spec aligned to runtime (`SUPERSEDED`/`ABANDONED`) |
 | **High** | Pairing initialization doc pointer drift (`docs/USAGE.md`) *(Adversarial pass, entry: specs/)* | Session Initialization in `PAIRING_MODE.md` requires a non-existent file; startup protocol can fail before task execution | Point initialization to canonical docs (`USAGE_PAIRING.md` and/or `docs/README.md`) |
 | **High** | Iteration-limit config drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) *(Adversarial pass, entry: config/)* | Limits are modeled and documented but not enforced in runtime task/review loops | Implement effective-limit enforcement and explicit BLOCKED/escalation transitions |
 | **High** | MCP parse-error response write failure ignored *(Adversarial pass, entry: error handling)* | Server drops `WriteError` failure and keeps looping, hiding protocol output failure | Make parse-error response write failure terminal (`Run` should return error) |
 | **High** | `submit-for-review` `commit_sha` contract drift *(Adversarial pass, entry: data flow)* | CLI/MCP require SHA input but runtime ignores it and persists computed post-rebase HEAD | Align contract: remove SHA input from surfaces or enforce strict SHA validation against worktree HEAD |
 | **High** | REJECTED reassignment can orphan worktree on recreate failure *(Adversarial pass, entry: documented smells)* | Different-coder REJECTED claim deletes old worktree/branch before confirming replacement create succeeds | Reorder reassignment flow to secure replacement before teardown, or persist compensating recovery state |
-| ~~**Medium**~~ | ~~Magic number 1800 (lease default)~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constant in one location~~ |
-| ~~**Medium**~~ | ~~`executeTemplate` panics (2 locations)~~ *(resolved)* | Both `executeTemplate` and `executeCommandTemplate` return `(string, error)` | ~~Return error instead~~ |
-| ~~**Medium**~~ | ~~Inconsistent `NotFoundError` usage (25+ ad-hoc instances)~~ *(resolved)* | All sites migrated to `NotFoundError` with `ID` field; `classifyError` uses `errors.As` | ~~Adopt `NotFoundError` consistently~~ |
 | **Medium** | Cleanup failures suppressed in rebase/worktree recovery paths *(Adversarial pass, entry: error handling)* | Best-effort cleanup uses ignored errors across claim/review/worktree flows, masking residual dirty state | Surface cleanup outcomes as warning/error and escalate when inconsistency risk is material |
 | **Medium** | Stale-lock cleanup error is ignored before retry *(Adversarial pass, entry: error handling)* | Lock recovery drops `cleanupStaleLock()` failure context | Propagate cleanup failure as lock/filesystem error before retry |
 | **Medium** | Planner max-wait config is effectively ignored *(Adversarial pass, entry: documented smells)* | Planner wait loop overrides configured max wait with a fixed near-infinite duration | Either enforce `planner_max_wait` or remove/deprecate knob and document infinite planner semantics |
@@ -923,7 +950,6 @@ The 24.7% uncovered code concentrates in two patterns:
 | **Medium** | Watch stall detection bypasses typed log parsing *(Adversarial pass, entry: specs/)* | `checkStalled` scans raw `timestamp:` lines instead of using structured log entries | Use `internal/log` typed parser or an explicit activity timestamp field |
 | **Medium** | `DeleteTask` side effects can desync state/worktree under race *(Adversarial pass, entry: data flow)* | Worktree/branch may be deleted before final lock-time state commit succeeds | Reorder side effects post-commit or add compensating reconciliation on commit failure |
 | **Medium** | Interactive stdin in library packages *(pass 3 — partially resolved: MCP-exposed commands no longer read stdin; remaining reads in CLI-only commands)* | Remaining 7 locations hardwired to terminal; tests use fragile monkey-patching | Accept `io.Reader`/callback for prompts |
-| ~~**Medium**~~ | ~~Poll/wait fallback magic numbers~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constants~~ |
 | **Medium** | `validate.validateAnomalies` at 13.3% coverage *(pass 4)* | Only 1 of 5 anomaly type validators exercised; relates to "Anomaly Detail Validation Incomplete" issue | Add test cases for all 5 anomaly type branches |
 | **Medium** | `supervisor.resumeHandoffTask` at 11.4% coverage *(pass 4)* | Complex handoff resumption with minimal test exercising | Increase test coverage for handoff scenarios |
 | **Medium** | `inspect_field.go` manual reflection *(pass 7)* | 9 switch statements duplicating struct field names; adding a model field silently omits it from `inspect` | Replace switch dispatch with `reflect`-based traversal or `go generate` |
@@ -959,6 +985,24 @@ The 24.7% uncovered code concentrates in two patterns:
 
 ---
 
+## Fixed (Traceability)
+
+| Issue | Original Priority | Resolved In | Date Moved | Evidence |
+|-------|-------------------|-------------|------------|----------|
+| Magic number 1800 lease default | Medium | `150c4d0` | 2026-02-21 | `models.DefaultLeaseDurationSeconds` introduced; central defaults now named |
+| `executeTemplate` panic behavior | Medium | `ad3288c` | 2026-02-21 | `executeTemplate`/`executeCommandTemplate` now return error instead of panic |
+| Inconsistent `NotFoundError` usage | Medium | `e6f7bd2` | 2026-02-21 | Ad-hoc `task not found` strings migrated to structured `NotFoundError` |
+| Poll/wait fallback magic numbers | Medium | `150c4d0` | 2026-02-21 | Poll/wait defaults consolidated as named model constants |
+| `supervisor.go` god file decomposition | High | `c281430` | 2026-02-21 | Supervisor split into 6 cohesive files (`supervisor`, `registration`, `waitforwork`, `claiming`, `prompt`, `systemctl`) |
+| Task lookup duplication (inline loops) | High | `363b440` | 2026-02-21 | Replaced repeated loops with `State.FindTask()` / `State.FindTaskIndex()` |
+| Commands-to-ops extraction (agent boundary fix) | High | `c7e98d7`, `bfe179d`, `e7d020d` | 2026-02-21 | Business logic moved to `internal/ops`; agent and MCP mutate via ops, not command handlers |
+| Duplicated file locking mechanism | Medium | `a0bd779` | 2026-02-21 | Shared locking extracted into `internal/filelock` and reused by db/log paths |
+| MCP state read bypassed Blackboard lock | High | `af911ed` | 2026-02-21 | MCP state resource now reads via lock-safe `Blackboard.ReadRaw()` |
+| MCP dispatch/diagnostics critical-path test gaps | Medium | `40ef645` | 2026-02-21 | Added dispatch classification tests and diagnostics coverage |
+| Task-state-machine spec drift (`BLOCKED -> READY`) | High | `0f6fe19` | 2026-02-21 | Spec now forbids `BLOCKED -> READY` and matches runtime transition map (`BLOCKED -> SUPERSEDED|ABANDONED`) |
+
+---
+
 ## Summary
 
 Liza's architecture is well-suited to its constraints: a file-based multi-agent coordination system for solo developers. The dependency graph is clean with no cycles. Test coverage is excellent (2.4:1 ratio) with consistent patterns and strong helper infrastructure. The atomic state persistence via flock and fsync+rename is correctly implemented. Health monitoring is comprehensive. The task state machine is now explicit with a complete transition map.
@@ -977,7 +1021,7 @@ The primary structural concerns in priority order: ~~(1) `supervisor.go` god fil
 
 **Pass 7 (Complexity lens)** revisits complexity with the benefit of 6 prior passes of context. The earlier Complexity lens (pass 2) correctly identified the monolithic commands and task-lookup duplication — both now resolved. This pass reveals the complexity that *replaced* them: `ops/claim_task.go:ClaimTask` at 265 LOC is now the longest function in the codebase (inheriting from the resolved `ClaimTaskCommand`), with nesting depth 6 and dependency-checking logic intentionally duplicated across its TOCTOU phases. `ops/wt_merge.go:MergeWorktree` at 189 LOC is the second-longest. Both are architecturally correct — the three-phase pattern prevents race conditions — but their internal complexity makes them the hardest code to safely modify. A new finding not in previous passes: `commands/inspect_field.go` (327 LOC, 9 switch statements) is a hand-written reflection system where every model field requires a manual switch case. This is a maintenance trap — adding a field to `SprintMetrics` without updating the switch silently makes it inaccessible via `liza inspect`, with no compiler warning. LOC figures updated: production code is ~15,300 LOC (stable), test code grew to ~36,700 LOC (2.4:1 ratio, up from 2:1 at pass 1), and `commands/` is 4,300 LOC (up from 2,800 recorded earlier, likely due to test growth during ops extraction). All existing findings verified as current.
 
-**Adversarial pass (entry: docs/)** forced a doc-first path and surfaced contract-level drift missed by prior code-centric passes: (1) state-machine spec said `BLOCKED -> READY` while runtime disallowed it, (2) a troubleshooting recovery command used non-canonical branch naming (`task-1` vs `task/<id>`), and (3) testing docs overstated `go test -short` behavior for integration tests. These are medium-to-high leverage because they affect operator behavior and architectural understanding directly, not just implementation internals.
+**Adversarial pass (entry: docs/)** forced a doc-first path and surfaced contract-level drift missed by prior code-centric passes. One item is now resolved: ~~state-machine spec said `BLOCKED -> READY` while runtime disallowed it~~ (fixed in `0f6fe19`). Remaining open items are (1) troubleshooting recovery branch naming drift (`task-1` vs `task/<id>`) and (2) testing-doc short-mode drift for integration tests. These are medium-to-high leverage because they affect operator behavior and architectural understanding directly, not just implementation internals.
 
 **Adversarial pass (entry: specs/)** surfaced three additional coherence gaps: (1) Pairing Session Initialization still references `docs/USAGE.md` even though docs were split into `USAGE_PAIRING.md` and `USAGE_MULTI_AGENTS.md`, (2) watcher stall detection parses raw `log.yaml` text for `timestamp:` instead of using typed log parsing, and (3) sprint governance links Vision via `../vision.md` while canonical Vision lives in `specs/build/0 - Vision.md`. Together these are mostly documentation/protocol-integrity issues, but the initialization-path drift is high leverage because it can break startup behavior before execution begins.
 
