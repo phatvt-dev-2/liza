@@ -14,7 +14,7 @@ Running tests, coverage targets, and test utilities for the Liza Go codebase.
 | `go test -cover ./...` | Coverage summary |
 | `go test -run TestFoo ./internal/db/` | Specific test |
 | `go test -run "TestBlackboard.*" ./internal/db/` | Pattern match |
-| `go test -short ./...` | Skip slow integration tests |
+| `go test -short ./...` | Run tests with short-mode enabled (integration tests currently do not auto-skip on `-short`) |
 
 ### Coverage
 
@@ -220,13 +220,10 @@ if state.Config.Mode != models.SystemModeRunning {
 
 ### Integration Tests
 
-Located in `internal/integration/`. Use `testing.Short()` to skip in fast runs.
+Located in `internal/integration/`. These tests currently run even with `-short`; there are no `testing.Short()` guards in this package.
 
 ```go
 func TestFullWorkflow(t *testing.T) {
-    if testing.Short() {
-        t.Skip("Skipping integration test in short mode")
-    }
     dir := t.TempDir()
     // Set up real git repo, init liza, add tasks, claim, submit, review, merge
 }

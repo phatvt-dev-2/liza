@@ -1,7 +1,7 @@
 # Architecture Review — Liza
 
-**Date:** 2026-02-20
-**Mode:** Enrichment (pass 4, Coverage lens)
+**Date:** 2026-02-21
+**Mode:** Adversarial (after pass 7)
 **Reviewer:** software-architecture-review skill
 
 ---
@@ -20,16 +20,16 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 
 **Two binaries:** `liza` (CLI with 25+ cobra commands) and `liza-mcp` (MCP JSON-RPC server over stdio).
 
-**Source size:** ~15,400 LOC production Go, ~30,800 LOC test Go (2:1 test-to-code ratio).
+**Source size:** ~15,300 LOC production Go, ~36,700 LOC test Go (2.4:1 test-to-code ratio). *(pass 7: updated from ~15,400/~30,800)*
 
 ### 1.2 Component Walkthrough
 
-#### models (`internal/models/`) — 673 LOC
+#### models (`internal/models/`) — ~680 LOC
 
 **Purpose:** Core domain model. Task lifecycle state machine, agent state, sprint tracking.
 
 **Observations:**
-- `State` struct is the central data type — serialized to/from `state.yaml`
+- `State` struct is the central data type — serialized to/from `state.yaml`. `state.go` is 631 LOC with 20 structs — cohesive (all YAML-serialized state types) *(pass 5: updated LOC)*
 - `Task` struct has 30+ fields covering full lifecycle
 - `TaskType` → role workflow registry (`taskWorkflows` map)
 - `IsClaimable()` encodes claiming rules with dependency checking
@@ -54,7 +54,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `Metrics` for lock acquisition timing
 - `GetTask()` and `UpdateTask()` exist and now delegate to `State.FindTask()` internally *(pass 2, Complexity lens — resolved)*
 
-#### agent (`internal/agent/`) — 1,667 LOC (6 files)
+#### agent (`internal/agent/`) — 1,716 LOC (6 files)
 
 **Purpose:** Supervisor loop, heartbeat, work detection, logging.
 
@@ -66,7 +66,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
   - `claiming.go` (~230 LOC) — task claiming and merge handling
   - `prompt.go` (~95 LOC) — prompt assembly
   - `systemctl.go` (~160 LOC) — system control, execution, planner verification
-- `RunSupervisor()` (186 LOC): checkAbort → waitWhilePaused → handleApprovedMerges → waitForWork → claimTask → buildPrompt → executeAgent → handleExitCode
+- `RunSupervisor()` (186 LOC, nesting depth 5): checkAbort → waitWhilePaused → handleApprovedMerges → waitForWork → claimTask → buildPrompt → executeAgent → handleExitCode *(pass 7, Complexity lens: nesting depth noted)*
 - `CLIExecutor` interface enables mock testing (supports claude, codex, gemini, vibe)
 - `waitForWorkEventDriven()` (116 LOC) with fsnotify + polling fallback
 - `verifyPlannerStateChanges()` (137 LOC) — 6 switch cases with repetitive before/after counting structure *(pass 2, Complexity lens)*
@@ -75,8 +75,12 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `logging.go`: package-level singleton `slog.Logger`, hardcoded to stdout
 - ~~**Upward dependency on commands**: supervisor calls `commands.ClaimTaskCommand()`, `commands.WtMergeCommand()`, `commands.ClearStaleReviewClaimsCommand()` directly — orchestration layer depends on CLI handler layer~~ *(pass 3, Boundaries lens — resolved: extracted to `internal/ops/` package, agent now imports `ops` instead of `commands`)*
 - **Core execution paths untested**: `Execute()`, `ExecuteInteractive()`, `handleApprovedMerges()`, `logTaskSubmissionIfCompleted()` at 0% statement coverage; `resumeHandoffTask()` at 11.4%. These are the actual agent loop entry points — tested indirectly via `TestSupervisorBasicLoop` with mock executor but not at statement level *(pass 4, Coverage lens)*
+- **`handleApprovedMerges` high nesting-to-LOC ratio**: 55 LOC but nesting depth 6 (for-range → if-status → if-approved → if-merge-commit → if-err → errors.As). The deepest nesting processes `IntegrationFailedError` fields conditionally. Relatedly, `resumeHandoffTask` (63 LOC) reaches nesting depth 5 inside its `bb.Modify` closure *(pass 7, Complexity lens)*
+- **Role string literals instead of constants**: ~15 switch/if-else cases use raw `"coder"`, `"code-reviewer"`, `"planner"` strings despite `models.RoleCoder` and `models.RoleCodeReviewer` existing. `claiming.go:115` uses `Role: "coder"` literal. Note: agent config role `"code-reviewer"` (hyphen) differs from task workflow role `models.RoleCodeReviewer = "code_reviewer"` (underscore) — two role naming conventions semantically coupled but not unified *(pass 6, Coupling lens)*
+- **Duplicated identity validation**: `registration.go:validateIdentity()` reimplements `identity.ValidateFormat()` + `identity.ValidateRole()` — same algorithm (split on last hyphen, validate numeric suffix, check role prefix) without importing the `identity` package *(pass 6, Coupling lens)*
+- **Hardcoded `"terminal-1"` and raw `1800`**: `supervisor.go:127` passes `"terminal-1"` literal and `1800` instead of `models.DefaultLeaseDurationSeconds`; `supervisor.go:221` also uses raw `1800` *(pass 6, Coupling lens)*
 
-#### ops (`internal/ops/`) — ~2,700 LOC (19 files)
+#### ops (`internal/ops/`) — ~2,700 LOC production, ~4,300 LOC test (19 files)
 
 **Purpose:** Pure business logic layer for all task workflow and system operations. Returns structured results with no terminal I/O side effects.
 
@@ -94,8 +98,13 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - Zero `fmt.Print*` or `os.Stdin` calls — verified by grep
 - Three consumers: `agent/` (orchestration), `commands/` (CLI presentation), `mcp/` (JSON-RPC adapter)
 - Depends on: `db`, `models`, `git`, `log`, `paths`, `analysis` — same layer as `commands` minus presentation concerns
+- `claim_task.go` (299 LOC): `ClaimTask` is 265 LOC with nesting depth 6 — the largest single function in the codebase. Phase 3's `bb.Modify` closure (L171-L275, ~105 LOC) re-checks dependencies with logic duplicated from Phase 1 (L67-L78 vs L192-L204). The duplication is intentional (TOCTOU pattern) but the function's total complexity — 3 phases, 4 task-status branches, worktree management, agent state updates, cleanup on error — makes it the hardest function to read and modify safely *(pass 7, Complexity lens)*
+- `wt_merge.go` (285 LOC): `MergeWorktree` is 189 LOC — second-longest function. Linear phased flow (validate → merge → integration tests → update state → cleanup) but the phase count and error handling paths contribute significant cognitive load *(pass 7, Complexity lens)*
+- `helpers.go` provides `readTaskState()` for Read-path task lookup, but no equivalent exists for the Modify-callback path *(pass 5, Duplication lens)*
+- **Structural repetition within ops** *(pass 5, Duplication lens)*: Most ops functions share an identical skeleton — input validation → `paths.New(projectRoot)` + `db.For(lp.StatePath())` → `bb.Modify(func(state) { FindTask + nil check + status check + mutate + history append })` → wrap error → return result. Quantified: `if taskID == ""` guard in 10/19 files, `FindTask + NotFoundError` inside Modify in 10 files, `task.History = append(...)` in 12 files. See Duplication smell below.
+- **Inconsistent parameter conventions** *(pass 6, Coupling lens)*: Some ops functions take `projectRoot` and internally construct `paths.New()` + `db.For()` (ClaimTask, MergeWorktree, DeleteTask, SubmitReview, etc.), while others take `statePath`/`logPath` directly (AddTask). Callers must know which convention each function uses. See Coupling smell below.
 
-#### commands (`internal/commands/`) — ~2,800 LOC
+#### commands (`internal/commands/`) — ~4,300 LOC *(pass 7: updated from ~2,800)*
 
 **Purpose:** CLI presentation wrappers over `ops/` business logic, plus read-only query commands.
 
@@ -104,13 +113,16 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 **Observations:**
 - 25+ command implementations — mutation commands are thin wrappers (~20-75 LOC each), read-only commands retain logic
 - `watch.go` (516 LOC): 11 health checks with alert deduplication, comprehensive monitoring
-- `validate.go` (457 LOC): 9 validators checking all state invariants, largest function `validateTaskInvariants` at 142 LOC *(pass 2)*
+- `validate.go` (448 LOC): 9 validators checking all state invariants, `validateTaskInvariants` at 142 LOC — sequential if-chain checking ~15 status-specific invariants with no early-exit grouping *(pass 2; pass 7: LOC updated, complexity note)*
+- `inspect_field.go` (327 LOC): Manual reflection system with 9 switch statements — `getField`, `getConfigField`, `getSprintField`, `getSprintMetricsField`, `getSprintTimelineField`, `getComputedField`, `getAgentsComputedField`, `getTasksComputedField`, `getSprintComputedField`, `getAgentComputedField`, `getTaskComputedField`. Every struct field requires a switch case that duplicates the YAML tag name. Adding a new model field (e.g., a new Config or SprintMetrics field) requires updating both the struct and the corresponding switch — the compiler provides no help if they diverge *(pass 7, Complexity lens)*
 - ~~`wt_merge.go` (356 LOC)~~ now ~60 LOC wrapper over `ops.MergeWorktree()`
 - `format.go` (164 LOC): centralized JSON/YAML/table formatting
 - Templates in `commands/templates/`: status_dashboard, agent_value, metrics_value
 - ~~**Monolithic command functions**~~ — *(pass 2, Complexity lens — resolved)* All monolithic commands extracted to `ops/`. `DeleteTaskCommand` (220→~75 LOC) was the last to be extracted, using `ops.CheckDeleteTask()` + `ops.DeleteTask()` with interactive confirmation remaining at CLI level.
 - ~~**Presentation+logic coupling**~~ — *(pass 3, Boundaries lens — resolved for MCP-exposed commands)* All mutation commands now delegate to `ops/` for business logic. Remaining `fmt.Print*` calls are legitimate presentation in thin wrappers. `os.Stdin` reads remain only in CLI-only commands (`setup.go`, `init.go`, `delete_task.go`, `delete_agent.go`) — not MCP-exposed.
 - **Self-constructing infrastructure** — each command function creates fresh `paths.New()`, `db.New()`, `git.New()` instances internally; no dependency injection *(pass 3, Boundaries lens)*
+- **Watch thresholds hardcoded** — 10 constants (`DefaultCheckInterval`, `LeaseGracePeriod`, `StallThreshold`, etc.) with no path to `models.Config`. Operationally tunable parameters hardcoded in source *(pass 6, Coupling lens)*
+- **Divergent GracePeriod** — `validate.go:16` defines `GracePeriod = 60` (seconds, int) while `watch.go` defines `LeaseGracePeriod = 120 * time.Second`. Both represent lease expiry grace periods but with different values, types, and names *(pass 6, Coupling lens)*
 
 #### cmd (`cmd/`) — 1,344 LOC
 
@@ -126,7 +138,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 
 **Observations:**
 - `server.go` (704 LOC): tool/resource registration, request dispatch. `registerMutationTools()` is 242 LOC of declarative tool schema definitions — LOC is mostly boilerplate, not algorithmic complexity *(pass 2, Complexity lens)*
-- `handlers.go` (~550 LOC, 29 functions): tool implementations delegating to `ops` package for mutations, `commands` package for read-only queries. 14% branch density — each handler is thin. *(pass 2; pass 5: updated — ops import added)*
+- `handlers.go` (~600 LOC, 29 functions): tool implementations delegating to `ops` package for mutations, `commands` package for read-only queries. 14% branch density — each handler is thin. *(pass 2; pass 5: updated LOC and ops import)*
 - `protocol/` subpackage (232 LOC): clean DTO types, stdio transport, error codes
 - 4 registration categories: read-only tools, read-only resources, mutation tools, complex operations
 - Clean adapter boundary: mcp translates JSON-RPC into `ops` calls (mutations) and `commands` calls (queries), adds error classification, holds no business logic *(pass 3, Boundaries lens; pass 5: updated — handlers now import ops directly for all mutations)*
@@ -141,6 +153,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `CreateWorktree()`, `RemoveWorktree()`, `MergeBranch()` (ff then no-ff), `RebaseOnto()`
 - Centralized `runGit()` / `runGitCombined()` helpers
 - `CalculateDrift()` for worktree-to-main divergence measurement
+- **Hardcoded `"task/"` branch prefix**: `worktree.go:114` and `worktree.go:159` use `"task/" + taskID` inline; same literal in 5 ops files (7 production files total, no constant) *(pass 6, Coupling lens)*
 
 #### prompts (`internal/prompts/`) — 258 LOC + 14 templates
 
@@ -246,8 +259,9 @@ commands/ (volatile, high-level)
 **What's implicit that should be explicit?**
 - ~~Task state transitions~~ *(pass 2: resolved — explicit `taskTransitions` map now exists)*
 - The "Blackboard must remain stateless beyond cache" constraint (documented in architectural-issues.md)
-- Default lease duration (1800 seconds) — exists as magic number, not named constant
-- The relationship between `GracePeriod` (60s in validate.go) and `LeaseGracePeriod` (120s in watch.go)
+- ~~Default lease duration (1800 seconds) — exists as magic number, not named constant~~ *(resolved: `models.DefaultLeaseDurationSeconds` — but supervisor.go still uses raw `1800` in 2 call sites, pass 6)*
+- The relationship between `GracePeriod` (60s in validate.go) and `LeaseGracePeriod` (120s in watch.go) — semantically related but divergent values and types *(pass 6, Coupling lens: elevated to smell)*
+- The mapping between agent config roles (`"code-reviewer"`, hyphen) and task workflow role constants (`"code_reviewer"`, underscore) *(pass 6, Coupling lens)*
 - ~~Missing `State.FindTask(taskID)` domain method~~ *(pass 2, Complexity lens — resolved)* — `FindTask` and `FindTaskIndex` added, all inline lookups migrated
 - The contract between `commands` and its consumers — commands assume terminal I/O but serve three different transports *(pass 3, Boundaries lens)*
 
@@ -263,6 +277,14 @@ commands/ (volatile, high-level)
 - ~~Inline task-lookup loop duplicated 55+ times across commands, agent, db packages~~ *(pass 2, Complexity lens — resolved: `State.FindTask()`)*
 - Template execution pattern in `commands/templates.go` vs `prompts/templates.go` — nearly identical: embed.FS + funcMap with `deref` + template.Must + executeTemplate that panics *(pass 3, Boundaries lens)*
 - `os.Stdin` reads across `embedded` (2), `commands/setup` (2), `commands/init` (1), `commands/delete_task` (2), `commands/delete_agent` (1) — all tested by monkey-patching `os.Stdin` *(pass 3, Boundaries lens)*
+- **Ops Modify-callback boilerplate** *(pass 5, Duplication lens)*: `FindTask(taskID) + nil→NotFoundError` inside `bb.Modify` callbacks appears in 10 production files. The existing `readTaskState()` helper only works outside callbacks. The guard is identical in every file — see Smell below.
+- **Ops input validation** *(pass 5, Duplication lens)*: `if taskID == "" { return nil, fmt.Errorf("task ID is required") }` in 10/19 ops files; `if agentID == ""` in 7/19. Each function validates its own required parameters independently.
+- **Command test harness** *(pass 5, Duplication lens)*: 82 table-driven test loops across 34 command test files, 23 `initialState := &models.State{...}` constructions. The loop body (~15 lines: tmpDir → SetupLizaDir → create state → setup → WriteInitialState → call command → check error → validate state) is structurally identical.
+- **Test setup sequence** *(pass 5, Duplication lens)*: 625 occurrences of `testhelpers.{SetupLizaDir|CreateValidState|WriteInitialState}` across 55 test files. The 3-4 line setup is per-test-function, not per-file.
+- **Ops parameter convention split** *(pass 6, Coupling lens)*: `ClaimTask`, `MergeWorktree`, `DeleteTask`, `SubmitReview`, `Start`, `Stop`, `Pause`, `Resume`, `CreateWorktree`, `DeleteWorktree` take `projectRoot`; `AddTask` takes `statePath`/`logPath` directly — callers must track which convention each function uses
+- **`"task/"` branch prefix scattered** *(pass 6, Coupling lens)*: `"task/" + taskID` in 7 production files (`ops/claim_task.go`, `ops/wt_merge.go`, `ops/delete_task.go`, `ops/submit_review.go`, `ops/wt_delete.go`, `git/worktree.go` ×2) — no constant in `paths/` or elsewhere
+- **Identity validation duplicated** *(pass 6, Coupling lens)*: `agent/registration.go:validateIdentity()` reimplements `identity.ValidateFormat()` + `identity.ValidateRole()` without importing the package
+- **Role naming divergence** *(pass 6, Coupling lens)*: Agent config roles use hyphens (`"code-reviewer"`), task workflow constants use underscores (`"code_reviewer"`). The two are semantically coupled (supervisor maps config role to workflow role for claiming) but the mapping is implicit in switch statements, not explicit
 
 **Coverage lens statement-level data** *(pass 4)*:
 
@@ -292,18 +314,24 @@ commands/ (volatile, high-level)
 
 **Coverage report reliability** *(pass 4)*: `coverage.out` shows 0% for `CanTransition`/`Transition`/`IsTerminal` despite dedicated test functions (`TestCanTransition` with 20+ table cases, `TestTaskTransition`, `TestTerminalStatesHaveNoTransitions`). These functions were added in commit `2b5d236` — the coverage report may predate that change or was generated from a partial run. Recommend re-running `make test` to regenerate.
 
-**Complexity lens metrics** *(pass 2)*:
+**Complexity lens metrics** *(pass 2; pass 7: updated with ops files, nesting depth, function LOC)*:
 
-| File | LOC | Functions | Branch Density | Longest Function |
-|------|-----|-----------|---------------|-----------------|
-| ~~supervisor.go~~ | ~~1,428~~ | ~~33~~ | ~~19%~~ | ~~RunSupervisor (186)~~ *(resolved: split into 6 files, largest ~270 LOC)* |
-| main.go | 1,275 | 5 | 9% | init (111) |
-| server.go | 704 | 22 | 5% | registerMutationTools (242) |
-| handlers.go | 547 | 29 | 14% | — |
-| state.go | 543 | 19 | 9% | — |
-| watch.go | 516 | 15 | 14% | — |
-| ~~claim_task.go~~ | ~~328~~ | ~~1~~ | — | ~~ClaimTaskCommand (310)~~ *(resolved: business logic extracted to `ops/claim_task.go`; command is now ~55 LOC presentation wrapper)* |
-| ~~wt_merge.go~~ | ~~356~~ | ~~3~~ | — | ~~WtMergeCommand (319)~~ *(resolved: business logic extracted to `ops/wt_merge.go`; command is now ~60 LOC presentation wrapper)* |
+| File | LOC | Longest Function (LOC) | Max Nesting Depth | Notes |
+|------|-----|----------------------|-------------------|-------|
+| main.go | 1,275 | init (111) | 2 | Organizational only — flat command registry |
+| server.go | 715 | registerMutationTools (242) | 2 | Declarative schema definitions |
+| state.go | 631 | — | 2 | 20+ cohesive structs |
+| handlers.go | 603 | — | 3 | Thin handlers, 14% branch density |
+| watch.go | 516 | — | 3 | 11 health checks, well-decomposed |
+| validate.go | 448 | validateTaskInvariants (142) | 3 | Sequential if-chain, no early-exit grouping |
+| inspect_field.go | 327 | — | 3 | **9 switch statements** — manual reflection *(pass 7)* |
+| **ops/claim_task.go** | **299** | **ClaimTask (265)** | **6** | **Highest complexity — 3-phase TOCTOU with duplicated dep check** *(pass 7)* |
+| **ops/wt_merge.go** | **285** | **MergeWorktree (189)** | **4** | **Linear but many error-handling paths** *(pass 7)* |
+| supervisor.go | 302 | RunSupervisor (186) | 5 | Main event loop *(pass 7: depth noted)* |
+| claiming.go | 318 | resumeHandoffTask (63) | 5/6 | handleApprovedMerges: 55 LOC but depth 6 *(pass 7)* |
+| ~~supervisor.go (old)~~ | ~~1,428~~ | ~~RunSupervisor (186)~~ | — | *(resolved: split into 6 files)* |
+| ~~commands/claim_task.go~~ | ~~328~~ | ~~ClaimTaskCommand (310)~~ | — | *(resolved: extracted to ops)* |
+| ~~commands/wt_merge.go~~ | ~~356~~ | ~~WtMergeCommand (319)~~ | — | *(resolved: extracted to ops)* |
 
 **Boundaries lens import analysis** *(pass 3)*:
 
@@ -353,7 +381,7 @@ Dependencies flow inward toward stability. No import cycles. Leaf packages (`mod
 
 #### Excellent Test Infrastructure
 
-2:1 test-to-code ratio with consistent patterns: table-driven tests, filesystem isolation via `t.TempDir()`, real git repos for integration, lightweight hand-written mocks. The `testhelpers` package (733 LOC) eliminates duplication across test files. Integration tests in `internal/integration/` verify complete workflows. All `internal/` packages have tests.
+2:1 test-to-code ratio with consistent patterns: table-driven tests, filesystem isolation via `t.TempDir()`, real git repos for integration, lightweight hand-written mocks. The `testhelpers` package (733 LOC) provides reusable primitives (`SetupLizaDir`, `CreateValidState`, `WriteInitialState`, `BuildTaskByStatus`, assertion helpers) used across 55 test files (625 call sites). Integration tests in `internal/integration/` verify complete workflows. All `internal/` packages have tests. *(pass 5: quantified testhelpers usage)*
 
 #### Atomic State Persistence
 
@@ -434,11 +462,13 @@ Tests work around this by replacing `os.Stdin` with pipe readers (8+ test files 
 
 **Fix:** Extracted to `internal/filelock` package with the db package's enriched version (stale lock recovery, PID tracking, error classification, metrics) as the basis. Both `db.Blackboard` and `log.Logger` now delegate to `filelock.FileLock`. The log package gained stale lock recovery and error classification it previously lacked. No external consumers of the old `db.LockError` types existed, so no aliases were needed.
 
-#### ~~Smell: Hardcoded configuration — magic number 1800~~ *(resolved)*
+#### ~~Smell: Hardcoded configuration — magic number 1800~~ *(mostly resolved — 2 residual sites, pass 6)*
 
 **Signal:** `leaseDuration = 1800` appeared as a fallback default in 3 locations, plus 6 more magic numbers in `getRoleWaitConfig`.
 
-**Fix:** Defined `DefaultLeaseDurationSeconds` and `Default{Coder,Planner,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside `Config`. All 9 fallback sites reference named constants. `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds`.
+**Fix:** Defined `DefaultLeaseDurationSeconds` and `Default{Coder,Planner,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside `Config`. ~~All 9 fallback sites reference named constants.~~ `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds`.
+
+**Residual** *(pass 6, Coupling lens)*: `supervisor.go:127` (`registerAgent(..., 1800)`) and `supervisor.go:221` (`claimReviewerTask(..., 1800, ...)`) still use raw `1800` instead of `models.DefaultLeaseDurationSeconds`. These were missed during the original extraction.
 
 #### ~~Smell: MCP handlers bypass Blackboard locking~~ *(resolved)*
 
@@ -490,6 +520,137 @@ The root cause is I/O coupling: functions at 0% are precisely those with hardwir
 
 **Direction:** ~~For `mcp/server`, the dispatch layer is pure logic~~ (done). ~~For `classifyError`, same: pure function~~ (done). ~~For `diagnostics.go`: pure functions on `*State`~~ (done). For `supervisor.Execute`/`ExecuteInteractive`: already abstracted behind `CLIExecutor` interface, which is mocked in `TestSupervisorBasicLoop`, but the `DefaultCLIExecutor` concrete implementation is untested. For `mcp/server.Run` and `protocol/stdio`: require I/O injection (see "Non-injectable stdio" smell).
 
+#### Smell: Ops callback boilerplate — FindTask + guard + history *(pass 5, Duplication lens)*
+
+**Signal:** Inside `bb.Modify` callbacks, 10 of 19 ops files repeat identical 3-line task lookup:
+```go
+task := state.FindTask(taskID)
+if task == nil {
+    return &errors.NotFoundError{Entity: "task", ID: taskID}
+}
+```
+The `readTaskState()` helper (helpers.go) only works outside callbacks (it calls `bb.Read()`). Inside callbacks, no helper exists.
+
+Additionally, `task.History = append(task.History, models.TaskHistoryEntry{Time: now, Event: "...", Agent: &agentID})` appears in 12 locations with minor variations (some add `Reason`, `Note`, `PreviousAssignee`).
+
+**Impact:** Low-medium. Each occurrence is small (3-5 lines), and the variations in history entries make full extraction non-trivial. The repetition is coincidental similarity rather than copy-paste — each file was independently authored with the same pattern. Risk: if the guard pattern changes (e.g., adding logging on not-found), 10 files need updating.
+
+**Direction:** A `modifyTask(bb, taskID, func(state, task) error) error` helper could encapsulate the Modify+FindTask+guard pattern. History append could get a `task.RecordEvent(time, event, agentID, opts...)` method. However, the current repetition is idiomatic Go — evaluate whether the abstraction adds clarity or obscures intent.
+
+#### Smell: Manual reflection dispatch in `inspect_field.go` *(pass 7, Complexity lens)*
+
+**Signal:** 327 LOC with 9 switch statements forming a hand-written field accessor system. Each struct field (Config, Sprint, SprintMetrics, Timeline) has a switch case mapping its YAML tag name to a Go struct access. `getComputedField` adds another dispatch layer for derived values (5 more switch statements across helper functions). Total: ~14 switch statements across 11 functions, 40+ case branches.
+
+**Impact:** Medium. When a model field is added (e.g., a new `SprintMetrics` counter), the developer must update both the struct definition in `models/state.go` AND the corresponding switch in `inspect_field.go`. The compiler provides no warning if they diverge — the field simply becomes inaccessible via `liza inspect`. This is already observable: `getSprintMetricsField` has only 29.4% test coverage (pass 4), meaning most fields are untested as accessors. Adding a field and forgetting the switch case is a silent failure.
+
+**Direction:** Two options: (1) Use Go `reflect` package to generically traverse struct fields by YAML tag — eliminates all dispatch switches but adds runtime reflection cost (acceptable for a CLI query tool). (2) Generate the switch functions from struct tags via `go generate` — compile-time safety with no reflection overhead. Option (1) is simpler and appropriate given `inspect` is a read-only diagnostic command, not a hot path.
+
+#### Smell: `ClaimTask` function complexity *(pass 7, Complexity lens)*
+
+**Signal:** `ops/claim_task.go:ClaimTask` is 265 LOC — the longest function in the codebase. Nesting depth 6 (function → Modify closure → if-status → if-deps → for-range → if-condition). The function has 3 phases (validate, worktree, re-validate+commit), 4 task-status branches in Phase 2, dependency checking duplicated between Phase 1 (L67-L78) and Phase 3 (L192-L204), and error-path cleanup logic (L281-L284).
+
+**Impact:** Low-medium. The three-phase TOCTOU pattern is architecturally correct — the duplication is intentional (Phase 1 reads before worktree creation, Phase 3 re-validates under lock). However, the function's total cognitive load makes it the hardest single function to safely modify. Each phase has distinct concerns (validation, I/O, state mutation) that are interleaved with shared local variables (`taskStatus`, `previousAssignee`, `baseCommit`).
+
+**Direction:** Extract Phase 2 (worktree handling, L101-L165) into a `handleWorktree(taskStatus, previousAssignee, agentID, worktreeDir, gitWrapper) (created, deleted bool, error)` helper. The phases would then read as: validate → handleWorktree → commit. The dependency check could be extracted to a `checkDependencies(task, state) error` function used in both phases. These are scope-contained extractions that don't affect the TOCTOU correctness.
+
+#### Smell: `validateTaskInvariants` monolithic if-chain *(pass 7, Complexity lens)*
+
+**Signal:** 142 LOC, ~15 sequential `if task.Status == X && field == nil` checks with no grouping. Each status's invariants are scattered across the function rather than grouped by status.
+
+**Impact:** Low. The function is simple despite its length — each check is independent and self-documenting. However, the lack of grouping means a developer adding a new status must scan the entire function to ensure all required invariants are covered.
+
+**Direction:** Group checks by status (all IMPLEMENTING invariants together, all REVIEWING together, etc.) — or use a `switch task.Status` with per-status validation functions. Not urgent; the function is correct and readable despite its length.
+
+#### Smell: High nesting depth in `claiming.go` *(pass 7, Complexity lens)*
+
+**Signal:** `handleApprovedMerges` (55 LOC) reaches nesting depth 6: `for range → if status → if approved → if merge_commit → if err → errors.As`. `resumeHandoffTask` (63 LOC) reaches depth 5 inside its `bb.Modify` closure. Both functions are short enough that the nesting doesn't create horizontal scroll, but the depth-to-LOC ratio signals tightly packed control flow.
+
+**Impact:** Low. Both functions are well-commented and the deep nesting follows natural error-handling patterns (check condition → attempt operation → classify error). The `handleApprovedMerges` pattern is particularly common in Go error handling.
+
+**Direction:** `handleApprovedMerges` could extract the inner merge-attempt body into a `tryMergeTask(projectRoot, task, agentID) error` helper, reducing the for-loop body to: filter + call + log. Low priority.
+
+#### Smell: Ops input validation boilerplate *(pass 5, Duplication lens)*
+
+**Signal:** `if taskID == "" { return nil, fmt.Errorf("task ID is required") }` appears in 10 ops files. `if agentID == ""` appears in 7 files. Each function independently validates required string parameters with identical code.
+
+**Impact:** Low. The validation is trivial (1-3 lines per parameter) and self-documenting. The "cost" is mostly visual noise rather than maintenance risk.
+
+**Direction:** A validation helper (`requireNonEmpty("task ID", taskID)`) or struct-based input with a `Validate()` method could reduce noise, but this is borderline — idiomatic Go favors explicit validation at function entry. Not worth abstracting unless the pattern grows beyond simple emptiness checks.
+
+#### Smell: Command test harness repetition *(pass 5, Duplication lens)*
+
+**Signal:** 34 command test files share a structurally identical test loop body (~15 lines): create tmpDir → `SetupLizaDir` → construct `initialState` with common config → apply `setupState` → `WriteInitialState` → call command → check error → validate state. The `initialState` construction (Config fields: IntegrationBranch, LeaseDuration, etc.) is repeated 23 times with near-identical values.
+
+**Impact:** Low. This is standard Go table-driven test boilerplate. The `testhelpers` package already extracts the reusable primitives. Further abstraction would need to handle the variety in command signatures (different parameter sets per command) — a generic harness would trade boilerplate for indirection.
+
+**Direction:** A `testhelpers.RunCommandTest(t, CommandTestCase{...})` helper could encapsulate the common loop body, accepting the command-under-test as a function parameter. Alternatively, a `testhelpers.DefaultState()` function returning a pre-configured `*models.State` (with standard Config values) would eliminate the 23 repeated `initialState` constructions. The latter is lower-risk and higher-value.
+
+#### Smell: Hardcoded `"task/"` branch prefix *(pass 6, Coupling lens)*
+
+**Signal:** The string `"task/" + taskID` is constructed inline in 7 production files: `ops/claim_task.go` (×3), `ops/wt_merge.go`, `ops/delete_task.go`, `ops/submit_review.go`, `ops/wt_delete.go`, `git/worktree.go` (×2). No constant or function centralizes this convention.
+
+**Impact:** Medium. If the branch naming convention changes (e.g., to `"liza/"` or a configurable prefix), 7+ files need updating. More critically, a typo in any one site would silently produce wrong branch names. The `paths/` package already centralizes other naming conventions (`LizaDirName`, `StateFileName`, etc.) but doesn't include the branch prefix.
+
+**Direction:** Add `TaskBranchPrefix = "task/"` constant to `paths/` (or a `TaskBranchName(taskID string) string` function) and replace all inline constructions.
+
+#### Smell: Duplicated identity validation *(pass 6, Coupling lens)*
+
+**Signal:** `agent/registration.go:validateIdentity()` (30 LOC) reimplements the same algorithm as `identity.ValidateFormat()` + `identity.ValidateRole()` without importing the `identity` package. Both: split on last hyphen, validate numeric suffix with `strconv.Atoi`, check role prefix match.
+
+**Impact:** Low-medium. If identity format rules change (e.g., allowing non-numeric suffixes), two implementations need updating independently. The `identity` package is the canonical source but the `agent` package doesn't know it exists.
+
+**Direction:** Replace `validateIdentity()` call with `identity.ValidateFormat()` + `identity.ValidateRole()`. The `identity` package already returns structured errors.
+
+#### Smell: Role naming divergence *(pass 6, Coupling lens)*
+
+**Signal:** Two role naming conventions coexist:
+- **Agent config roles** (used in supervisor switch statements, registration): `"coder"`, `"code-reviewer"` (hyphen), `"planner"` — string literals, no constants
+- **Task workflow roles** (defined in `models/state.go`): `RoleCoder = "coder"`, `RoleCodeReviewer = "code_reviewer"` (underscore)
+
+The `"coder"` name coincidentally matches both conventions. `"code-reviewer"` vs `"code_reviewer"` does not. The mapping from config role to workflow role is implicit in ~15 switch/if-else cases in the `agent` package.
+
+**Impact:** Medium. A developer adding a new role must know both conventions exist and update both sides. The naming divergence (`code-reviewer` vs `code_reviewer`) increases confusion risk. `claiming.go:115` already uses `Role: "coder"` literal instead of the available `models.RoleCoder` constant.
+
+**Direction:** Unify role naming. Either (a) define agent role constants in `models` alongside the existing workflow role constants, or (b) make the workflow role constants the canonical names and use them in supervisor config. If hyphens are needed for CLI display, use a presentation mapping.
+
+#### Smell: Inconsistent ops parameter conventions *(pass 6, Coupling lens)*
+
+**Signal:** Most ops functions take `projectRoot string` and internally construct `paths.New(projectRoot)` + `db.For(lp.StatePath())` (e.g., `ClaimTask`, `MergeWorktree`, `DeleteTask`, `Start`, `Stop`). But `AddTask` takes `statePath, logPath string` directly — the caller must construct these paths and pass them in.
+
+**Impact:** Low-medium. Callers must know which convention each function uses. The inconsistency creates a maintenance tax: if path derivation logic changes, functions using `projectRoot` auto-adapt (via `paths.New()`), but `AddTask` callers must update manually. New ops functions must decide which convention to follow with no documented guidance.
+
+**Direction:** Standardize on `projectRoot` parameter convention (majority pattern). Migrate `AddTask` to take `projectRoot` and derive paths internally, consistent with all other ops functions.
+
+#### Smell: Watch thresholds not configurable *(pass 6, Coupling lens)*
+
+**Signal:** `commands/watch.go` defines 10 hardcoded constants:
+- `DefaultCheckInterval = 10s`, `LeaseGracePeriod = 120s`, `StallThreshold = 30m`
+- `StaleDraftThreshold = 30m`, `CheckpointStaleThreshold = 30m`, `CheckpointStuckThreshold = 2h`
+- `CheckpointAbandonedThreshold = 8h`, `PauseStaleThreshold = 30m`, `PauseForgottenThreshold = 2h`
+- `OrphanedGracePeriod = 30s`
+
+These are operational tuning parameters with no path to `models.Config`.
+
+**Impact:** Low. The values are reasonable defaults and rarely need changing. However, the `models.Config` struct already exists as the configuration mechanism for other runtime parameters (`LeaseDuration`, `IntegrationBranch`, etc.). Watch thresholds are the only operational parameters that bypass this pattern entirely.
+
+**Direction:** Add watch-related fields to `models.Config` (or a nested `WatchConfig` struct) with the current values as defaults. Not urgent — these are stable values.
+
+#### Smell: Hardcoded `"terminal-1"` in supervisor *(pass 6, Coupling lens)*
+
+**Signal:** `supervisor.go:127` passes `"terminal-1"` as a literal string to `registerAgent()`. The terminal field is recorded in agent state but always set to this fixed value regardless of the agent's actual terminal.
+
+**Impact:** Low. The terminal field is informational (used in status display). However, if multiple agents run in different terminals, they all report the same terminal ID, reducing operational visibility.
+
+**Direction:** Derive from `config.Terminal` or the agent's TTY, or remove the field if it's not providing value.
+
+#### Smell: Divergent GracePeriod values *(pass 6, Coupling lens)*
+
+**Signal:** `commands/validate.go:16` defines `GracePeriod = 60` (seconds, integer type). `commands/watch.go` defines `LeaseGracePeriod = 120 * time.Second` (`time.Duration` type). Both represent grace periods for expired leases, but with different values (60s vs 120s), types (`int` vs `time.Duration`), and names.
+
+**Impact:** Medium. The validate command considers a lease expired after 60s grace. The watch command considers it expired after 120s grace. This creates a window (60-120s) where validate flags an issue but watch doesn't — or vice versa, depending on perspective. Neither documents why its value differs.
+
+**Direction:** Unify into a single grace period constant (or make it configurable via `models.Config`). If different grace periods are intentional (validate should be stricter than watch), document the rationale.
+
 #### Smell: No interface-based seams beyond CLIExecutor *(pass 3, Boundaries lens)*
 
 **Signal:** The entire production codebase has exactly **one interface**: `CLIExecutor` in `agent/supervisor.go`. All other cross-package dependencies use concrete types: `*db.Blackboard`, `*git.Git`, `*log.Logger`, `paths.LizaPaths`. There is one test-only interface (`testingT` in `testhelpers/assertions.go`).
@@ -497,6 +658,30 @@ The root cause is I/O coupling: functions at 0% are precisely those with hardwir
 **Impact:** This is a deliberate simplicity choice appropriate for v1 scope. However, it means testing any package that uses `db.Blackboard` requires real file I/O (creating temp directories, writing YAML files). The `testhelpers` package exists specifically to manage this overhead. If the system grows, introducing seams at the `db` and `git` boundaries would enable faster, more isolated tests.
 
 **Direction:** No action for v1 — the current approach works. If test suite time becomes a concern, introduce interfaces at package boundaries (particularly `db` and `git`) to enable in-memory test doubles.
+
+#### Smell: Task-state-machine spec drift (`BLOCKED -> READY`) *(Adversarial pass)*
+
+**Signal:** `specs/architecture/state-machines.md` documented `BLOCKED -> READY` as valid, but the executable transition graph in `internal/models/state.go` only allows `BLOCKED -> SUPERSEDED|ABANDONED`. `TaskStatus.CanTransition()` tests align with code, not the doc.
+
+**Impact:** High. This is a contract drift between architecture spec and runtime behavior. Operators and contributors reading the spec can design recovery flows that the system rejects, creating avoidable operational failures and incorrect mental models.
+
+**Direction:** Keep one source of truth. Either (a) update specs/docs to match current runtime behavior, or (b) implement and test `BLOCKED -> READY` in `taskTransitions` plus corresponding ops behavior. Do not leave mixed semantics.
+
+#### Smell: Worktree recovery doc uses non-canonical branch name *(Adversarial pass)*
+
+**Signal:** `docs/TROUBLESHOOTING.md` used `git worktree add ... -b task-1` while runtime checks and worktree creation consistently use `task/<id>` (e.g., `"task/" + taskID` in `internal/git/worktree.go` and `internal/ops/submit_review.go`).
+
+**Impact:** Medium. Following documented recovery can produce a local branch layout that later fails submit/merge validation (`expected: task/<id>`), turning recovery into a second failure.
+
+**Direction:** Align recovery docs with runtime invariant: branch names must be `task/<task-id>`.
+
+#### Smell: Test guidance drift for short mode *(Adversarial pass)*
+
+**Signal:** `docs/TESTING.md` claimed integration tests are skipped in `go test -short` via `testing.Short()`, but `internal/integration/*.go` currently has no `testing.Short()` guards and tests execute under `-short`.
+
+**Impact:** Medium. CI/runtime expectations diverge from reality; teams relying on short mode for fast feedback get unexpectedly slow runs and inconsistent documentation.
+
+**Direction:** Document current behavior accurately now. Optionally add explicit `testing.Short()` guards later if the desired behavior is to skip integration tests in short mode.
 
 ### 2.4 Patterns
 
@@ -507,6 +692,7 @@ The root cause is I/O coupling: functions at 0% are precisely those with hardwir
 | Command | `internal/commands/` | Each CLI command is an independent function with uniform interface |
 | Template Method | `internal/prompts/` | Role-specific prompts built from shared templates |
 | Observer (Watcher) | `internal/db/watcher.go` | Event-driven state change notification via fsnotify |
+| Strategy (claimRelease) | `internal/ops/release_claim.go` | Parameterized coder/reviewer claim release — eliminates duplication between two nearly-identical release flows *(pass 5, Duplication lens: notable counterexample)* |
 | Registry | `internal/models/` | Task type → role workflow mapping |
 | State Machine | `internal/models/` | Explicit `taskTransitions` map with `CanTransition()`/`Transition()` *(pass 2: added)* |
 | Circuit Breaker | `internal/analysis/` | Pattern detection on anomalies triggers system pause |
@@ -516,7 +702,7 @@ The root cause is I/O coupling: functions at 0% are precisely those with hardwir
 
 ### 2.5 Test Coverage
 
-**Overall:** ~15,400 source LOC, ~30,800 test LOC. 2:1 ratio. **75.3% statement coverage** (from `go tool cover -func`). *(pass 4: statement-level data added)*
+**Overall:** ~15,300 source LOC, ~36,700 test LOC. 2.4:1 ratio. **75.3% statement coverage** (from `go tool cover -func`). *(pass 4: statement-level data added; pass 7: LOC updated)*
 
 **Well-covered:**
 | Package | Ratio | Notes |
@@ -564,21 +750,40 @@ The 24.7% uncovered code concentrates in two patterns:
 
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
+| **High** | Task-state-machine spec drift (`BLOCKED -> READY`) *(Adversarial pass)* | `state-machines.md` and runtime transition map disagreed on valid lifecycle edge | Keep one source of truth: either implement `BLOCKED -> READY` end-to-end or keep docs/spec aligned to runtime (`SUPERSEDED`/`ABANDONED`) |
 | ~~**Medium**~~ | ~~Magic number 1800 (lease default)~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constant in one location~~ |
 | ~~**Medium**~~ | ~~`executeTemplate` panics (2 locations)~~ *(resolved)* | Both `executeTemplate` and `executeCommandTemplate` return `(string, error)` | ~~Return error instead~~ |
 | ~~**Medium**~~ | ~~Inconsistent `NotFoundError` usage (25+ ad-hoc instances)~~ *(resolved)* | All sites migrated to `NotFoundError` with `ID` field; `classifyError` uses `errors.As` | ~~Adopt `NotFoundError` consistently~~ |
+| **Medium** | Troubleshooting worktree recovery branch mismatch *(Adversarial pass)* | Recovery command used `task-1`; runtime expects `task/<id>` | Standardize docs to `task/<id>` branch naming |
+| **Medium** | Testing `-short` behavior mismatch *(Adversarial pass)* | Docs implied integration tests skip in short mode; implementation currently runs them | Correct docs now; optionally add `testing.Short()` guards in integration tests if skip semantics are desired |
 | **Medium** | Interactive stdin in library packages *(pass 3 — partially resolved: MCP-exposed commands no longer read stdin; remaining reads in CLI-only commands)* | Remaining 7 locations hardwired to terminal; tests use fragile monkey-patching | Accept `io.Reader`/callback for prompts |
 | ~~**Medium**~~ | ~~Poll/wait fallback magic numbers~~ *(resolved)* | Named constants in `models/state.go` | ~~Define named constants~~ |
 | **Medium** | `validate.validateAnomalies` at 13.3% coverage *(pass 4)* | Only 1 of 5 anomaly type validators exercised; relates to "Anomaly Detail Validation Incomplete" issue | Add test cases for all 5 anomaly type branches |
 | **Medium** | `supervisor.resumeHandoffTask` at 11.4% coverage *(pass 4)* | Complex handoff resumption with minimal test exercising | Increase test coverage for handoff scenarios |
+| **Medium** | `inspect_field.go` manual reflection *(pass 7)* | 9 switch statements duplicating struct field names; adding a model field silently omits it from `inspect` | Replace switch dispatch with `reflect`-based traversal or `go generate` |
+| **Medium** | `ClaimTask` function complexity (265 LOC, depth 6) *(pass 7)* | Longest function in codebase; 3-phase TOCTOU with duplicated dep check; hard to modify safely | Extract Phase 2 worktree handling and dependency check into helpers |
+| **Medium** | Hardcoded `"task/"` branch prefix in 7 files *(pass 6)* | Silent breakage if convention changes; no single source of truth | Add `TaskBranchPrefix` constant to `paths/` |
+| **Medium** | Role naming divergence *(pass 6)* | `"code-reviewer"` vs `"code_reviewer"` across agent/models boundary; implicit mapping | Unify role constants or add explicit mapping |
+| **Medium** | Divergent GracePeriod values (60s vs 120s) *(pass 6)* | Validate and watch disagree on lease grace window | Unify or document why different |
+| **Low** | Residual raw `1800` in supervisor.go *(pass 6)* | 2 call sites bypass `models.DefaultLeaseDurationSeconds` constant | Replace with named constant |
+| **Low** | Duplicated identity validation *(pass 6)* | `agent/registration.go` reimplements `identity` package logic | Replace with `identity.ValidateFormat()` + `ValidateRole()` |
+| **Low** | Inconsistent ops parameter conventions *(pass 6)* | `AddTask` takes `statePath` while 15+ others take `projectRoot` | Standardize on `projectRoot` |
 | **Low** | `StdioTransport` not injectable | Testing workaround needed | Accept `io.Reader`/`io.Writer` params |
 | **Low** | `PlannerContextConfig` empty struct | Premature abstraction | Remove or document intent |
 | **Low** | Duplicated template execution pattern *(pass 3)* | `commands/templates.go` and `prompts/templates.go` near-identical | Extract shared template infrastructure or accept as coincidental similarity |
 | **Low** | `derefString` duplicated | In builder.go and templates.go funcMap | Use template func only |
+| **Low** | `validateTaskInvariants` monolithic if-chain *(pass 7)* | 142 LOC, ~15 checks ungrouped by status; hard to verify completeness | Group checks by status or use switch |
+| **Low** | High nesting in `claiming.go` helpers *(pass 7)* | `handleApprovedMerges` depth 6, `resumeHandoffTask` depth 5 despite short LOC | Extract inner merge-attempt body |
 | **Low** | `cmd/liza/main.go` (1,275 LOC) *(pass 2)* | Organizational god file; behavioral complexity is low | Consider splitting cobra definitions into per-command files if growth continues |
 | **Low** | No interface-based seams *(pass 3)* | Deliberate simplicity; acceptable for v1 | Monitor test suite time; introduce seams if needed |
 | **Low** | Mutable package-level version variables *(pass 3)* | `mcp.Version = embedded.Version` cross-assignment | Consider constructor parameter or build-time injection |
 | **Low** | Regenerate `coverage.out` *(pass 4)* | Report shows 0% for functions with thorough tests; may predate recent commits | Run `make test` to update |
+| **Low** | Ops Modify-callback task guard *(pass 5, Duplication lens)* | 10 files repeat identical FindTask+NotFoundError inside Modify callbacks | Consider `modifyTask(bb, taskID, fn)` helper; evaluate clarity vs indirection |
+| **Low** | Command test `initialState` construction *(pass 5, Duplication lens)* | 23 near-identical State constructions with same Config values | Add `testhelpers.DefaultState()` returning pre-configured State |
+| **Low** | Watch thresholds not configurable *(pass 6)* | 10 operational constants bypass `models.Config` pattern | Add to Config with current values as defaults |
+| **Low** | Hardcoded `"terminal-1"` *(pass 6)* | All agents report same terminal regardless of actual TTY | Derive from config or actual terminal |
+| **None** | Ops input validation boilerplate *(pass 5)* | 10 files with `if taskID == ""` — idiomatic Go, low risk | Not worth abstracting |
+| **None** | `task.History = append(...)` pattern *(pass 5)* | 12 occurrences with variations — coincidental similarity | Not worth abstracting |
 | **None** | `formatKeyValue` bubble sort | Works, small data sets, not perf-sensitive | Not worth changing |
 | **None** | Global logger singleton | Acceptable for CLI scope | Not worth changing for v1 |
 
@@ -586,7 +791,7 @@ The 24.7% uncovered code concentrates in two patterns:
 
 ## Summary
 
-Liza's architecture is well-suited to its constraints: a file-based multi-agent coordination system for solo developers. The dependency graph is clean with no cycles. Test coverage is excellent (2:1 ratio) with consistent patterns and strong helper infrastructure. The atomic state persistence via flock and fsync+rename is correctly implemented. Health monitoring is comprehensive. The task state machine is now explicit with a complete transition map.
+Liza's architecture is well-suited to its constraints: a file-based multi-agent coordination system for solo developers. The dependency graph is clean with no cycles. Test coverage is excellent (2.4:1 ratio) with consistent patterns and strong helper infrastructure. The atomic state persistence via flock and fsync+rename is correctly implemented. Health monitoring is comprehensive. The task state machine is now explicit with a complete transition map.
 
 **Pass 2 (Complexity lens)** added two structural findings: (1) Monolithic command functions — `WtMergeCommand` and `ClaimTaskCommand` at 310-319 LOC each are the system's longest single functions, resisting comprehension and targeted testing. ~~(2) Task-lookup duplication — the same 6-line loop appears 55+ times, making it the largest DRY violation in the codebase~~ (resolved: `State.FindTask()` and `FindTaskIndex()` added, all inline lookups migrated).
 
@@ -595,6 +800,14 @@ Liza's architecture is well-suited to its constraints: a file-based multi-agent 
 **Pass 4 (Coverage lens)** adds quantitative depth: 75.3% statement coverage overall, with the uncovered 24.7% concentrated in two patterns — runtime orchestration code (supervisor Execute, MCP server dispatch) and I/O-coupled functions. The most actionable finding: `mcp/server.classifyError` and `HandleRequest` are pure logic at 0% that can be tested trivially without any refactoring. Similarly, `models/diagnostics.go` (127 LOC, 4 functions, no test file) is critical work-detection logic that's entirely untested despite being pure functions on `*State`. I/O coupling (already flagged as a Boundaries smell) is now quantitatively confirmed as the primary driver of untested critical paths — functions with hardwired `os.Stdin`/`os.Stdout`/`os/exec` account for the majority of the 0% coverage.
 
 The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), ~~(2) commands presentation+logic coupling~~ (resolved — all 15 MCP-exposed mutation commands extracted to `internal/ops/`; MCP handlers call ops directly; protocol corruption risk eliminated), ~~(3) monolithic command functions~~ (resolved — all 4 monolithic commands extracted to ops; `DeleteTaskCommand` was the last, using the two-function pre-check + action pattern from `DeleteAgentCommand`), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). The ops layer now contains 19 operations (~2,700 LOC) serving 3 consumers (agent, commands, mcp). Remaining concerns: interactive stdin in CLI-only commands (partially resolved — no MCP risk).
+
+**Pass 5 (Duplication lens)** examined cross-file repetition patterns. The most significant duplication pattern is within the `ops/` package itself: 10 of 19 ops files repeat an identical 3-line FindTask+NotFoundError guard inside `bb.Modify` callbacks, and 12 files share structurally similar history-append code. The `readTaskState()` helper addresses this for the Read path but has no equivalent for the Modify path. This is idiomatic Go — each function is independently authored with the same pattern — and the impact is low (maintenance burden if the guard pattern changes). In test code, 23 command test files construct near-identical `initialState` objects; a `testhelpers.DefaultState()` helper would be a low-risk improvement. Overall, the codebase's earlier duplication issues (task-lookup loops 55×, file-locking, magic numbers) have been resolved. The remaining repetition is largely structural — Go's explicit style trading conciseness for clarity.
+
+**Pass 6 (Coupling lens)** focused on configuration hardcoding, tight dependencies, and hidden state sharing. The most significant finding is the `"task/"` branch prefix scattered as a string literal across 7 production files with no constant — a single source of truth issue that could cause silent breakage. The role naming divergence between agent config roles (`"code-reviewer"`, hyphen) and task workflow constants (`"code_reviewer"`, underscore) is a semantic coupling risk: the mapping is implicit in switch statements, and the `"coder"` name only works by coincidence. The magic number 1800 marked as resolved in pass 1 still has 2 residual call sites in `supervisor.go`. Other findings: `GracePeriod` divergence (60s vs 120s for semantically identical concepts), duplicated identity validation between `agent` and `identity` packages, inconsistent ops parameter conventions (`projectRoot` vs `statePath`), and watch thresholds with no config path. The coupling patterns are generally low-to-medium impact — the architecture's clean dependency graph prevents coupling from cascading — but the role naming and branch prefix issues warrant attention to prevent subtle bugs.
+
+**Pass 7 (Complexity lens)** revisits complexity with the benefit of 6 prior passes of context. The earlier Complexity lens (pass 2) correctly identified the monolithic commands and task-lookup duplication — both now resolved. This pass reveals the complexity that *replaced* them: `ops/claim_task.go:ClaimTask` at 265 LOC is now the longest function in the codebase (inheriting from the resolved `ClaimTaskCommand`), with nesting depth 6 and dependency-checking logic intentionally duplicated across its TOCTOU phases. `ops/wt_merge.go:MergeWorktree` at 189 LOC is the second-longest. Both are architecturally correct — the three-phase pattern prevents race conditions — but their internal complexity makes them the hardest code to safely modify. A new finding not in previous passes: `commands/inspect_field.go` (327 LOC, 9 switch statements) is a hand-written reflection system where every model field requires a manual switch case. This is a maintenance trap — adding a field to `SprintMetrics` without updating the switch silently makes it inaccessible via `liza inspect`, with no compiler warning. LOC figures updated: production code is ~15,300 LOC (stable), test code grew to ~36,700 LOC (2.4:1 ratio, up from 2:1 at pass 1), and `commands/` is 4,300 LOC (up from 2,800 recorded earlier, likely due to test growth during ops extraction). All existing findings verified as current.
+
+**Adversarial pass (entry: docs/)** forced a doc-first path and surfaced contract-level drift missed by prior code-centric passes: (1) state-machine spec said `BLOCKED -> READY` while runtime disallowed it, (2) a troubleshooting recovery command used non-canonical branch naming (`task-1` vs `task/<id>`), and (3) testing docs overstated `go test -short` behavior for integration tests. These are medium-to-high leverage because they affect operator behavior and architectural understanding directly, not just implementation internals.
 
 ---
 

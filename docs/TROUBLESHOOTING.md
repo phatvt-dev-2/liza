@@ -200,7 +200,7 @@ mkdir -p specs && vi specs/vision.md
 
 **Error:** `INVALID: IMPLEMENTING task task-1 has worktree=.worktrees/task-1 but directory does not exist`
 
-**Recreate:** `git worktree add .worktrees/task-1 -b task-1`
+**Recreate:** `git worktree add .worktrees/task-1 -b task/task-1 integration`
 
 **Or reset task** (if work was lost — edit `.liza/state.yaml` directly):
 ```yaml

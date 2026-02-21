@@ -12,7 +12,7 @@
 | REJECTED | Code Reviewer rejected, feedback provided | → IMPLEMENTING (supervisor reclaims for coder) |
 | APPROVED | Code Reviewer approved, merge eligible | → MERGED, INTEGRATION_FAILED |
 | MERGED | Successfully merged to integration | Terminal |
-| BLOCKED | Cannot proceed, awaiting escalation | → READY (rescoped), SUPERSEDED, ABANDONED |
+| BLOCKED | Cannot proceed, awaiting escalation | → SUPERSEDED, ABANDONED |
 | SUPERSEDED | Replaced by rescoped task(s) | Terminal |
 | ABANDONED | Planner killed task | Terminal |
 | INTEGRATION_FAILED | Merge conflict or integration test failure | → IMPLEMENTING (integration-fix scope) |
@@ -106,6 +106,7 @@ When new task types are added (e.g., `specification`, `architecture`), they defi
 - READY_FOR_REVIEW → APPROVED (must go through REVIEWING)
 - READY_FOR_REVIEW → REJECTED (must go through REVIEWING)
 - REJECTED → APPROVED (without addressing feedback)
+- BLOCKED → READY (in current implementation, blocked tasks are resolved via SUPERSEDED/ABANDONED)
 - Any terminal state → Any other state (MERGED, ABANDONED, SUPERSEDED are final)
 
 ### Transition Requirements
@@ -119,7 +120,8 @@ When new task types are added (e.g., `specification`, `architecture`), they defi
 | REJECTED → IMPLEMENTING (same coder) | `lease_expires` (new) | `worktree`, `review_cycles_current`, `review_cycles_total` | Supervisor reclaims for same coder to address feedback |
 | REJECTED → IMPLEMENTING (different coder) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `review_cycles_total` | Worktree reset: delete old, create fresh |
 | INTEGRATION_FAILED → IMPLEMENTING | `lease_expires`, `integration_fix: true` | `worktree` | Any coder may claim; keeps worktree for conflict resolution |
-| BLOCKED → READY | — | `failed_by` | Preserves failure history; worktree deleted |
+| BLOCKED → SUPERSEDED | `superseded_by`, `rescope_reason`, status=SUPERSEDED | `failed_by` | Planner links blocked task to replacement task(s) |
+| BLOCKED → ABANDONED | status=ABANDONED | `failed_by` | Planner abandons blocked task when no viable continuation exists |
 | READY → IMPLEMENTING (reassignment) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `failed_by`, `review_cycles_total` | Fresh worktree created |
 | Any → MERGED | — | — | Must clear `worktree` (cleanup) |
 

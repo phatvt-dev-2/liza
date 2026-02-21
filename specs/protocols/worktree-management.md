@@ -14,7 +14,9 @@
 
 **Note:** Worktree creation is supervisor-only (via `liza claim-task`), not agent-callable. This ensures worktrees exist before agents are spawned.
 
-**Reassignment rule:** When a different coder claims a task (after REJECTED or BLOCKED → READY), the worktree is deleted and recreated fresh. Same coder re-claiming keeps the existing worktree. Rationale: salvaging failed work often costs more than restarting from spec.
+**Reassignment rule:** When a different coder claims a task after `REJECTED`, the worktree is deleted and recreated fresh. Same coder re-claiming keeps the existing worktree. Rationale: salvaging failed work often costs more than restarting from spec.
+
+**Blocked-task note:** In the current state machine, `BLOCKED` tasks do not transition back to `READY`. They are resolved via `SUPERSEDED` (with replacement tasks) or `ABANDONED`; any existing worktree should be cleaned up via `liza wt-delete task-N`.
 
 ---
 
