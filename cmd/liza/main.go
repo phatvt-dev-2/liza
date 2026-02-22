@@ -1076,6 +1076,32 @@ Example:
 	},
 }
 
+// recover-agent command
+var recoverAgentCmd = &cobra.Command{
+	Use:   "recover-agent <agent-id>",
+	Short: "Recover a crashed agent (release claims, remove worktree, delete agent)",
+	Long: `Recover a crashed agent by performing full cleanup:
+
+- Release task claims (IMPLEMENTING → READY for coders, REVIEWING → READY_FOR_REVIEW for reviewers)
+- Remove git worktree and branch (coders only)
+- Delete agent from state
+
+Idempotent: safe to run multiple times (no error if agent already gone).
+By default, refuses to recover agents whose PID is still alive.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agentID := args[0]
+		force, _ := cmd.Flags().GetBool("force")
+		cli, _ := cmd.Flags().GetString("cli")
+		reason, _ := cmd.Flags().GetString("reason")
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+		return commands.RecoverAgentCommand(projectRoot, agentID, force, cli, reason)
+	},
+}
+
 // Parent delete command
 var deleteCmd = &cobra.Command{
 	Use:   "delete",
@@ -1185,6 +1211,7 @@ func init() {
 	rootCmd.AddCommand(resumeCmd)
 	rootCmd.AddCommand(checkpointCmd)
 	rootCmd.AddCommand(agentCmd)
+	rootCmd.AddCommand(recoverAgentCmd)
 	rootCmd.AddCommand(deleteCmd)
 
 	deleteCmd.AddCommand(deleteAgentCmd)
@@ -1252,6 +1279,11 @@ func init() {
 	// Agent command flags
 	agentCmd.Flags().String("cli", "claude", "CLI to use (claude, codex, gemini, mistral)")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")
+
+	// Recover-agent command flags
+	recoverAgentCmd.Flags().Bool("force", false, "override PID liveness check (refuse by default if process is alive)")
+	recoverAgentCmd.Flags().String("cli", "", "respawn the agent after cleanup using this CLI (e.g., claude, codex)")
+	recoverAgentCmd.Flags().String("reason", "agent recovery", "reason for recovering the agent")
 
 	// Delete agent command flags
 	deleteAgentCmd.Flags().Bool("force", false, "force deletion even if agent has active lease or current task")

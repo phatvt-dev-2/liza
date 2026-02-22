@@ -18,14 +18,21 @@ ERROR: Failed to register agent planner-1 (collision?)
 
 **Solutions:**
 
-1. **Wait for lease expiry** — The timestamp shows when the lease expires. After that time, re-registration will succeed.
-
-2. **Manual cleanup** — Remove the stale agent entry:
+1. **Recover and respawn** — one command does everything:
    ```bash
-   liza delete agent planner-1 --force
+   liza recover-agent planner-1 --cli claude
+   # Releases task claims, removes worktree, deletes agent, then respawns
    ```
 
-3. **Use a different agent ID:**
+2. **Recover without respawn:**
+   ```bash
+   liza recover-agent planner-1
+   liza agent planner --agent-id planner-1
+   ```
+
+3. **Wait for lease expiry** — The timestamp shows when the lease expires. After that time, re-registration will succeed.
+
+4. **Use a different agent ID:**
    ```bash
    liza agent planner --agent-id planner-2
    ```
@@ -424,6 +431,52 @@ EOF
 
 ## Recovery Procedures
 
+### Agent crashed with IMPLEMENTING task (usage limit, OOM, etc.)
+
+When a coder agent crashes (usage limit, OOM, SIGKILL) while a task is IMPLEMENTING:
+
+**One-command recovery:**
+```bash
+# Recover and respawn in one step
+liza recover-agent <agent-id> --cli claude
+
+# Or recover without respawn
+liza recover-agent <agent-id>
+liza agent coder --agent-id <agent-id>
+```
+
+`recover-agent` auto-detects the agent's role and performs all cleanup:
+- Releases the task claim (IMPLEMENTING → READY)
+- Removes the git worktree and branch
+- Deletes the agent from state
+
+Idempotent — safe to run multiple times. If the agent's PID is still alive, use `--force`.
+
+**Diagnosis (if needed):**
+```bash
+liza get tasks <task-id>          # Check status, assigned_to, lease_expires
+liza get agents --format table    # Check agent status and lease
+```
+
+<details>
+<summary>Manual recovery (granular control)</summary>
+
+**If lease has expired** (current time > `lease_expires`):
+
+```bash
+liza release-claim <task-id> --role coder
+liza agent coder --agent-id <agent-id>
+```
+
+**If lease has NOT expired:**
+
+```bash
+liza delete agent <agent-id> --force
+liza release-claim <task-id> --role coder
+liza agent coder --agent-id <agent-id>
+```
+</details>
+
 ### Full state reset (nuclear option)
 
 ```bash
@@ -437,13 +490,11 @@ liza init "Goal description"
 ### Agent stuck in WORKING state
 
 ```bash
-# Clear agent entry
-liza delete agent coder-1 --force
+# Full recovery in one command
+liza recover-agent coder-1
 
-# Reset task to READY (loses uncommitted work)
-liza release-claim <task-id> --role coder
-
-# Or keep IMPLEMENTING and restart with same agent ID (preserves worktree)
+# Then restart
+liza agent coder --agent-id coder-1
 ```
 
 ---

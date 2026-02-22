@@ -72,22 +72,32 @@ Watch daemon alerts on high review cycles (>= 5). Check with `liza get tasks tas
 
 ## Recovering from Agent Crashes
 
-**Automatic recovery**: Agents detect expired leases on restart and take over.
+**One-command recovery** (recommended):
 
 ```bash
-# Just restart the crashed agent
+# Recover and respawn
+liza recover-agent coder-1 --cli claude
+# Releases claim, removes worktree, deletes agent, respawns
+
+# Or recover without respawn
+liza recover-agent coder-1
+liza agent coder --agent-id coder-1
+```
+
+`recover-agent` auto-detects the role and performs the right cleanup. Idempotent — safe to run multiple times. Use `--force` if the agent's PID is still alive.
+
+**Automatic recovery**: If the agent's lease has expired, restarting the supervisor also works:
+
+```bash
 liza agent coder --agent-id coder-1
 # Output: "Took over expired lease for coder-1"
 ```
 
-**Manual recovery** (if agent won't restart):
+**Granular recovery** (if you need fine-grained control):
 
 ```bash
-# Force release the claim
 liza release-claim task-1 --role coder --force
-
-# Worktree is preserved -- check for in-progress work
-cd .worktrees/task-1 && git status && git log
+liza delete agent coder-1 --force
 ```
 
 **Prevention**: Use `liza pause` before stopping agents. Avoid `kill -9` (use `kill` or Ctrl+C).
