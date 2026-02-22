@@ -4,6 +4,121 @@ A peer-supervised multi-agent coding system (MAS) built on behavioral contracts.
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/liza-mas/liza)
 
+## Features
+
+- **Behavioral Contract**: 55+ LLM failure modes mapped to specific countermeasures, operating as an explicit state machine with tiered rules
+- **Multi-Provider**: Supports claude, codex, kimi, mistral, and gemini CLIs
+- **Blackboard Pattern**: All agents read/write to a central `state.yaml` with atomic file locking
+- **Git Worktrees**: Each task gets an isolated worktree for parallel development
+- **Agent Supervisors**: Long-running processes that claim tasks, execute work, and handle failures
+- **State Machine**: Strict task state transitions with 43+ validation rules
+- **MCP Server**: Structured API access to Liza operations for agents
+- **Code-Enforced Guardrails**: Role boundaries and TDD gates enforced in Go, not just prompts
+- **Project Guardrails**: Optional `GUARDRAILS.md` for project-specific constraints using the same Tier 0-3 system
+- **Skills System**: 17 composable skill protocols (debugging, code review, testing, architecture, etc.) agents load on demand
+- **Multi-Sprint Support**: Sprint numbering, checkpoint summaries, and history across sprints
+- **Circuit Breaker**: Pattern detection (loops, repeated failures) triggers automatic sprint checkpoint
+- **Crash Recovery**: `recover-agent` and `recover-task` commands for idempotent cleanup after hard crashes
+- **Restart Logic**: Agents can request restarts (exit code 42) for incremental work
+- **Context Handoff**: Agents hand off with structured notes when approaching context limits
+- **Monitoring**: Watch daemon alerts on anomalies (expired leases, blocked tasks, etc.)
+- **Agent Log Analysis**: Opt-in logging with token usage, context utilization, and struggle sequence diagnostics
+
+## Requirements
+
+- A supported coding agent CLI: Claude Code, Codex, Kimi, Mistral, or Gemini (see [Provider Compatibility](#provider-compatibility))
+- Git 2.38+ (for full worktree support)
+- Go 1.25.5+ (only for building from source — pre-built binaries available via `install.sh`)
+
+## Architecture
+
+Liza's architecture is made of:
+- A behavioral contract
+- Agent roles and skills
+- A YAML blackboard
+- A supervisor wrapping a coding agent with additional code.
+- A template-based prompt builder for coding agents
+- A Go CLI
+- Go MCP tools for the agents to interact with the Liza system and use worktrees
+- Markdown files following a convention-over-code principle
+
+Roles aren't composable, Skills are: agents aren't constrained regarding their capabilities by a rigid "Act as a..." prompt
+and may use any skill they consider relevant to adapt to the situation.
+
+As of today, Liza has only 3 roles. More to come: Spec Writer / Spec Reviewer, etc.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Human                               │
+│   (leads specs, observes terminals, reads blackboard,       │
+│               kills agents, pauses system)                  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+    ┌───────────┐        ┌──────────┐        ┌──────────┐
+    │ Planner   │        │  Coder   │        │ Reviewer │
+    │           │        │          │        │          │
+    │ Decomposes|        │ Claims   │        │ Examines │
+    │ goal into │        │ tasks,   │        │ work,    │
+    │ tasks,    │        │ iterates │        │ approves │
+    │ rescopes  │        │ until    │        │ or       │
+    │ on failure│        │ approved │        │ rejects, │
+    │           │        │  review  │        │ merges   │
+    └─────┬─────┘        └────┬─────┘        └────┬─────┘
+          │                   │                   │
+          └───────────────────┴───────────────────┘
+                              │
+                              ▼
+                     ┌─────────────────┐
+                     │   .liza/        │
+                     │   state.yaml    │  ← blackboard
+                     │   log.yaml      │  ← activity history
+                     │   alerts.log    │  ← watch daemon output
+                     │   archive/      │  ← terminal-state tasks
+                     └─────────────────┘
+                              │
+                              ▼
+                     ┌─────────────────┐
+                     │  .worktrees/    │
+                     │  task-1/        │  ← isolated workspaces
+                     │  task-2/        │
+                     └─────────────────┘
+```
+
+See [Architecture](specs/architecture).
+
+### Task Lifecycle
+
+```
+DRAFT → READY → IMPLEMENTING → READY_FOR_REVIEW → REVIEWING → APPROVED → MERGED
+                      │ ↑              ↑                ↓          │
+                      │ └──────────────┼─────── REJECTED ──┘       │
+                      │                │                            ↓
+                      ├──> BLOCKED ────┤                 INTEGRATION_FAILED
+                      │    ├──> SUPERSEDED
+                      │    └──> ABANDONED
+                      │
+                      └──> READY (release claim)
+```
+---
+
+## Getting Started
+
+### Hands-on
+
+- **Pairing**: See [Pairing Guide](docs/USAGE_PAIRING.md) — human-agent collaboration under contract
+- **Multi-Agent (Liza)**: See [USAGE](docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
+- **Reference**: [Configuration](docs/CONFIGURATION.md) · [Recipes](docs/RECIPES.md) · [Troubleshooting](docs/TROUBLESHOOTING.md)
+
+### Deep understanding
+
+Liza is simultaneously a Pairing and Multi-Agent System optimized for thoughtfulness, trust and auditability, leading to faster execution thanks to fewer cycles.
+- The contract lives in [contracts/](contracts/). It supports three modes: Pairing (with sub-modes — Autonomous, User Duck, Agent Duck, True Pairing, Spike), MAS, and Subagent (lightweight mode for delegated work).
+- The complete [Vision](<specs/build/1 - Vision.md>) of Liza
+
+---
+
 ## Why This Exists
 
 It started with a test file that kept getting modified to pass instead of the bug getting fixed. Then the confident "Done!" claims when the verification command hadn't actually run. Then the hour-long debugging spirals of random changes when the agent was clearly stuck but wouldn't say so.
@@ -35,7 +150,7 @@ This isn't about making agents try harder like with the Ralph Wiggum technique. 
 
 The contract operates as an explicit state machine with forbidden transitions, not as suggestions the agent interprets flexibly. Tiered rules define what degrades gracefully under pressure versus what never bends.
 
-Errors caught in specs cost less than errors caught in code. The spec system front-loads understanding so agents don't discover requirements by failing tests. This reinforces the [Cost Gradient](<specs/build/0 - Vision.md>) concept from the contract.
+Errors caught in specs cost less than errors caught in code. The spec system front-loads understanding so agents don't discover requirements by failing tests. This reinforces the [Cost Gradient](<specs/build/1 - Vision.md>) concept from the contract.
 
 > Quality is the fastest path to real completion.
 
@@ -43,7 +158,7 @@ Claude Opus 4.5 putting the contract philosophy in its own words in its *letter 
 
 > **Negative space design**: The contract defines what's forbidden; the shape that remains is where judgment lives. Strict on failure modes, silent on excellence. You can't prescribe good judgment—you can only remove the obstacles to it.
 
-For the full analysis: [Vision](<specs/build/0 - Vision.md>) and [Turning AI Coding Agents into Senior Engineering Peers](https://medium.com/@tangi.vass/turning-ai-coding-agents-into-senior-engineering-peers-c3d178621c9e).
+For the full analysis: [Vision](<specs/build/1 - Vision.md>) and [Turning AI Coding Agents into Senior Engineering Peers](https://medium.com/@tangi.vass/turning-ai-coding-agents-into-senior-engineering-peers-c3d178621c9e).
 
 ## From Pairing to Peer Supervision
 
@@ -80,68 +195,16 @@ The human owns intent and acts as circuit-breaker, not bottleneck. Authority is 
 
 More at [I Tried to Kill Vibe Coding. I Built Adversarial Vibe Coding. Without the Vibes.](https://medium.com/@tangi.vass/i-tried-to-kill-vibe-coding-i-built-adversarial-vibe-coding-without-the-vibes-bc4a63872440)
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Human                               │
-│   (leads specs, observes terminals, reads blackboard,       │
-│               kills agents, pauses system)                  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-    ┌───────────┐        ┌──────────┐        ┌──────────┐
-    │ Planner   │        │  Coder   │        │ Reviewer │
-    │           │        │          │        │          │
-    │ Decomposes|        │ Claims   │        │ Examines │
-    │ goal into │        │ tasks,   │        │ work,    │
-    │ tasks,    │        │ iterates │        │ approves │
-    │ rescopes  │        │ until    │        │ or       │
-    │ on failure│        │ approved │        │ rejects, │
-    │           │        │  review  │        │ merges   │
-    └─────┬─────┘        └────┬─────┘        └────┬─────┘
-          │                   │                   │
-          └───────────────────┴───────────────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │   .liza/        │
-                    │   state.yaml    │  ← blackboard
-                    │   log.yaml      │  ← activity history
-                    └─────────────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  .worktrees/    │
-                    │  task-1/        │  ← isolated workspaces
-                    │  task-2/        │
-                    └─────────────────┘
-```
-
-See [Architecture](specs/architecture).
-
-### Task Lifecycle
-
-```
-DRAFT → UNCLAIMED → CLAIMED → READY_FOR_REVIEW → APPROVED → MERGED
-                        │              │
-                        │              └─> REJECTED ──┘
-                        │
-                        ├──> BLOCKED ──> UNCLAIMED (rescoped)
-                        │                ├──> SUPERSEDED
-                        │                └──> ABANDONED
-                        │
-                        └──> INTEGRATION_FAILED ──┘
-```
+---
 
 ### Common Commands
 
 ```bash
 liza setup                                          # One-time global setup
-liza init "Project goal" --spec specs/vision.md   # Initialize blackboard
-liza add-task --id t1 --desc "..." --done "..."    # Add tasks
-liza agent coder --agent-id coder-1                # Start agent supervisor
+liza init "Project goal" --spec specs/vision.md     # Initialize blackboard
+liza add-task --id t1 --desc "..." --spec "..." \
+  --done "..." --scope "..."                        # Add tasks
+liza agent coder --agent-id coder-1                 # Start agent supervisor
 liza validate                                       # Validate state
 liza get tasks                                      # Query tasks
 liza status                                         # Dashboard overview
@@ -149,6 +212,8 @@ liza watch                                          # Monitor for anomalies
 liza pause / liza resume                            # Human intervention
 liza stop / liza start                              # System control
 liza sprint-checkpoint                              # Sprint checkpoint
+liza recover-agent <id>                             # Crash recovery
+liza analyze                                        # Circuit breaker analysis
 ```
 
 ## Installation
@@ -186,24 +251,25 @@ liza version
 
 See [RELEASE.md](RELEASE.md) for maintainer release workflow.
 
-## Getting Started
-
-### Hands-on
-
-- **Pairing**: See [Pairing Guide](docs/USAGE_PAIRING.md) — human-agent collaboration under contract
-- **Multi-Agent (Liza)**: See [USAGE](docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
-
-### Deep understanding
-
-Liza is simultaneously a Pairing and Multi-Agent System optimized for thoughtfulness, trust and auditability, leading to faster execution thanks to fewer cycles.
-- The contract lives in [contracts/](contracts/). It supports two modes: Pairing (with multiple collaboration sub-modes - Autonomous, UserDuck, AgentDuck, Pairing, Spike) and MAS.
-- The complete [Vision](<specs/build/0 - Vision.md>) of Liza
-
 ## Status
 
 The contract in Pairing mode is battle-tested for making the **agents write most of the production code (~90%) under human supervision**.
 
-The Multi-Agent mode is an **operational proof of concept** with ongoing refinement. The contract, blackboard schema, coordination protocols, and tooling are implemented. The Go CLI runs end-to-end.
+The Multi-Agent mode is an **alpha version** with ongoing refinement. The main limitation to address real projects is
+the lack of additional role pairs.
+
+**Planned role pairs:**
+- Spec Writer / Spec Reviewer
+- Architect / Architecture Reviewer
+- Tech Writer / Doc Reviewer
+- [Planner] / Plan Reviewer
+
+**Roadmap:**
+- Specification phase pipeline (Requirement Planner → Spec Writer → Spec Reviewer) before coding sprints
+- Context handoff as blackboard event — structured positive/negative findings on every task completion
+- Sprint Analyzer role — steering interface for the human at sprint boundaries
+- Deterministic pre/post hooks at role transitions — mechanical checks before spawning agents and before their handoff
+- Planner-routed model selection — assign tasks to models based on estimated complexity
 
 ### Provider Compatibility
 
@@ -211,19 +277,13 @@ The contract is a capability test. It requires meta-cognitive machinery—the ab
 
 | Provider | Classification | Notes |
 |----------|----------------|-------|
-| Claude Opus 4.5 | Fully compatible | Reference provider |
-| GPT-5.2-Codex | Fully compatible | Equally capable |
+| Claude Opus 4.x | Fully compatible | Reference provider |
+| GPT-5.x-Codex | Fully compatible | Equally capable |
+| Kimi 2.5 | Fully compatible | Responsive to tooling feedback |
 | Mistral Devstral-2 | Partial | Requires explicit activation and supervision |
 | Gemini 2.5 Flash | Incompatible | Architectural limitation—no prompt-level fix |
 
 See [Model Capability Assessment](docs/demo-benchmark/wrap-up.md) for detailed analysis.
-
-### Planned
-
-- Spec Writer / Spec Reviewer agent pair
-- Architect / Architecture Reviewer agent pair
-- Tech Writer / Doc Reviewer agent pair
-- Plan Reviewer agent
 
 ## Naming
 
@@ -234,22 +294,6 @@ See [Model Capability Assessment](docs/demo-benchmark/wrap-up.md) for detailed a
 **ELIZA**—the 1966 chatbot that demonstrated structured dialogue patterns. Liza is about structured collaboration patterns: explicit states, binding verdicts, auditable transitions.
 
 Liza is not autonomous. She is accountable.
-
-## Features
-
-- **Blackboard Pattern**: All agents read/write to a central `state.yaml` with atomic file locking
-- **Git Worktrees**: Each task gets an isolated worktree for parallel development
-- **Agent Supervisors**: Long-running processes that claim tasks, execute work, and handle failures
-- **State Machine**: Strict task state transitions with 43+ validation rules
-- **Restart Logic**: Agents can request restarts (exit code 42) for incremental work
-- **Monitoring**: Watch daemon alerts on anomalies (expired leases, blocked tasks, etc.)
-- **MCP Server**: Structured API access to Liza operations for Claude Code agents
-
-## Requirements
-
-- Claude Code or Codex CLI (tested: Claude Opus 4.5, GPT-5.2-Codex)
-- Git 2.38+ (for full worktree support)
-- Go 1.25.5+ (only for building from source — pre-built binaries available via `install.sh`)
 
 ## License
 
@@ -262,5 +306,6 @@ The behavioral contract draws on research into LLM failure modes, sycophancy pat
 - **[SpecKit](https://github.com/github/spec-kit)** — Project specification
 - **[BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)** — Role templates and workflow patterns
 - **Classical blackboard architecture** — Shared state coordination
-- **[Ralph Wiggum technique](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)** — Iteration until convergence
+- **[Ralph Wiggum technique](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)** — Iteration until convergence, validated by an adversarial agent instead of mechanical check or self-declaration
 - Stephen Oberther (**[liza-go](https://github.com/smo921/liza-go)**) — Shell to Go CLI migration
+- **[CrewAI](https://github.com/crewAIInc/crewAI)'s composable guardrails concept** — Reduced to Liza's convention-over-code pattern.
