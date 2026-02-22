@@ -95,7 +95,7 @@ The `liza` CLI uses a consistent exit code taxonomy:
 | Command | Exit 1 | Exit 3 | Exit 4 |
 |---------|--------|--------|--------|
 | `liza wt-create` | Task not IMPLEMENTING | Worktree creation failed | — |
-| `liza wt-merge` | Task not APPROVED, SHA mismatch | Merge conflict | — |
+| `liza wt-merge` | Task not APPROVED, SHA mismatch | Merge conflict (detected via merge-tree) | — |
 | `liza validate` | Schema violation found | — | — |
 
 **Recovery Procedures:**
@@ -257,6 +257,16 @@ liza agent coder --agent-id coder-1
 liza agent code-reviewer --agent-id code-reviewer-1
 ```
 
+**Multiple agents of the same role are supported.** Run additional agents in separate terminals:
+
+```bash
+# Terminal 4: Second coder (processes tasks in parallel)
+liza agent coder --agent-id coder-2
+
+# Terminal 5: Second reviewer (processes reviews in parallel)
+liza agent code-reviewer --agent-id code-reviewer-2
+```
+
 See [Agent Identity Protocol](../architecture/roles.md#agent-identity-protocol) for identity validation and collision prevention.
 
 ### Startup Order
@@ -377,6 +387,8 @@ liza wt-create task-3 [--fresh]
 ```bash
 liza wt-merge task-3
 # Task must be APPROVED
+# Performs working-tree-less merge using git merge-tree + commit-tree + update-ref
+# Multiple reviewers can merge concurrently without race conditions
 ```
 
 **liza wt-delete** — Delete worktree

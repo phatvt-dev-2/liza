@@ -16,6 +16,36 @@
 
 **ID Validation Regex:** `^(coder|code-reviewer|planner)-[0-9]+$`
 
+## Multiple Agents Per Role
+
+Running multiple agents of the same role is fully supported:
+
+| Role | Multiple Agents Supported | Notes |
+|------|--------------------------|-------|
+| Coder | Yes | Each coder claims independent tasks; no coordination needed |
+| Code Reviewer | Yes | Reviewers claim independent review tasks; merge safety via working-tree-less `liza wt-merge` |
+| Planner | Yes | Multiple planners can process blocked tasks concurrently |
+
+**Concurrency Safety:**
+- Task claiming: File locking on `state.yaml` ensures atomic claim operations
+- Review claiming: Lease-based exclusive access prevents duplicate reviews
+- Merging: Working-tree-less merge (`git merge-tree` + `commit-tree` + `update-ref`) enables concurrent merges without corruption
+
+**Example Deployment:**
+```bash
+# Terminal 1: Coder 1
+liza agent coder --agent-id coder-1
+
+# Terminal 2: Coder 2 (concurrent)
+liza agent coder --agent-id coder-2
+
+# Terminal 3: Code Reviewer 1
+liza agent code-reviewer --agent-id code-reviewer-1
+
+# Terminal 4: Code Reviewer 2 (concurrent)
+liza agent code-reviewer --agent-id code-reviewer-2
+```
+
 ---
 
 ## Shared Capabilities

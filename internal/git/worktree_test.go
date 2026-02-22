@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -461,6 +462,84 @@ func TestGetWorktreeHEAD(t *testing.T) {
 	if headSHA != integrationSHA {
 		t.Errorf("GetWorktreeHEAD() = %s, want %s", headSHA, integrationSHA)
 	}
+}
+
+func TestUpdateRef(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	g := New(repoDir)
+
+	testhelpers.MustGit(t, repoDir, "checkout", "integration")
+
+	sha1, err := g.GetCommitSHA("HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add another commit so we have two distinct SHAs
+	testFile := filepath.Join(repoDir, "update-ref-test.txt")
+	if writeErr := os.WriteFile(testFile, []byte("v1\n"), 0644); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	testhelpers.MustGit(t, repoDir, "add", ".")
+	testhelpers.MustGit(t, repoDir, "commit", "-m", "for update-ref test")
+	sha2, err := g.GetCommitSHA("HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ref := "refs/heads/integration"
+
+	t.Run("unconditional update (empty expectedOldSHA)", func(t *testing.T) {
+		// Move ref to sha1 unconditionally
+		if err := g.UpdateRef(ref, sha1, ""); err != nil {
+			t.Fatalf("UpdateRef unconditional failed: %v", err)
+		}
+		cur, _ := g.GetCommitSHA(ref)
+		if cur != sha1 {
+			t.Errorf("ref = %s, want %s", cur, sha1)
+		}
+	})
+
+	t.Run("CAS success", func(t *testing.T) {
+		// Set to sha1 first
+		if err := g.UpdateRef(ref, sha1, ""); err != nil {
+			t.Fatal(err)
+		}
+		// CAS: sha1 → sha2 with correct expected
+		if err := g.UpdateRef(ref, sha2, sha1); err != nil {
+			t.Fatalf("CAS should succeed: %v", err)
+		}
+		cur, _ := g.GetCommitSHA(ref)
+		if cur != sha2 {
+			t.Errorf("ref = %s, want %s", cur, sha2)
+		}
+	})
+
+	t.Run("CAS failure returns RefConflictError", func(t *testing.T) {
+		// ref is at sha2, but we claim it's at sha1
+		err := g.UpdateRef(ref, sha1, sha1)
+		if err == nil {
+			t.Fatal("CAS should fail when expected doesn't match actual")
+		}
+		var casErr *RefConflictError
+		if !errors.As(err, &casErr) {
+			t.Fatalf("expected *RefConflictError, got %T: %v", err, err)
+		}
+		if casErr.Ref != ref {
+			t.Errorf("RefConflictError.Ref = %q, want %q", casErr.Ref, ref)
+		}
+		if casErr.Expected != sha1 {
+			t.Errorf("RefConflictError.Expected = %q, want %q", casErr.Expected, sha1)
+		}
+		if casErr.Actual != sha2 {
+			t.Errorf("RefConflictError.Actual = %q, want %q (parsed from git error)", casErr.Actual, sha2)
+		}
+		// Verify ref was NOT moved
+		cur, _ := g.GetCommitSHA(ref)
+		if cur != sha2 {
+			t.Errorf("ref should still be %s after CAS failure, got %s", sha2, cur)
+		}
+	})
 }
 
 func TestMergeBranchFastForward(t *testing.T) {

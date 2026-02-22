@@ -101,6 +101,14 @@ Terminal 3 — Code Reviewer:
 liza agent code-reviewer --agent-id code-reviewer-1
 ```
 
+Note that it is possible to run multiple agents of the same roles in different terminals.
+```bash
+liza agent coder --agent-id coder-1
+```
+```bash
+liza agent coder --agent-id coder-2
+```
+
 **3. Observe**
 ```bash
 # Run the watcher for alerts

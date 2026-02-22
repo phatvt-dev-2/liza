@@ -2,6 +2,31 @@
 
 Who does what — supervisor vs agent via MCP tools.
 
+## Multiple Agents Per Role
+
+The supervision model supports running multiple agents of the same role concurrently. Each agent operates with its own supervisor loop and claims work independently:
+
+```
+Terminal 1: coder-1          Terminal 2: coder-2          Terminal 3: code-reviewer-1
+┌─────────────────┐          ┌─────────────────┐          ┌───────────────────┐
+│ liza agent coder│          │ liza agent coder│          │ liza agent        │
+│ --agent-id      │          │ --agent-id      │          │ code-reviewer     │
+│   coder-1       │          │   coder-2       │          │ --agent-id        │
+│                 │          │                 │          │   code-reviewer-1 │
+│  while true:    │          │  while true:    │          │  while true:      │
+│    claim_task() │          │    claim_task() │          │    claim_review() │
+│    spawn()      │          │    spawn()      │          │    spawn()        │
+│    handle_exit()│          │    handle_exit()│          │    handle_exit()  │
+└─────────────────┘          └─────────────────┘          └───────────────────┘
+```
+
+**Concurrency is safe because:**
+- Task claiming uses atomic file locking (`flock` on `state.yaml`)
+- Review claiming uses lease-based exclusive access
+- Merging uses working-tree-less git operations (no working tree conflicts)
+
+See [Role Definitions](roles.md) for supported agent combinations.
+
 ## Design Principle
 
 The supervisor (Go process wrapping the agent CLI) **guarantees** infrastructure actions that agents might forget or do partially. MCP tools provide agent-initiated workflow actions and manual fallback paths for supervisor actions. No action that was supervisor-guaranteed has been delegated to agents.

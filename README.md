@@ -246,7 +246,7 @@ Liza is not autonomous. She is accountable.
 ## Requirements
 
 - Claude Code or Codex CLI (tested: Claude Opus 4.5, GPT-5.2-Codex)
-- Git 2.5+ (for worktree support)
+- Git 2.38+ (for full worktree support)
 - Go 1.25.5+ (only for building from source — pre-built binaries available via `install.sh`)
 
 ## License

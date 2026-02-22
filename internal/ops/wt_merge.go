@@ -2,7 +2,9 @@ package ops
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,11 +12,19 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/errors"
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
+
+// maxMergeRetries is the maximum number of CAS retry attempts for the merge loop.
+const maxMergeRetries = 3
+
+// mergeCASRetryTestHook is a test-only hook invoked after reading integration HEAD
+// in each CAS attempt and before merge/ref-update logic runs.
+// Production code leaves this nil.
+var mergeCASRetryTestHook func(attempt int, integrationRef, preMergeHEAD string) error
 
 // Integration failure reason constants.
 const (
@@ -63,7 +73,7 @@ func markIntegrationFailed(bb *db.Blackboard, taskID, agentID, reason, mergeComm
 	return bb.Modify(func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
 		}
 		if t.Status != models.TaskStatusApproved {
 			return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
@@ -164,29 +174,96 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		integrationBranch = "main"
 	}
 
-	// Checkout integration branch
-	if err := gitWrapper.CheckoutBranch(integrationBranch); err != nil {
-		return nil, fmt.Errorf("failed to checkout integration branch: %w", err)
-	}
+	// Merge with CAS retry loop: read HEAD → merge-tree → commit-tree → update-ref (CAS).
+	// On RefConflictError (another merge landed), re-read HEAD and retry.
+	integrationRef := "refs/heads/" + integrationBranch
 
-	// Capture pre-merge HEAD for rollback if integration tests fail
-	preMergeHEAD, err := gitWrapper.GetCommitSHA("HEAD")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pre-merge HEAD: %w", err)
-	}
+	var mergeCommit string
+	var preMergeHEAD string
+	var fastForward bool
 
-	// Attempt merge
-	taskBranch := "task/" + taskID
-	fastForward, mergeCommit, err := gitWrapper.MergeBranch(taskBranch)
-
-	if err != nil {
-		_ = gitWrapper.AbortMerge()
-
-		if updateErr := markIntegrationFailed(bb, taskID, agentID, "merge conflict", ""); updateErr != nil {
-			return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
+	var attempt int
+	for attempt = 0; attempt < maxMergeRetries; attempt++ {
+		if attempt > 0 {
+			log.Printf("wt-merge %s: CAS retry attempt %d/%d", taskID, attempt+1, maxMergeRetries)
 		}
 
-		return nil, &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
+		// (Re-)read integration HEAD
+		preMergeHEAD, err = gitWrapper.GetCommitSHA(integrationRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get integration HEAD: %w", err)
+		}
+		if mergeCASRetryTestHook != nil {
+			if hookErr := mergeCASRetryTestHook(attempt, integrationRef, preMergeHEAD); hookErr != nil {
+				return nil, fmt.Errorf("merge CAS retry hook failed: %w", hookErr)
+			}
+		}
+
+		// Check if worktree HEAD is already ancestor of integration (already merged)
+		isAncestor, err := gitWrapper.IsAncestor(expectedCommit, preMergeHEAD)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check ancestry: %w", err)
+		}
+
+		if isAncestor {
+			// Already merged - nothing to do, no CAS needed
+			mergeCommit = preMergeHEAD
+			fastForward = true
+			break
+		}
+
+		isFF, err := gitWrapper.IsAncestor(preMergeHEAD, expectedCommit)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check fast-forward: %w", err)
+		}
+
+		if isFF {
+			// Fast-forward: CAS update ref to task commit
+			if err := gitWrapper.UpdateRef(integrationRef, expectedCommit, preMergeHEAD); err != nil {
+				var casErr *git.RefConflictError
+				if errors.As(err, &casErr) {
+					continue // CAS failed — retry from new HEAD
+				}
+				return nil, fmt.Errorf("failed to fast-forward integration branch: %w", err)
+			}
+			mergeCommit = expectedCommit
+			fastForward = true
+			break
+		}
+
+		// True merge required - use merge-tree (no working tree modification)
+		treeSHA, clean, err := gitWrapper.MergeTree(preMergeHEAD, expectedCommit)
+		if err != nil {
+			return nil, fmt.Errorf("merge-tree computation failed: %w", err)
+		}
+		if !clean {
+			// Merge conflicts - mark as integration failed (no retry)
+			if updateErr := markIntegrationFailed(bb, taskID, agentID, "merge conflict", ""); updateErr != nil {
+				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
+			}
+			return nil, &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
+		}
+
+		// Create merge commit using commit-tree (no working tree needed)
+		mergeMsg := "Merge " + taskID + " (task/" + taskID + ")"
+		mergeCommit, err = gitWrapper.CreateCommitFromTree(treeSHA, []string{preMergeHEAD, expectedCommit}, mergeMsg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create merge commit: %w", err)
+		}
+		fastForward = false
+
+		// CAS update integration branch to point to new merge commit
+		if err := gitWrapper.UpdateRef(integrationRef, mergeCommit, preMergeHEAD); err != nil {
+			var casErr *git.RefConflictError
+			if errors.As(err, &casErr) {
+				continue // CAS failed — another merge landed; retry from new HEAD
+			}
+			return nil, fmt.Errorf("failed to update integration branch: %w", err)
+		}
+		break // CAS succeeded
+	}
+	if attempt == maxMergeRetries {
+		return nil, fmt.Errorf("merge CAS failed after %d attempts — high contention on %s", maxMergeRetries, integrationRef)
 	}
 
 	// Run integration tests if they exist
@@ -204,8 +281,17 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		if runErr := cmd.Run(); runErr != nil {
 			testOutput = combinedOutput.String()
 
-			// Rollback: reset integration branch to pre-merge state
-			rollbackErr := gitWrapper.ResetHard(preMergeHEAD)
+			// CAS rollback: only rewind if ref still points to our merge commit.
+			// If someone else merged on top, rewinding would drop their work.
+			var rollbackErr error
+			if err := gitWrapper.UpdateRef(integrationRef, preMergeHEAD, mergeCommit); err != nil {
+				var casErr *git.RefConflictError
+				if errors.As(err, &casErr) {
+					log.Printf("wt-merge %s: skipping rollback — another merge landed on top of %s", taskID, mergeCommit[:7])
+				} else {
+					rollbackErr = err
+				}
+			}
 
 			if updateErr := markIntegrationFailed(bb, taskID, agentID, "integration tests failed", mergeCommit); updateErr != nil {
 				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
@@ -227,7 +313,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	err = bb.Modify(func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
 		}
 		// Re-validate status under lock to prevent concurrent transition
 		if t.Status != models.TaskStatusApproved {
@@ -265,6 +351,8 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	if err := gitWrapper.RemoveWorktree(taskID); err != nil {
 		warnings = append(warnings, fmt.Sprintf("failed to remove worktree: %v", err))
 	}
+	// Delete the task branch
+	taskBranch := "task/" + taskID
 	if err := gitWrapper.DeleteBranch(taskBranch); err != nil {
 		warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", taskBranch, err))
 	}

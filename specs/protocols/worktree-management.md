@@ -137,9 +137,13 @@ After APPROVED, **Code Reviewer** executes:
 
 1. Verify `review_commit` matches current HEAD
 2. Run `liza wt-merge task-N`
-3. Script attempts fast-forward or clean merge
+3. Script performs working-tree-less merge:
+   - Read integration HEAD without checkout (`git rev-parse refs/heads/integration`)
+   - Detect fast-forward (task commit is descendant of integration)
+   - For true merge: compute tree via `git merge-tree`, create commit via `git commit-tree`, update ref via `git update-ref`
+   - No modification to main repo working tree
 4. If conflict: task → INTEGRATION_FAILED, Code Reviewer reports
-5. If integration tests fail: task → INTEGRATION_FAILED
+5. If integration tests fail: rollback via `git update-ref` to pre-merge HEAD, task → INTEGRATION_FAILED
 6. On success: task → MERGED, worktree deleted
 
 ---
@@ -192,6 +196,24 @@ EXPECTED = task.review_commit from blackboard
 if ACTUAL != EXPECTED:
     ERROR: Worktree modified since review requested
 ```
+
+## Concurrent Merge Safety
+
+Multiple reviewers can merge approved tasks concurrently without race conditions:
+
+**Before (race-prone):**
+```
+reviewer A: git checkout integration → git merge task-1  [modifies working tree]
+reviewer B: git checkout integration → git merge task-2  [concurrent modification → corruption]
+```
+
+**After (working-tree-less):**
+```
+reviewer A: read HEAD → merge-tree → commit-tree → update-ref  [object operations only]
+reviewer B: read HEAD → merge-tree → commit-tree → update-ref  [safe concurrent execution]
+```
+
+Git object database operations are inherently safe for concurrent reads. Each `update-ref` uses compare-and-swap (CAS): `git update-ref <ref> <new> <old>`. If the ref moved since it was read (another merge landed), the CAS fails and the merge retries from the new HEAD. This prevents lost updates without requiring external locks.
 
 ## Related Documents
 

@@ -465,6 +465,90 @@ func TestMergeWorktree_IntegrationTestFailure(t *testing.T) {
 	}
 }
 
+func TestMergeWorktree_CASRetryDeterministic(t *testing.T) {
+	taskID := "merge-cas-retry"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	// Capture the task commit SHA (the approved worktree commit).
+	stateBefore := readStateForTest(t, stateFile)
+	taskBefore := stateBefore.FindTask(taskID)
+	if taskBefore == nil || taskBefore.ReviewCommit == nil {
+		t.Fatal("task/review_commit missing in test setup")
+	}
+	taskCommit := *taskBefore.ReviewCommit
+
+	// Create a competing integration commit (simulates another reviewer merge)
+	// but do not advance integration yet.
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	testhelpers.MustGit(t, tmpDir, "checkout", "-b", "competing-cas")
+	competingFile := filepath.Join(tmpDir, "competing-cas.txt")
+	if err := os.WriteFile(competingFile, []byte("competing change\n"), 0644); err != nil {
+		t.Fatalf("Failed to write competing file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "competing-cas.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Competing integration commit")
+	competingSHA := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	testhelpers.MustGit(t, tmpDir, "branch", "-D", "competing-cas")
+
+	hookCalls := 0
+	previousHook := mergeCASRetryTestHook
+	mergeCASRetryTestHook = func(attempt int, integrationRef, preMergeHEAD string) error {
+		hookCalls++
+		if attempt != 0 {
+			return nil
+		}
+		// Force first attempt to use stale preMergeHEAD by advancing integration
+		// immediately after preMergeHEAD is read.
+		cmd := exec.Command("git", "-C", tmpDir, "update-ref", integrationRef, competingSHA, preMergeHEAD)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to force CAS conflict: %w (output: %s)", err, output)
+		}
+		return nil
+	}
+	defer func() { mergeCASRetryTestHook = previousHook }()
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+	if hookCalls < 2 {
+		t.Fatalf("expected at least 2 CAS attempts (initial + retry), got %d", hookCalls)
+	}
+	if result.MergeCommit == "" {
+		t.Fatal("MergeCommit should not be empty")
+	}
+
+	// Verify state transitioned to MERGED.
+	stateAfter := readStateForTest(t, stateFile)
+	taskAfter := stateAfter.FindTask(taskID)
+	if taskAfter == nil {
+		t.Fatal("Task not found in state")
+	}
+	if taskAfter.Status != models.TaskStatusMerged {
+		t.Errorf("Task status = %v, want MERGED", taskAfter.Status)
+	}
+
+	integrationHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+	assertAncestor := func(ancestor, descendant, label string) {
+		t.Helper()
+		cmd := exec.Command("git", "-C", tmpDir, "merge-base", "--is-ancestor", ancestor, descendant)
+		err := cmd.Run()
+		if err == nil {
+			return
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			t.Fatalf("%s (%s) is not an ancestor of %s", label, ancestor, descendant)
+		}
+		t.Fatalf("merge-base failed for %s: %v", label, err)
+	}
+	assertAncestor(taskCommit, integrationHEAD, "task commit")
+	assertAncestor(competingSHA, integrationHEAD, "competing commit")
+}
+
 func TestMergeWorktree_SuccessWithPassingTests(t *testing.T) {
 	taskID := "merge-testpass"
 	agentID := "coder-1"

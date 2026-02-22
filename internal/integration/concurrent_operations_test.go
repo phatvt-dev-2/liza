@@ -7,6 +7,7 @@ package integration
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -511,4 +512,167 @@ func TestConcurrentClaimIntegrationFailedTask(t *testing.T) {
 	}
 
 	t.Log("✓ Concurrent INTEGRATION_FAILED claim test passed")
+}
+
+// TestConcurrentMerges tests that multiple approved tasks can be merged
+// concurrently without race conditions or corruption.
+// This verifies the fix for the MergeWorktree race condition where
+// concurrent reviewers would corrupt the integration branch.
+func TestConcurrentMerges(t *testing.T) {
+	projectDir, cleanup := setupTestProject(t)
+	defer cleanup()
+
+	numTasks := 3
+	taskIDs := make([]string, numTasks)
+	agentIDs := make([]string, numTasks)
+	reviewerIDs := make([]string, numTasks)
+
+	bb, _, _ := setupIntegrationTest(t, projectDir, []string{})
+
+	// Register multiple coders and reviewers
+	for i := 0; i < numTasks; i++ {
+		taskIDs[i] = "task-merge-" + string(rune('a'+i))
+		agentIDs[i] = "coder-" + string(rune('1'+i))
+		reviewerIDs[i] = "reviewer-" + string(rune('1'+i))
+		testhelpers.RegisterTestAgent(t, bb, agentIDs[i], "coder")
+		testhelpers.RegisterTestAgent(t, bb, reviewerIDs[i], "code_reviewer")
+	}
+
+	// Create approved tasks with worktrees
+	for i, taskID := range taskIDs {
+		err := bb.Modify(func(state *models.State) error {
+			// Create worktree directory and branch
+			wtDir := filepath.Join(projectDir, ".worktrees", taskID)
+			if err := os.MkdirAll(filepath.Dir(wtDir), 0755); err != nil {
+				return err
+			}
+
+			// Create worktree from integration
+			cmd := exec.Command("git", "-C", projectDir, "worktree", "add", wtDir, "integration", "-b", "task/"+taskID)
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("Failed to create worktree for %s: %v", taskID, err)
+			}
+
+			// Create unique file in worktree and commit
+			testFile := filepath.Join(wtDir, "feature-"+string(rune('a'+i))+".txt")
+			if err := os.WriteFile(testFile, []byte("content from "+taskID), 0644); err != nil {
+				t.Fatalf("Failed to write test file: %v", err)
+			}
+
+			cmd = exec.Command("git", "-C", wtDir, "add", ".")
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("Failed to git add: %v", err)
+			}
+
+			cmd = exec.Command("git", "-C", wtDir, "commit", "-m", "Commit for "+taskID)
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("Failed to git commit: %v", err)
+			}
+
+			// Get commit SHA
+			cmd = exec.Command("git", "-C", wtDir, "rev-parse", "HEAD")
+			output, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("Failed to get commit SHA: %v", err)
+			}
+			reviewCommit := strings.TrimSpace(string(output))
+
+			wtRel := filepath.Join(".worktrees", taskID)
+			now := time.Now().UTC()
+			task := models.Task{
+				ID:           taskID,
+				Description:  "Test merge task " + taskID,
+				Status:       models.TaskStatusApproved,
+				Priority:     i + 1,
+				Created:      now,
+				SpecRef:      "README.md",
+				DoneWhen:     "Done",
+				Scope:        "Test",
+				Worktree:     &wtRel,
+				AssignedTo:   &agentIDs[i],
+				ReviewCommit: &reviewCommit,
+				ApprovedBy:   &reviewerIDs[i],
+				History:      []models.TaskHistoryEntry{},
+			}
+			state.Tasks = append(state.Tasks, task)
+			return nil
+		})
+		testhelpers.AssertNoError(t, err)
+	}
+
+	t.Log("Starting concurrent merges")
+
+	// Concurrently merge all approved tasks
+	// Use a sync barrier so all goroutines reach the merge call before any proceeds,
+	// forcing contention at the stale-head window.
+	var wg sync.WaitGroup
+	results := make([]error, numTasks)
+	ready := make(chan struct{})
+	var startWg sync.WaitGroup
+	startWg.Add(numTasks)
+
+	for i := 0; i < numTasks; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			startWg.Done() // signal ready
+			<-ready        // wait for all goroutines to be ready
+			// Each reviewer merges their approved task
+			results[index] = commands.WtMergeCommand(projectDir, taskIDs[index], reviewerIDs[index])
+		}(i)
+	}
+
+	startWg.Wait() // all goroutines spawned and ready
+	close(ready)   // release all at once — maximum contention
+
+	wg.Wait()
+
+	// Verify all merges succeeded
+	successCount := 0
+	for i, err := range results {
+		if err != nil {
+			t.Logf("Merge %s failed: %v", taskIDs[i], err)
+		} else {
+			successCount++
+			t.Logf("Merge %s succeeded", taskIDs[i])
+		}
+	}
+
+	if successCount != numTasks {
+		t.Errorf("Expected %d successful merges, got %d", numTasks, successCount)
+	}
+
+	// Verify final state
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+
+	for _, taskID := range taskIDs {
+		task := findTask(state.Tasks, taskID)
+		if task == nil {
+			t.Errorf("Task %s not found", taskID)
+			continue
+		}
+
+		if task.Status != models.TaskStatusMerged {
+			t.Errorf("Task %s should be MERGED, got %s", taskID, task.Status)
+		}
+
+		if task.MergeCommit == nil {
+			t.Errorf("Task %s should have merge_commit set", taskID)
+		}
+	}
+
+	// Verify integration branch contains all changes
+	cmd := exec.Command("git", "-C", projectDir, "log", "--oneline", "integration")
+	output, err := cmd.Output()
+	testhelpers.AssertNoError(t, err)
+	logOutput := string(output)
+
+	for _, taskID := range taskIDs {
+		if !strings.Contains(logOutput, "Commit for "+taskID) {
+			t.Errorf("Integration branch log should contain commit for %s", taskID)
+		}
+	}
+
+	t.Log("✓ Concurrent merges test passed")
 }

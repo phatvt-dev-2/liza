@@ -12,6 +12,18 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// RefConflictError indicates a compare-and-swap failure on git update-ref.
+// The ref's current value did not match the expected old SHA.
+type RefConflictError struct {
+	Ref      string
+	Expected string
+	Actual   string // may be empty if undetermined
+}
+
+func (e *RefConflictError) Error() string {
+	return fmt.Sprintf("ref conflict on %s: expected %s, got %s", e.Ref, e.Expected, e.Actual)
+}
+
 // Git provides git operations for worktree management
 type Git struct {
 	projectRoot string
@@ -348,4 +360,91 @@ func (g *Git) GetWorktreeBranch(wtPath string) (string, error) {
 		return "", fmt.Errorf("failed to get worktree branch: %w", err)
 	}
 	return branch, nil
+}
+
+// MergeTree computes a merge between two commits without touching the working tree.
+// Returns the tree SHA of the merge result, a boolean indicating if it's clean (no conflicts),
+// and any error. If not clean, the tree SHA contains the best-effort merge with conflict markers.
+func (g *Git) MergeTree(baseCommit, branchCommit string) (treeSHA string, clean bool, err error) {
+	// Use git merge-tree --write-tree which returns the tree SHA directly
+	// Exit code 0 = clean merge, 1 = has conflicts
+	output, err := g.exec("merge-tree", "--write-tree", "--no-messages", baseCommit, branchCommit)
+	if err != nil {
+		// Check if it's a conflict (exit code 1)
+		errStr := err.Error()
+		if strings.Contains(errStr, "exit status 1") {
+			// Conflicts exist - the output still contains the tree SHA
+			// with best-effort merge (with conflict markers)
+			return output, false, nil
+		}
+		return "", false, fmt.Errorf("merge-tree failed: %w", err)
+	}
+	return output, true, nil
+}
+
+// CreateCommitFromTree creates a commit from a tree SHA with given parents and message.
+// Returns the new commit SHA. This does not touch the working tree.
+func (g *Git) CreateCommitFromTree(treeSHA string, parents []string, message string) (string, error) {
+	args := []string{"commit-tree", treeSHA, "-m", message}
+	for _, parent := range parents {
+		args = append(args, "-p", parent)
+	}
+	output, err := g.exec(args...)
+	if err != nil {
+		return "", fmt.Errorf("commit-tree failed: %w", err)
+	}
+	return output, nil
+}
+
+// UpdateRef updates a ref to point to a new commit.
+// When expectedOldSHA is non-empty, this is a compare-and-swap (CAS) operation:
+// git update-ref <ref> <new> <old>. If the ref's current value doesn't match
+// expectedOldSHA, git exits with status 128 and a RefConflictError is returned.
+func (g *Git) UpdateRef(ref, commitSHA, expectedOldSHA string) error {
+	args := []string{"update-ref", ref, commitSHA}
+	if expectedOldSHA != "" {
+		args = append(args, expectedOldSHA)
+	}
+	_, err := g.exec(args...)
+	if err != nil {
+		if expectedOldSHA != "" {
+			errMsg := err.Error()
+			// git update-ref CAS mismatch: exit status 128,
+			// output contains "is at <actual> but expected <old>"
+			if strings.Contains(errMsg, "but expected") {
+				actual := extractActualSHA(errMsg)
+				return &RefConflictError{Ref: ref, Expected: expectedOldSHA, Actual: actual}
+			}
+		}
+		return fmt.Errorf("update-ref %s failed: %w", ref, err)
+	}
+	return nil
+}
+
+// extractActualSHA parses the actual SHA from a git update-ref CAS error message.
+// Format: "...is at <sha> but expected <sha>"
+func extractActualSHA(errMsg string) string {
+	const marker = "is at "
+	idx := strings.Index(errMsg, marker)
+	if idx == -1 {
+		return ""
+	}
+	rest := errMsg[idx+len(marker):]
+	if spaceIdx := strings.IndexByte(rest, ' '); spaceIdx > 0 {
+		return rest[:spaceIdx]
+	}
+	return ""
+}
+
+// IsAncestor checks if commitA is an ancestor of commitB
+func (g *Git) IsAncestor(commitA, commitB string) (bool, error) {
+	_, err := g.exec("merge-base", "--is-ancestor", commitA, commitB)
+	if err != nil {
+		// Check if error is "not an ancestor" (exit code 1)
+		if strings.Contains(err.Error(), "exit status 1") {
+			return false, nil
+		}
+		return false, fmt.Errorf("merge-base failed: %w", err)
+	}
+	return true, nil
 }
