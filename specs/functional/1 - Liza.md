@@ -24,7 +24,8 @@ Liza combines four ideas:
 | System | Role |
 |--------|------|
 | Claude Code CLI | Agent runtime — executes agents with mode-based prompting |
-| Bash/Shell | Script execution — all Liza mechanics are shell scripts |
+| Go CLI (`liza`) | Control plane — task workflow, state transitions, system mode commands |
+| MCP server (`liza-mcp`) | Tool/resource surface for agent actions and supervisor fallback operations |
 | YAML + flock | Blackboard persistence — atomic read-modify-write coordination |
 | Git worktrees | Isolation — each task gets its own working directory |
 | Git | Version control — standard operations, merge protocol |
@@ -36,7 +37,7 @@ Liza combines four ideas:
 - One Planner, one Coder, one Code Reviewer
 - Terminal-based observation
 - YAML blackboard with file locking
-- Shell script tooling
+- Go CLI tooling (`liza`) with MCP companion server (`liza-mcp`)
 - Human-triggered circuit breaker
 
 **Explicit out of scope:**
@@ -50,7 +51,6 @@ Liza combines four ideas:
 | Real-time circuit breaker | Human-triggered analysis sufficient |
 | Token budget tracking | API doesn't expose; calendar time proxy |
 | SQLite backend | YAML sufficient at v1 scale |
-| MCP server integration | Nice-to-have, not essential |
 
 ## Risks and Assumptions
 
@@ -58,10 +58,10 @@ See [Vision](../build/0%20-%20Vision.md) for detailed risk analysis.
 
 Key assumptions:
 - Claude Code CLI supports mode-based prompting
-- Agents can reliably call shell scripts
+- Agents can reliably invoke Liza through CLI commands and MCP tools
 - YAML + flock sufficient for coordination
 - Specs substantially complete before work begins
 
 ---
 *Status: active*
-*Last verified: 2026-02-02*
+*Last verified: 2026-02-22*

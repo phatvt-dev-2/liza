@@ -1,0 +1,199 @@
+version: 1
+repository: "git@github.com:liza-mas/liza.git"
+last_updated: "2026-02-22T15:36:30Z"
+
+code_classification:
+  "cmd/liza/main.go": {type: functional, confidence: confirmed}
+  "internal/commands/claim_task.go": {type: functional, confidence: confirmed}
+  "internal/ops/claim_task.go": {type: functional, confidence: confirmed}
+  "internal/ops/submit_review.go": {type: functional, confidence: confirmed}
+  "internal/agent/supervisor.go": {type: functional, confidence: confirmed}
+  "internal/analysis/patterns.go": {type: functional, confidence: confirmed}
+  "cmd/liza-mcp/main.go": {type: architectural, confidence: confirmed}
+  "internal/mcp/server.go": {type: architectural, confidence: confirmed}
+  "internal/db/blackboard.go": {type: architectural, confidence: confirmed}
+  "internal/models/state.go": {type: architectural, confidence: confirmed}
+  "internal/git/worktree.go": {type: architectural, confidence: confirmed}
+  "internal/embedded/embedded.go": {type: architectural, confidence: confirmed}
+  "internal/prompts/builder.go": {type: architectural, confidence: confirmed}
+  "internal/errors/errors.go": {type: utility, confidence: confirmed}
+  "internal/filelock/filelock.go": {type: utility, confidence: confirmed}
+  "internal/log/logger.go": {type: utility, confidence: confirmed}
+  "internal/paths/paths.go": {type: utility, confidence: confirmed}
+
+mappings:
+  "cmd/liza/main.go":
+    spec_path: "specs/functional/1 - Liza.md"
+    spec_title: "Liza"
+    code_sha: ec635c5
+    spec_sha: 16962c2
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/commands/claim_task.go":
+    spec_path: "specs/functional/1.3.md"
+    spec_title: "Task Management"
+    code_sha: c7e98d7
+    spec_sha: 16962c2
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/ops/claim_task.go":
+    spec_path: "specs/functional/1.3.md"
+    spec_title: "Task Management"
+    code_sha: 7fc449d
+    spec_sha: 16962c2
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/ops/submit_review.go":
+    spec_path: "specs/functional/1.3.md"
+    spec_title: "Task Management"
+    code_sha: e6f7bd2
+    spec_sha: 16962c2
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/agent/supervisor.go":
+    spec_path: "specs/functional/1.2.md"
+    spec_title: "Multi-Agent Coordination"
+    code_sha: 9d1890c
+    spec_sha: 16962c2
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/analysis/patterns.go":
+    spec_path: "specs/functional/1.5.md"
+    spec_title: "Circuit Breaker"
+    code_sha: c60b89b
+    spec_sha: 16962c2
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "cmd/liza-mcp/main.go":
+    spec_path: "specs/architecture/supervision-model.md"
+    spec_title: "Supervision Model: Action Responsibility"
+    code_sha: c60b89b
+    spec_sha: 17e94f7
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/mcp/server.go":
+    spec_path: "specs/architecture/supervision-model.md"
+    spec_title: "Supervision Model: Action Responsibility"
+    code_sha: e6f7bd2
+    spec_sha: 17e94f7
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/db/blackboard.go":
+    spec_path: "specs/architecture/blackboard-schema.md"
+    spec_title: "Blackboard Schema"
+    code_sha: e6f7bd2
+    spec_sha: ec635c5
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/models/state.go":
+    spec_path: "specs/architecture/state-machines.md"
+    spec_title: "State Machines"
+    code_sha: 7fc449d
+    spec_sha: 0f6fe19
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/git/worktree.go":
+    spec_path: "specs/protocols/worktree-management.md"
+    spec_title: "Worktree Management Protocol"
+    code_sha: 17e94f7
+    spec_sha: 17e94f7
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/embedded/embedded.go":
+    spec_path: "specs/architecture/ADR/0016-embedded-template-architecture.md"
+    spec_title: "Embedded Template Architecture for Agent Prompts"
+    code_sha: a477ce5
+    spec_sha: 1948685
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+  "internal/prompts/builder.go":
+    spec_path: "specs/architecture/ADR/0016-embedded-template-architecture.md"
+    spec_title: "Embedded Template Architecture for Agent Prompts"
+    code_sha: ad3288c
+    spec_sha: 1948685
+    status: aligned
+    last_verified: "2026-02-22"
+    confidence: inferred-pending-review
+    conflict_details: null
+
+specs:
+  "specs/functional/1 - Liza.md":
+    title: "Liza"
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: ["cmd/liza/main.go"]
+  "specs/functional/1.2.md":
+    title: "Multi-Agent Coordination"
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: ["internal/agent/supervisor.go"]
+  "specs/functional/1.3.md":
+    title: "Task Management"
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: ["internal/commands/claim_task.go", "internal/ops/claim_task.go", "internal/ops/submit_review.go"]
+  "specs/functional/1.5.md":
+    title: "Circuit Breaker"
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: ["internal/analysis/patterns.go"]
+  "specs/architecture/supervision-model.md":
+    title: "Supervision Model: Action Responsibility"
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: ["0006", "0011", "0012"]
+    code_paths: ["cmd/liza-mcp/main.go", "internal/mcp/server.go"]
+  "specs/architecture/blackboard-schema.md":
+    title: "Blackboard Schema"
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: ["0003"]
+    code_paths: ["internal/db/blackboard.go"]
+  "specs/architecture/state-machines.md":
+    title: "State Machines"
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: ["internal/models/state.go"]
+  "specs/protocols/worktree-management.md":
+    title: "Worktree Management Protocol"
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: ["internal/git/worktree.go"]
+  "specs/architecture/ADR/0016-embedded-template-architecture.md":
+    title: "Embedded Template Architecture for Agent Prompts"
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: ["0016"]
+    code_paths: ["internal/embedded/embedded.go", "internal/prompts/builder.go"]
+
+archive: {}
