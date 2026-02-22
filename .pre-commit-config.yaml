@@ -55,7 +55,8 @@ repos:
     hooks:
       - id: jscpd  # a useful one to counter the tendency of coding agents to duplicate code
         name: jscpd (duplicate code detection)
-        entry: npx jscpd . --min-lines 10 --min-tokens 50 --threshold 5 --noSymlinks --ignore "**/tests/**,**/.venv/**,**/_archive/**,**/.idea/**,**/internal/embedded/**"
+        # write cache to a universally-writable location
+        entry: bash -c 'NPM_CONFIG_CACHE=/tmp/.npm-cache npx jscpd . --min-lines 10 --min-tokens 50 --threshold 5 --noSymlinks --ignore "**/tests/**,**/.venv/**,**/_archive/**,**/.idea/**,**/internal/embedded/**"'
         language: system
         files: \.(py|go)$  # trigger when Python or Go files are staged
         pass_filenames: false  # but scan full directory (dupes are cross-file)
