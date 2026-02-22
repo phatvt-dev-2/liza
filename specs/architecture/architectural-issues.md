@@ -439,6 +439,9 @@ Issues identified through code-level architectural analysis (patterns, structure
 - [x] Documentation/Implementation Desynchronization — replaced all operational `yq` references across 8 docs/specs files with `liza` CLI equivalents or tool-agnostic instructions *(systemic-thinking)*
 - [x] YAML Round-Trip Data Loss — added `Extra map[string]any` with `yaml:",inline"` to all model structs; unknown YAML fields now survive round-trips *(systemic-thinking)*
 - [x] Inconsistent NotFoundError Usage — added `ID` field to `NotFoundError`, migrated 25+ ad-hoc string errors to structured type across `ops/`, `db/`, `agent/`, `commands/`; `IsNotFound()` uses `errors.As`; MCP `classifyError()` uses type-based detection with string fallback *(software-architecture-review)*
+- [x] MCP parse-error response write failure ignored — made `WriteError` failure terminal; `Run` returns error instead of silently continuing *(architecture-review)*
+- [x] `submit-for-review` `commit_sha` contract drift — aligned contract: removed SHA input from CLI/MCP surfaces, derived internally from worktree HEAD *(architecture-review)*
+- [x] REJECTED reassignment can orphan worktree on recreate failure — reordered reassignment to secure replacement before teardown with compensating recovery *(architecture-review)*
 
 ---
 
@@ -475,6 +478,9 @@ Commit SHA where issue details were first marked as fixed (proxy for actual fix 
 | Untested MCP Server Dispatch Layer | `40ef645` |
 | Untested Work Detection Logic | `40ef645` |
 | Iteration-Limit Config Drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) | `5fceaad` |
+| MCP parse-error response write failure ignored | `80297b9` |
+| `submit-for-review` `commit_sha` contract drift | `d4c688e` |
+| REJECTED reassignment can orphan worktree on recreate failure | `ccaf9b0` |
 
 ---
 
@@ -726,5 +732,29 @@ Test files split correspondingly. `supervisor_priority_test.go` renamed to `clai
 **Status:** RESOLVED — `internal/models/diagnostics_test.go` added
 
 **Fix:** Added `diagnostics_test.go` with table-driven tests covering all 4 functions: `CountClaimableTasks` (empty state, role filtering, mixed statuses, dependency blocking/satisfaction), `CountReviewableTasks` (empty state, status filtering, role filtering), `GetCoderWorkDiagnostics` (claimable found, blocked-by-deps, in-progress, combined), `GetReviewerWorkDiagnostics` (unassigned, expired leases, active reviews, nil lease handling).
+
+### MCP Parse-Error Response Write Failure Ignored
+
+**Skill:** architecture-review
+**Category:** Error handling
+**Status:** RESOLVED — parse-error write failure is now terminal
+
+**Fix:** `internal/mcp/server.go` parse-error path now checks `WriteError` return value. If the transport write fails, `Run` returns the error immediately instead of silently continuing the server loop.
+
+### `submit-for-review` `commit_sha` Contract Drift
+
+**Skill:** architecture-review
+**Category:** Data flow
+**Status:** RESOLVED — commit SHA contract aligned
+
+**Fix:** Aligned contract and runtime semantics. CLI/MCP surfaces no longer require caller-provided `commit_sha`; the runtime derives the authoritative commit from worktree HEAD, eliminating interface-to-runtime drift.
+
+### REJECTED Reassignment Can Orphan Worktree on Recreate Failure
+
+**Skill:** architecture-review
+**Category:** Documented smell
+**Status:** RESOLVED — reassignment flow hardened
+
+**Fix:** Reordered the different-coder REJECTED reassignment path in `internal/ops/claim_task.go` to secure the replacement worktree before tearing down the old one. If replacement creation fails, the old worktree is preserved and compensating recovery state is persisted.
 
 ---

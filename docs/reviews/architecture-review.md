@@ -781,6 +781,8 @@ Resolved: `ops.ClaimTask` now enforces coder iteration ceilings (effective polic
 
 #### Smell: MCP parse-error response write failure is ignored *(Adversarial pass, entry: error handling)*
 
+**Status: Fixed** (`80297b9`)
+
 **Signal:** `internal/mcp/server.go:252` calls `transport.WriteError(...)` and discards its return value in the parse-error path.
 
 **Impact:** High. If stdout/transport write is broken, the server silently continues after failing to send protocol errors, leaving the MCP session in an unobservable degraded state.
@@ -817,6 +819,8 @@ Resolved: `ops.ClaimTask` now enforces coder iteration ceilings (effective polic
 
 #### Smell: `submit-for-review` commit input is required but not authoritative *(Adversarial pass, entry: data flow)*
 
+**Status: Fixed** (`d4c688e`)
+
 **Signal:** `submit-for-review` interfaces require `commit_sha` (`cmd/liza/main.go:248`, `internal/mcp/server.go:425`, `internal/ops/submit_review.go:29`), but runtime does not validate it against worktree HEAD and always persists post-rebase HEAD as `review_commit` (`internal/ops/submit_review.go:108`, `internal/ops/submit_review.go:137`).
 
 **Impact:** High. API/CLI contracts imply caller-provided commit authority while execution ignores that value after non-empty validation. This creates interface-to-runtime drift and weakens traceability of reviewed content.
@@ -832,6 +836,8 @@ Resolved: `ops.ClaimTask` now enforces coder iteration ceilings (effective polic
 **Direction:** Make destructive side effects transactional in effect: move git side effects after successful state mutation, or add compensating reconciliation when post-side-effect state commit fails.
 
 #### Smell: REJECTED reassignment deletes old worktree before replacement is secured *(Adversarial pass, entry: documented smells)*
+
+**Status: Fixed** (`ccaf9b0`)
 
 **Signal:** In `internal/ops/claim_task.go`, the different-coder REJECTED path removes existing worktree/branch (`internal/ops/claim_task.go:149`, `internal/ops/claim_task.go:150`) before attempting new worktree creation (`internal/ops/claim_task.go:153`). If creation fails, Phase 3 never commits state, but prior artifacts may already be gone.
 
@@ -934,9 +940,9 @@ The 24.7% uncovered code concentrates in two patterns:
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
 | **High** | Pairing initialization doc pointer drift (`docs/USAGE.md`) *(Adversarial pass, entry: specs/)* | Session Initialization in `PAIRING_MODE.md` requires a non-existent file; startup protocol can fail before task execution | Point initialization to canonical docs (`USAGE_PAIRING.md` and/or `docs/README.md`) |
-| **High** | MCP parse-error response write failure ignored *(Adversarial pass, entry: error handling)* | Server drops `WriteError` failure and keeps looping, hiding protocol output failure | Make parse-error response write failure terminal (`Run` should return error) |
-| **High** | `submit-for-review` `commit_sha` contract drift *(Adversarial pass, entry: data flow)* | CLI/MCP require SHA input but runtime ignores it and persists computed post-rebase HEAD | Align contract: remove SHA input from surfaces or enforce strict SHA validation against worktree HEAD |
-| **High** | REJECTED reassignment can orphan worktree on recreate failure *(Adversarial pass, entry: documented smells)* | Different-coder REJECTED claim deletes old worktree/branch before confirming replacement create succeeds | Reorder reassignment flow to secure replacement before teardown, or persist compensating recovery state |
+| ~~**High**~~ | ~~MCP parse-error response write failure ignored *(Adversarial pass, entry: error handling)*~~ | ~~Server drops `WriteError` failure and keeps looping, hiding protocol output failure~~ | Fixed (`80297b9`) |
+| ~~**High**~~ | ~~`submit-for-review` `commit_sha` contract drift *(Adversarial pass, entry: data flow)*~~ | ~~CLI/MCP require SHA input but runtime ignores it and persists computed post-rebase HEAD~~ | Fixed (`d4c688e`) |
+| ~~**High**~~ | ~~REJECTED reassignment can orphan worktree on recreate failure *(Adversarial pass, entry: documented smells)*~~ | ~~Different-coder REJECTED claim deletes old worktree/branch before confirming replacement create succeeds~~ | Fixed (`ccaf9b0`) |
 | **Medium** | Cleanup failures suppressed in rebase/worktree recovery paths *(Adversarial pass, entry: error handling)* | Best-effort cleanup uses ignored errors across claim/review/worktree flows, masking residual dirty state | Surface cleanup outcomes as warning/error and escalate when inconsistency risk is material |
 | **Medium** | Stale-lock cleanup error is ignored before retry *(Adversarial pass, entry: error handling)* | Lock recovery drops `cleanupStaleLock()` failure context | Propagate cleanup failure as lock/filesystem error before retry |
 | **Medium** | Planner max-wait config is effectively ignored *(Adversarial pass, entry: documented smells)* | Planner wait loop overrides configured max wait with a fixed near-infinite duration | Either enforce `planner_max_wait` or remove/deprecate knob and document infinite planner semantics |
