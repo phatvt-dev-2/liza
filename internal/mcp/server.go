@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +25,12 @@ type Server struct {
 
 // ToolHandler is a function that handles tool invocation
 type ToolHandler func(params map[string]any) (any, error)
+
+type runTransport interface {
+	ReadRequest() (*protocol.JSONRPCRequest, error)
+	WriteResponse(resp *protocol.JSONRPCResponse) error
+	WriteError(id json.RawMessage, code int, message string, data any) error
+}
 
 // NewServer creates a new MCP server
 func NewServer(projectRoot, logPath string) *Server {
@@ -239,8 +246,10 @@ func (s *Server) registerResource(resource protocol.Resource) {
 
 // Run starts the MCP server with stdio transport
 func (s *Server) Run() error {
-	transport := protocol.NewStdioTransport()
+	return s.runWithTransport(protocol.NewStdioTransport())
+}
 
+func (s *Server) runWithTransport(transport runTransport) error {
 	for {
 		req, err := transport.ReadRequest()
 		if err != nil {
@@ -248,8 +257,10 @@ func (s *Server) Run() error {
 			if errors.Is(err, io.EOF) || err.Error() == "EOF" {
 				return nil
 			}
-			// Write parse error and continue
-			_ = transport.WriteError(nil, protocol.ParseError, err.Error(), nil)
+			// Write parse error and continue unless writing the error fails.
+			if writeErr := transport.WriteError(nil, protocol.ParseError, err.Error(), nil); writeErr != nil {
+				return fmt.Errorf("failed to write parse error response: %w", writeErr)
+			}
 			continue
 		}
 
