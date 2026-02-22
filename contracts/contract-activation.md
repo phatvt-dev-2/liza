@@ -242,10 +242,8 @@ Verification:
 ## Kimi (with Claude CLI)
 
 ```bash
-export ANTHROPIC_BASE_URL=https://api.kimi.com/coding/
-export ANTHROPIC_API_KEY=$KIMI_API_KEY
-export ANTHROPIC_MODEL="kimi-k2.5"
+alias kimi="ANTHROPIC_BASE_URL=https://api.kimi.com/coding/ ANTHROPIC_API_KEY=$KIMI_API_KEY ANTHROPIC_MODEL='kimi-k2.5' claude"
 ```
-Then run `claude`
+Then run `kimi`
 
 Kimi uses Claude's config automatically.
