@@ -573,6 +573,75 @@ func TestHandleSubmitForReview(t *testing.T) {
 	}
 }
 
+func TestHandleSubmitForReviewCommitMismatch(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Create a worktree for the task
+	g := git.New(projectRoot)
+	taskID := "task-1"
+	baseCommit, err := g.CreateWorktree(taskID, "integration")
+	if err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+	wtPath := g.GetWorktreePath(taskID)
+
+	// Make a commit in the worktree
+	testFile := filepath.Join(wtPath, "test-file.txt")
+	if err := os.WriteFile(testFile, []byte("test content\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "test-file.txt")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Test commit")
+
+	// Use integration HEAD as an intentionally wrong commit SHA
+	wrongCommit := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration")
+
+	// Setup: Claim task with the worktree
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err = bb.Modify(func(state *models.State) error {
+		state.Tasks[0].Status = models.TaskStatusImplementing
+		assignedTo := "coder-1"
+		state.Tasks[0].AssignedTo = &assignedTo
+		worktree := g.GetWorktreeRelPath(taskID)
+		state.Tasks[0].Worktree = &worktree
+		state.Tasks[0].BaseCommit = &baseCommit
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	_, err = server.handleSubmitForReview(map[string]any{
+		"task_id":    taskID,
+		"commit_sha": wrongCommit,
+		"agent_id":   "coder-1",
+	})
+	if err == nil {
+		t.Fatal("Expected commit mismatch error")
+	}
+	if !strings.Contains(err.Error(), "does not match worktree HEAD") {
+		t.Fatalf("Expected mismatch error, got: %v", err)
+	}
+
+	// Verify task remains unchanged
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.Tasks[0]
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected status IMPLEMENTING after mismatch, got %s", task.Status)
+	}
+	if task.ReviewCommit != nil {
+		t.Errorf("Expected review_commit to remain nil after mismatch, got %v", task.ReviewCommit)
+	}
+}
+
 // TestHandleHandoff verifies liza_handoff tool
 func TestHandleHandoff(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
