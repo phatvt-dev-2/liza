@@ -1,7 +1,6 @@
 version: 1
 repository: "git@github.com:liza-mas/liza.git"
-last_updated: "2026-02-22T15:36:30Z"
-
+last_updated: "2026-02-22T15:57:28Z"
 code_classification:
   "cmd/liza/main.go": {type: functional, confidence: confirmed}
   "internal/commands/claim_task.go": {type: functional, confidence: confirmed}
@@ -20,7 +19,37 @@ code_classification:
   "internal/filelock/filelock.go": {type: utility, confidence: confirmed}
   "internal/log/logger.go": {type: utility, confidence: confirmed}
   "internal/paths/paths.go": {type: utility, confidence: confirmed}
-
+  internal/ops/wt_create.go: {type: functional, confidence: confirmed}
+  internal/ops/wt_delete.go: {type: functional, confidence: confirmed}
+  internal/ops/wt_merge.go: {type: functional, confidence: confirmed}
+  internal/commands/wt_create.go: {type: functional, confidence: confirmed}
+  internal/commands/wt_delete.go: {type: functional, confidence: confirmed}
+  internal/commands/wt_merge.go: {type: functional, confidence: confirmed}
+  internal/commands/validate.go: {type: functional, confidence: confirmed}
+  internal/commands/setup.go: {type: functional, confidence: confirmed}
+  internal/commands/init.go: {type: functional, confidence: confirmed}
+  skills/adr-backfill/SKILL.md: {type: functional, confidence: confirmed}
+  skills/black-box-red-testing/SKILL.md: {type: functional, confidence: confirmed}
+  skills/clean-code/SKILL.md: {type: functional, confidence: confirmed}
+  skills/code-review/SKILL.md: {type: functional, confidence: confirmed}
+  skills/code-spec-backfill/SKILL.md: {type: functional, confidence: confirmed}
+  skills/debugging/SKILL.md: {type: functional, confidence: confirmed}
+  skills/feynman/SKILL.md: {type: functional, confidence: confirmed}
+  skills/generic-subagent/SKILL.md: {type: functional, confidence: confirmed}
+  skills/have-you-considered/SKILL.md: {type: functional, confidence: confirmed}
+  skills/lesson-capture/SKILL.md: {type: functional, confidence: confirmed}
+  skills/software-architecture-review/SKILL.md: {type: functional, confidence: confirmed}
+  skills/spec-backfill/SKILL.md: {type: functional, confidence: confirmed}
+  skills/spec-review/SKILL.md: {type: functional, confidence: confirmed}
+  skills/systemic-thinking/SKILL.md: {type: functional, confidence: confirmed}
+  skills/testing/SKILL.md: {type: functional, confidence: confirmed}
+  skills/white-box-red-testing/SKILL.md: {type: functional, confidence: confirmed}
+  contracts/CORE.md: {type: functional, confidence: confirmed}
+  contracts/PAIRING_MODE.md: {type: functional, confidence: confirmed}
+  contracts/MULTI_AGENT_MODE.md: {type: functional, confidence: confirmed}
+  contracts/SUBAGENT_MODE.md: {type: functional, confidence: confirmed}
+  contracts/AGENT_TOOLS.md: {type: functional, confidence: confirmed}
+  contracts/COLLABORATION_CONTINUITY.md: {type: functional, confidence: confirmed}
 mappings:
   "cmd/liza/main.go":
     spec_path: "specs/functional/1 - Liza.md"
@@ -32,7 +61,7 @@ mappings:
     confidence: inferred-pending-review
     conflict_details: null
   "internal/commands/claim_task.go":
-    spec_path: "specs/functional/1.3.md"
+    spec_path: "specs/functional/1.3 - Task Management.md"
     spec_title: "Task Management"
     code_sha: c7e98d7
     spec_sha: 16962c2
@@ -41,16 +70,16 @@ mappings:
     confidence: inferred-pending-review
     conflict_details: null
   "internal/ops/claim_task.go":
-    spec_path: "specs/functional/1.3.md"
+    spec_path: "specs/functional/1.3 - Task Management.md"
     spec_title: "Task Management"
     code_sha: 7fc449d
-    spec_sha: 16962c2
+    spec_sha: f150399
     status: aligned
     last_verified: "2026-02-22"
     confidence: inferred-pending-review
     conflict_details: null
   "internal/ops/submit_review.go":
-    spec_path: "specs/functional/1.3.md"
+    spec_path: "specs/functional/1.3 - Task Management.md"
     spec_title: "Task Management"
     code_sha: e6f7bd2
     spec_sha: 16962c2
@@ -59,7 +88,7 @@ mappings:
     confidence: inferred-pending-review
     conflict_details: null
   "internal/agent/supervisor.go":
-    spec_path: "specs/functional/1.2.md"
+    spec_path: "specs/functional/1.2 - Multi-Agent Coordination.md"
     spec_title: "Multi-Agent Coordination"
     code_sha: 9d1890c
     spec_sha: 16962c2
@@ -68,7 +97,7 @@ mappings:
     confidence: inferred-pending-review
     conflict_details: null
   "internal/analysis/patterns.go":
-    spec_path: "specs/functional/1.5.md"
+    spec_path: "specs/functional/1.5 - Circuit Breaker.md"
     spec_title: "Circuit Breaker"
     code_sha: c60b89b
     spec_sha: 16962c2
@@ -139,7 +168,285 @@ mappings:
     last_verified: "2026-02-22"
     confidence: inferred-pending-review
     conflict_details: null
-
+  internal/ops/wt_create.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.4 - Worktree Isolation.md
+    spec_title: Worktree Isolation
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/wt_delete.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.4 - Worktree Isolation.md
+    spec_title: Worktree Isolation
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/wt_merge.go:
+    status: aligned
+    code_sha: 17e94f7
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.4 - Worktree Isolation.md
+    spec_title: Worktree Isolation
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/wt_create.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.4 - Worktree Isolation.md
+    spec_title: Worktree Isolation
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/wt_delete.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.4 - Worktree Isolation.md
+    spec_title: Worktree Isolation
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/wt_merge.go:
+    status: aligned
+    code_sha: c7e98d7
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.4 - Worktree Isolation.md
+    spec_title: Worktree Isolation
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/validate.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.4 - Worktree Isolation.md
+    spec_title: Worktree Isolation
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/setup.go:
+    status: aligned
+    code_sha: 5b86cfb
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/init.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/adr-backfill/SKILL.md:
+    status: aligned
+    code_sha: 00c1843
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/black-box-red-testing/SKILL.md:
+    status: aligned
+    code_sha: e969844
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/clean-code/SKILL.md:
+    status: aligned
+    code_sha: 9fe20e1
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/code-review/SKILL.md:
+    status: aligned
+    code_sha: 60c7be2
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/code-spec-backfill/SKILL.md:
+    status: aligned
+    code_sha: fd2f99b
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/debugging/SKILL.md:
+    status: aligned
+    code_sha: f02ac4a
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/feynman/SKILL.md:
+    status: aligned
+    code_sha: e8a39b6
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/generic-subagent/SKILL.md:
+    status: aligned
+    code_sha: eca0d82
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/have-you-considered/SKILL.md:
+    status: aligned
+    code_sha: 6ea75a8
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/lesson-capture/SKILL.md:
+    status: aligned
+    code_sha: 8057a88
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/software-architecture-review/SKILL.md:
+    status: aligned
+    code_sha: cfede1d
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/spec-backfill/SKILL.md:
+    status: aligned
+    code_sha: f700c60
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/spec-review/SKILL.md:
+    status: aligned
+    code_sha: ed0b384
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/systemic-thinking/SKILL.md:
+    status: aligned
+    code_sha: 1960c90
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/testing/SKILL.md:
+    status: aligned
+    code_sha: f02ac4a
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/white-box-red-testing/SKILL.md:
+    status: aligned
+    code_sha: 15f1b71
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  contracts/CORE.md:
+    status: aligned
+    code_sha: 2294abb
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.1 - Contract System.md
+    spec_title: Contract System
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  contracts/PAIRING_MODE.md:
+    status: aligned
+    code_sha: 2294abb
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.1 - Contract System.md
+    spec_title: Contract System
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  contracts/MULTI_AGENT_MODE.md:
+    status: aligned
+    code_sha: e969844
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.1 - Contract System.md
+    spec_title: Contract System
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  contracts/SUBAGENT_MODE.md:
+    status: aligned
+    code_sha: 7c24e33
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.1 - Contract System.md
+    spec_title: Contract System
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  contracts/AGENT_TOOLS.md:
+    status: aligned
+    code_sha: b8f7faf
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.1 - Contract System.md
+    spec_title: Contract System
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  contracts/COLLABORATION_CONTINUITY.md:
+    status: aligned
+    code_sha: 314c60a
+    spec_sha: 16962c2
+    spec_path: specs/functional/1.1 - Contract System.md
+    spec_title: Contract System
+    confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
 specs:
   "specs/functional/1 - Liza.md":
     title: "Liza"
@@ -147,19 +454,19 @@ specs:
     last_verified: "2026-02-22"
     linked_adrs: []
     code_paths: ["cmd/liza/main.go"]
-  "specs/functional/1.2.md":
+  "specs/functional/1.2 - Multi-Agent Coordination.md":
     title: "Multi-Agent Coordination"
     status: active
     last_verified: "2026-02-22"
     linked_adrs: []
     code_paths: ["internal/agent/supervisor.go"]
-  "specs/functional/1.3.md":
+  "specs/functional/1.3 - Task Management.md":
     title: "Task Management"
     status: active
     last_verified: "2026-02-22"
     linked_adrs: []
     code_paths: ["internal/commands/claim_task.go", "internal/ops/claim_task.go", "internal/ops/submit_review.go"]
-  "specs/functional/1.5.md":
+  "specs/functional/1.5 - Circuit Breaker.md":
     title: "Circuit Breaker"
     status: active
     last_verified: "2026-02-22"
@@ -195,5 +502,106 @@ specs:
     last_verified: "2026-02-22"
     linked_adrs: ["0016"]
     code_paths: ["internal/embedded/embedded.go", "internal/prompts/builder.go"]
-
+  specs/functional/1.1 - Contract System.md:
+    title: Contract System
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths:
+      - contracts/CORE.md
+      - contracts/PAIRING_MODE.md
+      - contracts/MULTI_AGENT_MODE.md
+      - contracts/SUBAGENT_MODE.md
+      - contracts/AGENT_TOOLS.md
+      - contracts/COLLABORATION_CONTINUITY.md
+  specs/functional/1.4 - Worktree Isolation.md:
+    title: Worktree Isolation
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths:
+      - internal/ops/wt_create.go
+      - internal/ops/wt_delete.go
+      - internal/ops/wt_merge.go
+      - internal/commands/wt_create.go
+      - internal/commands/wt_delete.go
+      - internal/commands/wt_merge.go
+      - internal/commands/validate.go
+  specs/functional/1.6 - Skills.md:
+    title: Skills
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths:
+      - internal/commands/setup.go
+      - internal/commands/init.go
+      - skills/adr-backfill/SKILL.md
+      - skills/black-box-red-testing/SKILL.md
+      - skills/clean-code/SKILL.md
+      - skills/code-review/SKILL.md
+      - skills/code-spec-backfill/SKILL.md
+      - skills/debugging/SKILL.md
+      - skills/feynman/SKILL.md
+      - skills/generic-subagent/SKILL.md
+      - skills/have-you-considered/SKILL.md
+      - skills/lesson-capture/SKILL.md
+      - skills/software-architecture-review/SKILL.md
+      - skills/spec-backfill/SKILL.md
+      - skills/spec-review/SKILL.md
+      - skills/systemic-thinking/SKILL.md
+      - skills/testing/SKILL.md
+      - skills/white-box-red-testing/SKILL.md
+  specs/build/1.1 - Contract System.md:
+    title: Contract System
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    child_specs:
+      - specs/build/1.1.1 - Pairing Safety Gates.md
+  specs/build/1.4 - Worktree Isolation.md:
+    title: Worktree Isolation
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    child_specs:
+      - specs/build/1.4.1 - Task Worktree Provisioning.md
+  specs/build/1.6 - Skills.md:
+    title: Skills
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    child_specs:
+      - specs/build/1.6.1 - Skill Triggering and Use.md
+  specs/build/1.1.1 - Pairing Safety Gates.md:
+    title: Pairing Safety Gates
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths:
+      - contracts/CORE.md
+      - contracts/PAIRING_MODE.md
+      - contracts/AGENT_TOOLS.md
+  specs/build/1.4.1 - Task Worktree Provisioning.md:
+    title: Task Worktree Provisioning
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths:
+      - internal/ops/claim_task.go
+      - internal/git/worktree.go
+      - internal/ops/wt_merge.go
+  specs/build/1.6.1 - Skill Triggering and Use.md:
+    title: Skill Triggering and Use
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths:
+      - contracts/CORE.md
+      - internal/embedded/embedded.go
+      - internal/commands/setup.go
+  specs/build/changelog.md:
+    title: Build Changelog
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
 archive: {}

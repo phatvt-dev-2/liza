@@ -12,12 +12,12 @@ Liza combines four ideas:
 
 ## Domains
 
-- 1.1 — [Contract System](1.1.md) — Behavioral rules governing agent conduct
-- 1.2 — [Multi-Agent Coordination](1.2.md) — Blackboard, roles, state machines
-- 1.3 — [Task Management](1.3.md) — Claim, iterate, review, merge flow
-- 1.4 — [Worktree Isolation](1.4.md) — Per-task git worktrees
-- 1.5 — [Circuit Breaker](1.5.md) — Systemic failure detection and recovery
-- 1.6 — [Skills](1.6.md) — Domain-specific agent protocols
+- 1.1 — [Contract System](1.1 - Contract System.md) — Behavioral rules governing agent conduct
+- 1.2 — [Multi-Agent Coordination](1.2 - Multi-Agent Coordination.md) — Blackboard, roles, state machines
+- 1.3 — [Task Management](1.3 - Task Management.md) — Claim, iterate, review, merge flow
+- 1.4 — [Worktree Isolation](1.4 - Worktree Isolation.md) — Per-task git worktrees
+- 1.5 — [Circuit Breaker](1.5 - Circuit Breaker.md) — Systemic failure detection and recovery
+- 1.6 — [Skills](1.6 - Skills.md) — Domain-specific agent protocols
 
 ## Key Integrations
 

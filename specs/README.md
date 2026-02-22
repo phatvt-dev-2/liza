@@ -6,7 +6,14 @@
 
 | Document                        | Purpose |
 |---------------------------------|---------|
-| [Vision](<build/0 - Vision.md>) | Why Liza exists, target users, success metrics, risks |
+| [Vision](<build/1 - Vision.md>) | Why Liza exists, target users, success metrics, risks |
+| [1.1 Contract System](<build/1.1 - Contract System.md>) | Epic: enforceable behavioral contract and mode gates |
+| [1.1.1 Pairing Safety Gates](<build/1.1.1 - Pairing Safety Gates.md>) | Story: explicit human gate and invariant enforcement in pairing |
+| [1.4 Worktree Isolation](<build/1.4 - Worktree Isolation.md>) | Epic: isolated task execution and controlled integration |
+| [1.4.1 Task Worktree Provisioning](<build/1.4.1 - Task Worktree Provisioning.md>) | Story: per-task worktree creation, reassignment, and base commit capture |
+| [1.6 Skills](<build/1.6 - Skills.md>) | Epic: modular domain-specific protocol library |
+| [1.6.1 Skill Triggering and Use](<build/1.6.1 - Skill Triggering and Use.md>) | Story: trigger-based skill loading under contract |
+| [Build Changelog](<build/changelog.md>) | Build hierarchy change history |
 
 ### Functional (Current State)
 
@@ -50,7 +57,7 @@
 ## Reading Order
 
 **For understanding the system:**
-1. [Vision](<build/0 - Vision.md>) — philosophy and rationale
+1. [Vision](<build/1 - Vision.md>) — philosophy and rationale
 2. [Product Description](<functional/1 - Liza.md>) — what Liza is today
 3. [Architecture Overview](architecture/overview.md) — components and flow
 4. [Roles](architecture/roles.md) — who does what
@@ -79,7 +86,7 @@
 
 ### Design Philosophy
 
-See [Vision](<build/0 - Vision.md>) for the design philosophy and cost gradient.
+See [Vision](<build/1 - Vision.md>) for the design philosophy and cost gradient.
 
 ---
 
@@ -94,7 +101,7 @@ See [Vision](<build/0 - Vision.md>) for the design philosophy and cost gradient.
 
 | Category | Documents | Status |
 |----------|-----------|--------|
-| Build | 1 (0.md) | Complete |
+| Build | 8 (Vision + 3 epics + 3 stories + changelog) | Partial backfill |
 | Functional | 7 (0.md + 1.1–1.6) | Complete |
 | Architecture | 6 + ADR/ | Complete |
 | Protocols | 5 | Complete |
