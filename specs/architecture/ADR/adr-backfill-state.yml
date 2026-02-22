@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-02-18T01:00:00Z"
+last_updated: "2026-02-22T15:05:34Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -270,6 +270,54 @@ clusters:
       rationale: "Role-neutral naming supports multiple worker/reviewer pair types; REVIEWING state is preventive"
       limitations: "Breaking change to existing blackboard files"
     note: "Evolves ADR-0003 (Blackboard) and ADR-0011 (Script-Enforced Status)."
+
+  - id: 20
+    title: "Explicit Task Workflow Contract (Type-Aware Claiming and Limit Escalation)"
+    commit_shas: ["ec635c5", "2b5d236", "7fc449d"]
+    date_range: "2026-02-19 to 2026-02-21"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0020-explicit-task-workflow-contract.md"
+    analysis:
+      intent_hypothesis: "Make task workflow semantics explicit, role-aware, and runtime-enforced"
+      solution_detected: "TaskType registry + explicit transition graph + limit escalation to BLOCKED"
+    user_context:
+      problem: "Lifecycle rules were distributed and loop limits were not enforced as structural runtime behavior"
+      alternatives: "Keep distributed checks, task-type-only abstraction without transition/limit centralization"
+      rationale: "Centralized model primitives reduce drift; enforced escalation prevents infinite review/retry churn"
+      limitations: "Task type abstraction remains partial because claimable-status mapping still relies partly on role-specific logic"
+
+  - id: 21
+    title: "Ops Service Layer for State Mutations"
+    commit_shas: ["c7e98d7", "bfe179d", "e7d020d"]
+    date_range: "2026-02-20 to 2026-02-21"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0021-ops-service-layer-for-mutations.md"
+    analysis:
+      intent_hypothesis: "Decouple mutation business logic from CLI presentation and unify mutation semantics across entry points"
+      solution_detected: "Extract mutation operations into internal/ops with typed results and no terminal I/O"
+    user_context:
+      problem: "Command handlers mixed business logic and presentation, increasing drift risk and MCP protocol hazards"
+      alternatives: "Keep command-centric mutations, partial extraction only"
+      rationale: "Single mutation layer is easier to test and safer for machine-protocol callers like MCP"
+      limitations: "Introduces an extra abstraction boundary that must remain consistently applied"
+
+  - id: 22
+    title: "Concurrency Hardening: Singleton Blackboard and CAS Merges"
+    commit_shas: ["9d1890c", "17e94f7"]
+    date_range: "2026-02-21 to 2026-02-22"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0022-concurrency-hardening-singleton-blackboard-and-cas-merges.md"
+    analysis:
+      intent_hypothesis: "Strengthen concurrency correctness in both state access and integration-branch updates"
+      solution_detected: "Process-level db.For singleton + CAS-based update-ref merge retries"
+    user_context:
+      problem: "Parallel agent execution exposed risks around blackboard instance fragmentation and merge-branch contention"
+      alternatives: "Independent instances + optimistic updates, coarse global serialization"
+      rationale: "Shared instance per path and CAS retries provide explicit conflict correctness under contention"
+      limitations: "CAS retries are bounded and singleton lifecycle management becomes part of process semantics"
 
 processing_cursor:
   step: "ordering"
