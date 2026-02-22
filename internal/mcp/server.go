@@ -436,7 +436,7 @@ func (s *Server) registerMutationTools() {
 	// liza_submit_for_review tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_for_review",
-		Description: "Submit completed work for review",
+		Description: "Submit completed work for review after commit SHA validation",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -446,7 +446,7 @@ func (s *Server) registerMutationTools() {
 				},
 				"commit_sha": {
 					Type:        "string",
-					Description: "Git commit SHA of the work",
+					Description: "Current task worktree HEAD SHA before rebase (exact match required)",
 				},
 				"agent_id": {
 					Type:        "string",

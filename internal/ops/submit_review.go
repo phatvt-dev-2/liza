@@ -19,8 +19,9 @@ type SubmitForReviewResult struct {
 	AgentID      string
 }
 
-// SubmitForReview rebases the task branch onto the integration branch to catch
-// conflicts early, then atomically transitions the task to READY_FOR_REVIEW.
+// SubmitForReview validates that commitSHA matches the worktree HEAD before rebase,
+// rebases the task branch onto the integration branch to catch conflicts early,
+// then atomically transitions the task to READY_FOR_REVIEW.
 // No terminal I/O.
 func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitForReviewResult, error) {
 	if taskID == "" {
@@ -79,6 +80,14 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, fmt.Errorf("worktree is on branch %s (expected: %s)", wtBranch, expectedBranch)
 	}
 
+	preRebaseCommit, err := g.GetWorktreeHEAD(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pre-rebase commit SHA: %w", err)
+	}
+	if commitSHA != preRebaseCommit {
+		return nil, fmt.Errorf("provided commit SHA %s does not match worktree HEAD %s", commitSHA, preRebaseCommit)
+	}
+
 	integrationBranch := state.Config.IntegrationBranch
 	if err := g.FetchFromLocal(wtPath, integrationBranch); err != nil {
 		return nil, fmt.Errorf("failed to fetch integration branch: %w", err)
@@ -99,10 +108,11 @@ To resolve:
   3. Edit files to resolve conflict markers
   4. git add <resolved-files>
   5. git rebase --continue
-  6. Return to project root and retry: liza submit-for-review %s
+  6. COMMIT=$(git -C %s rev-parse HEAD)
+  7. Return to project root and retry: liza submit-for-review %s $COMMIT
 
 Alternatively, abort the rebase and ask for help:
-  git rebase --abort`, wtPath, wtPath, taskID)
+  git rebase --abort`, wtPath, wtPath, wtPath, taskID)
 	}
 
 	postRebaseCommit, err := g.GetWorktreeHEAD(taskID)

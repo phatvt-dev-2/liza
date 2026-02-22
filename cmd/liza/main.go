@@ -247,7 +247,7 @@ This pattern prevents TOCTOU races in multi-agent scenarios.`,
 var submitForReviewCmd = &cobra.Command{
 	Use:   "submit-for-review <task-id> <commit-sha>",
 	Short: "Submit a task for review",
-	Long: `Atomically mark a task as READY_FOR_REVIEW with the review_commit SHA.
+	Long: `Validate a task worktree commit and submit it for review.
 
 Used by coder agents to submit completed work for review.
 
@@ -255,10 +255,11 @@ Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
   - Task must be in IMPLEMENTING status
   - Task must be assigned to the submitting agent
+  - <commit-sha> must exactly match current worktree HEAD before rebase
 
 Updates:
   - status = READY_FOR_REVIEW
-  - review_commit = <commit-sha>
+  - review_commit = post-rebase worktree HEAD
   - Adds history entry with event "submitted_for_review"`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
