@@ -1,6 +1,6 @@
 version: 1
 repository: "git@github.com:liza-mas/liza.git"
-last_updated: "2026-02-22T15:57:28Z"
+last_updated: "2026-02-22T16:42:00Z"
 code_classification:
   "cmd/liza/main.go": {type: functional, confidence: confirmed}
   "internal/commands/claim_task.go": {type: functional, confidence: confirmed}
@@ -50,12 +50,249 @@ code_classification:
   contracts/SUBAGENT_MODE.md: {type: functional, confidence: confirmed}
   contracts/AGENT_TOOLS.md: {type: functional, confidence: confirmed}
   contracts/COLLABORATION_CONTINUITY.md: {type: functional, confidence: confirmed}
+  internal/agent/claiming.go:
+    type: functional
+    confidence: inferred
+  internal/agent/heartbeat.go:
+    type: functional
+    confidence: inferred
+  internal/agent/logging.go:
+    type: functional
+    confidence: inferred
+  internal/agent/prompt.go:
+    type: functional
+    confidence: inferred
+  internal/agent/registration.go:
+    type: functional
+    confidence: inferred
+  internal/agent/systemctl.go:
+    type: functional
+    confidence: inferred
+  internal/agent/waitforwork.go:
+    type: functional
+    confidence: inferred
+  internal/agent/workdetection.go:
+    type: functional
+    confidence: inferred
+  internal/commands/add_task.go:
+    type: functional
+    confidence: inferred
+  internal/commands/analyze.go:
+    type: functional
+    confidence: inferred
+  internal/commands/checkpoint.go:
+    type: functional
+    confidence: inferred
+  internal/commands/clear_stale_review_claims.go:
+    type: functional
+    confidence: inferred
+  internal/commands/delete_agent.go:
+    type: functional
+    confidence: inferred
+  internal/commands/delete_task.go:
+    type: functional
+    confidence: inferred
+  internal/commands/doc.go:
+    type: functional
+    confidence: inferred
+  internal/commands/format.go:
+    type: functional
+    confidence: inferred
+  internal/commands/handoff.go:
+    type: functional
+    confidence: inferred
+  internal/commands/inspect.go:
+    type: functional
+    confidence: inferred
+  internal/commands/inspect_agents.go:
+    type: functional
+    confidence: inferred
+  internal/commands/inspect_anomalies.go:
+    type: functional
+    confidence: inferred
+  internal/commands/inspect_field.go:
+    type: functional
+    confidence: inferred
+  internal/commands/inspect_metrics.go:
+    type: functional
+    confidence: inferred
+  internal/commands/inspect_tasks.go:
+    type: functional
+    confidence: inferred
+  internal/commands/inspect_time.go:
+    type: functional
+    confidence: inferred
+  internal/commands/mark_blocked.go:
+    type: functional
+    confidence: inferred
+  internal/commands/pause.go:
+    type: functional
+    confidence: inferred
+  internal/commands/release_claim.go:
+    type: functional
+    confidence: inferred
+  internal/commands/resume.go:
+    type: functional
+    confidence: inferred
+  internal/commands/start.go:
+    type: functional
+    confidence: inferred
+  internal/commands/status.go:
+    type: functional
+    confidence: inferred
+  internal/commands/stop.go:
+    type: functional
+    confidence: inferred
+  internal/commands/submit_review.go:
+    type: functional
+    confidence: inferred
+  internal/commands/submit_verdict.go:
+    type: functional
+    confidence: inferred
+  internal/commands/supersede_task.go:
+    type: functional
+    confidence: inferred
+  internal/commands/templates.go:
+    type: functional
+    confidence: inferred
+  internal/commands/templates/agent_value.tmpl:
+    type: functional
+    confidence: inferred
+  internal/commands/templates/metrics_value.tmpl:
+    type: functional
+    confidence: inferred
+  internal/commands/templates/status_dashboard.tmpl:
+    type: functional
+    confidence: inferred
+  internal/commands/update_sprint_metrics.go:
+    type: functional
+    confidence: inferred
+  internal/commands/watch.go:
+    type: functional
+    confidence: inferred
+  internal/db/doc.go:
+    type: architectural
+    confidence: inferred
+  internal/db/watcher.go:
+    type: architectural
+    confidence: inferred
+  internal/mcp/handlers.go:
+    type: architectural
+    confidence: inferred
+  internal/mcp/protocol/errors.go:
+    type: architectural
+    confidence: inferred
+  internal/mcp/protocol/stdio.go:
+    type: architectural
+    confidence: inferred
+  internal/mcp/protocol/types.go:
+    type: architectural
+    confidence: inferred
+  internal/models/diagnostics.go:
+    type: architectural
+    confidence: inferred
+  internal/models/doc.go:
+    type: architectural
+    confidence: inferred
+  internal/ops/add_task.go:
+    type: functional
+    confidence: inferred
+  internal/ops/analyze.go:
+    type: functional
+    confidence: inferred
+  internal/ops/checkpoint.go:
+    type: functional
+    confidence: inferred
+  internal/ops/clear_stale_review_claims.go:
+    type: functional
+    confidence: inferred
+  internal/ops/delete_agent.go:
+    type: functional
+    confidence: inferred
+  internal/ops/delete_task.go:
+    type: functional
+    confidence: inferred
+  internal/ops/doc.go:
+    type: functional
+    confidence: inferred
+  internal/ops/handoff.go:
+    type: functional
+    confidence: inferred
+  internal/ops/helpers.go:
+    type: functional
+    confidence: inferred
+  internal/ops/iteration_limits.go:
+    type: functional
+    confidence: inferred
+  internal/ops/mark_blocked.go:
+    type: functional
+    confidence: inferred
+  internal/ops/mode_change.go:
+    type: functional
+    confidence: inferred
+  internal/ops/release_claim.go:
+    type: functional
+    confidence: inferred
+  internal/ops/submit_verdict.go:
+    type: functional
+    confidence: inferred
+  internal/ops/supersede_task.go:
+    type: functional
+    confidence: inferred
+  internal/ops/update_sprint_metrics.go:
+    type: functional
+    confidence: inferred
+  internal/prompts/templates.go:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/base_prompt.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/coder_context.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/coder_integration_fix.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/planner_context.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/reviewer_context.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/shared_reference.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/wake_blocked_tasks.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/wake_hypothesis_exhausted.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/wake_immediate_discovery.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/wake_initial_planning.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/wake_integration_failed.tmpl:
+    type: architectural
+    confidence: inferred
+  internal/prompts/templates/wake_sprint_complete.tmpl:
+    type: architectural
+    confidence: inferred
+  skills/spec-backfill/scripts/detect-stale.sh:
+    type: functional
+    confidence: inferred
+  skills/spec-backfill/scripts/update-mapping.sh:
+    type: functional
+    confidence: inferred
 mappings:
   "cmd/liza/main.go":
     spec_path: "specs/functional/1 - Liza.md"
     spec_title: "Liza"
     code_sha: ec635c5
-    spec_sha: 16962c2
+    spec_sha: 2181831
     status: aligned
     last_verified: "2026-02-22"
     confidence: inferred-pending-review
@@ -64,7 +301,7 @@ mappings:
     spec_path: "specs/functional/1.3 - Task Management.md"
     spec_title: "Task Management"
     code_sha: c7e98d7
-    spec_sha: 16962c2
+    spec_sha: 2181831
     status: aligned
     last_verified: "2026-02-22"
     confidence: inferred-pending-review
@@ -73,7 +310,7 @@ mappings:
     spec_path: "specs/functional/1.3 - Task Management.md"
     spec_title: "Task Management"
     code_sha: 7fc449d
-    spec_sha: f150399
+    spec_sha: 2181831
     status: aligned
     last_verified: "2026-02-22"
     confidence: inferred-pending-review
@@ -82,7 +319,7 @@ mappings:
     spec_path: "specs/functional/1.3 - Task Management.md"
     spec_title: "Task Management"
     code_sha: e6f7bd2
-    spec_sha: 16962c2
+    spec_sha: 2181831
     status: aligned
     last_verified: "2026-02-22"
     confidence: inferred-pending-review
@@ -91,7 +328,7 @@ mappings:
     spec_path: "specs/functional/1.2 - Multi-Agent Coordination.md"
     spec_title: "Multi-Agent Coordination"
     code_sha: 9d1890c
-    spec_sha: 16962c2
+    spec_sha: 2181831
     status: aligned
     last_verified: "2026-02-22"
     confidence: inferred-pending-review
@@ -100,7 +337,7 @@ mappings:
     spec_path: "specs/functional/1.5 - Circuit Breaker.md"
     spec_title: "Circuit Breaker"
     code_sha: c60b89b
-    spec_sha: 16962c2
+    spec_sha: 2181831
     status: aligned
     last_verified: "2026-02-22"
     confidence: inferred-pending-review
@@ -171,7 +408,7 @@ mappings:
   internal/ops/wt_create.go:
     status: aligned
     code_sha: e6f7bd2
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.4 - Worktree Isolation.md
     spec_title: Worktree Isolation
     confidence: confirmed
@@ -180,7 +417,7 @@ mappings:
   internal/ops/wt_delete.go:
     status: aligned
     code_sha: e6f7bd2
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.4 - Worktree Isolation.md
     spec_title: Worktree Isolation
     confidence: confirmed
@@ -189,7 +426,7 @@ mappings:
   internal/ops/wt_merge.go:
     status: aligned
     code_sha: 17e94f7
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.4 - Worktree Isolation.md
     spec_title: Worktree Isolation
     confidence: confirmed
@@ -198,7 +435,7 @@ mappings:
   internal/commands/wt_create.go:
     status: aligned
     code_sha: bfe179d
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.4 - Worktree Isolation.md
     spec_title: Worktree Isolation
     confidence: confirmed
@@ -207,7 +444,7 @@ mappings:
   internal/commands/wt_delete.go:
     status: aligned
     code_sha: bfe179d
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.4 - Worktree Isolation.md
     spec_title: Worktree Isolation
     confidence: confirmed
@@ -216,7 +453,7 @@ mappings:
   internal/commands/wt_merge.go:
     status: aligned
     code_sha: c7e98d7
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.4 - Worktree Isolation.md
     spec_title: Worktree Isolation
     confidence: confirmed
@@ -225,7 +462,7 @@ mappings:
   internal/commands/validate.go:
     status: aligned
     code_sha: 9d1890c
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.4 - Worktree Isolation.md
     spec_title: Worktree Isolation
     confidence: confirmed
@@ -234,7 +471,7 @@ mappings:
   internal/commands/setup.go:
     status: aligned
     code_sha: 5b86cfb
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -243,7 +480,7 @@ mappings:
   internal/commands/init.go:
     status: aligned
     code_sha: 9d1890c
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -252,7 +489,7 @@ mappings:
   skills/adr-backfill/SKILL.md:
     status: aligned
     code_sha: 00c1843
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -261,7 +498,7 @@ mappings:
   skills/black-box-red-testing/SKILL.md:
     status: aligned
     code_sha: e969844
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -270,7 +507,7 @@ mappings:
   skills/clean-code/SKILL.md:
     status: aligned
     code_sha: 9fe20e1
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -279,7 +516,7 @@ mappings:
   skills/code-review/SKILL.md:
     status: aligned
     code_sha: 60c7be2
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -288,7 +525,7 @@ mappings:
   skills/code-spec-backfill/SKILL.md:
     status: aligned
     code_sha: fd2f99b
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -297,7 +534,7 @@ mappings:
   skills/debugging/SKILL.md:
     status: aligned
     code_sha: f02ac4a
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -306,7 +543,7 @@ mappings:
   skills/feynman/SKILL.md:
     status: aligned
     code_sha: e8a39b6
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -315,7 +552,7 @@ mappings:
   skills/generic-subagent/SKILL.md:
     status: aligned
     code_sha: eca0d82
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -324,7 +561,7 @@ mappings:
   skills/have-you-considered/SKILL.md:
     status: aligned
     code_sha: 6ea75a8
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -333,7 +570,7 @@ mappings:
   skills/lesson-capture/SKILL.md:
     status: aligned
     code_sha: 8057a88
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -342,7 +579,7 @@ mappings:
   skills/software-architecture-review/SKILL.md:
     status: aligned
     code_sha: cfede1d
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -351,7 +588,7 @@ mappings:
   skills/spec-backfill/SKILL.md:
     status: aligned
     code_sha: f700c60
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -360,7 +597,7 @@ mappings:
   skills/spec-review/SKILL.md:
     status: aligned
     code_sha: ed0b384
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -369,7 +606,7 @@ mappings:
   skills/systemic-thinking/SKILL.md:
     status: aligned
     code_sha: 1960c90
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -378,7 +615,7 @@ mappings:
   skills/testing/SKILL.md:
     status: aligned
     code_sha: f02ac4a
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -387,7 +624,7 @@ mappings:
   skills/white-box-red-testing/SKILL.md:
     status: aligned
     code_sha: 15f1b71
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.6 - Skills.md
     spec_title: Skills
     confidence: confirmed
@@ -396,7 +633,7 @@ mappings:
   contracts/CORE.md:
     status: aligned
     code_sha: 2294abb
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.1 - Contract System.md
     spec_title: Contract System
     confidence: confirmed
@@ -405,7 +642,7 @@ mappings:
   contracts/PAIRING_MODE.md:
     status: aligned
     code_sha: 2294abb
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.1 - Contract System.md
     spec_title: Contract System
     confidence: confirmed
@@ -414,7 +651,7 @@ mappings:
   contracts/MULTI_AGENT_MODE.md:
     status: aligned
     code_sha: e969844
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.1 - Contract System.md
     spec_title: Contract System
     confidence: confirmed
@@ -423,7 +660,7 @@ mappings:
   contracts/SUBAGENT_MODE.md:
     status: aligned
     code_sha: 7c24e33
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.1 - Contract System.md
     spec_title: Contract System
     confidence: confirmed
@@ -432,7 +669,7 @@ mappings:
   contracts/AGENT_TOOLS.md:
     status: aligned
     code_sha: b8f7faf
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.1 - Contract System.md
     spec_title: Contract System
     confidence: confirmed
@@ -441,10 +678,725 @@ mappings:
   contracts/COLLABORATION_CONTINUITY.md:
     status: aligned
     code_sha: 314c60a
-    spec_sha: 16962c2
+    spec_sha: 2181831
     spec_path: specs/functional/1.1 - Contract System.md
     spec_title: Contract System
     confidence: confirmed
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/agent/claiming.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/agent/heartbeat.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/agent/logging.go:
+    status: aligned
+    code_sha: c60b89b
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/agent/prompt.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/agent/registration.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/agent/systemctl.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/agent/waitforwork.go:
+    status: aligned
+    code_sha: 150c4d0
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/agent/workdetection.go:
+    status: aligned
+    code_sha: 421ceef
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/add_task.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/analyze.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.5 - Circuit Breaker.md
+    spec_title: Circuit Breaker
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/checkpoint.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/clear_stale_review_claims.go:
+    status: aligned
+    code_sha: c7e98d7
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/delete_agent.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/delete_task.go:
+    status: aligned
+    code_sha: e7d020d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/doc.go:
+    status: aligned
+    code_sha: c60b89b
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/format.go:
+    status: aligned
+    code_sha: d1950bb
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/handoff.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/inspect.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/inspect_agents.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/inspect_anomalies.go:
+    status: aligned
+    code_sha: 0ed2436
+    spec_sha: 2181831
+    spec_path: specs/functional/1.5 - Circuit Breaker.md
+    spec_title: Circuit Breaker
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/inspect_field.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/inspect_metrics.go:
+    status: aligned
+    code_sha: ad3288c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.5 - Circuit Breaker.md
+    spec_title: Circuit Breaker
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/inspect_tasks.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/inspect_time.go:
+    status: aligned
+    code_sha: c60b89b
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/mark_blocked.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/pause.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/release_claim.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/resume.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/start.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/status.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/stop.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/submit_review.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/submit_verdict.go:
+    status: aligned
+    code_sha: 7fc449d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/supersede_task.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/templates.go:
+    status: aligned
+    code_sha: ad3288c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/templates/agent_value.tmpl:
+    status: aligned
+    code_sha: 896be0a
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/templates/metrics_value.tmpl:
+    status: aligned
+    code_sha: 896be0a
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/templates/status_dashboard.tmpl:
+    status: aligned
+    code_sha: 896be0a
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/update_sprint_metrics.go:
+    status: aligned
+    code_sha: c7e98d7
+    spec_sha: 2181831
+    spec_path: specs/functional/1.5 - Circuit Breaker.md
+    spec_title: Circuit Breaker
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/commands/watch.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/db/doc.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: ec635c5
+    spec_path: specs/architecture/blackboard-schema.md
+    spec_title: Blackboard Schema
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/db/watcher.go:
+    status: aligned
+    code_sha: c60b89b
+    spec_sha: ec635c5
+    spec_path: specs/architecture/blackboard-schema.md
+    spec_title: Blackboard Schema
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/mcp/handlers.go:
+    status: aligned
+    code_sha: bfe179d
+    spec_sha: 17e94f7
+    spec_path: specs/architecture/supervision-model.md
+    spec_title:
+      Supervision Model: Action Responsibility
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/mcp/protocol/errors.go:
+    status: aligned
+    code_sha: c60b89b
+    spec_sha: 17e94f7
+    spec_path: specs/architecture/supervision-model.md
+    spec_title:
+      Supervision Model: Action Responsibility
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/mcp/protocol/stdio.go:
+    status: aligned
+    code_sha: c60b89b
+    spec_sha: 17e94f7
+    spec_path: specs/architecture/supervision-model.md
+    spec_title:
+      Supervision Model: Action Responsibility
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/mcp/protocol/types.go:
+    status: aligned
+    code_sha: d1950bb
+    spec_sha: 17e94f7
+    spec_path: specs/architecture/supervision-model.md
+    spec_title:
+      Supervision Model: Action Responsibility
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/models/diagnostics.go:
+    status: aligned
+    code_sha: ec635c5
+    spec_sha: 0f6fe19
+    spec_path: specs/architecture/state-machines.md
+    spec_title: State Machines
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/models/doc.go:
+    status: aligned
+    code_sha: c60b89b
+    spec_sha: 0f6fe19
+    spec_path: specs/architecture/state-machines.md
+    spec_title: State Machines
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/add_task.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/analyze.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.5 - Circuit Breaker.md
+    spec_title: Circuit Breaker
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/checkpoint.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/clear_stale_review_claims.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/delete_agent.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/delete_task.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/doc.go:
+    status: aligned
+    code_sha: c7e98d7
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/handoff.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/helpers.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/iteration_limits.go:
+    status: aligned
+    code_sha: 7fc449d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.5 - Circuit Breaker.md
+    spec_title: Circuit Breaker
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/mark_blocked.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/mode_change.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.2 - Multi-Agent Coordination.md
+    spec_title: Multi-Agent Coordination
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/release_claim.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/submit_verdict.go:
+    status: aligned
+    code_sha: 7fc449d
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/supersede_task.go:
+    status: aligned
+    code_sha: e6f7bd2
+    spec_sha: 2181831
+    spec_path: specs/functional/1.3 - Task Management.md
+    spec_title: Task Management
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/ops/update_sprint_metrics.go:
+    status: aligned
+    code_sha: 9d1890c
+    spec_sha: 2181831
+    spec_path: specs/functional/1.5 - Circuit Breaker.md
+    spec_title: Circuit Breaker
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates.go:
+    status: aligned
+    code_sha: ad3288c
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/base_prompt.tmpl:
+    status: aligned
+    code_sha: de201d5
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/coder_context.tmpl:
+    status: aligned
+    code_sha: e8459ea
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/coder_integration_fix.tmpl:
+    status: aligned
+    code_sha: 896be0a
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/planner_context.tmpl:
+    status: aligned
+    code_sha: de201d5
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/reviewer_context.tmpl:
+    status: aligned
+    code_sha: a92515b
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/shared_reference.tmpl:
+    status: aligned
+    code_sha: ec635c5
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/wake_blocked_tasks.tmpl:
+    status: aligned
+    code_sha: 97d7687
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/wake_hypothesis_exhausted.tmpl:
+    status: aligned
+    code_sha: 896be0a
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/wake_immediate_discovery.tmpl:
+    status: aligned
+    code_sha: 896be0a
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/wake_initial_planning.tmpl:
+    status: aligned
+    code_sha: ec635c5
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/wake_integration_failed.tmpl:
+    status: aligned
+    code_sha: 97d7687
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  internal/prompts/templates/wake_sprint_complete.tmpl:
+    status: aligned
+    code_sha: 421ceef
+    spec_sha: 1948685
+    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
+    spec_title: Embedded Template Architecture for Agent Prompts
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/spec-backfill/scripts/detect-stale.sh:
+    status: aligned
+    code_sha: f700c60
+    spec_sha: 2181831
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: inferred-pending-review
+    conflict_details: null
+    last_verified: "2026-02-22"
+  skills/spec-backfill/scripts/update-mapping.sh:
+    status: aligned
+    code_sha: f700c60
+    spec_sha: 2181831
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: inferred-pending-review
     conflict_details: null
     last_verified: "2026-02-22"
 specs:
@@ -459,37 +1411,37 @@ specs:
     status: active
     last_verified: "2026-02-22"
     linked_adrs: []
-    code_paths: ["internal/agent/supervisor.go"]
+    code_paths: [internal/agent/claiming.go, internal/agent/heartbeat.go, internal/agent/logging.go, internal/agent/prompt.go, internal/agent/registration.go, "internal/agent/supervisor.go", internal/agent/systemctl.go, internal/agent/waitforwork.go, internal/agent/workdetection.go, internal/commands/delete_agent.go, internal/commands/format.go, internal/commands/inspect_agents.go, internal/commands/pause.go, internal/commands/resume.go, internal/commands/start.go, internal/commands/status.go, internal/commands/stop.go, internal/commands/templates.go, internal/commands/templates/agent_value.tmpl, internal/commands/templates/metrics_value.tmpl, internal/commands/templates/status_dashboard.tmpl, internal/commands/watch.go, internal/ops/delete_agent.go, internal/ops/mode_change.go]
   "specs/functional/1.3 - Task Management.md":
     title: "Task Management"
     status: active
     last_verified: "2026-02-22"
     linked_adrs: []
-    code_paths: ["internal/commands/claim_task.go", "internal/ops/claim_task.go", "internal/ops/submit_review.go"]
+    code_paths: [internal/commands/add_task.go, internal/commands/checkpoint.go, "internal/commands/claim_task.go", internal/commands/clear_stale_review_claims.go, internal/commands/delete_task.go, internal/commands/doc.go, internal/commands/handoff.go, internal/commands/inspect.go, internal/commands/inspect_field.go, internal/commands/inspect_tasks.go, internal/commands/inspect_time.go, internal/commands/mark_blocked.go, internal/commands/release_claim.go, internal/commands/submit_review.go, internal/commands/submit_verdict.go, internal/commands/supersede_task.go, internal/ops/add_task.go, internal/ops/checkpoint.go, "internal/ops/claim_task.go", internal/ops/clear_stale_review_claims.go, internal/ops/delete_task.go, internal/ops/doc.go, internal/ops/handoff.go, internal/ops/helpers.go, internal/ops/mark_blocked.go, internal/ops/release_claim.go, "internal/ops/submit_review.go", internal/ops/submit_verdict.go, internal/ops/supersede_task.go]
   "specs/functional/1.5 - Circuit Breaker.md":
     title: "Circuit Breaker"
     status: active
     last_verified: "2026-02-22"
     linked_adrs: []
-    code_paths: ["internal/analysis/patterns.go"]
+    code_paths: ["internal/analysis/patterns.go", internal/commands/analyze.go, internal/commands/inspect_anomalies.go, internal/commands/inspect_metrics.go, internal/commands/update_sprint_metrics.go, internal/ops/analyze.go, internal/ops/iteration_limits.go, internal/ops/update_sprint_metrics.go]
   "specs/architecture/supervision-model.md":
     title: "Supervision Model: Action Responsibility"
     status: active
     last_verified: "2026-02-22"
     linked_adrs: ["0006", "0011", "0012"]
-    code_paths: ["cmd/liza-mcp/main.go", "internal/mcp/server.go"]
+    code_paths: ["cmd/liza-mcp/main.go", internal/mcp/handlers.go, internal/mcp/protocol/errors.go, internal/mcp/protocol/stdio.go, internal/mcp/protocol/types.go, "internal/mcp/server.go"]
   "specs/architecture/blackboard-schema.md":
     title: "Blackboard Schema"
     status: active
     last_verified: "2026-02-22"
     linked_adrs: ["0003"]
-    code_paths: ["internal/db/blackboard.go"]
+    code_paths: ["internal/db/blackboard.go", internal/db/doc.go, internal/db/watcher.go]
   "specs/architecture/state-machines.md":
     title: "State Machines"
     status: active
     last_verified: "2026-02-22"
     linked_adrs: []
-    code_paths: ["internal/models/state.go"]
+    code_paths: [internal/models/diagnostics.go, internal/models/doc.go, "internal/models/state.go"]
   "specs/protocols/worktree-management.md":
     title: "Worktree Management Protocol"
     status: active
@@ -501,7 +1453,7 @@ specs:
     status: active
     last_verified: "2026-02-22"
     linked_adrs: ["0016"]
-    code_paths: ["internal/embedded/embedded.go", "internal/prompts/builder.go"]
+    code_paths: ["internal/embedded/embedded.go", "internal/prompts/builder.go", internal/prompts/templates.go, internal/prompts/templates/base_prompt.tmpl, internal/prompts/templates/coder_context.tmpl, internal/prompts/templates/coder_integration_fix.tmpl, internal/prompts/templates/planner_context.tmpl, internal/prompts/templates/reviewer_context.tmpl, internal/prompts/templates/shared_reference.tmpl, internal/prompts/templates/wake_blocked_tasks.tmpl, internal/prompts/templates/wake_hypothesis_exhausted.tmpl, internal/prompts/templates/wake_immediate_discovery.tmpl, internal/prompts/templates/wake_initial_planning.tmpl, internal/prompts/templates/wake_integration_failed.tmpl, internal/prompts/templates/wake_sprint_complete.tmpl]
   specs/functional/1.1 - Contract System.md:
     title: Contract System
     status: active
@@ -533,8 +1485,8 @@ specs:
     last_verified: "2026-02-22"
     linked_adrs: []
     code_paths:
-      - internal/commands/setup.go
       - internal/commands/init.go
+      - internal/commands/setup.go
       - skills/adr-backfill/SKILL.md
       - skills/black-box-red-testing/SKILL.md
       - skills/clean-code/SKILL.md
@@ -547,6 +1499,8 @@ specs:
       - skills/lesson-capture/SKILL.md
       - skills/software-architecture-review/SKILL.md
       - skills/spec-backfill/SKILL.md
+      - skills/spec-backfill/scripts/detect-stale.sh
+      - skills/spec-backfill/scripts/update-mapping.sh
       - skills/spec-review/SKILL.md
       - skills/systemic-thinking/SKILL.md
       - skills/testing/SKILL.md

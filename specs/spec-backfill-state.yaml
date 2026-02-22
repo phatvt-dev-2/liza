@@ -1,10 +1,10 @@
 version: 1
 started_at: "2026-02-22T15:25:01Z"
-last_updated: "2026-02-22T15:57:28Z"
+last_updated: "2026-02-22T16:42:00Z"
 processing_cursor:
   step: "verification"
-  current_path: "specs/build/changelog.md"
-  substep: "build_story_backfill_1.1.1_1.4.1_1.6.1_complete"
+  current_path: "specs/spec-mapping.yaml"
+  substep: "incremental_reconcile_complete_all_current"
 configuration:
   functional_roots: ["cmd/", "internal/"]
   exclude_patterns: ["**/*_test.go", "**/testhelpers/**", "**/integration/**", "**/templates/**"]
