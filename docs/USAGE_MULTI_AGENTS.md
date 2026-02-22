@@ -111,7 +111,7 @@ liza agent coder --agent-id coder-2
 
 **3. Observe**
 ```bash
-# Run the watcher for alerts
+# Run the watcher for alerts and automatic circuit-breaker escalation
 liza watch
 ```
 
@@ -165,7 +165,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza agent <role> --agent-id <id>` | Agent supervisor (start, restart, backoff loop) |
 | `liza claim-task <task-id> <agent-id>` | Atomically claim a task for a coder (creates worktree, updates state) |
 | `liza validate [state.yaml]` | Validate blackboard state against schema invariants |
-| `liza watch` | Monitor blackboard and alert on anomalies |
+| `liza watch` | Monitor blackboard, alert on anomalies, and auto-checkpoint on circuit-breaker trigger |
 | `liza release-claim <task-id> [--role R]` | Release claim on a task (crash recovery) |
 | `liza checkpoint` | Create a checkpoint (halt + summary) |
 | `liza status` | Show system status |
@@ -241,3 +241,4 @@ The supervisor automatically handles these conditions (transparent to agents):
 | Agent crash loop (3× in 5min) | Supervisor stops the agent |
 | Blackboard validation fails | All agents pause |
 | Integration branch conflict | Task set to INTEGRATION_FAILED |
+| Circuit-breaker pattern detected in anomalies | Set mode to `CIRCUIT_BREAKER_TRIPPED`, create sprint `CHECKPOINT`, write reports |

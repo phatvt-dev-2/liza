@@ -533,6 +533,7 @@ Runs periodic checks (default: every 10 seconds) for:
   - Stalled progress (no log activity 30+ min)
   - Stale drafts (>30min old)
   - Immediate discoveries not converted to tasks
+  - Circuit breaker anomaly patterns (auto-checkpoints sprint on trigger)
   - State validity
   - Stale checkpoint/pause files
 

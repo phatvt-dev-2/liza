@@ -2,13 +2,16 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/analysis"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -125,6 +128,18 @@ func runChecks(_ context.Context, config WatchConfig) error {
 		alerts = append(alerts, check()...)
 	}
 
+	circuitBreakerAlerts, err := checkCircuitBreakerEscalation(config.ProjectRoot, state)
+	if err != nil {
+		alerts = append(alerts, alert{
+			Timestamp: time.Now().UTC(),
+			Level:     alertLevelCritical,
+			Category:  "CIRCUIT BREAKER ERROR",
+			Message:   err.Error(),
+		})
+	} else {
+		alerts = append(alerts, circuitBreakerAlerts...)
+	}
+
 	if err := ValidateCommand(statePath, true); err != nil {
 		alerts = append(alerts, alert{
 			Timestamp: time.Now().UTC(),
@@ -142,6 +157,72 @@ func runChecks(_ context.Context, config WatchConfig) error {
 	}
 
 	return nil
+}
+
+func checkCircuitBreakerEscalation(projectRoot string, state *models.State) ([]alert, error) {
+	mode := state.Config.Mode
+	if mode == "" {
+		mode = models.SystemModeRunning
+	}
+
+	// Auto-escalation should only run during active execution.
+	if mode != models.SystemModeRunning || state.Sprint.Status != models.SprintStatusInProgress {
+		return nil, nil
+	}
+
+	// Keep both checks: manual edits or interrupted writes can leave one field stale.
+	// Either value indicates a previously triggered circuit-breaker state.
+	if state.CircuitBreaker.Status == "TRIGGERED" || state.CircuitBreaker.CurrentTrigger != nil {
+		return nil, nil
+	}
+
+	patternResult := analysis.DetectPatterns(state.Anomalies)
+	if !patternResult.Triggered {
+		return nil, nil
+	}
+
+	// Analyze/Checkpoint each re-read state under lock. This snapshot pre-check is
+	// best-effort only and may race with manual mode/sprint changes.
+	analyzeResult, err := ops.Analyze(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("auto circuit-breaker analysis failed: %w", err)
+	}
+	if !analyzeResult.Triggered {
+		return nil, nil
+	}
+
+	checkpointResult, err := ops.Checkpoint(projectRoot)
+	if err != nil {
+		// Another process may checkpoint between read and mutation.
+		if errors.Is(err, ops.ErrSprintAlreadyCheckpoint) {
+			return []alert{{
+				Timestamp: time.Now().UTC(),
+				Level:     alertLevelCritical,
+				Category:  "CIRCUIT BREAKER",
+				Message: fmt.Sprintf("pattern=%s severity=%s report=%s (sprint already at CHECKPOINT)",
+					analyzeResult.Pattern, analyzeResult.Severity, analyzeResult.ReportPath),
+			}}, nil
+		}
+		return nil, fmt.Errorf("auto checkpoint after circuit-breaker trigger failed: %w", err)
+	}
+
+	timestamp := time.Now().UTC()
+	return []alert{
+		{
+			Timestamp: timestamp,
+			Level:     alertLevelCritical,
+			Category:  "CIRCUIT BREAKER",
+			Message: fmt.Sprintf("pattern=%s severity=%s report=%s",
+				analyzeResult.Pattern, analyzeResult.Severity, analyzeResult.ReportPath),
+		},
+		{
+			Timestamp: timestamp,
+			Level:     alertLevelCritical,
+			Category:  "AUTO CHECKPOINT",
+			Message: fmt.Sprintf("created at %s report=%s",
+				checkpointResult.CheckpointAt.UTC().Format(time.RFC3339), checkpointResult.ReportPath),
+		},
+	}, nil
 }
 
 func checkExpiredLeases(state *models.State) []alert {

@@ -114,24 +114,30 @@ liza resume
 
 **When to checkpoint**: End of sprint, major milestone, before direction changes, weekly reviews.
 
-## Circuit Breaker Analysis
+## Circuit Breaker Escalation
 
-When multiple tasks seem stuck with similar errors:
+When `liza watch` is running, circuit-breaker checks are automatic:
 
 ```bash
-# 1. Run analysis
-liza analyze
-
-# If pattern detected:
+# If pattern detected by watch:
 # - circuit_breaker.status = TRIGGERED
 # - config.mode = CIRCUIT_BREAKER_TRIPPED (agents halt)
+# - sprint.status = CHECKPOINT
 # - Report written to .liza/circuit_breaker_report.md
+# - Sprint summary written to .liza/sprint_summary.md
+```
+
+You can still run manual analysis on demand (with or without `watch` running):
+
+```bash
+# 1. Run analysis now
+liza analyze
 
 # 2. Review report
 cat .liza/circuit_breaker_report.md
 
 # 3. Fix root cause (update spec, fix architecture, etc.)
-# 4. Resume
+# 4. Resume (clears mode and exits checkpoint)
 liza resume
 ```
 

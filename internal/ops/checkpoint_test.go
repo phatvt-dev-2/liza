@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -76,8 +77,8 @@ func TestCheckpoint_AlreadyAtCheckpoint(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error when already at CHECKPOINT")
 	}
-	if !strings.Contains(err.Error(), "already at CHECKPOINT") {
-		t.Errorf("Error = %q, want to contain 'already at CHECKPOINT'", err.Error())
+	if !errors.Is(err, ErrSprintAlreadyCheckpoint) {
+		t.Fatalf("error = %v, want errors.Is(..., ErrSprintAlreadyCheckpoint)", err)
 	}
 }
 

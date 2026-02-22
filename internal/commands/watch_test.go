@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -819,5 +821,266 @@ func TestWatchCommand(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRunChecks_AutoCheckpointOnCircuitBreakerPattern(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	lizaPaths := paths.New(tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Anomalies = []models.Anomaly{
+		{
+			Timestamp: now,
+			Task:      "task-1",
+			Reporter:  "coder-1",
+			Type:      "retry_loop",
+			Details: map[string]any{
+				"count":         3,
+				"error_pattern": "connection refused",
+			},
+		},
+		{
+			Timestamp: now,
+			Task:      "task-2",
+			Reporter:  "coder-2",
+			Type:      "retry_loop",
+			Details: map[string]any{
+				"count":         3,
+				"error_pattern": "connection refused",
+			},
+		},
+		{
+			Timestamp: now,
+			Task:      "task-3",
+			Reporter:  "code-reviewer-1",
+			Type:      "retry_loop",
+			Details: map[string]any{
+				"count":         3,
+				"error_pattern": "connection refused",
+			},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	config := WatchConfig{
+		ProjectRoot: tmpDir,
+		AlertsLog:   lizaPaths.AlertsLogPath(),
+		StateCache:  make(map[string]time.Time),
+	}
+
+	if err := runChecks(context.Background(), config); err != nil {
+		t.Fatalf("runChecks() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	updatedState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read updated state: %v", err)
+	}
+
+	if updatedState.Config.Mode != models.SystemModeCircuitBreakerTripped {
+		t.Errorf("mode = %s, want %s", updatedState.Config.Mode, models.SystemModeCircuitBreakerTripped)
+	}
+	if updatedState.Sprint.Status != models.SprintStatusCheckpoint {
+		t.Errorf("sprint.status = %s, want %s", updatedState.Sprint.Status, models.SprintStatusCheckpoint)
+	}
+	if updatedState.Sprint.Timeline.CheckpointAt == nil {
+		t.Fatal("expected sprint checkpoint_at to be set")
+	}
+	if updatedState.CircuitBreaker.Status != "TRIGGERED" {
+		t.Errorf("circuit_breaker.status = %s, want TRIGGERED", updatedState.CircuitBreaker.Status)
+	}
+	if updatedState.CircuitBreaker.CurrentTrigger == nil {
+		t.Fatal("expected current_trigger to be populated")
+	}
+	if updatedState.CircuitBreaker.CurrentTrigger.Pattern != "retry_cluster" {
+		t.Errorf("trigger pattern = %s, want retry_cluster", updatedState.CircuitBreaker.CurrentTrigger.Pattern)
+	}
+
+	if _, err := os.Stat(lizaPaths.CircuitBreakerReportPath()); err != nil {
+		t.Fatalf("expected circuit breaker report: %v", err)
+	}
+	reportData, err := os.ReadFile(lizaPaths.CircuitBreakerReportPath())
+	if err != nil {
+		t.Fatalf("failed to read circuit breaker report: %v", err)
+	}
+	reportText := string(reportData)
+	if !strings.Contains(reportText, "retry_cluster") {
+		t.Errorf("expected retry_cluster in report, got:\n%s", reportText)
+	}
+	if !strings.Contains(reportText, "3 retry_loop anomalies with similar error patterns") {
+		t.Errorf("expected retry evidence in report, got:\n%s", reportText)
+	}
+	if _, err := os.Stat(lizaPaths.SprintSummaryPath()); err != nil {
+		t.Fatalf("expected sprint summary report: %v", err)
+	}
+
+	alertLogData, err := os.ReadFile(lizaPaths.AlertsLogPath())
+	if err != nil {
+		t.Fatalf("failed to read alerts log: %v", err)
+	}
+	alertLogText := string(alertLogData)
+	if !strings.Contains(alertLogText, "CIRCUIT BREAKER") {
+		t.Errorf("expected CIRCUIT BREAKER alert in log, got:\n%s", alertLogText)
+	}
+	if !strings.Contains(alertLogText, "AUTO CHECKPOINT") {
+		t.Errorf("expected AUTO CHECKPOINT alert in log, got:\n%s", alertLogText)
+	}
+}
+
+func TestRunChecks_NoCircuitBreakerEscalationBelowThreshold(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	lizaPaths := paths.New(tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Anomalies = []models.Anomaly{
+		{
+			Timestamp: now,
+			Task:      "task-1",
+			Reporter:  "coder-1",
+			Type:      "retry_loop",
+			Details: map[string]any{
+				"count":         2,
+				"error_pattern": "timeout",
+			},
+		},
+		{
+			Timestamp: now,
+			Task:      "task-2",
+			Reporter:  "coder-2",
+			Type:      "retry_loop",
+			Details: map[string]any{
+				"count":         2,
+				"error_pattern": "timeout",
+			},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	config := WatchConfig{
+		ProjectRoot: tmpDir,
+		AlertsLog:   lizaPaths.AlertsLogPath(),
+		StateCache:  make(map[string]time.Time),
+	}
+
+	if err := runChecks(context.Background(), config); err != nil {
+		t.Fatalf("runChecks() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	updatedState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read updated state: %v", err)
+	}
+
+	if updatedState.Config.Mode != models.SystemModeRunning {
+		t.Errorf("mode = %s, want %s", updatedState.Config.Mode, models.SystemModeRunning)
+	}
+	if updatedState.Sprint.Status != models.SprintStatusInProgress {
+		t.Errorf("sprint.status = %s, want %s", updatedState.Sprint.Status, models.SprintStatusInProgress)
+	}
+	if updatedState.Sprint.Timeline.CheckpointAt != nil {
+		t.Fatalf("did not expect checkpoint_at, got %s", updatedState.Sprint.Timeline.CheckpointAt.UTC().Format(time.RFC3339))
+	}
+	if updatedState.CircuitBreaker.Status != "OK" {
+		t.Errorf("circuit_breaker.status = %s, want OK", updatedState.CircuitBreaker.Status)
+	}
+
+	if _, err := os.Stat(lizaPaths.CircuitBreakerReportPath()); !os.IsNotExist(err) {
+		t.Errorf("expected no circuit breaker report, err=%v", err)
+	}
+	if _, err := os.Stat(lizaPaths.SprintSummaryPath()); !os.IsNotExist(err) {
+		t.Errorf("expected no sprint summary report, err=%v", err)
+	}
+}
+
+func TestRunChecks_CircuitBreakerErrorDoesNotDropOtherAlerts(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	lizaPaths := paths.New(tmpDir)
+
+	// Force ops.Analyze report write failure: report path exists as a directory.
+	if err := os.Mkdir(lizaPaths.CircuitBreakerReportPath(), 0755); err != nil {
+		t.Fatalf("failed to create report-path directory: %v", err)
+	}
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-99", models.TaskStatusIntegrationFailed, now),
+	}
+	state.Anomalies = []models.Anomaly{
+		{
+			Timestamp: now,
+			Task:      "task-1",
+			Reporter:  "coder-1",
+			Type:      "retry_loop",
+			Details: map[string]any{
+				"count":         3,
+				"error_pattern": "connection refused",
+			},
+		},
+		{
+			Timestamp: now,
+			Task:      "task-2",
+			Reporter:  "coder-2",
+			Type:      "retry_loop",
+			Details: map[string]any{
+				"count":         3,
+				"error_pattern": "connection refused",
+			},
+		},
+		{
+			Timestamp: now,
+			Task:      "task-3",
+			Reporter:  "code-reviewer-1",
+			Type:      "retry_loop",
+			Details: map[string]any{
+				"count":         3,
+				"error_pattern": "connection refused",
+			},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	config := WatchConfig{
+		ProjectRoot: tmpDir,
+		AlertsLog:   lizaPaths.AlertsLogPath(),
+		StateCache:  make(map[string]time.Time),
+	}
+
+	if err := runChecks(context.Background(), config); err != nil {
+		t.Fatalf("runChecks() should not fail on circuit-breaker escalation errors: %v", err)
+	}
+
+	// Existing operational alerts should still be emitted.
+	alertLogData, err := os.ReadFile(lizaPaths.AlertsLogPath())
+	if err != nil {
+		t.Fatalf("failed to read alerts log: %v", err)
+	}
+	alertLogText := string(alertLogData)
+	if !strings.Contains(alertLogText, "INTEGRATION FAILED") {
+		t.Errorf("expected INTEGRATION FAILED alert in log, got:\n%s", alertLogText)
+	}
+	if !strings.Contains(alertLogText, "CIRCUIT BREAKER ERROR") {
+		t.Errorf("expected CIRCUIT BREAKER ERROR alert in log, got:\n%s", alertLogText)
+	}
+
+	// On escalation failure, state should remain unmutated by analyze/checkpoint.
+	bb := db.New(stateFile)
+	updatedState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read updated state: %v", err)
+	}
+	if updatedState.Config.Mode != models.SystemModeRunning {
+		t.Errorf("mode = %s, want %s", updatedState.Config.Mode, models.SystemModeRunning)
+	}
+	if updatedState.Sprint.Status != models.SprintStatusInProgress {
+		t.Errorf("sprint.status = %s, want %s", updatedState.Sprint.Status, models.SprintStatusInProgress)
 	}
 }

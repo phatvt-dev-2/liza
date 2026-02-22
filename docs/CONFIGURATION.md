@@ -136,7 +136,7 @@ config:
 | `RUNNING` | Work normally | Yes | `liza resume` / `liza start` |
 | `PAUSED` | Block, don't claim | Yes | `liza pause` |
 | `STOPPED` | Exit cleanly | Stop | `liza stop` |
-| `CIRCUIT_BREAKER_TRIPPED` | Halt | Yes | `liza analyze` (auto) |
+| `CIRCUIT_BREAKER_TRIPPED` | Halt | Yes | `liza analyze` or `liza watch` (auto on pattern trigger) |
 
 **PAUSED**: Agents stay alive, resume instantly. Use for manual edits.
 **STOPPED**: Agents exit. Must restart manually. Use for end of session.
@@ -147,6 +147,8 @@ RUNNING -> STOPPED (liza stop)
 STOPPED -> RUNNING (liza start, then restart agents)
 CIRCUIT_BREAKER_TRIPPED -> RUNNING (liza resume, after fixing root cause)
 ```
+
+When `liza watch` triggers the circuit breaker, it also sets `sprint.status` to `CHECKPOINT`.
 
 ## Task Lifecycle States
 

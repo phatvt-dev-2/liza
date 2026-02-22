@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -9,6 +10,9 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
+
+// ErrSprintAlreadyCheckpoint indicates the sprint is already at CHECKPOINT.
+var ErrSprintAlreadyCheckpoint = errors.New("sprint is already at CHECKPOINT")
 
 // CheckpointResult contains the outcome of creating a sprint checkpoint.
 type CheckpointResult struct {
@@ -31,7 +35,7 @@ func Checkpoint(projectRoot string) (*CheckpointResult, error) {
 	}
 
 	if state.Sprint.Status == models.SprintStatusCheckpoint {
-		return nil, fmt.Errorf("sprint is already at CHECKPOINT")
+		return nil, ErrSprintAlreadyCheckpoint
 	}
 
 	if state.Sprint.Status == models.SprintStatusCompleted {
