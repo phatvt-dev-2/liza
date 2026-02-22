@@ -94,8 +94,6 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	}
 
 	if err := g.RebaseOnto(wtPath, "FETCH_HEAD"); err != nil {
-		_ = g.AbortRebase(wtPath)
-
 		return nil, fmt.Errorf(`failed to submit task for review: rebase conflict detected
 
 Your task branch has conflicts with the latest integration branch.
