@@ -5,7 +5,7 @@
 | Feature | Description | Rationale for Deferral |
 |---------|-------------|------------------------|
 | **Integration rollback** | Mechanism to revert merged work from integration branch | v1 is forward-only by design; errors discovered after merge require manual git surgery outside Liza protocols. Decision needed: add ROLLBACK checkpoint action with blackboard audit trail, or document as out-of-scope. |
-| **Parallel coders** | Multiple coders working simultaneously | Adds complexity; validate single-coder first |
+| **Parallel-coder scheduling policies** | Advanced fairness/throughput controls for many concurrent coders | Base parallel-coder support exists; scheduling optimization deferred |
 | **Subagent support** | Within-terminal delegation in multi-agent context | Existing subagent mode works; integration can wait |
 | **Plan Reviewer role** | Dedicated agent to validate task decomposition, spec references, and success criteria before coders claim | Human review sufficient for v1; Planner self-validation gates reduce risk |
 | **Second Code Reviewer escalation** | Different Code Reviewer after N rejections | Single Code Reviewer in v1 |

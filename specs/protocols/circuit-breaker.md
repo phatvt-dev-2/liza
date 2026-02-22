@@ -15,7 +15,7 @@ circuit_breaker:
   identity: observer
   permissions:
     read: [.liza/state.yaml (anomalies), .liza/log.yaml, sprint.metrics]
-    write: [.liza/circuit_breaker_report.md, sprint.status → CHECKPOINT]
+    write: [.liza/circuit_breaker_report.md, circuit_breaker fields, config.mode → CIRCUIT_BREAKER_TRIPPED]
     execute: NOTHING
   prohibitions:
     - NEVER propose solutions
@@ -118,7 +118,7 @@ circuit_breaker_rules:
       description: "Same external service blocking multiple tasks"
       condition: count(type=external_blocker, same(blocker_service)) >= 2
       severity: EXTERNAL_DEPENDENCY
-      action: CHECKPOINT  # Halt sprint — external issue, not agent problem
+      action: TRIP_MODE  # Set config.mode to CIRCUIT_BREAKER_TRIPPED; human may checkpoint sprint separately
 ```
 
 ### Pattern Matching Functions
@@ -166,9 +166,10 @@ The pattern conditions use pseudo-functions for matching:
 
 ```
 1. TRIGGER — Pattern rule matches, classify severity, log to blackboard
-2. HALT — Set sprint.status to CHECKPOINT, agents stop, supervisors wait
+2. HALT — Set config.mode to CIRCUIT_BREAKER_TRIPPED, agents stop, supervisors wait
 3. GENERATE REPORT — Write .liza/circuit_breaker_report.md
 4. WAIT FOR HUMAN — Human reviews, decides, documents, releases (`liza resume` or `liza stop`)
+5. OPTIONAL CHECKPOINT — Human may run `liza checkpoint` for sprint-level review workflow
 ```
 
 ---
@@ -215,13 +216,13 @@ The pattern conditions use pseudo-functions for matching:
 ## Implementation: v1 vs v2
 
 **v1: Human-triggered analysis**
-- Human runs ``liza analyze`` during checkpoint
+- Human runs ``liza analyze`` on demand (commonly during checkpoint review)
 - Script parses anomalies, applies rules, generates report
 - No background daemon
 
 **v2: Continuous monitoring**
 - ``liza watch`` extended with pattern detection
-- Auto-triggers checkpoint if pattern matches
+- Auto-trips mode if pattern matches (checkpoint remains a separate human command)
 
 **Recommendation:** Start with v1. Promote to v2 if manual analysis becomes bottleneck.
 
@@ -266,26 +267,13 @@ circuit_breaker:
 When circuit breaker is triggered:
 
 1. **Automatic:** ``liza analyze`` sets `status: TRIGGERED`, populates `current_trigger`
-2. **Human review:** Human analyzes report, takes corrective action (ADR, spec update, etc.)
-3. **Human resolves:** Edit `.liza/state.yaml` directly:
-   ```yaml
-   # 1. Copy current_trigger into history[] with resolution fields added:
-   circuit_breaker:
-     history:
-       - ...existing entries...
-       - timestamp: "2025-01-18T17:30:00Z"  # from current_trigger
-         pattern: retry_cluster
-         severity: ARCHITECTURE_FLAW
-         result: TRIGGERED
-         resolution: "ADR-003 created"       # added by human
-         resolved_at: "2025-01-18T19:00:00Z" # added by human
+2. **Automatic:** ``liza analyze`` sets `config.mode: CIRCUIT_BREAKER_TRIPPED`
+3. **Human review:** Human analyzes report, takes corrective action (ADR, spec update, etc.)
+4. **Optional audit enrichment:** Human may annotate history entries with `resolution` and `resolved_at`
+5. **Human resumes:** `liza resume` (sets mode to RUNNING, clears `current_trigger`, sets status to OK)
+6. **Agents resume**
 
-   # 2. Clear current trigger and reset status:
-     current_trigger: null
-     status: OK
-   ```
-4. **Human resumes:** `liza resume`
-5. **Agents resume**
+**Note:** A subsequent clean ``liza analyze`` run also sets status to `OK` and clears `CIRCUIT_BREAKER_TRIPPED` mode. This does not clear sprint `CHECKPOINT`; checkpoint resume still requires `liza resume`.
 
 **Resolution field:** Human-written summary of corrective action taken (free text, should reference ADRs/specs if applicable).
 

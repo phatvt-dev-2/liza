@@ -1,10 +1,10 @@
 version: 1
 started_at: "2026-02-22T15:25:01Z"
-last_updated: "2026-02-22T16:42:00Z"
+last_updated: "2026-02-22T17:11:25Z"
 processing_cursor:
   step: "verification"
-  current_path: "specs/spec-mapping.yaml"
-  substep: "incremental_reconcile_complete_all_current"
+  current_path: "specs/build/1.6.3 - Mandatory High-Risk Skill Enforcement.md"
+  substep: "targeted_backfill_planned_children_complete_all"
 configuration:
   functional_roots: ["cmd/", "internal/"]
   exclude_patterns: ["**/*_test.go", "**/testhelpers/**", "**/integration/**", "**/templates/**"]

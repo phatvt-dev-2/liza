@@ -34,7 +34,7 @@ Liza combines four ideas:
 
 **In scope:**
 - Single goal, single sprint at a time
-- One Planner, one Coder, one Code Reviewer
+- One or more agents per role (parallel coders/reviewers supported)
 - Terminal-based observation
 - YAML blackboard with file locking
 - Go CLI tooling (`liza`) with MCP companion server (`liza-mcp`)
@@ -47,7 +47,6 @@ Liza combines four ideas:
 | IDE integration | Terminal workflow sufficient; IDE adds complexity |
 | Web dashboard | `tail -f` and `watch` sufficient for observation |
 | Multi-repo coordination | Single repo focus for v1 |
-| Parallel coders | Validate sequential first |
 | Real-time circuit breaker | Human-triggered analysis sufficient |
 | Token budget tracking | API doesn't expose; calendar time proxy |
 | SQLite backend | YAML sufficient at v1 scale |

@@ -1,6 +1,6 @@
 version: 1
 repository: "git@github.com:liza-mas/liza.git"
-last_updated: "2026-02-22T16:42:00Z"
+last_updated: "2026-02-22T17:11:25Z"
 code_classification:
   "cmd/liza/main.go": {type: functional, confidence: confirmed}
   "internal/commands/claim_task.go": {type: functional, confidence: confirmed}
@@ -1512,6 +1512,8 @@ specs:
     linked_adrs: []
     child_specs:
       - specs/build/1.1.1 - Pairing Safety Gates.md
+      - specs/build/1.1.2 - Multi-Agent Gate Semantics.md
+      - specs/build/1.1.3 - Secrets and Recovery Protocols.md
   specs/build/1.4 - Worktree Isolation.md:
     title: Worktree Isolation
     status: active
@@ -1519,6 +1521,8 @@ specs:
     linked_adrs: []
     child_specs:
       - specs/build/1.4.1 - Task Worktree Provisioning.md
+      - specs/build/1.4.2 - Approved-Commit Integration Constraints.md
+      - specs/build/1.4.3 - Reassignment Recovery Rules.md
   specs/build/1.6 - Skills.md:
     title: Skills
     status: active
@@ -1526,6 +1530,8 @@ specs:
     linked_adrs: []
     child_specs:
       - specs/build/1.6.1 - Skill Triggering and Use.md
+      - specs/build/1.6.2 - Skill Packaging and Distribution.md
+      - specs/build/1.6.3 - Mandatory High-Risk Skill Enforcement.md
   specs/build/1.1.1 - Pairing Safety Gates.md:
     title: Pairing Safety Gates
     status: active
@@ -1558,4 +1564,131 @@ specs:
     status: active
     last_verified: "2026-02-22"
     linked_adrs: []
+  specs/build/1.2 - Multi-Agent Coordination.md:
+    title: Multi-Agent Coordination
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    child_specs:
+      - specs/build/1.2.1 - Blackboard Coordination and Agent Wake Flow.md
+      - specs/build/1.2.2 - Stale-Lease Reclamation Policy.md
+      - specs/build/1.2.3 - Coordination Observability Views.md
+  specs/build/1.2.1 - Blackboard Coordination and Agent Wake Flow.md:
+    title: Blackboard Coordination and Agent Wake Flow
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths:
+      - internal/agent/supervisor.go
+      - internal/agent/claiming.go
+      - internal/agent/workdetection.go
+  specs/build/1.3 - Task Management.md:
+    title: Task Management
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    child_specs:
+      - specs/build/1.3.1 - Claim-to-Verdict Task Lifecycle.md
+      - specs/build/1.3.2 - Integration-Fix Loop Guidance.md
+      - specs/build/1.3.3 - Automatic Rescope Prompts.md
+  specs/build/1.3.1 - Claim-to-Verdict Task Lifecycle.md:
+    title: Claim-to-Verdict Task Lifecycle
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths:
+      - internal/ops/claim_task.go
+      - internal/ops/submit_review.go
+      - internal/ops/submit_verdict.go
+      - internal/ops/iteration_limits.go
+  specs/build/1.5 - Circuit Breaker.md:
+    title: Circuit Breaker
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    child_specs:
+      - specs/build/1.5.1 - Pattern-Triggered Checkpoint Escalation.md
+      - specs/build/1.5.2 - Configurable Pattern Thresholds.md
+      - specs/build/1.5.3 - Trend-Based Early Warnings.md
+  specs/build/1.5.1 - Pattern-Triggered Checkpoint Escalation.md:
+    title: Pattern-Triggered Checkpoint Escalation
+    status: active
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths:
+      - internal/analysis/patterns.go
+      - internal/ops/analyze.go
+      - internal/ops/update_sprint_metrics.go
+  specs/build/1.2.2 - Stale-Lease Reclamation Policy.md:
+    title: Stale-Lease Reclamation Policy
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.2.3 - Coordination Observability Views.md:
+    title: Coordination Observability Views
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.3.2 - Integration-Fix Loop Guidance.md:
+    title: Integration-Fix Loop Guidance
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.3.3 - Automatic Rescope Prompts.md:
+    title: Automatic Rescope Prompts
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.5.2 - Configurable Pattern Thresholds.md:
+    title: Configurable Pattern Thresholds
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.5.3 - Trend-Based Early Warnings.md:
+    title: Trend-Based Early Warnings
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.1.2 - Multi-Agent Gate Semantics.md:
+    title: Multi-Agent Gate Semantics
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.1.3 - Secrets and Recovery Protocols.md:
+    title: Secrets and Recovery Protocols
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.4.2 - Approved-Commit Integration Constraints.md:
+    title: Approved-Commit Integration Constraints
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.4.3 - Reassignment Recovery Rules.md:
+    title: Reassignment Recovery Rules
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.6.2 - Skill Packaging and Distribution.md:
+    title: Skill Packaging and Distribution
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
+  specs/build/1.6.3 - Mandatory High-Risk Skill Enforcement.md:
+    title: Mandatory High-Risk Skill Enforcement
+    status: draft
+    last_verified: "2026-02-22"
+    linked_adrs: []
+    code_paths: []
 archive: {}

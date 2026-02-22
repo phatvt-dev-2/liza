@@ -1,5 +1,8 @@
 # Liza Vision
 
+> Archived snapshot: this file reflects historical v1 planning scope and may not match current implementation.
+> Current scope lives in `specs/functional/1 - Liza.md` and architecture specs.
+
 ## What
 
 A disciplined peer-supervised multi-agent coding system that makes AI agents accountable engineering peers, not unreliable yet autonomous assistants.

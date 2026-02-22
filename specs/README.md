@@ -9,10 +9,28 @@
 | [Vision](<build/1 - Vision.md>) | Why Liza exists, target users, success metrics, risks |
 | [1.1 Contract System](<build/1.1 - Contract System.md>) | Epic: enforceable behavioral contract and mode gates |
 | [1.1.1 Pairing Safety Gates](<build/1.1.1 - Pairing Safety Gates.md>) | Story: explicit human gate and invariant enforcement in pairing |
+| [1.1.2 Multi-Agent Gate Semantics](<build/1.1.2 - Multi-Agent Gate Semantics.md>) | Story: mode-specific gate artifacts and forbidden transition enforcement |
+| [1.1.3 Secrets and Recovery Protocols](<build/1.1.3 - Secrets and Recovery Protocols.md>) | Story: explicit secret handling and deterministic violation recovery flow |
+| [1.2 Multi-Agent Coordination](<build/1.2 - Multi-Agent Coordination.md>) | Epic: blackboard-driven role coordination and deterministic wake/claim flow |
+| [1.2.1 Blackboard Coordination and Agent Wake Flow](<build/1.2.1 - Blackboard Coordination and Agent Wake Flow.md>) | Story: planner wake detection and coder/reviewer claim orchestration via shared state |
+| [1.2.2 Stale-Lease Reclamation Policy](<build/1.2.2 - Stale-Lease Reclamation Policy.md>) | Story: deterministic stale-lease detection and safe claim reclamation policy |
+| [1.2.3 Coordination Observability Views](<build/1.2.3 - Coordination Observability Views.md>) | Story: operator-facing views for role drift and queue health visibility |
+| [1.3 Task Management](<build/1.3 - Task Management.md>) | Epic: claim/review/verdict lifecycle with escalation limits and auditable transitions |
+| [1.3.1 Claim-to-Verdict Task Lifecycle](<build/1.3.1 - Claim-to-Verdict Task Lifecycle.md>) | Story: three-phase claim, rebase-based review submission, and verdict enforcement |
+| [1.3.2 Integration-Fix Loop Guidance](<build/1.3.2 - Integration-Fix Loop Guidance.md>) | Story: explicit recovery/ownership loop for INTEGRATION_FAILED tasks |
+| [1.3.3 Automatic Rescope Prompts](<build/1.3.3 - Automatic Rescope Prompts.md>) | Story: planner prompts when review/iteration limits are exhausted |
 | [1.4 Worktree Isolation](<build/1.4 - Worktree Isolation.md>) | Epic: isolated task execution and controlled integration |
 | [1.4.1 Task Worktree Provisioning](<build/1.4.1 - Task Worktree Provisioning.md>) | Story: per-task worktree creation, reassignment, and base commit capture |
+| [1.4.2 Approved-Commit Integration Constraints](<build/1.4.2 - Approved-Commit Integration Constraints.md>) | Story: integration merges constrained to explicitly approved review commits |
+| [1.4.3 Reassignment Recovery Rules](<build/1.4.3 - Reassignment Recovery Rules.md>) | Story: deterministic reuse-vs-recreate behavior for reassigned worktrees |
+| [1.5 Circuit Breaker](<build/1.5 - Circuit Breaker.md>) | Epic: systemic anomaly pattern detection and human checkpoint escalation |
+| [1.5.1 Pattern-Triggered Checkpoint Escalation](<build/1.5.1 - Pattern-Triggered Checkpoint Escalation.md>) | Story: deterministic pattern detection, report creation, and mode trip behavior |
+| [1.5.2 Configurable Pattern Thresholds](<build/1.5.2 - Configurable Pattern Thresholds.md>) | Story: runtime-tunable detection thresholds without code edits |
+| [1.5.3 Trend-Based Early Warnings](<build/1.5.3 - Trend-Based Early Warnings.md>) | Story: pre-trigger warning signals based on metric/anomaly trends |
 | [1.6 Skills](<build/1.6 - Skills.md>) | Epic: modular domain-specific protocol library |
 | [1.6.1 Skill Triggering and Use](<build/1.6.1 - Skill Triggering and Use.md>) | Story: trigger-based skill loading under contract |
+| [1.6.2 Skill Packaging and Distribution](<build/1.6.2 - Skill Packaging and Distribution.md>) | Story: consistent packaging/install flow for reproducible skill behavior |
+| [1.6.3 Mandatory High-Risk Skill Enforcement](<build/1.6.3 - Mandatory High-Risk Skill Enforcement.md>) | Story: required debugging/testing/review skills for critical workflows |
 | [Build Changelog](<build/changelog.md>) | Build hierarchy change history |
 
 ### Functional (Current State)
@@ -101,7 +119,7 @@ See [Vision](<build/1 - Vision.md>) for the design philosophy and cost gradient.
 
 | Category | Documents | Status |
 |----------|-----------|--------|
-| Build | 8 (Vision + 3 epics + 3 stories + changelog) | Partial backfill |
+| Build | 26 (Vision + 6 epics + 18 stories + changelog) | Partial backfill |
 | Functional | 7 (0.md + 1.1–1.6) | Complete |
 | Architecture | 6 + ADR/ | Complete |
 | Protocols | 5 | Complete |
