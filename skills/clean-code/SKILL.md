@@ -62,9 +62,10 @@ Before any transformation:
   | Structural | Extract function, early return, split responsibility | ≥70% |
   | Behavioral-adjacent | CQS split, error handling isolation | ≥90% |
 
-  - Threshold applies to the **highest-risk transformation planned** — if any structural change is planned, the structural threshold applies to the whole session
-  - **STOP if below threshold** — report uncovered lines, do not proceed
-  - If tools unavailable (coverage tool or `diff-cover`): warn, require explicit waiver to proceed without coverage data
+  - **Pairing:** Threshold applies to the **highest-risk transformation planned** — if any structural change is planned, the structural threshold applies to the whole session
+  - **Liza:** Threshold caps the **allowed transformation set** — only transformations whose threshold is met are permitted (see Mode-Specific Behavior)
+  - **STOP if below threshold** — report uncovered lines, do not proceed (Pairing: all transformations blocked; Liza: only transformations above coverage are blocked)
+  - If tools unavailable (coverage tool or `diff-cover`): warn, require explicit waiver to proceed without coverage data (Liza: abort — no waiver mechanism)
 
 4. **Diff size guard**
   - If staged diff >500 lines: require scope reduction or switch to Full-file mode with chunking strategy
@@ -406,7 +407,7 @@ When no resolution is clear: **flag the conflict, present both options, do not c
 | Pairing Prompt | Liza Behavior |
 |----------------|---------------|
 | Mode announcement ("Override?") | Announce mode, no prompt |
-| Pre-flight summary ("Proceed (P)?") | Auto-proceed if all checks pass; abort if any fail |
+| Pre-flight summary ("Proceed (P)?") | Auto-proceed if all checks pass. Coverage below threshold: downgrade to allowed transformation set (see below); abort only if <30% or non-coverage check fails |
 | Batch approval ("Proceed with batch 1 (P)?") | Auto-proceed |
 | Await approval (between transformations) | Apply directly |
 | Test failure ("(R)evert / (I)nvestigate / (F)orce continue") | Auto-revert batch |
@@ -414,6 +415,17 @@ When no resolution is clear: **flag the conflict, present both options, do not c
 | Propagation to unstaged files | Auto-proceed within worktree scope |
 | Public API changes | Allowed within task scope |
 | Diff size guard (>500 lines) | Abort — log anomaly to blackboard |
+
+**Coverage-gated transformation downgrade (Liza only):**
+
+| Staged Coverage | Allowed Transformations |
+|-----------------|------------------------|
+| ≥90% | All (mechanical + structural + behavioral-adjacent) |
+| ≥70% | Mechanical + structural |
+| ≥30% | Mechanical only |
+| <30% | Abort — log to blackboard |
+
+When downgraded, the Analysis phase must filter its violation list to only include transformations within the allowed set. Log skipped violations to the blackboard for visibility.
 
 Anti-pattern overrides in Liza mode:
 - "without user approval" → "without task scope authorization" (the task definition provides scope)
