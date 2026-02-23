@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	// DefaultHeartbeatInterval is the default time between heartbeats
-	DefaultHeartbeatInterval = 60 * time.Second
+	// DefaultHeartbeatInterval is the default time between heartbeats.
+	// Derived from models.DefaultHeartbeatIntervalSec to maintain a single source of truth.
+	DefaultHeartbeatInterval = time.Duration(models.DefaultHeartbeatIntervalSec) * time.Second
 	// DefaultLeaseDuration is the default lease duration
 	DefaultLeaseDuration = time.Duration(models.DefaultLeaseDurationSeconds) * time.Second
 )
