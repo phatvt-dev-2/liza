@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/errors"
@@ -10,159 +11,104 @@ import (
 // GetField accesses direct state fields using dot notation
 // Examples: "config.mode", "sprint.status", "sprint.metrics.tasks_done"
 func getField(state *models.State, fieldPath string) (any, error) {
-	parts := strings.Split(fieldPath, ".")
-	if len(parts) == 0 {
+	if fieldPath == "" {
 		return nil, &errors.NotFoundError{Entity: "field", Field: fieldPath}
 	}
 
-	entity := parts[0]
+	parts := strings.Split(fieldPath, ".")
+	if len(parts) == 0 || parts[0] == "" {
+		return nil, &errors.NotFoundError{Entity: "field", Field: fieldPath}
+	}
 
-	switch entity {
-	case "config":
-		return getConfigField(state, parts[1:])
-	case "sprint":
-		return getSprintField(state, parts[1:])
-	case "version":
-		if len(parts) == 1 {
-			return state.Version, nil
-		}
+	// Preserve existing version-path behavior.
+	if parts[0] == "version" && len(parts) > 1 {
 		return nil, &errors.NotFoundError{Entity: "state", Field: fieldPath}
-	default:
-		return nil, &errors.NotFoundError{Entity: entity, Field: ""}
 	}
+
+	return resolveFieldByYAMLPath(reflect.ValueOf(state), parts, "")
 }
 
-// getConfigField accesses config fields
-func getConfigField(state *models.State, parts []string) (any, error) {
-	if len(parts) == 0 {
-		return nil, &errors.NotFoundError{Entity: "config", Field: ""}
-	}
-
-	field := parts[0]
-	config := state.Config
-
-	switch field {
-	case "mode":
-		return string(config.Mode), nil
-	case "max_coder_iterations":
-		return config.MaxCoderIterations, nil
-	case "max_review_cycles":
-		return config.MaxReviewCycles, nil
-	case "heartbeat_interval":
-		return config.HeartbeatInterval, nil
-	case "lease_duration":
-		return config.LeaseDuration, nil
-	case "coder_poll_interval":
-		return config.CoderPollInterval, nil
-	case "coder_max_wait":
-		return config.CoderMaxWait, nil
-	case "integration_branch":
-		return config.IntegrationBranch, nil
-	case "escalation_webhook":
-		if config.EscalationWebhook != nil {
-			return *config.EscalationWebhook, nil
+func resolveFieldByYAMLPath(current reflect.Value, parts []string, entityPath string) (any, error) {
+	current = derefReflectValue(current)
+	if !current.IsValid() {
+		if entityPath == "" {
+			return nil, &errors.NotFoundError{Entity: "field", Field: strings.Join(parts, ".")}
 		}
-		return nil, nil
-	default:
-		return nil, &errors.NotFoundError{Entity: "config", Field: field}
+		return nil, &errors.NotFoundError{Entity: entityPath, Field: ""}
 	}
+
+	if len(parts) == 0 {
+		return normalizeFieldValue(current), nil
+	}
+	if current.Kind() != reflect.Struct {
+		if entityPath == "" {
+			return nil, &errors.NotFoundError{Entity: parts[0], Field: ""}
+		}
+		return nil, &errors.NotFoundError{Entity: entityPath, Field: parts[0]}
+	}
+
+	part := parts[0]
+	next, ok := findFieldByYAMLTag(current, part)
+	if !ok {
+		if entityPath == "" {
+			return nil, &errors.NotFoundError{Entity: part, Field: ""}
+		}
+		return nil, &errors.NotFoundError{Entity: entityPath, Field: part}
+	}
+
+	nextEntityPath := part
+	if entityPath != "" {
+		nextEntityPath = entityPath + "." + part
+	}
+
+	if len(parts) == 1 {
+		// Keep previous behavior for "sprint.timeline": require a sub-field.
+		if nextEntityPath == "sprint.timeline" {
+			if value := derefReflectValue(next); value.IsValid() && value.Kind() == reflect.Struct {
+				return nil, &errors.NotFoundError{Entity: "sprint.timeline", Field: ""}
+			}
+		}
+		return normalizeFieldValue(next), nil
+	}
+
+	return resolveFieldByYAMLPath(next, parts[1:], nextEntityPath)
 }
 
-// getSprintField accesses sprint fields
-func getSprintField(state *models.State, parts []string) (any, error) {
-	if len(parts) == 0 {
-		return nil, &errors.NotFoundError{Entity: "sprint", Field: ""}
-	}
-
-	field := parts[0]
-	sprint := state.Sprint
-
-	switch field {
-	case "id":
-		return sprint.ID, nil
-	case "status":
-		return string(sprint.Status), nil
-	case "goal_ref":
-		return sprint.GoalRef, nil
-	case "metrics":
-		if len(parts) > 1 {
-			return getSprintMetricsField(state, parts[1:])
+func findFieldByYAMLTag(value reflect.Value, tagName string) (reflect.Value, bool) {
+	typ := value.Type()
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		yamlTag := strings.Split(field.Tag.Get("yaml"), ",")[0]
+		if yamlTag == "" || yamlTag == "-" {
+			continue
 		}
-		return sprint.Metrics, nil
-	case "timeline":
-		if len(parts) > 1 {
-			return getSprintTimelineField(state, parts[1:])
+		if yamlTag == tagName {
+			return value.Field(i), true
 		}
-		return nil, &errors.NotFoundError{Entity: "sprint.timeline", Field: ""}
-	default:
-		return nil, &errors.NotFoundError{Entity: "sprint", Field: field}
 	}
+	return reflect.Value{}, false
 }
 
-// getSprintMetricsField accesses sprint metrics fields
-func getSprintMetricsField(state *models.State, parts []string) (any, error) {
-	if len(parts) == 0 {
-		return nil, &errors.NotFoundError{Entity: "sprint.metrics", Field: ""}
+func normalizeFieldValue(value reflect.Value) any {
+	value = derefReflectValue(value)
+	if !value.IsValid() {
+		return nil
 	}
-
-	field := parts[0]
-	metrics := state.Sprint.Metrics
-
-	switch field {
-	case "tasks_done":
-		return metrics.TasksDone, nil
-	case "tasks_in_progress":
-		return metrics.TasksInProgress, nil
-	case "tasks_blocked":
-		return metrics.TasksBlocked, nil
-	case "iterations_total":
-		return metrics.IterationsTotal, nil
-	case "review_cycles_total":
-		return metrics.ReviewCyclesTotal, nil
-	case "review_verdict_approvals":
-		return metrics.ReviewVerdictApprovals, nil
-	case "review_verdict_rejections":
-		return metrics.ReviewVerdictRejections, nil
-	case "review_verdict_count":
-		return metrics.ReviewVerdictCount, nil
-	case "review_verdict_approval_rate_percent":
-		return metrics.ReviewVerdictApprovalRatePercent, nil
-	case "task_submitted_for_review_count":
-		return metrics.TaskSubmittedForReviewCount, nil
-	case "task_outcome_approval_rate_percent":
-		return metrics.TaskOutcomeApprovalRatePercent, nil
-	default:
-		return nil, &errors.NotFoundError{Entity: "sprint.metrics", Field: field}
+	// Keep inspect output stable for string aliases like models.SystemMode.
+	if value.Kind() == reflect.String {
+		return value.String()
 	}
+	return value.Interface()
 }
 
-// getSprintTimelineField accesses sprint timeline fields
-func getSprintTimelineField(state *models.State, parts []string) (any, error) {
-	if len(parts) == 0 {
-		return nil, &errors.NotFoundError{Entity: "sprint.timeline", Field: ""}
-	}
-
-	field := parts[0]
-	timeline := state.Sprint.Timeline
-
-	switch field {
-	case "started":
-		return timeline.Started, nil
-	case "deadline":
-		return timeline.Deadline, nil
-	case "checkpoint_at":
-		if timeline.CheckpointAt != nil {
-			return *timeline.CheckpointAt, nil
+func derefReflectValue(value reflect.Value) reflect.Value {
+	for value.IsValid() && value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return reflect.Value{}
 		}
-		return nil, nil
-	case "ended":
-		if timeline.Ended != nil {
-			return *timeline.Ended, nil
-		}
-		return nil, nil
-	default:
-		return nil, &errors.NotFoundError{Entity: "sprint.timeline", Field: field}
+		value = value.Elem()
 	}
+	return value
 }
 
 // getComputedField calculates derived data from state
