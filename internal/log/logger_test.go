@@ -552,3 +552,49 @@ func readLogFile(path string) ([]Entry, error) {
 
 	return entries, nil
 }
+
+// TestLoggerGetLastTimestamp tests the GetLastTimestamp method
+func TestLoggerGetLastTimestamp(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "log.yaml")
+	logger := New(logPath)
+
+	// Test 1: Empty/non-existent log file
+	ts, err := logger.GetLastTimestamp()
+	if err != nil {
+		t.Fatalf("GetLastTimestamp on empty file returned error: %v", err)
+	}
+	if !ts.IsZero() {
+		t.Errorf("GetLastTimestamp on empty file should return zero time, got: %v", ts)
+	}
+
+	// Test 2: Add entries and check last timestamp
+	oldTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	newTime := time.Date(2026, 1, 1, 12, 30, 0, 0, time.UTC)
+
+	if err := logger.Append(Entry{
+		Timestamp: oldTime,
+		Agent:     "agent-1",
+		Action:    "test-action",
+		Detail:    "first entry",
+	}); err != nil {
+		t.Fatalf("couldn't append first entry: %v", err)
+	}
+
+	if err := logger.Append(Entry{
+		Timestamp: newTime,
+		Agent:     "agent-2",
+		Action:    "test-action-2",
+		Detail:    "second entry",
+	}); err != nil {
+		t.Fatalf("couldn't append second entry: %v", err)
+	}
+
+	ts, err = logger.GetLastTimestamp()
+	if err != nil {
+		t.Fatalf("GetLastTimestamp returned error: %v", err)
+	}
+	if !ts.Equal(newTime) {
+		t.Errorf("GetLastTimestamp should return %v, got: %v", newTime, ts)
+	}
+}
