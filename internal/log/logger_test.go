@@ -1,6 +1,7 @@
 package log
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -596,5 +597,82 @@ func TestLoggerGetLastTimestamp(t *testing.T) {
 	}
 	if !ts.Equal(newTime) {
 		t.Errorf("GetLastTimestamp should return %v, got: %v", newTime, ts)
+	}
+}
+
+func TestLoggerAppendPreservesExistingContent(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "log.yaml")
+	logger := New(logPath)
+
+	existing := []byte(
+		"- timestamp: 2026-01-01T12:00:00Z\n" +
+			"  agent: system\n" +
+			"  action: initialized\n" +
+			"  detail: initial entry\n" +
+			"  extra_field: keep-me\n",
+	)
+	if err := os.WriteFile(logPath, existing, 0644); err != nil {
+		t.Fatalf("failed to write existing log: %v", err)
+	}
+
+	nextTime := time.Date(2026, 1, 1, 12, 30, 0, 0, time.UTC)
+	if err := logger.Append(Entry{
+		Timestamp: nextTime,
+		Agent:     "coder-1",
+		Action:    "task_claimed",
+		Detail:    "claimed task",
+	}); err != nil {
+		t.Fatalf("Append() error = %v", err)
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("failed to read log after append: %v", err)
+	}
+	if !bytes.HasPrefix(data, existing) {
+		t.Fatalf("append rewrote existing content; file no longer starts with original bytes")
+	}
+
+	entries, err := logger.Read()
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if !entries[1].Timestamp.Equal(nextTime) {
+		t.Errorf("last timestamp = %v, want %v", entries[1].Timestamp, nextTime)
+	}
+}
+
+func TestLoggerGetLastTimestampTailWindow(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "log.yaml")
+	logger := New(logPath)
+
+	prefix := bytes.Repeat([]byte("invalid: [\n"), 10000)
+	expected := time.Date(2026, 1, 1, 12, 45, 0, 0, time.UTC)
+	tail := []byte(
+		"- timestamp: 2026-01-01T12:00:00Z\n" +
+			"  agent: system\n" +
+			"  action: initialized\n" +
+			"  detail: startup\n" +
+			"- timestamp: 2026-01-01T12:45:00Z\n" +
+			"  agent: coder-1\n" +
+			"  action: task_claimed\n" +
+			"  detail: claimed task\n",
+	)
+
+	if err := os.WriteFile(logPath, append(prefix, tail...), 0644); err != nil {
+		t.Fatalf("failed to write log fixture: %v", err)
+	}
+
+	ts, err := logger.GetLastTimestamp()
+	if err != nil {
+		t.Fatalf("GetLastTimestamp returned error: %v", err)
+	}
+	if !ts.Equal(expected) {
+		t.Errorf("GetLastTimestamp should return %v, got %v", expected, ts)
 	}
 }
