@@ -139,16 +139,19 @@ func resetAgentAfterExit(bb *db.Blackboard, agentID string) error {
 
 		switch agent.Status {
 		case models.AgentStatusWaiting, models.AgentStatusHandoff:
-			agent.Heartbeat = now
-			state.Agents[agentID] = agent
-			return nil
-		default:
-			agent.Status = models.AgentStatusIdle
-			agent.CurrentTask = nil
-			agent.Heartbeat = now
-			state.Agents[agentID] = agent
-			return nil
+			if agent.CurrentTask != nil {
+				agent.Heartbeat = now
+				state.Agents[agentID] = agent
+				return nil
+			}
+			// CurrentTask already cleared — fall through to reset to IDLE
 		}
+
+		agent.Status = models.AgentStatusIdle
+		agent.CurrentTask = nil
+		agent.Heartbeat = now
+		state.Agents[agentID] = agent
+		return nil
 	})
 }
 

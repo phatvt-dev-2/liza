@@ -267,8 +267,8 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 	if agent.Status != models.AgentStatusWaiting {
 		t.Errorf("expected coder status WAITING after submission, got %s", agent.Status)
 	}
-	if agent.CurrentTask == nil || *agent.CurrentTask != taskID {
-		t.Errorf("expected coder current_task %s after submission, got %v", taskID, agent.CurrentTask)
+	if agent.CurrentTask != nil {
+		t.Errorf("expected coder current_task nil after submission, got %v", *agent.CurrentTask)
 	}
 
 	// Verify review_commit is set (and different from wtCommit due to rebase)

@@ -153,6 +153,7 @@ Alternatively, abort the rebase and ask for help:
 
 		if agent, ok := state.Agents[agentID]; ok {
 			agent.Status = models.AgentStatusWaiting
+			agent.CurrentTask = nil
 			agent.LeaseExpires = nil
 			state.Agents[agentID] = agent
 		}

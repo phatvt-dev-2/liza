@@ -445,6 +445,77 @@ func TestResetAgentToIdle_NotFound(t *testing.T) {
 	}
 }
 
+// TestResetAgentAfterExit_WaitingWithoutCurrentTask tests that a WAITING agent
+// with no CurrentTask gets reset to IDLE (not preserved as WAITING).
+func TestResetAgentAfterExit_WaitingWithoutCurrentTask(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	agentID := "coder-1"
+	state.Agents[agentID] = models.Agent{
+		Role:      "coder",
+		Status:    models.AgentStatusWaiting,
+		Heartbeat: time.Now().UTC(),
+		// CurrentTask is nil — simulates post-submit state
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	err := resetAgentAfterExit(bb, agentID)
+	if err != nil {
+		t.Fatalf("resetAgentAfterExit() error = %v", err)
+	}
+
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	agent := state.Agents[agentID]
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Expected status IDLE, got %s", agent.Status)
+	}
+	if agent.CurrentTask != nil {
+		t.Errorf("Expected CurrentTask nil, got %v", *agent.CurrentTask)
+	}
+}
+
+// TestResetAgentAfterExit_WaitingWithCurrentTask tests that a WAITING agent
+// with CurrentTask set is preserved (existing behavior).
+func TestResetAgentAfterExit_WaitingWithCurrentTask(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	agentID := "coder-1"
+	taskID := "task-1"
+	state.Agents[agentID] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWaiting,
+		CurrentTask: &taskID,
+		Heartbeat:   time.Now().UTC(),
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	err := resetAgentAfterExit(bb, agentID)
+	if err != nil {
+		t.Fatalf("resetAgentAfterExit() error = %v", err)
+	}
+
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	agent := state.Agents[agentID]
+	if agent.Status != models.AgentStatusWaiting {
+		t.Errorf("Expected status WAITING, got %s", agent.Status)
+	}
+	if agent.CurrentTask == nil || *agent.CurrentTask != taskID {
+		t.Errorf("Expected CurrentTask %q, got %v", taskID, agent.CurrentTask)
+	}
+}
+
 // TestResetAgentAfterExit_NotFound tests error handling for non-existent agent
 func TestResetAgentAfterExit_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
