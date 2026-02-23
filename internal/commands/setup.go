@@ -20,7 +20,11 @@ var userCustomizableFiles = map[string]bool{
 
 // SetupCommand performs one-time global setup by writing contracts and skills
 // to the target directory (typically ~/.liza/).
-func SetupCommand(targetDir string, force bool) error {
+// The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
+func SetupCommand(targetDir string, force bool, stdin io.Reader) error {
+	if stdin == nil {
+		stdin = os.Stdin
+	}
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
 	}
@@ -55,7 +59,7 @@ func SetupCommand(targetDir string, force bool) error {
 		}
 		fmt.Printf("\nOverwrite? (y/n): ")
 
-		reader = bufio.NewReader(os.Stdin)
+		reader = bufio.NewReader(stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read input, aborting")
@@ -73,7 +77,7 @@ func SetupCommand(targetDir string, force bool) error {
 		base := filepath.Base(p)
 		if userCustomizableFiles[base] {
 			if reader == nil {
-				reader = bufio.NewReader(os.Stdin)
+				reader = bufio.NewReader(stdin)
 			}
 			fmt.Fprintf(os.Stderr, "%s is user-customizable and has local changes.\n", base)
 			fmt.Fprintf(os.Stderr, "Overwrite %s? (y/n): ", relDisplay(targetDir, p))

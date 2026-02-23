@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -298,17 +299,13 @@ func TestDeleteTaskCommand(t *testing.T) {
 			}
 
 			// Setup stdin for interactive prompts
+			var stdin io.Reader = nil
 			if tt.stdinInput != "" {
-				oldStdin := os.Stdin
-				r, w, _ := os.Pipe()
-				os.Stdin = r
-				w.Write([]byte(tt.stdinInput))
-				w.Close()
-				defer func() { os.Stdin = oldStdin }()
+				stdin = strings.NewReader(tt.stdinInput)
 			}
 
 			// Execute command
-			err := DeleteTaskCommand(tmpDir, tt.taskID, tt.force, tt.deleteWorktree, tt.reason)
+			err := DeleteTaskCommand(tmpDir, tt.taskID, tt.force, tt.deleteWorktree, tt.reason, stdin)
 
 			// Check error
 			if tt.wantErr {
@@ -384,20 +381,15 @@ func TestDeleteTaskCommand_APPROVED(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	// Mock stdin to answer 'y' to confirmation
-	oldStdin := os.Stdin
-	stdinR, stdinW, _ := os.Pipe()
-	os.Stdin = stdinR
-	stdinW.Write([]byte("y\ny\n")) // Two 'y's - one for APPROVED warning, one for worktree prompt
-	stdinW.Close()
+	// Mock stdin to answer 'y' to confirmation (two 'y's - one for APPROVED warning, one for worktree prompt)
+	stdin := strings.NewReader("y\ny\n")
 
 	// Execute command (should prompt with warning)
-	err := DeleteTaskCommand(tmpDir, "task-approved", false, false, "test")
+	err := DeleteTaskCommand(tmpDir, "task-approved", false, false, "test", stdin)
 
-	// Restore stderr and stdin
+	// Restore stderr
 	w.Close()
 	os.Stderr = oldStderr
-	os.Stdin = oldStdin
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)

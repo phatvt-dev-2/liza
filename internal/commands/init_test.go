@@ -104,7 +104,7 @@ func TestInitCommand(t *testing.T) {
 			tt.setup(t, tmpDir)
 
 			// Run init command
-			err = InitCommand(tt.description, tt.specRef)
+			err = InitCommand(tt.description, tt.specRef, nil)
 
 			// Check error
 			if (err != nil) != tt.wantErr {
@@ -143,7 +143,7 @@ func TestInitCommandDirectoryStructure(t *testing.T) {
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
 
 	// Run init
-	if err := InitCommand("Test goal", "specs/vision.md"); err != nil {
+	if err := InitCommand("Test goal", "specs/vision.md", nil); err != nil {
 		t.Fatalf("InitCommand() error = %v", err)
 	}
 
@@ -199,7 +199,7 @@ func TestInitCommandIntegrationBranch(t *testing.T) {
 	}
 
 	// Run init
-	if err := InitCommand("Test goal", "specs/vision.md"); err != nil {
+	if err := InitCommand("Test goal", "specs/vision.md", nil); err != nil {
 		t.Fatalf("InitCommand() error = %v", err)
 	}
 
@@ -365,7 +365,7 @@ func TestInitCommand_CreatesContractSymlinks(t *testing.T) {
 	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
 
 	// Run init
-	err = InitCommand("Test goal", "specs/vision.md")
+	err = InitCommand("Test goal", "specs/vision.md", nil)
 	if err != nil {
 		t.Fatalf("InitCommand failed: %v", err)
 	}
@@ -412,7 +412,7 @@ func TestInitCommand_SkipsCorrectSymlinks(t *testing.T) {
 	}
 
 	// Run init
-	if err := InitCommand("Test goal", "specs/vision.md"); err != nil {
+	if err := InitCommand("Test goal", "specs/vision.md", nil); err != nil {
 		t.Fatalf("InitCommand failed: %v", err)
 	}
 
@@ -452,7 +452,7 @@ func TestInitCommand_DoesNotOverwriteWithoutConsent(t *testing.T) {
 
 	// Run init — stdin is not interactive in tests, so the prompt
 	// will fail to read and the file should be left untouched.
-	if err := InitCommand("Test goal", "specs/vision.md"); err != nil {
+	if err := InitCommand("Test goal", "specs/vision.md", nil); err != nil {
 		t.Fatalf("InitCommand failed: %v", err)
 	}
 
@@ -495,7 +495,7 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
 
 	// Run init
-	err = InitCommand("Test goal", "specs/vision.md")
+	err = InitCommand("Test goal", "specs/vision.md", nil)
 	if err != nil {
 		t.Fatalf("InitCommand failed: %v", err)
 	}

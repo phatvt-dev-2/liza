@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -13,7 +14,11 @@ import (
 // DeleteTaskCommand removes a task from the state database.
 // Handles interactive confirmation at the CLI level (APPROVED warning,
 // worktree deletion prompt), then delegates business logic to ops.DeleteTask.
-func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, reason string) error {
+// The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
+func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, reason string, stdin io.Reader) error {
+	if stdin == nil {
+		stdin = os.Stdin
+	}
 	// Pre-check: validate and get info for interactive decisions
 	info, err := ops.CheckDeleteTask(projectRoot, taskID, force)
 	if err != nil {
@@ -23,7 +28,7 @@ func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, r
 	// Interactive: warn about deleting APPROVED task
 	if info.Status == models.TaskStatusApproved && !force {
 		fmt.Fprintf(os.Stderr, "Warning: The task you are deleting has been implemented, reviewed, and approved. Are you sure you want to delete the task? (y/N): ")
-		scanner := bufio.NewScanner(os.Stdin)
+		scanner := bufio.NewScanner(stdin)
 		if !scanner.Scan() {
 			fmt.Println("n")
 			return fmt.Errorf("deletion cancelled")
@@ -38,7 +43,7 @@ func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, r
 	resolvedDeleteWt := deleteWorktree
 	if info.HasWorktree && !deleteWorktree {
 		fmt.Fprintf(os.Stderr, "Delete worktree at %s? (y/N): ", info.WorktreePath)
-		scanner := bufio.NewScanner(os.Stdin)
+		scanner := bufio.NewScanner(stdin)
 		if scanner.Scan() {
 			answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
 			if answer == "y" || answer == "yes" {

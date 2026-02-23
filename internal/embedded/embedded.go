@@ -8,6 +8,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -242,7 +243,11 @@ func collectFiles(fsys embed.FS) ([]string, error) {
 // WriteClaudeSettings writes the embedded claude-settings.json to .claude/settings.json.
 // If the file already exists, prompts the user to merge settings.
 // Returns nil on success or if user declines merge.
-func WriteClaudeSettings(projectRoot string) error {
+// The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
+func WriteClaudeSettings(projectRoot string, stdin io.Reader) error {
+	if stdin == nil {
+		stdin = os.Stdin
+	}
 	lizaPaths := paths.New(projectRoot)
 	claudeDir := lizaPaths.ClaudeDir()
 	settingsPath := lizaPaths.ClaudeSettingsPath()
@@ -250,7 +255,7 @@ func WriteClaudeSettings(projectRoot string) error {
 	var existingSettings map[string]any
 	if existingData, err := os.ReadFile(settingsPath); err == nil {
 		fmt.Print("Should the Liza claude settings be merged into the existing settings file? (y/n): ")
-		reader := bufio.NewReader(os.Stdin)
+		reader := bufio.NewReader(stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read user input: %w", err)
@@ -380,13 +385,17 @@ func unionStringArrays(a, b []any) []any {
 // WriteMCPSettings writes the embedded mcp.json to .mcp.json in the project root.
 // If the file already exists, prompts the user to merge settings.
 // Returns nil on success or if user declines merge.
-func WriteMCPSettings(projectRoot string) error {
+// The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
+func WriteMCPSettings(projectRoot string, stdin io.Reader) error {
+	if stdin == nil {
+		stdin = os.Stdin
+	}
 	mcpSettingsPath := filepath.Join(projectRoot, ".mcp.json")
 
 	var existingSettings map[string]any
 	if existingData, err := os.ReadFile(mcpSettingsPath); err == nil {
 		fmt.Print("Should the Liza MCP server configuration be merged into the existing .mcp.json file? (y/n): ")
-		reader := bufio.NewReader(os.Stdin)
+		reader := bufio.NewReader(stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read user input: %w", err)

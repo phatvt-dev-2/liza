@@ -4,6 +4,7 @@ package commands
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,7 +22,11 @@ import (
 // validates the spec file exists, and creates the integration branch.
 //
 // Prerequisite: 'liza setup' must have been run to populate ~/.liza/.
-func InitCommand(description string, specRef string) error {
+// The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
+func InitCommand(description string, specRef string, stdin io.Reader) error {
+	if stdin == nil {
+		stdin = os.Stdin
+	}
 	// Get project paths
 	lizaPaths, err := paths.LizaPathsFromGit()
 	if err != nil {
@@ -69,14 +74,14 @@ func InitCommand(description string, specRef string) error {
 	// Write/merge Claude Code settings to .claude/
 	// This is non-fatal - if it fails, just warn
 	// Note: This may prompt user for input if settings file exists
-	if err := embedded.WriteClaudeSettings(lizaPaths.ProjectRoot()); err != nil {
+	if err := embedded.WriteClaudeSettings(lizaPaths.ProjectRoot(), stdin); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
 	}
 
 	// Write/merge MCP server configuration to .mcp.json
 	// This is non-fatal - if it fails, just warn
 	// Note: This may prompt user for input if settings file exists
-	if err := embedded.WriteMCPSettings(lizaPaths.ProjectRoot()); err != nil {
+	if err := embedded.WriteMCPSettings(lizaPaths.ProjectRoot(), stdin); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write .mcp.json: %v\n", err)
 	}
 
@@ -107,7 +112,7 @@ func InitCommand(description string, specRef string) error {
 
 			// Exists but is not the correct symlink — ask permission.
 			if reader == nil {
-				reader = bufio.NewReader(os.Stdin)
+				reader = bufio.NewReader(stdin)
 			}
 			fmt.Fprintf(os.Stderr, "Warning: %s already exists but does not point to %s.\n", name, contractTarget)
 			fmt.Fprintf(os.Stderr, "Without this symlink, liza agents will not use liza's contracts.\n")

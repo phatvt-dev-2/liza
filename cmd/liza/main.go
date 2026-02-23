@@ -62,7 +62,7 @@ Use --force to overwrite an existing global config.`,
 			return err
 		}
 		force, _ := cmd.Flags().GetBool("force")
-		return commands.SetupCommand(targetDir, force)
+		return commands.SetupCommand(targetDir, force, os.Stdin)
 	},
 }
 
@@ -78,7 +78,7 @@ The spec file (default: specs/vision.md) must exist before initialization.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		description := args[0]
 		specRef, _ := cmd.Flags().GetString("spec")
-		return commands.InitCommand(description, specRef)
+		return commands.InitCommand(description, specRef, os.Stdin)
 	},
 }
 
@@ -1127,7 +1127,7 @@ current tasks.`,
 		if err != nil {
 			return err
 		}
-		return commands.DeleteAgentCommand(projectRoot, agentID, force, reason)
+		return commands.DeleteAgentCommand(projectRoot, agentID, force, reason, os.Stdin)
 	},
 }
 
@@ -1149,7 +1149,7 @@ in MERGED state cannot be deleted by default (as they represent integrated work)
 		if err != nil {
 			return err
 		}
-		return commands.DeleteTaskCommand(projectRoot, taskID, force, deleteWorktree, reason)
+		return commands.DeleteTaskCommand(projectRoot, taskID, force, deleteWorktree, reason, os.Stdin)
 	},
 }
 

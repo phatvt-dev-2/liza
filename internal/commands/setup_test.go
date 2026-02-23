@@ -10,7 +10,7 @@ import (
 func TestSetupCommand_NewInstall(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	err := SetupCommand(tmpDir, false)
+	err := SetupCommand(tmpDir, false, nil)
 	if err != nil {
 		t.Fatalf("SetupCommand failed: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestSetupCommand_ExistingWithoutForce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := SetupCommand(tmpDir, false)
+	err := SetupCommand(tmpDir, false, nil)
 	if err == nil {
 		t.Fatal("Expected error when existing config found without --force")
 	}
@@ -66,19 +66,9 @@ func TestSetupCommand_ExistingWithForce(t *testing.T) {
 	}
 
 	// Provide "y\n" on stdin so the overwrite prompt is accepted
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.WriteString("y\n"); err != nil {
-		t.Fatal(err)
-	}
-	w.Close()
-	origStdin := os.Stdin
-	os.Stdin = r
-	defer func() { os.Stdin = origStdin }()
+	stdin := strings.NewReader("y\n")
 
-	err = SetupCommand(tmpDir, true)
+	err := SetupCommand(tmpDir, true, stdin)
 	if err != nil {
 		t.Fatalf("SetupCommand with --force failed: %v", err)
 	}
@@ -115,19 +105,9 @@ func TestSetupCommand_CustomizableFileSkipped(t *testing.T) {
 	}
 
 	// Provide "y\n" for bulk overwrite, then "n\n" to skip AGENT_TOOLS.md
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.WriteString("y\nn\n"); err != nil {
-		t.Fatal(err)
-	}
-	w.Close()
-	origStdin := os.Stdin
-	os.Stdin = r
-	defer func() { os.Stdin = origStdin }()
+	stdin := strings.NewReader("y\nn\n")
 
-	err = SetupCommand(tmpDir, true)
+	err := SetupCommand(tmpDir, true, stdin)
 	if err != nil {
 		t.Fatalf("SetupCommand failed: %v", err)
 	}
@@ -177,19 +157,9 @@ func TestSetupCommand_CustomizableFileOverwritten(t *testing.T) {
 	}
 
 	// Provide "y\n" for bulk overwrite, then "y\n" to also overwrite AGENT_TOOLS.md
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.WriteString("y\ny\n"); err != nil {
-		t.Fatal(err)
-	}
-	w.Close()
-	origStdin := os.Stdin
-	os.Stdin = r
-	defer func() { os.Stdin = origStdin }()
+	stdin := strings.NewReader("y\ny\n")
 
-	err = SetupCommand(tmpDir, true)
+	err := SetupCommand(tmpDir, true, stdin)
 	if err != nil {
 		t.Fatalf("SetupCommand failed: %v", err)
 	}
@@ -222,19 +192,9 @@ func TestSetupCommand_ExistingWithForceDeclined(t *testing.T) {
 	}
 
 	// Provide "n\n" on stdin — user declines overwrite
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.WriteString("n\n"); err != nil {
-		t.Fatal(err)
-	}
-	w.Close()
-	origStdin := os.Stdin
-	os.Stdin = r
-	defer func() { os.Stdin = origStdin }()
+	stdin := strings.NewReader("n\n")
 
-	err = SetupCommand(tmpDir, true)
+	err := SetupCommand(tmpDir, true, stdin)
 	if err == nil {
 		t.Fatal("Expected error when user declines overwrite")
 	}

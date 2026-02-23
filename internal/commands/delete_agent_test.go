@@ -239,8 +239,8 @@ func TestDeleteAgentCommand(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Execute command
-			err := DeleteAgentCommand(tmpDir, tt.agentID, tt.force, tt.reason)
+			// Execute command (nil stdin means no interactive prompts in these tests)
+			err := DeleteAgentCommand(tmpDir, tt.agentID, tt.force, tt.reason, nil)
 
 			// Check error
 			if tt.wantErr {
@@ -352,8 +352,8 @@ func TestDeleteAgentWithPID(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Execute command
-			err := DeleteAgentCommand(tmpDir, tt.agentID, tt.force, tt.reason)
+			// Execute command (nil stdin means no interactive prompts in these tests)
+			err := DeleteAgentCommand(tmpDir, tt.agentID, tt.force, tt.reason, nil)
 
 			// Check error
 			if tt.wantErr {
@@ -380,4 +380,66 @@ func TestDeleteAgentWithPID(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDeleteAgentCommand_InteractivePrompt verifies the PID confirmation prompt
+// works correctly with injected stdin (testing the io.Reader injection pattern).
+func TestDeleteAgentCommand_InteractivePrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	lizaDir := paths.New(tmpDir).LizaDir()
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(lizaDir, paths.StateFileName)
+
+	t.Run("decline_deletion", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		state.Agents["running-agent"] = models.Agent{
+			Role:      "coder",
+			Status:    models.AgentStatusIdle,
+			Heartbeat: time.Now().UTC(),
+			Terminal:  "terminal-1",
+			PID:       os.Getpid(),
+		}
+		bb := db.New(statePath)
+		if err := bb.Write(state); err != nil {
+			t.Fatal(err)
+		}
+		stdin := strings.NewReader("n\n")
+		err := DeleteAgentCommand(tmpDir, "running-agent", false, "test", stdin)
+		if err == nil {
+			t.Error("Expected error when declining deletion")
+		}
+		if !strings.Contains(err.Error(), "cancelled") {
+			t.Errorf("Expected cancelled in error, got: %v", err)
+		}
+		finalState, _ := bb.Read()
+		if _, exists := finalState.Agents["running-agent"]; !exists {
+			t.Error("Agent should NOT have been deleted when user declined")
+		}
+	})
+
+	t.Run("confirm_deletion", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		state.Agents["running-agent"] = models.Agent{
+			Role:      "coder",
+			Status:    models.AgentStatusIdle,
+			Heartbeat: time.Now().UTC(),
+			Terminal:  "terminal-1",
+			PID:       os.Getpid(),
+		}
+		bb := db.New(statePath)
+		if err := bb.Write(state); err != nil {
+			t.Fatal(err)
+		}
+		stdin := strings.NewReader("y\n")
+		err := DeleteAgentCommand(tmpDir, "running-agent", false, "test", stdin)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		finalState, _ := bb.Read()
+		if _, exists := finalState.Agents["running-agent"]; exists {
+			t.Error("Agent should have been deleted when user confirmed")
+		}
+	})
 }

@@ -437,34 +437,6 @@ func TestWriteGlobalFiles_OverwritesExisting(t *testing.T) {
 	}
 }
 
-// Helper function to mock stdin for tests
-func withMockStdin(t *testing.T, input string, testFunc func()) {
-	t.Helper()
-
-	// Save original stdin
-	oldStdin := os.Stdin
-	defer func() { os.Stdin = oldStdin }()
-
-	// Create pipe for mock input
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	os.Stdin = r
-
-	// Write mock input in goroutine
-	go func() {
-		defer w.Close()
-		_, err := w.Write([]byte(input + "\n"))
-		if err != nil {
-			t.Errorf("Failed to write to pipe: %v", err)
-		}
-	}()
-
-	// Run test
-	testFunc()
-}
-
 // Test unionStringArrays helper function
 func TestUnionStringArrays(t *testing.T) {
 	tests := []struct {
@@ -714,7 +686,7 @@ func TestWriteClaudeSettings_NewFile(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	err := WriteClaudeSettings(tmpDir)
+	err := WriteClaudeSettings(tmpDir, nil)
 	if err != nil {
 		t.Fatalf("WriteClaudeSettings failed: %v", err)
 	}
@@ -809,32 +781,32 @@ func TestWriteClaudeSettings_MergeAccepted(t *testing.T) {
 		t.Fatalf("Failed to write existing file: %v", err)
 	}
 
-	// Mock stdin to accept merge
-	withMockStdin(t, "y", func() {
-		// Capture stdout to verify prompt
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
+	// Inject stdin to accept merge
+	stdin := strings.NewReader("y\n")
 
-		err := WriteClaudeSettings(tmpDir)
+	// Capture stdout to verify prompt
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
 
-		w.Close()
-		os.Stdout = oldStdout
+	err := WriteClaudeSettings(tmpDir, stdin)
 
-		// Read captured output
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		output := buf.String()
+	w.Close()
+	os.Stdout = oldStdout
 
-		if err != nil {
-			t.Fatalf("WriteClaudeSettings failed: %v", err)
-		}
+	// Read captured output
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
 
-		// Verify prompt was shown
-		if !strings.Contains(output, "merge") {
-			t.Errorf("Expected merge prompt in output, got: %s", output)
-		}
-	})
+	if err != nil {
+		t.Fatalf("WriteClaudeSettings failed: %v", err)
+	}
+
+	// Verify prompt was shown
+	if !strings.Contains(output, "merge") {
+		t.Errorf("Expected merge prompt in output, got: %s", output)
+	}
 
 	// Read and verify merged file
 	content, err := os.ReadFile(settingsPath)
@@ -910,13 +882,13 @@ func TestWriteClaudeSettings_MergeDeclined(t *testing.T) {
 		t.Fatalf("Failed to write existing file: %v", err)
 	}
 
-	// Mock stdin to decline merge
-	withMockStdin(t, "n", func() {
-		err := WriteClaudeSettings(tmpDir)
-		if err != nil {
-			t.Fatalf("WriteClaudeSettings failed: %v", err)
-		}
-	})
+	// Inject stdin to decline merge
+	stdin := strings.NewReader("n\n")
+
+	err := WriteClaudeSettings(tmpDir, stdin)
+	if err != nil {
+		t.Fatalf("WriteClaudeSettings failed: %v", err)
+	}
 
 	// Read file and verify it's unchanged
 	content, err := os.ReadFile(settingsPath)
@@ -940,7 +912,7 @@ func TestWriteClaudeSettings_MergeDeclined(t *testing.T) {
 func TestWriteClaudeSettings_JSONValidity(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	err := WriteClaudeSettings(tmpDir)
+	err := WriteClaudeSettings(tmpDir, nil)
 	if err != nil {
 		t.Fatalf("WriteClaudeSettings failed: %v", err)
 	}

@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -12,7 +13,11 @@ import (
 // DeleteAgentCommand removes an agent from the state database and prints the result.
 // Handles interactive confirmation for running processes at the CLI level,
 // then delegates business logic to ops.DeleteAgent.
-func DeleteAgentCommand(projectRoot, agentID string, force bool, reason string) error {
+// The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
+func DeleteAgentCommand(projectRoot, agentID string, force bool, reason string, stdin io.Reader) error {
+	if stdin == nil {
+		stdin = os.Stdin
+	}
 	// Check if agent process is running (interactive confirmation is CLI-only)
 	pidConfirmed := false
 	if !force && agentID != "" {
@@ -22,7 +27,7 @@ func DeleteAgentCommand(projectRoot, agentID string, force bool, reason string) 
 		}
 		if running {
 			fmt.Fprintf(os.Stderr, "Agent %s is still running with PID %d, do you want to delete the agent from the state file? (y/n): ", agentID, pid)
-			scanner := bufio.NewScanner(os.Stdin)
+			scanner := bufio.NewScanner(stdin)
 			if !scanner.Scan() {
 				return fmt.Errorf("deletion cancelled")
 			}
