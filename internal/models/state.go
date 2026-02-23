@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // State represents the complete Liza state.yaml structure
@@ -31,9 +33,10 @@ const (
 )
 
 // Role name constants used in task workflow definitions.
+// These are aliases for the canonical definitions in the roles package.
 const (
-	RoleCoder        = "coder"
-	RoleCodeReviewer = "code_reviewer"
+	RoleCoder        = roles.WorkflowCoder
+	RoleCodeReviewer = roles.WorkflowCodeReviewer
 )
 
 // taskWorkflows maps each TaskType to its ordered role sequence.

@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // nonZeroOr returns val if positive, otherwise fallback.
@@ -23,10 +24,10 @@ func getRoleWaitConfig(state *models.State, role string) (pollInterval, maxWait 
 	var pollSeconds, maxWaitSeconds int
 
 	switch role {
-	case "planner":
+	case roles.RuntimePlanner:
 		pollSeconds = nonZeroOr(state.Config.PlannerPollInterval, models.DefaultPlannerPollInterval)
 		maxWaitSeconds = nonZeroOr(state.Config.PlannerMaxWait, models.DefaultPlannerMaxWait)
-	case "code-reviewer":
+	case roles.RuntimeCodeReviewer:
 		pollSeconds = nonZeroOr(state.Config.ReviewerPollInterval, models.DefaultReviewerPollInterval)
 		maxWaitSeconds = nonZeroOr(state.Config.ReviewerMaxWait, models.DefaultReviewerMaxWait)
 	default:
@@ -47,11 +48,11 @@ func waitForWork(ctx context.Context, bb *db.Blackboard, projectRoot string, rol
 	logger.Debug("agent waiting for work", "maxWait", maxWait, "role", role)
 
 	switch role {
-	case "coder":
+	case roles.RuntimeCoder:
 		return waitForCoderWork(ctx, bb, projectRoot, config.AgentID, pollInterval, maxWait)
-	case "code-reviewer":
+	case roles.RuntimeCodeReviewer:
 		return waitForReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
-	case "planner":
+	case roles.RuntimePlanner:
 		return waitForPlannerWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	default:
 		return false, fmt.Errorf("unknown role: %s", role)

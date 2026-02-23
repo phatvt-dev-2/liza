@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/prompts"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // buildPrompt creates the complete prompt for the agent
@@ -31,7 +32,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 
 	// Add role-specific context
 	switch config.Role {
-	case "coder":
+	case roles.RuntimeCoder:
 		task := state.FindTask(taskID)
 		if task == nil {
 			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
@@ -55,7 +56,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 		}
 		prompt += context
 
-	case "code-reviewer":
+	case roles.RuntimeCodeReviewer:
 		task := state.FindTask(taskID)
 		if task == nil {
 			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
@@ -71,7 +72,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 		}
 		prompt += context
 
-	case "planner":
+	case roles.RuntimePlanner:
 		plannerConfig := prompts.PlannerContextConfig{}
 		context, err := prompts.BuildPlannerContext(state, plannerConfig)
 		if err != nil {

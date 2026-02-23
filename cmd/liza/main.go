@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
 )
 
@@ -202,7 +203,7 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 		if err != nil {
 			return err
 		}
-		if role != "code-reviewer" {
+		if role != roles.RuntimeCodeReviewer {
 			return fmt.Errorf("wt-merge requires code-reviewer agent (got: %s)", role)
 		}
 
@@ -909,7 +910,7 @@ Example:
 			return err
 		}
 
-		if !slices.Contains([]string{"coder", "code-reviewer", "planner"}, role) {
+		if !slices.Contains(roles.AllRuntime(), role) {
 			return fmt.Errorf("invalid role: %s (must be coder, code-reviewer, or planner)", role)
 		}
 

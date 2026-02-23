@@ -9,12 +9,13 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // SupervisorConfig contains all configuration for the agent supervisor
 type SupervisorConfig struct {
 	AgentID          string
-	Role             string // "coder", "code-reviewer", "planner"
+	Role             string // roles.RuntimeCoder, roles.RuntimeCodeReviewer, roles.RuntimePlanner
 	ProjectRoot      string
 	StatePath        string
 	LogPath          string
@@ -143,11 +144,11 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	if config.ExecutionTimeout == 0 {
 		// Default timeouts based on role
 		switch config.Role {
-		case "code-reviewer":
+		case roles.RuntimeCodeReviewer:
 			config.ExecutionTimeout = 30 * time.Minute
-		case "coder":
+		case roles.RuntimeCoder:
 			config.ExecutionTimeout = 2 * time.Hour
-		case "planner":
+		case roles.RuntimePlanner:
 			config.ExecutionTimeout = 4 * time.Hour
 		default:
 			config.ExecutionTimeout = 2 * time.Hour
@@ -170,7 +171,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 
 		// Handle approved merges (reviewer only)
-		if config.Role == "code-reviewer" {
+		if config.Role == roles.RuntimeCodeReviewer {
 			if err := handleApprovedMerges(config.ProjectRoot, config.AgentID, bb); err != nil {
 				GetLogger().Warn("Merge handler error", "error", err)
 			}
@@ -210,7 +211,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		// Claim task (coder/reviewer only)
 		var taskID string
 		var claimedTaskID string // Track claimed task for completion logging
-		if config.Role == "coder" {
+		if config.Role == roles.RuntimeCoder {
 			taskID, _, err = claimCoderTask(config.ProjectRoot, config.AgentID, bb)
 			if err != nil {
 				// Error already logged in claimCoderTask
@@ -218,7 +219,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				continue
 			}
 			claimedTaskID = taskID
-		} else if config.Role == "code-reviewer" {
+		} else if config.Role == roles.RuntimeCodeReviewer {
 			var reviewCommit string
 			taskID, _, reviewCommit, err = claimReviewerTask(config.AgentID, 1800, bb)
 			if err != nil {
@@ -235,7 +236,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 
 		// Set planner status to PLANNING
-		if config.Role == "planner" {
+		if config.Role == roles.RuntimePlanner {
 			if err := setAgentToPlanningStatus(bb, config.AgentID); err != nil {
 				GetLogger().Warn("Failed to set planner status", "error", err, "agent_id", config.AgentID)
 			}
@@ -276,14 +277,14 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			GetLogger().Info("Agent completed, checking for more work")
 
 			// Log task submission if it happened (coder role only)
-			if config.Role == "coder" && claimedTaskID != "" {
+			if config.Role == roles.RuntimeCoder && claimedTaskID != "" {
 				if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID); err != nil {
 					GetLogger().Warn("Failed to log task submission", "error", err, "task_id", claimedTaskID)
 				}
 			}
 
 			// Verify expected state changes for planner
-			if config.Role == "planner" {
+			if config.Role == roles.RuntimePlanner {
 				if err := verifyPlannerStateChanges(bb, state); err != nil {
 					GetLogger().Warn("Planner state verification failed",
 						"error", err,
