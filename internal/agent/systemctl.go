@@ -95,10 +95,16 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string) (
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat()
 
+	// Read state to get heartbeat interval from config
+	var state *models.State
+	if bb := db.For(config.StatePath); bb != nil {
+		state, _ = bb.Read()
+	}
+
 	hb := NewHeartbeat(HeartbeatConfig{
 		AgentID:   config.AgentID,
 		StatePath: config.StatePath,
-		Interval:  60 * time.Second,
+		State:     state,
 	})
 
 	go func() {

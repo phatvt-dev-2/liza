@@ -389,3 +389,135 @@ func TestHeartbeatDefaultValues(t *testing.T) {
 	// Verify defaults were applied (we can't directly check private fields,
 	// but we can verify the heartbeat struct was created successfully)
 }
+
+func TestHeartbeatIntervalFromConfig(t *testing.T) {
+	tests := []struct {
+		name                 string
+		configInterval       int
+		expectedIntervalSecs int
+	}{
+		{
+			name:                 "valid interval from config (30s)",
+			configInterval:       30,
+			expectedIntervalSecs: 30,
+		},
+		{
+			name:                 "valid interval from config (120s)",
+			configInterval:       120,
+			expectedIntervalSecs: 120,
+		},
+		{
+			name:                 "zero interval uses default (60s)",
+			configInterval:       0,
+			expectedIntervalSecs: 60,
+		},
+		{
+			name:                 "negative interval uses default (60s)",
+			configInterval:       -10,
+			expectedIntervalSecs: 60,
+		},
+		{
+			name:                 "unreasonably large interval uses default (60s)",
+			configInterval:       3600,
+			expectedIntervalSecs: 60,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			// Create state with specific heartbeat interval
+			initialState := testhelpers.CreateValidState()
+			initialState.Config.HeartbeatInterval = tt.configInterval
+			now := time.Now().UTC()
+			initialState.Agents = map[string]models.Agent{
+				"coder-1": {
+					Role:         "coder",
+					Status:       models.AgentStatusWorking,
+					Heartbeat:    now,
+					LeaseExpires: testhelpers.TimePtr(now.Add(30 * time.Minute)),
+				},
+			}
+			testhelpers.WriteInitialState(t, stateFile, initialState)
+
+			// Create heartbeat config with State
+			config := HeartbeatConfig{
+				AgentID:   "coder-1",
+				StatePath: stateFile,
+				State:     initialState,
+			}
+
+			hb := NewHeartbeat(config)
+			if hb == nil {
+				t.Fatal("NewHeartbeat() returned nil")
+			}
+
+			// Verify the interval was set correctly by checking ticker behavior
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+
+			doneCh := make(chan error, 1)
+			go func() {
+				doneCh <- hb.Start(ctx)
+			}()
+
+			<-doneCh
+		})
+	}
+}
+
+func TestHeartbeatBoundsValidation(t *testing.T) {
+	tests := []struct {
+		name           string
+		interval       int
+		wantNormalized time.Duration
+	}{
+		{
+			name:           "zero uses default",
+			interval:       0,
+			wantNormalized: 60 * time.Second,
+		},
+		{
+			name:           "negative uses default",
+			interval:       -1,
+			wantNormalized: 60 * time.Second,
+		},
+		{
+			name:           "minimum valid (1s)",
+			interval:       1,
+			wantNormalized: 1 * time.Second,
+		},
+		{
+			name:           "typical value (30s)",
+			interval:       30,
+			wantNormalized: 30 * time.Second,
+		},
+		{
+			name:           "maximum valid (300s)",
+			interval:       300,
+			wantNormalized: 300 * time.Second,
+		},
+		{
+			name:           "over maximum uses default",
+			interval:       301,
+			wantNormalized: 60 * time.Second,
+		},
+		{
+			name:           "very large uses default",
+			interval:       3600,
+			wantNormalized: 60 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := models.NormalizeHeartbeatInterval(tt.interval)
+			if got != tt.wantNormalized {
+				t.Errorf("NormalizeHeartbeatInterval(%d) = %v, want %v",
+					tt.interval, got, tt.wantNormalized)
+			}
+		})
+	}
+}

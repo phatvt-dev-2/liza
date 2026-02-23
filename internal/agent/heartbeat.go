@@ -22,6 +22,7 @@ type HeartbeatConfig struct {
 	StatePath     string
 	Interval      time.Duration
 	LeaseDuration time.Duration
+	State         *models.State // Optional: if provided, interval is read from state.Config.HeartbeatInterval
 }
 
 // Heartbeat manages background lease extension for an agent
@@ -35,6 +36,13 @@ type Heartbeat struct {
 // NewHeartbeat creates a new heartbeat instance
 func NewHeartbeat(config HeartbeatConfig) *Heartbeat {
 	interval := config.Interval
+
+	// If state is provided, read interval from config with bounds validation
+	if config.State != nil {
+		interval = models.NormalizeHeartbeatInterval(config.State.Config.HeartbeatInterval)
+	}
+
+	// Fall back to explicit config.Interval or default
 	if interval == 0 {
 		interval = DefaultHeartbeatInterval
 	}

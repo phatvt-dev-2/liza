@@ -611,6 +611,23 @@ const (
 	DefaultReviewerMaxWait      = 1800 // 30 minutes
 )
 
+// Bounds for heartbeat interval validation.
+const (
+	MinHeartbeatIntervalSeconds = 1
+	MaxHeartbeatIntervalSeconds = 300 // 5 minutes
+	DefaultHeartbeatIntervalSec = 60
+)
+
+// NormalizeHeartbeatInterval validates and normalizes a heartbeat interval value.
+// Returns the normalized duration or the default if the value is invalid.
+// Invalid values: ≤ 0, > MaxHeartbeatIntervalSeconds (300s / 5min)
+func NormalizeHeartbeatInterval(interval int) time.Duration {
+	if interval <= 0 || interval > MaxHeartbeatIntervalSeconds {
+		return DefaultHeartbeatIntervalSec * time.Second
+	}
+	return time.Duration(interval) * time.Second
+}
+
 // Config holds system configuration parameters
 type Config struct {
 	MaxCoderIterations   int            `yaml:"max_coder_iterations"`
