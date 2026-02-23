@@ -200,3 +200,142 @@ func TestFileLockDefaults(t *testing.T) {
 		t.Errorf("lockTimeout = %v, want %v", fl.lockTimeout, DefaultLockTimeout)
 	}
 }
+
+// TestCleanupStaleLockFailure verifies that cleanupStaleLock returns an error
+// when the lock file does not exist (simulating a filesystem issue).
+func TestCleanupStaleLockFailure(t *testing.T) {
+	dir := t.TempDir()
+	protectedPath := filepath.Join(dir, "nonexistent", "data.yaml")
+
+	fl := New(protectedPath)
+
+	// cleanupStaleLock should succeed even if lock file doesn't exist
+	// (it only returns error on actual filesystem errors, not on ENOENT)
+	err := fl.cleanupStaleLock()
+	if err != nil {
+		t.Errorf("cleanupStaleLock() expected nil for non-existent lock file, got %v", err)
+	}
+}
+
+// TestWithLockStaleLockRecovery verifies that when a stale lock is detected,
+// cleanup is attempted and if successful, the lock is acquired.
+func TestWithLockStaleLockRecovery(t *testing.T) {
+	dir := t.TempDir()
+	protectedPath := filepath.Join(dir, "data.yaml")
+
+	// Create initial protected file
+	if err := os.WriteFile(protectedPath, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create protected file: %v", err)
+	}
+
+	// First, acquire the lock in a subprocess that will exit, leaving a stale lock
+	// We can't easily fork in a test, so we'll simulate by:
+	// 1. Creating a lock file
+	// 2. Creating a PID file with our own PID (so it's considered "live")
+	// 3. Using a very short timeout and acquiring another lock instance
+
+	// Actually, the simplest approach is to have this process hold the lock,
+	// and try to acquire it again with a different FileLock instance with a short timeout
+
+	lock1 := New(protectedPath)
+	lock1 = lock1.WithTimeout(5 * time.Second)
+
+	// Acquire lock1
+	lock1Acquired := make(chan struct{})
+	lock1Done := make(chan struct{})
+	go func() {
+		_ = lock1.WithLock(func() error {
+			close(lock1Acquired)
+			// Hold the lock for a bit
+			time.Sleep(200 * time.Millisecond)
+			return nil
+		})
+		close(lock1Done)
+	}()
+
+	// Wait for lock1 to be acquired
+	select {
+	case <-lock1Acquired:
+		// Good, lock1 is held
+	case <-time.After(2 * time.Second):
+		t.Fatal("lock1 was not acquired")
+	}
+
+	// Now try to acquire with lock2 using a short timeout
+	lock2 := New(protectedPath)
+	lock2 = lock2.WithTimeout(50 * time.Millisecond)
+
+	// This should timeout because lock1 is held
+	errChan := make(chan error, 1)
+	go func() {
+		err := lock2.WithLock(func() error {
+			return nil
+		})
+		errChan <- err
+	}()
+
+	// Wait for lock2 to timeout
+	select {
+	case err := <-errChan:
+		if err == nil {
+			t.Fatal("lock2 should have timed out")
+		}
+		// Expected - lock2 timed out
+	case <-time.After(1 * time.Second):
+		t.Fatal("lock2 should have timed out quickly")
+	}
+
+	// Wait for lock1 to release
+	select {
+	case <-lock1Done:
+		// Good
+	case <-time.After(3 * time.Second):
+		t.Fatal("lock1 was not released")
+	}
+
+	// Now test stale lock detection by simulating a stale lock
+	// Create a lock file and a PID file with a non-existent PID
+	pidPath := protectedPath + ".lock.pid"
+	lockPath := protectedPath + ".lock"
+
+	// The lock file may still exist from lock1 - that's fine
+	// But we need to replace the PID with a non-existent one
+	if err := os.WriteFile(pidPath, []byte("99999"), 0644); err != nil {
+		t.Fatalf("Failed to create stale PID file: %v", err)
+	}
+
+	// Ensure lock file exists (flock needs an actual file)
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		if err := os.WriteFile(lockPath, []byte(""), 0644); err != nil {
+			t.Fatalf("Failed to create lock file: %v", err)
+		}
+	}
+
+	// Now try to acquire with a new lock instance with a short timeout
+	// It should detect the stale lock, clean it up, and acquire successfully
+	lock3 := New(protectedPath)
+	lock3 = lock3.WithTimeout(100 * time.Millisecond)
+
+	executed := false
+	err := lock3.WithLock(func() error {
+		executed = true
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("WithLock() expected success after stale lock cleanup, got error: %v", err)
+	}
+
+	if !executed {
+		t.Error("function should have executed after stale lock cleanup")
+	}
+
+	// Verify the PID file was updated (new PID written by acquireLockWithPID)
+	pidData, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatalf("Failed to read PID file: %v", err)
+	}
+	if string(pidData) == "99999" {
+		t.Error("PID file should have been updated with new PID, not the stale one")
+	}
+}

@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -328,11 +329,15 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 	if err != nil {
 		// Cleanup on failure — only delete resources we created in this invocation.
-		// Cleanup errors are best-effort; the returned error conveys the claim failure.
-		// Callers (agent, commands) should log this if operational visibility is needed.
+		// Cleanup errors are logged as warnings; the returned error conveys the claim failure.
+		// Material inconsistency (orphaned worktree/branch) is flagged for operator attention.
 		if worktreeCreated {
-			_ = gitWrapper.RemoveWorktree(taskID)
-			_ = gitWrapper.DeleteBranch("task/" + taskID)
+			if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
+				log.Printf("WARNING: claim-task %s: failed to cleanup worktree after claim failure: %v", taskID, cleanupErr)
+			}
+			if cleanupErr := gitWrapper.DeleteBranch("task/" + taskID); cleanupErr != nil {
+				log.Printf("WARNING: claim-task %s: failed to cleanup branch after claim failure: %v", taskID, cleanupErr)
+			}
 		}
 		return nil, fmt.Errorf("failed to commit claim: %w", err)
 	}
@@ -441,8 +446,14 @@ func restoreRejectedWorktreeAfterCreateFailure(
 	taskID, recoveryRef, fallbackRef string,
 ) error {
 	// Best-effort cleanup of partial replacement artifacts before restoring.
-	_ = gitWrapper.RemoveWorktree(taskID)
-	_ = gitWrapper.DeleteBranch("task/" + taskID)
+	// Cleanup errors are logged but not propagated - the primary failure is the
+	// worktree creation failure that triggered this recovery.
+	if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
+		log.Printf("WARNING: claim-task recovery %s: failed to cleanup partial worktree: %v", taskID, cleanupErr)
+	}
+	if cleanupErr := gitWrapper.DeleteBranch("task/" + taskID); cleanupErr != nil {
+		log.Printf("WARNING: claim-task recovery %s: failed to cleanup partial branch: %v", taskID, cleanupErr)
+	}
 
 	restoreRef := recoveryRef
 	if restoreRef == "" {

@@ -167,7 +167,14 @@ func (fl *FileLock) WithLockOperation(operation string, fn func() error) error {
 	if !locked {
 		isStale, stalePID := fl.isLockStale()
 		if isStale {
-			fl.cleanupStaleLock()
+			// Propagate cleanup failure as a lock/filesystem error before retry
+			if cleanupErr := fl.cleanupStaleLock(); cleanupErr != nil {
+				return &LockError{
+					Type:    LockErrorFilesystem,
+					Message: fmt.Sprintf("failed to cleanup stale lock held by dead process (PID %d)", stalePID),
+					Err:     cleanupErr,
+				}
+			}
 			lock, err = fl.acquireLockWithPID()
 			if err != nil {
 				return NewLockStale(stalePID)
