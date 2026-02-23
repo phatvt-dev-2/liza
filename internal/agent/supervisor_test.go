@@ -343,6 +343,8 @@ func TestResumeHandoffTask_FailsWhenWorktreeMissing(t *testing.T) {
 
 	agentID := "coder-1"
 	state := testhelpers.CreateValidState()
+	// IMPLEMENTING task without Worktree field is invalid state that validateAgentInvariants
+	// would catch upstream. This tests resumeHandoffTask's own guard against the condition.
 	state.Tasks = []models.Task{
 		{
 			ID:             "task-1",
