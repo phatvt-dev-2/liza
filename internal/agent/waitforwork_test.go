@@ -214,31 +214,56 @@ func TestWaitForPlannerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
+			// Planner now respects maxWait parameter (uses 100ms timeout for test)
 			hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "planner", config, 10*time.Millisecond, 100*time.Millisecond)
 
-			// For "no planner work needed", planner waits indefinitely until context cancellation
-			// So we expect context.DeadlineExceeded error
-			if tt.name == "no planner work needed" {
-				if err == nil {
-					t.Fatalf("waitForWork() expected context deadline exceeded, got nil error")
-				}
-				if err != context.DeadlineExceeded {
-					t.Fatalf("waitForWork() expected context.DeadlineExceeded, got %v", err)
-				}
-				// hasWork should be false when context times out
-				if hasWork != false {
-					t.Errorf("waitForWork() = %v, want false", hasWork)
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("waitForWork() error = %v", err)
-				}
+			if err != nil {
+				t.Fatalf("waitForWork() error = %v", err)
+			}
 
-				if hasWork != tt.wantWork {
-					t.Errorf("waitForWork() = %v, want %v", hasWork, tt.wantWork)
-				}
+			if hasWork != tt.wantWork {
+				t.Errorf("waitForWork() = %v, want %v", hasWork, tt.wantWork)
 			}
 		})
+	}
+}
+
+// TestPlannerRespectsMaxWaitConfig verifies that planner wait loop respects
+// the configured max_wait value (does not override with hardcoded value)
+func TestPlannerRespectsMaxWaitConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	lizaDir := filepath.Dir(statePath)
+
+	// Create state with no work available
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC()),
+	}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	config := SupervisorConfig{
+		StatePath: statePath,
+	}
+
+	// Test with a short maxWait - planner should timeout when maxWait is reached
+	ctx := context.Background()
+	startTime := time.Now()
+	hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "planner", config, 10*time.Millisecond, 150*time.Millisecond)
+	elapsed := time.Since(startTime)
+
+	if err != nil {
+		t.Fatalf("waitForWork() error = %v", err)
+	}
+
+	if hasWork {
+		t.Error("Expected no work after timeout")
+	}
+
+	// Should wait approximately the maxWait duration (150ms), not a year
+	// Allow some tolerance for test execution variability
+	if elapsed < 150*time.Millisecond || elapsed > 300*time.Millisecond {
+		t.Errorf("Expected timeout around 150ms, got %v", elapsed)
 	}
 }
 

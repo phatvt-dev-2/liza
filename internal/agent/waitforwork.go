@@ -41,25 +41,18 @@ func getRoleWaitConfig(state *models.State, role string) (pollInterval, maxWait 
 func waitForWork(ctx context.Context, bb *db.Blackboard, projectRoot string, role string, config SupervisorConfig, pollInterval, maxWait time.Duration) (bool, error) {
 	logger := GetLogger()
 
-	// For planners, maxWait should be effectively infinite since they're persistent coordinators
-	// that only exit on STOPPED mode or context cancellation
-	effectiveMaxWait := maxWait
-	if role == "planner" {
-		// Use a very large duration to effectively wait indefinitely
-		// The loop will still exit on ABORT or context cancellation
-		effectiveMaxWait = 365 * 24 * time.Hour // 1 year
-		logger.Info("planner agent waiting indefinitely for wake triggers (will only exit on STOPPED or cancellation)")
-	} else {
-		logger.Debug("agent waiting for work", "maxWait", maxWait, "role", role)
-	}
+	// Planners use the configured maxWait from getRoleWaitConfig, which provides
+	// a default if PlannerMaxWait is not set. The planner wait loop will exit
+	// on ABORT/state change or when maxWait is reached.
+	logger.Debug("agent waiting for work", "maxWait", maxWait, "role", role)
 
 	switch role {
 	case "coder":
-		return waitForCoderWork(ctx, bb, projectRoot, config.AgentID, pollInterval, effectiveMaxWait)
+		return waitForCoderWork(ctx, bb, projectRoot, config.AgentID, pollInterval, maxWait)
 	case "code-reviewer":
-		return waitForReviewerWork(ctx, bb, projectRoot, pollInterval, effectiveMaxWait)
+		return waitForReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	case "planner":
-		return waitForPlannerWork(ctx, bb, projectRoot, pollInterval, effectiveMaxWait)
+		return waitForPlannerWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	default:
 		return false, fmt.Errorf("unknown role: %s", role)
 	}

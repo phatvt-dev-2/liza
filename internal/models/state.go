@@ -630,13 +630,16 @@ func NormalizeHeartbeatInterval(interval int) time.Duration {
 
 // Config holds system configuration parameters
 type Config struct {
-	MaxCoderIterations   int            `yaml:"max_coder_iterations"`
-	MaxReviewCycles      int            `yaml:"max_review_cycles"`
-	HeartbeatInterval    int            `yaml:"heartbeat_interval"`
-	LeaseDuration        int            `yaml:"lease_duration"`
-	CoderPollInterval    int            `yaml:"coder_poll_interval"`
-	CoderMaxWait         int            `yaml:"coder_max_wait"`
-	PlannerPollInterval  int            `yaml:"planner_poll_interval"`
+	MaxCoderIterations  int `yaml:"max_coder_iterations"`
+	MaxReviewCycles     int `yaml:"max_review_cycles"`
+	HeartbeatInterval   int `yaml:"heartbeat_interval"`
+	LeaseDuration       int `yaml:"lease_duration"`
+	CoderPollInterval   int `yaml:"coder_poll_interval"`
+	CoderMaxWait        int `yaml:"coder_max_wait"`
+	PlannerPollInterval int `yaml:"planner_poll_interval"`
+	// PlannerMaxWait is the maximum time a planner agent will wait for work
+	// before exiting. When 0, defaults to DefaultPlannerMaxWait (30 minutes).
+	// The planner will exit earlier if STOPPED mode is detected or context is cancelled.
 	PlannerMaxWait       int            `yaml:"planner_max_wait"`
 	ReviewerPollInterval int            `yaml:"reviewer_poll_interval"`
 	ReviewerMaxWait      int            `yaml:"reviewer_max_wait"`
