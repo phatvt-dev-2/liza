@@ -689,6 +689,10 @@ Never leave repository in inconsistent partial-change state without acknowledgme
 
 **Before Operations:** State current branch, flag uncommitted changes.
 
+**Commit Message Standard (all `git commit` operations):**
+- MUST follow Conventional Commits: `type(scope): short summary` (scope optional; `!` for breaking change)
+- MUST include a body with both why and what of the change
+
 **Selective Commits (committing specific files while preserving other changes):**
 1. `git stash -u` — stash everything (staged, unstaged, untracked)
 2. `git checkout stash -- <files-to-commit>` — restore only files to commit
