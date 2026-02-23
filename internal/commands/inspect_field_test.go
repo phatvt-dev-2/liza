@@ -1,6 +1,9 @@
 package commands
 
 import (
+	"fmt"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -108,6 +111,91 @@ func TestGetField(t *testing.T) {
 			}
 			if !tt.wantErr && got != tt.want {
 				t.Errorf("getField() = %v (%T), want %v (%T)", got, got, tt.want, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetField_DiscoversAllTaggedConfigAndSprintFields(t *testing.T) {
+	now := time.Now().UTC().Round(time.Second)
+	modeChangedAt := now.Add(-30 * time.Minute)
+	modeChangedBy := "planner-1"
+	escalationWebhook := "https://example.com/hook"
+	checkpointAt := now.Add(2 * time.Hour)
+	ended := now.Add(10 * time.Hour)
+	retrospective := "Kept quality high under load"
+
+	state := &models.State{
+		Version: 7,
+		Config: models.Config{
+			MaxCoderIterations:   11,
+			MaxReviewCycles:      6,
+			HeartbeatInterval:    60,
+			LeaseDuration:        1800,
+			CoderPollInterval:    15,
+			CoderMaxWait:         900,
+			PlannerPollInterval:  45,
+			PlannerMaxWait:       1200,
+			ReviewerPollInterval: 20,
+			ReviewerMaxWait:      1000,
+			IntegrationBranch:    "integration",
+			EscalationWebhook:    &escalationWebhook,
+			Mode:                 models.SystemModePaused,
+			ModeChangedAt:        &modeChangedAt,
+			ModeChangedBy:        &modeChangedBy,
+			DiagnosticLogging:    true,
+		},
+		Sprint: models.Sprint{
+			ID:      "sprint-42",
+			GoalRef: "specs/current.md",
+			Scope: models.SprintScope{
+				Planned: []string{"task-1", "task-2"},
+				Stretch: []string{"task-99"},
+			},
+			Timeline: models.SprintTimeline{
+				Started:      now.Add(-6 * time.Hour),
+				Deadline:     now.Add(6 * time.Hour),
+				CheckpointAt: &checkpointAt,
+				Ended:        &ended,
+			},
+			Status: models.SprintStatusCheckpoint,
+			Metrics: models.SprintMetrics{
+				TasksDone:                        5,
+				TasksInProgress:                  3,
+				TasksBlocked:                     1,
+				IterationsTotal:                  18,
+				ReviewCyclesTotal:                9,
+				ReviewVerdictApprovals:           7,
+				ReviewVerdictRejections:          2,
+				ReviewVerdictCount:               9,
+				ReviewVerdictApprovalRatePercent: 77,
+				TaskSubmittedForReviewCount:      8,
+				TaskOutcomeApprovalRatePercent:   63,
+			},
+			Retrospective: &retrospective,
+		},
+	}
+
+	expectedPaths := []string{"version"}
+	expectedPaths = append(expectedPaths, yamlLeafPathsForType("config", reflect.TypeOf(models.Config{}))...)
+	expectedPaths = append(expectedPaths, yamlLeafPathsForType("sprint", reflect.TypeOf(models.Sprint{}))...)
+	sort.Strings(expectedPaths)
+
+	for _, fieldPath := range expectedPaths {
+		fieldPath := fieldPath
+		t.Run(fieldPath, func(t *testing.T) {
+			want, err := valueAtYAMLPath(state, fieldPath)
+			if err != nil {
+				t.Fatalf("failed to build expected value for %q: %v", fieldPath, err)
+			}
+
+			got, err := getField(state, fieldPath)
+			if err != nil {
+				t.Fatalf("getField(%q) returned error: %v", fieldPath, err)
+			}
+
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("getField(%q) = %#v (%T), want %#v (%T)", fieldPath, got, got, want, want)
 			}
 		})
 	}
@@ -354,4 +442,115 @@ func TestGetComputedFieldTaskSpecific(t *testing.T) {
 // Helper function
 func stringPtr(s string) *string {
 	return &s
+}
+
+func yamlLeafPathsForType(prefix string, t reflect.Type) []string {
+	paths := make([]string, 0)
+	timeType := reflect.TypeOf(time.Time{})
+
+	var walk func(pathPrefix string, fieldType reflect.Type)
+	walk = func(pathPrefix string, fieldType reflect.Type) {
+		fieldType = derefType(fieldType)
+		if fieldType.Kind() != reflect.Struct || fieldType == timeType {
+			paths = append(paths, pathPrefix)
+			return
+		}
+
+		for i := 0; i < fieldType.NumField(); i++ {
+			field := fieldType.Field(i)
+			tagName := yamlTagName(field.Tag.Get("yaml"))
+			if tagName == "" {
+				continue
+			}
+
+			childPath := pathPrefix + "." + tagName
+			childType := derefType(field.Type)
+			if childType.Kind() == reflect.Struct && childType != timeType {
+				walk(childPath, field.Type)
+				continue
+			}
+
+			paths = append(paths, childPath)
+		}
+	}
+
+	walk(prefix, t)
+	return paths
+}
+
+func valueAtYAMLPath(state *models.State, fieldPath string) (any, error) {
+	if fieldPath == "" {
+		return nil, fmt.Errorf("empty field path")
+	}
+
+	parts := strings.Split(fieldPath, ".")
+	current := reflect.ValueOf(state)
+
+	for _, part := range parts {
+		current = derefValue(current)
+		if !current.IsValid() {
+			return nil, fmt.Errorf("nil while traversing %q", fieldPath)
+		}
+		if current.Kind() != reflect.Struct {
+			return nil, fmt.Errorf("cannot descend into %q for %q", current.Kind(), fieldPath)
+		}
+
+		next, ok := findStructFieldByYAMLTag(current, part)
+		if !ok {
+			return nil, fmt.Errorf("yaml tag %q not found in %s for %q", part, current.Type(), fieldPath)
+		}
+		current = next
+	}
+
+	return normalizeExpectedValue(current), nil
+}
+
+func findStructFieldByYAMLTag(v reflect.Value, tagName string) (reflect.Value, bool) {
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if yamlTagName(field.Tag.Get("yaml")) == tagName {
+			return v.Field(i), true
+		}
+	}
+	return reflect.Value{}, false
+}
+
+func normalizeExpectedValue(v reflect.Value) any {
+	v = derefValue(v)
+	if !v.IsValid() {
+		return nil
+	}
+	if v.Kind() == reflect.String {
+		return v.String()
+	}
+	return v.Interface()
+}
+
+func derefValue(v reflect.Value) reflect.Value {
+	for v.IsValid() && v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return reflect.Value{}
+		}
+		v = v.Elem()
+	}
+	return v
+}
+
+func derefType(t reflect.Type) reflect.Type {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t
+}
+
+func yamlTagName(tag string) string {
+	if tag == "" {
+		return ""
+	}
+	base := strings.Split(tag, ",")[0]
+	if base == "" || base == "-" {
+		return ""
+	}
+	return base
 }
