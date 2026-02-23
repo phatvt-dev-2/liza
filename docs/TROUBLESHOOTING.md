@@ -207,7 +207,9 @@ mkdir -p specs && vi specs/vision.md
 
 **Error:** `INVALID: IMPLEMENTING task task-1 has worktree=.worktrees/task-1 but directory does not exist`
 
-**Recreate:** `git worktree add .worktrees/task-1 -b task/task-1 integration`
+**Recreate:** `git worktree add .worktrees/task-1 -b task/task-1 <base-commit>`
+
+*(Replace `<base-commit>` with the task's `base_commit` value from `liza get tasks task-1`)*
 
 **Or reset task** (if work was lost — edit `.liza/state.yaml` directly):
 ```yaml
@@ -253,8 +255,10 @@ git reset --hard HEAD                          # discard
 Task branch doesn't exist:
 ```bash
 git branch -a | grep task/          # List task branches
-git branch task/task-1 integration  # Recreate from integration
+git branch task/task-1 <base-commit>  # Recreate from base_commit
 ```
+
+*(Replace `<base-commit>` with the task's `base_commit` value from `liza get tasks task-1`)*
 
 ---
 
