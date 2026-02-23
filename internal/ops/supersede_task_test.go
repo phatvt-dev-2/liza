@@ -1,7 +1,6 @@
 package ops
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -17,31 +16,26 @@ func TestSupersedeTask_Validation(t *testing.T) {
 		taskID         string
 		replacementIDs []string
 		reason         string
-		errContains    string
+		wantErr        string
 	}{
 		{
 			name: "empty task ID", replacementIDs: []string{"r1"}, reason: "r",
-			errContains: "task ID is required",
+			wantErr: "task ID is required",
 		},
 		{
 			name: "no replacements", taskID: "t1", replacementIDs: []string{}, reason: "r",
-			errContains: "at least one replacement",
+			wantErr: "at least one replacement",
 		},
 		{
 			name: "empty reason", taskID: "t1", replacementIDs: []string{"r1"},
-			errContains: "rescope reason is required",
+			wantErr: "rescope reason is required",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := SupersedeTask("/nonexistent", tt.taskID, tt.replacementIDs, tt.reason, "planner-1")
-			if err == nil {
-				t.Fatal("Expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tt.errContains) {
-				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.errContains)
-			}
+			testhelpers.RequireErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -151,12 +145,7 @@ func TestSupersedeTask_WrongStatus(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "reason", "planner-1")
-	if err == nil {
-		t.Fatal("Expected error for IMPLEMENTING task")
-	}
-	if !strings.Contains(err.Error(), "cannot supersede") {
-		t.Errorf("Error = %q, want to contain 'cannot supersede'", err.Error())
-	}
+	testhelpers.RequireErrorContains(t, err, "cannot supersede")
 }
 
 func TestSupersedeTask_TaskNotFound(t *testing.T) {

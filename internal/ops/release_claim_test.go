@@ -1,7 +1,6 @@
 package ops
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -31,12 +30,7 @@ func TestReleaseClaim_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := ReleaseClaim("/nonexistent", tt.taskID, tt.role, false, "", "human")
-			if err == nil {
-				t.Fatal("Expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tt.errContains) {
-				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.errContains)
-			}
+			testhelpers.RequireErrorContains(t, err, tt.errContains)
 		})
 	}
 }
@@ -196,12 +190,7 @@ func TestReleaseClaim_NoClaims(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := ReleaseClaim(tmpDir, "task-1", "coder", true, "reason", "human")
-	if err == nil {
-		t.Fatal("Expected error when no claims to release")
-	}
-	if !strings.Contains(err.Error(), "no claims to release") {
-		t.Errorf("Error = %q, want to contain 'no claims to release'", err.Error())
-	}
+	testhelpers.RequireErrorContains(t, err, "no claims to release")
 }
 
 func TestReleaseClaim_TaskNotFound(t *testing.T) {
@@ -234,12 +223,7 @@ func TestReleaseClaim_ActiveLease_NoForce(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := ReleaseClaim(tmpDir, "task-1", "coder", false, "", "human")
-	if err == nil {
-		t.Fatal("Expected error for active lease without force")
-	}
-	if !strings.Contains(err.Error(), "lease still valid") {
-		t.Errorf("Error = %q, want to contain 'lease still valid'", err.Error())
-	}
+	testhelpers.RequireErrorContains(t, err, "lease still valid")
 }
 
 func TestReleaseClaim_DefaultAgentAndReason(t *testing.T) {

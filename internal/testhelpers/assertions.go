@@ -34,6 +34,8 @@ type testingT interface {
 	Helper()
 	Error(args ...any)
 	Errorf(format string, args ...any)
+	Fatal(args ...any)
+	Fatalf(format string, args ...any)
 }
 
 // AssertErrorContains checks that an error contains a specific substring.

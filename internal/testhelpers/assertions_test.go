@@ -34,6 +34,18 @@ func (m *mockT) Errorf(format string, args ...any) {
 	}
 }
 
+func (m *mockT) Fatal(args ...any) {
+	m.errorCalled = true
+	if len(args) > 0 {
+		m.lastMessage = args[0].(string)
+	}
+}
+
+func (m *mockT) Fatalf(format string, args ...any) {
+	m.errorfCalled = true
+	m.lastMessage = format
+}
+
 func TestAssertErrorContains_Success(t *testing.T) {
 	// Test with error containing the substring
 	err := errors.New("invalid task status: INVALID")

@@ -45,12 +45,7 @@ func TestSubmitVerdict_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := SubmitVerdict("/nonexistent", tt.taskID, tt.verdict, tt.reason, tt.agentID)
-			if err == nil {
-				t.Fatal("Expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tt.errContains) {
-				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.errContains)
-			}
+			testhelpers.RequireErrorContains(t, err, tt.errContains)
 		})
 	}
 }
@@ -227,12 +222,7 @@ func TestSubmitVerdict_WrongStatus(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "reviewer-1")
-	if err == nil {
-		t.Fatal("Expected error for non-REVIEWING task")
-	}
-	if !strings.Contains(err.Error(), "not REVIEWING") {
-		t.Errorf("Error = %q, want to contain 'not REVIEWING'", err.Error())
-	}
+	testhelpers.RequireErrorContains(t, err, "not REVIEWING")
 }
 
 func TestSubmitVerdict_AgentReleased(t *testing.T) {

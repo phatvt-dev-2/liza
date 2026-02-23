@@ -273,12 +273,7 @@ func TestMergeWorktree_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := MergeWorktree("/nonexistent", tt.taskID, tt.agentID)
-			if err == nil {
-				t.Fatal("Expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tt.errContains) {
-				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.errContains)
-			}
+			testhelpers.RequireErrorContains(t, err, tt.errContains)
 		})
 	}
 }

@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"encoding/json"
 	"testing"
 )
 
@@ -22,38 +21,19 @@ func TestToolDefinitionJSON(t *testing.T) {
 		},
 	}
 
-	data, err := json.Marshal(tool)
-	if err != nil {
-		t.Fatalf("Failed to marshal: %v", err)
-	}
-
-	var parsed map[string]any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
-	}
+	parsed := mustMarshalToMap(t, tool)
 
 	if parsed["name"] != "liza_get" {
 		t.Errorf("Expected name liza_get, got %v", parsed["name"])
 	}
 
-	schema, ok := parsed["inputSchema"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected inputSchema to be map")
-	}
-
+	schema := mustGetMap(t, parsed, "inputSchema")
 	if schema["type"] != "object" {
 		t.Errorf("Expected type object, got %v", schema["type"])
 	}
 
-	props, ok := schema["properties"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected properties to be map")
-	}
-
-	queryProp, ok := props["query"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected query property to be map")
-	}
+	props := mustGetMap(t, schema, "properties")
+	queryProp := mustGetMap(t, props, "query")
 
 	if queryProp["type"] != "string" {
 		t.Errorf("Expected query type string, got %v", queryProp["type"])
@@ -69,15 +49,7 @@ func TestResourceDefinitionJSON(t *testing.T) {
 		MimeType:    "application/x-yaml",
 	}
 
-	data, err := json.Marshal(resource)
-	if err != nil {
-		t.Fatalf("Failed to marshal: %v", err)
-	}
-
-	var parsed map[string]any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
-	}
+	parsed := mustMarshalToMap(t, resource)
 
 	if parsed["uri"] != "liza://state" {
 		t.Errorf("Expected uri liza://state, got %v", parsed["uri"])
@@ -99,15 +71,7 @@ func TestMCPErrorJSON(t *testing.T) {
 		},
 	}
 
-	data, err := json.Marshal(mcpErr)
-	if err != nil {
-		t.Fatalf("Failed to marshal: %v", err)
-	}
-
-	var parsed map[string]any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
-	}
+	parsed := mustMarshalToMap(t, mcpErr)
 
 	if parsed["code"].(float64) != -32001 {
 		t.Errorf("Expected code -32001, got %v", parsed["code"])
@@ -117,11 +81,7 @@ func TestMCPErrorJSON(t *testing.T) {
 		t.Errorf("Expected message 'Lock acquisition timeout', got %v", parsed["message"])
 	}
 
-	dataField, ok := parsed["data"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected data to be map")
-	}
-
+	dataField := mustGetMap(t, parsed, "data")
 	if dataField["type"] != "lock_timeout" {
 		t.Errorf("Expected type lock_timeout, got %v", dataField["type"])
 	}

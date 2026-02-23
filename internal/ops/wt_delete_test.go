@@ -1,7 +1,6 @@
 package ops
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -12,12 +11,7 @@ import (
 
 func TestDeleteWorktree_Validation(t *testing.T) {
 	_, err := DeleteWorktree("/nonexistent", "")
-	if err == nil {
-		t.Fatal("Expected error for empty task ID")
-	}
-	if !strings.Contains(err.Error(), "task ID is required") {
-		t.Errorf("Error = %q, want to contain 'task ID is required'", err.Error())
-	}
+	testhelpers.RequireErrorContains(t, err, "task ID is required")
 }
 
 func TestDeleteWorktree_TaskNotFound(t *testing.T) {
@@ -51,22 +45,17 @@ func TestDeleteWorktree_WrongStatus(t *testing.T) {
 	for _, tt := range statuses {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
-			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
 			now := time.Now().UTC()
 			state := testhelpers.CreateValidState()
 			state.Tasks = []models.Task{
 				testhelpers.BuildTaskByStatus("task-1", tt.status, now),
 			}
-			testhelpers.WriteInitialState(t, stateFile, state)
+			testhelpers.WriteInitialState(t, statePath, state)
 
 			_, err := DeleteWorktree(tmpDir, "task-1")
-			if err == nil {
-				t.Fatalf("Expected error for %s task", tt.name)
-			}
-			if !strings.Contains(err.Error(), "cannot delete worktree") {
-				t.Errorf("Error = %q, want to contain 'cannot delete worktree'", err.Error())
-			}
+			testhelpers.RequireErrorContains(t, err, "cannot delete worktree")
 		})
 	}
 }

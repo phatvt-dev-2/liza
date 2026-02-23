@@ -1,7 +1,6 @@
 package ops
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -35,12 +34,7 @@ func TestSubmitForReview_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := SubmitForReview("/nonexistent", tt.taskID, tt.commitSHA, tt.agentID)
-			if err == nil {
-				t.Fatal("Expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tt.errContains) {
-				t.Errorf("Error = %q, want to contain %q", err.Error(), tt.errContains)
-			}
+			testhelpers.RequireErrorContains(t, err, tt.errContains)
 		})
 	}
 }
@@ -73,12 +67,7 @@ func TestSubmitForReview_WrongStatus(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := SubmitForReview(tmpDir, "task-1", "abc123", "coder-1")
-	if err == nil {
-		t.Fatal("Expected error for non-IMPLEMENTING task")
-	}
-	if !strings.Contains(err.Error(), "not IMPLEMENTING") {
-		t.Errorf("Error = %q, want to contain 'not IMPLEMENTING'", err.Error())
-	}
+	testhelpers.RequireErrorContains(t, err, "not IMPLEMENTING")
 }
 
 func TestSubmitForReview_WrongAgent(t *testing.T) {
@@ -93,12 +82,7 @@ func TestSubmitForReview_WrongAgent(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := SubmitForReview(tmpDir, "task-1", "abc123", "coder-2")
-	if err == nil {
-		t.Fatal("Expected error for wrong agent")
-	}
-	if !strings.Contains(err.Error(), "not assigned to agent") {
-		t.Errorf("Error = %q, want to contain 'not assigned to agent'", err.Error())
-	}
+	testhelpers.RequireErrorContains(t, err, "not assigned to agent")
 }
 
 func TestSubmitForReview_NoWorktree(t *testing.T) {
@@ -113,10 +97,5 @@ func TestSubmitForReview_NoWorktree(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := SubmitForReview(tmpDir, "task-1", "abc123", "coder-1")
-	if err == nil {
-		t.Fatal("Expected error for missing worktree")
-	}
-	if !strings.Contains(err.Error(), "no worktree") {
-		t.Errorf("Error = %q, want to contain 'no worktree'", err.Error())
-	}
+	testhelpers.RequireErrorContains(t, err, "no worktree")
 }

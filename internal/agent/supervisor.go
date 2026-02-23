@@ -56,7 +56,7 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, prompt
 	case "vibe":
 		cmd = exec.CommandContext(ctx, "vibe", "-p", prompt)
 	case "kimi":
-		cmd = exec.CommandContext(ctx, "kimi", "-p", prompt)  // kimi is an alias to claude with Kimi specific env vars
+		cmd = exec.CommandContext(ctx, "kimi", "-p", prompt) // kimi is an alias to claude with Kimi specific env vars
 	default:
 		return 0, fmt.Errorf("unknown CLI: %s", cliName)
 	}

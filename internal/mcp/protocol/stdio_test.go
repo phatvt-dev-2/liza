@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+// mustUnmarshalRequest parses raw JSON into a JSONRPCRequest, failing the test on error.
+func mustUnmarshalRequest(t *testing.T, raw string) JSONRPCRequest {
+	t.Helper()
+	var req JSONRPCRequest
+	if err := json.Unmarshal([]byte(raw), &req); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+	return req
+}
+
 // TestParseInitializeRequest verifies we can parse MCP initialize requests
 func TestParseInitializeRequest(t *testing.T) {
 	rawJSON := `{
@@ -21,10 +31,7 @@ func TestParseInitializeRequest(t *testing.T) {
 		}
 	}`
 
-	var req JSONRPCRequest
-	if err := json.Unmarshal([]byte(rawJSON), &req); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
-	}
+	req := mustUnmarshalRequest(t, rawJSON)
 
 	if req.JSONRPC != "2.0" {
 		t.Errorf("Expected JSONRPC 2.0, got %s", req.JSONRPC)
@@ -38,7 +45,6 @@ func TestParseInitializeRequest(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected params to be map")
 	}
-
 	if params["protocolVersion"] != "2024-11-05" {
 		t.Errorf("Unexpected protocol version: %v", params["protocolVersion"])
 	}
@@ -62,25 +68,13 @@ func TestSerializeInitializeResponse(t *testing.T) {
 		},
 	}
 
-	data, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("Failed to marshal: %v", err)
-	}
-
-	var parsed map[string]any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
-	}
+	parsed := mustMarshalToMap(t, resp)
 
 	if parsed["jsonrpc"] != "2.0" {
 		t.Errorf("Expected jsonrpc 2.0, got %v", parsed["jsonrpc"])
 	}
 
-	result, ok := parsed["result"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected result to be map")
-	}
-
+	result := mustGetMap(t, parsed, "result")
 	if result["protocolVersion"] != "2024-11-05" {
 		t.Errorf("Unexpected protocol version in result")
 	}
@@ -100,10 +94,7 @@ func TestParseToolCallRequest(t *testing.T) {
 		}
 	}`
 
-	var req JSONRPCRequest
-	if err := json.Unmarshal([]byte(rawJSON), &req); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
-	}
+	req := mustUnmarshalRequest(t, rawJSON)
 
 	if req.Method != "tools/call" {
 		t.Errorf("Expected method tools/call, got %s", req.Method)
@@ -113,16 +104,11 @@ func TestParseToolCallRequest(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected params to be map")
 	}
-
 	if params["name"] != "liza_get" {
 		t.Errorf("Expected tool name liza_get, got %v", params["name"])
 	}
 
-	args, ok := params["arguments"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected arguments to be map")
-	}
-
+	args := mustGetMap(t, params, "arguments")
 	if args["query"] != "tasks" {
 		t.Errorf("Expected query tasks, got %v", args["query"])
 	}
@@ -143,25 +129,9 @@ func TestSerializeToolCallResponse(t *testing.T) {
 		},
 	}
 
-	data, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("Failed to marshal: %v", err)
-	}
-
-	var parsed map[string]any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
-	}
-
-	result, ok := parsed["result"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected result to be map")
-	}
-
-	content, ok := result["content"].([]any)
-	if !ok {
-		t.Fatal("Expected content to be array")
-	}
+	parsed := mustMarshalToMap(t, resp)
+	result := mustGetMap(t, parsed, "result")
+	content := mustGetSlice(t, result, "content")
 
 	if len(content) != 1 {
 		t.Errorf("Expected 1 content item, got %d", len(content))
@@ -182,20 +152,8 @@ func TestErrorSerialization(t *testing.T) {
 		},
 	}
 
-	data, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("Failed to marshal: %v", err)
-	}
-
-	var parsed map[string]any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
-	}
-
-	errObj, ok := parsed["error"].(map[string]any)
-	if !ok {
-		t.Fatal("Expected error to be map")
-	}
+	parsed := mustMarshalToMap(t, resp)
+	errObj := mustGetMap(t, parsed, "error")
 
 	if errObj["code"].(float64) != -32602 {
 		t.Errorf("Expected error code -32602, got %v", errObj["code"])
