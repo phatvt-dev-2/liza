@@ -19,7 +19,7 @@ type SupervisorConfig struct {
 	StatePath        string
 	LogPath          string
 	SpecsDir         string // For prompt building
-	CLIName          string // "claude", "codex", "gemini", "mistral"
+	CLIName          string // "claude", "codex", "gemini", "mistral", "kimi"
 	Interactive      bool   // Print prompt location, don't execute
 	InitialTask      string // Optional task ID to resume
 	Executor         CLIExecutor
@@ -55,6 +55,8 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, prompt
 		cmd = exec.CommandContext(ctx, "gemini", "-p", prompt)
 	case "vibe":
 		cmd = exec.CommandContext(ctx, "vibe", "-p", prompt)
+	case "kimi":
+		cmd = exec.CommandContext(ctx, "kimi", "-p", prompt)  // kimi is an alias to claude with Kimi specific env vars
 	default:
 		return 0, fmt.Errorf("unknown CLI: %s", cliName)
 	}

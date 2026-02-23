@@ -916,8 +916,8 @@ Example:
 		cliName, _ := cmd.Flags().GetString("cli")
 		interactive, _ := cmd.Flags().GetBool("interactive")
 
-		if !slices.Contains([]string{"claude", "codex", "gemini", "mistral"}, cliName) {
-			return fmt.Errorf("invalid CLI: %s (must be claude, codex, gemini, or mistral)", cliName)
+		if !slices.Contains([]string{"claude", "codex", "gemini", "mistral", "kimi"}, cliName) {
+			return fmt.Errorf("invalid CLI: %s (must be claude, codex, gemini, mistral, or kimi)", cliName)
 		}
 
 		specsDir := os.Getenv("LIZA_SPECS")
