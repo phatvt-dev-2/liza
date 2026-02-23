@@ -17,7 +17,6 @@ import (
 
 const (
 	DefaultCheckInterval         = 10 * time.Second
-	LeaseGracePeriod             = 120 * time.Second
 	StallThreshold               = 30 * time.Minute
 	StaleDraftThreshold          = 30 * time.Minute
 	CheckpointStaleThreshold     = 30 * time.Minute
@@ -228,7 +227,7 @@ func checkCircuitBreakerEscalation(projectRoot string, state *models.State) ([]a
 func checkExpiredLeases(state *models.State) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
-	graceDeadline := now.Add(-LeaseGracePeriod)
+	graceDeadline := now.Add(-models.LeaseExpiryGracePeriod)
 
 	// Check agent leases (coders with active tasks)
 	for agentID, agent := range state.Agents {

@@ -11,11 +11,6 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
-const (
-	// GracePeriod is the grace period for expired leases (in seconds)
-	GracePeriod = 60
-)
-
 // ValidateCommand validates the state.yaml file against all schema rules.
 // Returns an error with detailed description if validation fails.
 func ValidateCommand(statePath string, skipSpecFileCheck bool) error {
@@ -304,7 +299,8 @@ func checkCircular(start, current string, visited map[string]bool, state *models
 }
 
 func validateAgentInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-	now := time.Now().Unix()
+	now := time.Now().UTC()
+	graceDeadline := now.Add(-models.LeaseExpiryGracePeriod)
 
 	for agentID, agent := range state.Agents {
 		// WORKING agent must have current_task
@@ -319,8 +315,7 @@ func validateAgentInvariants(state *models.State, projectRoot string, skipSpecFi
 			}
 
 			// Check lease expiry with grace period (warning only in original script)
-			leaseEpoch := agent.LeaseExpires.Unix()
-			if leaseEpoch+GracePeriod < now {
+			if agent.LeaseExpires.Before(graceDeadline) {
 				// In bash this is a warning, but we'll treat it as an error for stricter validation
 				// Could make this configurable if needed
 				fmt.Fprintf(os.Stderr, "WARNING: Agent %s has status WORKING but lease expired (may be long-running operation)\n", agentID)

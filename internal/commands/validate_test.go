@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -330,6 +332,71 @@ func TestValidateCommand_AgentInvariants(t *testing.T) {
 			}
 			if tt.wantErr && tt.errContains != "" {
 				testhelpers.AssertErrorContains(t, err, tt.errContains)
+			}
+		})
+	}
+}
+
+func TestValidateAgentInvariants_LeaseExpiryGracePeriod(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name        string
+		leaseExpiry time.Time
+		wantWarning bool
+	}{
+		{
+			name:        "within grace period",
+			leaseExpiry: now.Add(-(models.LeaseExpiryGracePeriod - 30*time.Second)),
+			wantWarning: false,
+		},
+		{
+			name:        "past grace period",
+			leaseExpiry: now.Add(-(models.LeaseExpiryGracePeriod + 30*time.Second)),
+			wantWarning: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			currentTask := "task-1"
+			state := &models.State{
+				Agents: map[string]models.Agent{
+					"coder-1": {
+						Role:         "coder",
+						Status:       models.AgentStatusWorking,
+						CurrentTask:  &currentTask,
+						LeaseExpires: &tt.leaseExpiry,
+						Heartbeat:    now,
+						Terminal:     "term-1",
+					},
+				},
+			}
+
+			oldStderr := os.Stderr
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("os.Pipe() error = %v", err)
+			}
+			os.Stderr = w
+
+			validateErr := validateAgentInvariants(state, "", true)
+
+			w.Close()
+			os.Stderr = oldStderr
+
+			var output bytes.Buffer
+			if _, err := output.ReadFrom(r); err != nil {
+				t.Fatalf("ReadFrom(stderr) error = %v", err)
+			}
+
+			if validateErr != nil {
+				t.Fatalf("validateAgentInvariants() error = %v", validateErr)
+			}
+
+			hasWarning := strings.Contains(output.String(), "lease expired")
+			if hasWarning != tt.wantWarning {
+				t.Errorf("warning present = %v, want %v; output=%q", hasWarning, tt.wantWarning, output.String())
 			}
 		})
 	}
