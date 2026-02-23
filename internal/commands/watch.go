@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/analysis"
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -481,59 +481,30 @@ func checkStalled(logPath string, cache map[string]time.Time) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
 
-	// Check if log file exists
-	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+	// Use typed log parsing to get the last timestamp
+	logger := log.New(logPath)
+	lastTimestamp, err := logger.GetLastTimestamp()
+	if err != nil || lastTimestamp.IsZero() {
 		return alerts
 	}
 
-	// Read log entries
-	data, err := os.ReadFile(logPath)
-	if err != nil || len(data) == 0 {
-		return alerts
-	}
-
-	// Parse to find last timestamp
-	lines := strings.Split(string(data), "\n")
-	var lastTimestamp time.Time
-
-	// Find last non-empty line with timestamp
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" || line == "-" {
-			continue
+	age := time.Since(lastTimestamp)
+	if age > StallThreshold {
+		// Throttle alerts to once every 5 minutes
+		cacheKey := "stalled:alert"
+		lastAlert, seen := cache[cacheKey]
+		if !seen || now.Sub(lastAlert) >= 5*time.Minute {
+			alerts = append(alerts, alert{
+				Timestamp: now,
+				Level:     alertLevelWarning,
+				Category:  "STALLED",
+				Message:   fmt.Sprintf("no progress for %d minutes", int(age.Minutes())),
+			})
+			cache[cacheKey] = now
 		}
-		// Look for "timestamp:" field
-		if strings.Contains(line, "timestamp:") {
-			parts := strings.SplitN(line, "timestamp:", 2)
-			if len(parts) == 2 {
-				timestampStr := strings.TrimSpace(parts[1])
-				if t, err := time.Parse(time.RFC3339, timestampStr); err == nil {
-					lastTimestamp = t
-					break
-				}
-			}
-		}
-	}
-
-	if !lastTimestamp.IsZero() {
-		age := time.Since(lastTimestamp)
-		if age > StallThreshold {
-			// Throttle alerts to once every 5 minutes
-			cacheKey := "stalled:alert"
-			lastAlert, seen := cache[cacheKey]
-			if !seen || now.Sub(lastAlert) >= 5*time.Minute {
-				alerts = append(alerts, alert{
-					Timestamp: now,
-					Level:     alertLevelWarning,
-					Category:  "STALLED",
-					Message:   fmt.Sprintf("no progress for %d minutes", int(age.Minutes())),
-				})
-				cache[cacheKey] = now
-			}
-		} else {
-			// Clear cache if system is no longer stalled
-			delete(cache, "stalled:alert")
-		}
+	} else {
+		// Clear cache if system is no longer stalled
+		delete(cache, "stalled:alert")
 	}
 
 	return alerts

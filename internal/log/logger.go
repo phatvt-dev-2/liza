@@ -136,3 +136,18 @@ func (l *Logger) Read() ([]Entry, error) {
 
 	return entries, nil
 }
+
+// GetLastTimestamp returns the timestamp of the most recent log entry.
+// Returns zero time if the log file doesn't exist or is empty.
+func (l *Logger) GetLastTimestamp() (time.Time, error) {
+	entries, err := l.Read()
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	if len(entries) == 0 {
+		return time.Time{}, nil
+	}
+
+	return entries[len(entries)-1].Timestamp, nil
+}
