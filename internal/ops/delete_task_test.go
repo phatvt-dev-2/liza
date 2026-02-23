@@ -1,12 +1,15 @@
 package ops
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -437,5 +440,66 @@ func TestDeleteTask_WorktreePreserved(t *testing.T) {
 	}
 	if !result.WorktreePreserved {
 		t.Error("WorktreePreserved should be true when worktree exists but deleteWorktree=false")
+	}
+}
+
+func TestDeleteTask_CommitFailureDoesNotDeleteWorktreeOrBranch(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraft, time.Now().UTC())
+	wt := ".worktrees/task-1"
+	task.Worktree = &wt
+	state.Tasks = append(state.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	gitWrapper := git.New(tmpDir)
+	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("Failed to create task worktree: %v", err)
+	}
+
+	// Force state commit failure while keeping lock acquisition possible.
+	// filelock writes state.yaml.lock.pid on each lock, so pre-create it
+	// before making .liza non-writable.
+	lizaDir := filepath.Join(tmpDir, ".liza")
+	pidPath := filepath.Join(lizaDir, "state.yaml.lock.pid")
+	if err := os.WriteFile(pidPath, []byte("0"), 0644); err != nil {
+		t.Fatalf("Failed to pre-create pid file: %v", err)
+	}
+	if err := os.Chmod(lizaDir, 0555); err != nil {
+		t.Fatalf("Failed to make .liza read-only: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(lizaDir, 0755)
+	})
+
+	_, err := DeleteTask(tmpDir, "task-1", false, true, "test")
+	if err == nil {
+		t.Fatal("Expected DeleteTask to fail when state commit cannot write")
+	}
+	if !strings.Contains(err.Error(), "failed to delete task") {
+		t.Errorf("Error = %q, want to contain 'failed to delete task'", err.Error())
+	}
+
+	// Task should still exist because state commit failed.
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.FindTask("task-1") == nil {
+		t.Fatal("Task should still exist after failed delete")
+	}
+
+	// Side effects must not run before successful commit.
+	worktreePath := filepath.Join(tmpDir, ".worktrees", "task-1")
+	if _, err := os.Stat(worktreePath); err != nil {
+		t.Fatalf("Worktree should still exist after failed delete, stat error: %v", err)
+	}
+	branches := testhelpers.MustGit(t, tmpDir, "branch", "--list", "task/task-1")
+	if !strings.Contains(branches, "task/task-1") {
+		t.Fatalf("Task branch should still exist after failed delete, branches output: %q", branches)
 	}
 }

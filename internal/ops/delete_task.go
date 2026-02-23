@@ -132,30 +132,12 @@ func DeleteTask(projectRoot, taskID string, force, deleteWorktree bool, reason s
 	}
 
 	taskStatus := task.Status
+	taskHasWorktree := task.Worktree != nil
 
-	// Handle worktree (outside lock, after validation)
+	// Build result early; destructive side effects happen only after commit succeeds.
 	result := &DeleteTaskResult{
 		TaskID:         taskID,
 		PreviousStatus: taskStatus,
-	}
-
-	if task.Worktree != nil {
-		gitWrapper := git.New(lp.ProjectRoot())
-		result.WorktreePath = gitWrapper.GetWorktreePath(taskID)
-
-		if deleteWorktree {
-			if err := gitWrapper.RemoveWorktree(taskID); err != nil {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("failed to remove worktree: %v", err))
-			} else {
-				result.WorktreeDeleted = true
-			}
-
-			// Delete branch (ignore errors if branch doesn't exist)
-			branchName := paths.TaskBranchPrefix + taskID
-			_ = gitWrapper.DeleteBranch(branchName)
-		} else {
-			result.WorktreePreserved = true
-		}
 	}
 
 	// Atomic state update
@@ -206,6 +188,27 @@ func DeleteTask(projectRoot, taskID string, force, deleteWorktree bool, reason s
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete task: %w", err)
+	}
+
+	// Handle worktree cleanup after successful state mutation to avoid
+	// state/filesystem drift when commit fails.
+	if taskHasWorktree {
+		gitWrapper := git.New(lp.ProjectRoot())
+		result.WorktreePath = gitWrapper.GetWorktreePath(taskID)
+
+		if deleteWorktree {
+			if err := gitWrapper.RemoveWorktree(taskID); err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("failed to remove worktree: %v", err))
+			} else {
+				result.WorktreeDeleted = true
+			}
+
+			// Delete branch (ignore errors if branch doesn't exist)
+			branchName := paths.TaskBranchPrefix + taskID
+			_ = gitWrapper.DeleteBranch(branchName)
+		} else {
+			result.WorktreePreserved = true
+		}
 	}
 
 	return result, nil
