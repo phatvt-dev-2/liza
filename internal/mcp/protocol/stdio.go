@@ -3,33 +3,56 @@ package protocol
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 )
 
+// MaxRequestSize is the maximum allowed size for a JSON-RPC request (10MB)
+const MaxRequestSize = 10 * 1024 * 1024
+
+// ErrRequestTooLarge is returned when a request exceeds MaxRequestSize
+var ErrRequestTooLarge = errors.New("request exceeds maximum allowed size")
+
 // StdioTransport implements JSON-RPC 2.0 over stdin/stdout
 type StdioTransport struct {
-	reader *bufio.Reader
-	writer *bufio.Writer
+	scanner *bufio.Scanner
+	writer  *bufio.Writer
 }
 
 // NewStdioTransport creates a new stdio transport
 func NewStdioTransport() *StdioTransport {
+	return newStdioTransport(os.Stdin, os.Stdout)
+}
+
+// newStdioTransport creates a transport from arbitrary reader/writer (for testing)
+func newStdioTransport(r io.Reader, w io.Writer) *StdioTransport {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), MaxRequestSize+1)
 	return &StdioTransport{
-		reader: bufio.NewReader(os.Stdin),
-		writer: bufio.NewWriter(os.Stdout),
+		scanner: scanner,
+		writer:  bufio.NewWriter(w),
 	}
 }
 
-// ReadRequest reads a JSON-RPC request from stdin
+// ReadRequest reads a JSON-RPC request from stdin with a maximum size limit.
+// Returns ErrRequestTooLarge if the request exceeds MaxRequestSize.
 func (t *StdioTransport) ReadRequest() (*JSONRPCRequest, error) {
-	line, err := t.reader.ReadBytes('\n')
-	if err != nil {
-		if err == io.EOF {
-			return nil, err
+	if !t.scanner.Scan() {
+		err := t.scanner.Err()
+		if err == nil {
+			return nil, io.EOF
+		}
+		if err == bufio.ErrTooLong {
+			return nil, ErrRequestTooLarge
 		}
 		return nil, fmt.Errorf("failed to read request: %w", err)
+	}
+
+	line := t.scanner.Bytes()
+	if len(line) == 0 {
+		return nil, io.EOF
 	}
 
 	var req JSONRPCRequest

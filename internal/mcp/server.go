@@ -257,9 +257,13 @@ func (s *Server) runWithTransport(transport runTransport) error {
 			if errors.Is(err, io.EOF) || err.Error() == "EOF" {
 				return nil
 			}
-			// Write parse error and continue unless writing the error fails.
-			if writeErr := transport.WriteError(nil, protocol.ParseError, err.Error(), nil); writeErr != nil {
-				return fmt.Errorf("failed to write parse error response: %w", writeErr)
+			// Use appropriate error code: RequestTooLarge for size violations, ParseError for others
+			errorCode := protocol.ParseError
+			if errors.Is(err, protocol.ErrRequestTooLarge) {
+				errorCode = protocol.RequestTooLarge
+			}
+			if writeErr := transport.WriteError(nil, errorCode, err.Error(), nil); writeErr != nil {
+				return fmt.Errorf("failed to write error response: %w", writeErr)
 			}
 			continue
 		}

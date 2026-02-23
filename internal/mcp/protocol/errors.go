@@ -31,6 +31,9 @@ const (
 
 	// NotFound entity not found
 	NotFound = -32004
+
+	// RequestTooLarge request exceeds maximum allowed size
+	RequestTooLarge = -32005
 )
 
 // NewError creates a new JSONRPCError
