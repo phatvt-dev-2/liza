@@ -94,10 +94,27 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 	return nil
 }
 
-// unregisterAgent removes an agent from the state
+// unregisterAgent releases any task claim held by the agent, then removes
+// the agent from state. Both operations happen in a single atomic modify
+// so that an interrupt between them cannot leave a stuck task.
 func unregisterAgent(bb *db.Blackboard, agentID string) {
 	logger := GetLogger()
+	now := time.Now().UTC()
+
 	err := bb.Modify(func(state *models.State) error {
+		agent, exists := state.Agents[agentID]
+		if !exists {
+			return nil
+		}
+
+		// Release task claim if agent held one
+		if agent.CurrentTask != nil {
+			taskID := *agent.CurrentTask
+			if task := state.FindTask(taskID); task != nil {
+				releaseTaskClaim(state, task, agent.Role, agentID, now)
+			}
+		}
+
 		delete(state.Agents, agentID)
 		return nil
 	})
@@ -105,6 +122,45 @@ func unregisterAgent(bb *db.Blackboard, agentID string) {
 	if err != nil {
 		logger.Warn("Failed to unregister agent", "error", err, "agent_id", agentID)
 	}
+}
+
+// releaseTaskClaim transitions a task back to its unclaimed status and clears
+// the claim fields. Best-effort: logs warnings instead of failing.
+func releaseTaskClaim(state *models.State, task *models.Task, role, agentID string, now time.Time) {
+	logger := GetLogger()
+	reason := "agent interrupted"
+
+	switch role {
+	case roles.RuntimeCoder:
+		if task.Status == models.TaskStatusImplementing {
+			if err := task.Transition(models.TaskStatusReady); err != nil {
+				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
+			}
+		}
+		task.AssignedTo = nil
+		task.LeaseExpires = nil
+
+	case roles.RuntimeCodeReviewer:
+		if task.Status == models.TaskStatusReviewing {
+			if err := task.Transition(models.TaskStatusReadyForReview); err != nil {
+				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
+			}
+		}
+		task.ReviewingBy = nil
+		task.ReviewLeaseExpires = nil
+
+	default:
+		return
+	}
+
+	state.ReleaseAgent(agentID)
+
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:   now,
+		Event:  "claim_released",
+		Agent:  &agentID,
+		Reason: &reason,
+	})
 }
 
 // resetAgentToIdle resets an agent's status to IDLE and clears CurrentTask

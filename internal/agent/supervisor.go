@@ -159,6 +159,12 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	mergeRetries := 0
 
 	for {
+		// Check context cancellation (signal received)
+		if ctx.Err() != nil {
+			GetLogger().Info("Signal received, shutting down")
+			return nil
+		}
+
 		// Check ABORT
 		if checkAbort(config.ProjectRoot) {
 			GetLogger().Info("ABORT signal received, system shutting down")

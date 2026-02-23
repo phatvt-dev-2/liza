@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/liza-mas/liza/internal/agent"
@@ -939,7 +941,9 @@ Example:
 			Executor:    &agent.DefaultCLIExecutor{},
 		}
 
-		return agent.RunSupervisor(context.Background(), config)
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return agent.RunSupervisor(ctx, config)
 	},
 }
 
