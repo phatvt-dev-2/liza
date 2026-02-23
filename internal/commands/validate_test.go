@@ -351,6 +351,14 @@ func TestValidateAgentInvariants_LeaseExpiryGracePeriod(t *testing.T) {
 			wantWarning: false,
 		},
 		{
+			// Lease expired exactly at the grace boundary should not warn.
+			// Before() is strict <, so equal-to-deadline is not "before" it.
+			// 1ms buffer accounts for wall-clock drift between test and function.
+			name:        "exactly at grace period boundary",
+			leaseExpiry: now.Add(-models.LeaseExpiryGracePeriod + time.Millisecond),
+			wantWarning: false,
+		},
+		{
 			name:        "past grace period",
 			leaseExpiry: now.Add(-(models.LeaseExpiryGracePeriod + 30*time.Second)),
 			wantWarning: true,
@@ -373,30 +381,18 @@ func TestValidateAgentInvariants_LeaseExpiryGracePeriod(t *testing.T) {
 				},
 			}
 
-			oldStderr := os.Stderr
-			r, w, err := os.Pipe()
-			if err != nil {
-				t.Fatalf("os.Pipe() error = %v", err)
-			}
-			os.Stderr = w
+			var buf bytes.Buffer
+			warnWriter = &buf
+			defer func() { warnWriter = os.Stderr }()
 
 			validateErr := validateAgentInvariants(state, "", true)
-
-			w.Close()
-			os.Stderr = oldStderr
-
-			var output bytes.Buffer
-			if _, err := output.ReadFrom(r); err != nil {
-				t.Fatalf("ReadFrom(stderr) error = %v", err)
-			}
-
 			if validateErr != nil {
 				t.Fatalf("validateAgentInvariants() error = %v", validateErr)
 			}
 
-			hasWarning := strings.Contains(output.String(), "lease expired")
+			hasWarning := strings.Contains(buf.String(), "lease expired")
 			if hasWarning != tt.wantWarning {
-				t.Errorf("warning present = %v, want %v; output=%q", hasWarning, tt.wantWarning, output.String())
+				t.Errorf("warning present = %v, want %v; output=%q", hasWarning, tt.wantWarning, buf.String())
 			}
 		})
 	}

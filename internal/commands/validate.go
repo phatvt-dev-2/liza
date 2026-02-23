@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,11 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 )
+
+// warnWriter is the destination for non-fatal validation warnings.
+// Defaults to os.Stderr; tests override it to capture output without
+// monkey-patching the global stderr (which is not goroutine-safe).
+var warnWriter io.Writer = os.Stderr
 
 // ValidateCommand validates the state.yaml file against all schema rules.
 // Returns an error with detailed description if validation fails.
@@ -318,7 +324,7 @@ func validateAgentInvariants(state *models.State, projectRoot string, skipSpecFi
 			if agent.LeaseExpires.Before(graceDeadline) {
 				// In bash this is a warning, but we'll treat it as an error for stricter validation
 				// Could make this configurable if needed
-				fmt.Fprintf(os.Stderr, "WARNING: Agent %s has status WORKING but lease expired (may be long-running operation)\n", agentID)
+				fmt.Fprintf(warnWriter, "WARNING: Agent %s has status WORKING but lease expired (may be long-running operation)\n", agentID)
 			}
 		}
 	}

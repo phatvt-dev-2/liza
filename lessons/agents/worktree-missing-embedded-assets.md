@@ -15,17 +15,19 @@ Any build/test path that compiles `internal/embedded/embedded.go` fails because 
 
 ## Solution
 
-Before running Go commands in the worktree, sync embedded assets from the main repo:
+Before running Go commands in the worktree, sync embedded assets from the main repo root:
 
 ```bash
-cp -a /home/tangi/Workspace/liza/internal/embedded/claude-settings.json \
-  /home/tangi/Workspace/liza/internal/embedded/mcp.json \
-  /home/tangi/Workspace/liza/internal/embedded/contracts \
-  /home/tangi/Workspace/liza/internal/embedded/skills \
-  /home/tangi/Workspace/liza/.worktrees/<task-id>/internal/embedded/
+cp -a "$PROJECT_ROOT/internal/embedded/claude-settings.json" \
+  "$PROJECT_ROOT/internal/embedded/mcp.json" \
+  "$PROJECT_ROOT/internal/embedded/contracts" \
+  "$PROJECT_ROOT/internal/embedded/skills" \
+  "$PROJECT_ROOT/.worktrees/<task-id>/internal/embedded/"
 ```
+
+Or equivalently, run `make sync-embedded` from the worktree directory.
 
 ## References
 
-- `/home/tangi/Workspace/liza/internal/embedded/embedded.go`
-- `/home/tangi/Workspace/liza/.worktrees/unify-grace-period/internal/embedded/`
+- `internal/embedded/embedded.go` (the `go:embed` directives)
+- `Makefile` (`sync-embedded` target)
