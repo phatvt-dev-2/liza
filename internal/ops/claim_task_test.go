@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -227,6 +228,57 @@ func TestClaimTask_MetDependencies(t *testing.T) {
 	}
 	if result.TaskID != "task-1" {
 		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+}
+
+func TestUnmetDependencies(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name      string
+		dependsOn []string
+		tasks     []models.Task
+		want      []string
+	}{
+		{
+			name:      "no dependencies",
+			dependsOn: nil,
+			tasks:     nil,
+			want:      nil,
+		},
+		{
+			name:      "all dependencies merged",
+			dependsOn: []string{"dep-1", "dep-2"},
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("dep-1", models.TaskStatusMerged, now),
+				testhelpers.BuildTaskByStatus("dep-2", models.TaskStatusMerged, now),
+			},
+			want: nil,
+		},
+		{
+			name:      "includes missing and non-merged dependencies",
+			dependsOn: []string{"dep-1", "dep-missing", "dep-2"},
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("dep-1", models.TaskStatusMerged, now),
+				testhelpers.BuildTaskByStatus("dep-2", models.TaskStatusReady, now),
+			},
+			want: []string{"dep-missing", "dep-2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := testhelpers.CreateValidState()
+			state.Tasks = append([]models.Task(nil), tt.tasks...)
+
+			task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+			task.DependsOn = tt.dependsOn
+
+			got := unmetDependencies(&task, state)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("unmetDependencies() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

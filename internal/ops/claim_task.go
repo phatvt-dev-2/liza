@@ -27,6 +27,11 @@ type ClaimResult struct {
 	WorktreeRecreated bool   // true if old worktree was deleted and new one created
 }
 
+type claimWorktreePhaseResult struct {
+	created bool
+	deleted bool
+}
+
 // ClaimTask implements the three-phase claim pattern to prevent TOCTOU races.
 // Phase 1: Validate under lock (no mutation)
 // Phase 2: Handle worktree outside lock
@@ -65,18 +70,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 	switch task.Status {
 	case models.TaskStatusReady:
-		// Check dependencies are satisfied
-		if len(task.DependsOn) > 0 {
-			var unmet []string
-			for _, depID := range task.DependsOn {
-				depTask := state.FindTask(depID)
-				if depTask == nil || depTask.Status != models.TaskStatusMerged {
-					unmet = append(unmet, depID)
-				}
-			}
-			if len(unmet) > 0 {
-				return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
-			}
+		if err := ensureNoUnmetDependencies(task, state, "task has unmet dependencies: %v"); err != nil {
+			return nil, err
 		}
 	case models.TaskStatusRejected, models.TaskStatusIntegrationFailed:
 		// These are valid source states
@@ -126,96 +121,21 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		return nil, fmt.Errorf("failed to get integration branch commit: %w", err)
 	}
 
-	var worktreeCreated bool
-	var worktreeDeleted bool
-
-	switch taskStatus {
-	case models.TaskStatusReady:
-		// New claim - create worktree
-		branchName := paths.TaskBranchPrefix + taskID
-
-		// Check if branch or worktree already exists - this indicates a race condition
-		// or stale state. Fail fast instead of trying to clean up, as another thread
-		// might have just created it.
-		branchExists, err := gitWrapper.BranchExists(branchName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check branch existence: %w", err)
-		}
-		if branchExists {
-			return nil, fmt.Errorf("branch %s already exists - another claim may be in progress", branchName)
-		}
-
-		if _, err := os.Stat(worktreeDir); err == nil {
-			return nil, fmt.Errorf("worktree %s already exists for READY task - another claim may be in progress", worktreeRel)
-		}
-
-		// Create worktree
-		_, err = gitWrapper.CreateWorktree(taskID, integrationBranch)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create worktree: %w", err)
-		}
-		worktreeCreated = true
-
-	case models.TaskStatusRejected:
-		branchName := paths.TaskBranchPrefix + taskID
-
-		if previousAssignee == agentID {
-			// Same coder re-claiming - preserve and validate the existing task worktree.
-			if err := validateRejectedSameCoderWorktree(gitWrapper, taskID, worktreeDir, worktreeRel); err != nil {
-				return nil, err
-			}
-		} else {
-			// Different coder - recreate worktree. If replacement creation fails after teardown,
-			// restore the previous task worktree so REJECTED state remains recoverable.
-			var recoveryRef string
-			if _, err := os.Stat(worktreeDir); err == nil {
-				branchExists, err := gitWrapper.BranchExists(branchName)
-				if err != nil {
-					return nil, fmt.Errorf("failed to check existing task branch: %w", err)
-				}
-				if branchExists {
-					recoveryRef, err = gitWrapper.GetCommitSHA(branchName)
-					if err != nil {
-						return nil, fmt.Errorf("failed to capture existing task branch for recovery: %w", err)
-					}
-				}
-
-				if err := gitWrapper.RemoveWorktree(taskID); err != nil {
-					return nil, fmt.Errorf("failed to remove existing worktree for reassignment: %w", err)
-				}
-
-				// RemoveWorktree best-effort deletes the task branch. Ensure a clean branch namespace
-				// before creating the replacement.
-				_ = gitWrapper.DeleteBranch(branchName)
-				worktreeDeleted = true
-			}
-			_, err := gitWrapper.CreateWorktree(taskID, integrationBranch)
-			if err != nil {
-				if worktreeDeleted {
-					if recoveryErr := restoreRejectedWorktreeAfterCreateFailure(
-						gitWrapper,
-						taskID,
-						recoveryRef,
-						integrationBranch,
-					); recoveryErr != nil {
-						return nil, fmt.Errorf(
-							"failed to create worktree: %w; failed to recover previous task worktree: %v",
-							err,
-							recoveryErr,
-						)
-					}
-				}
-				return nil, fmt.Errorf("failed to create replacement worktree (previous worktree restored): %w", err)
-			}
-			worktreeCreated = true
-		}
-
-	case models.TaskStatusIntegrationFailed:
-		// Preserve worktree for conflict resolution
-		if _, err := os.Stat(worktreeDir); os.IsNotExist(err) {
-			return nil, fmt.Errorf("worktree %s missing for INTEGRATION_FAILED task", worktreeRel)
-		}
+	worktreePhase, err := handleClaimTaskWorktreePhase(
+		gitWrapper,
+		taskID,
+		taskStatus,
+		integrationBranch,
+		previousAssignee,
+		agentID,
+		worktreeDir,
+		worktreeRel,
+	)
+	if err != nil {
+		return nil, err
 	}
+	worktreeCreated := worktreePhase.created
+	worktreeDeleted := worktreePhase.deleted
 
 	// --- Phase 3: Re-validate and Commit ---
 	now := time.Now().UTC()
@@ -242,17 +162,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 		// For READY: re-check dependencies
 		if taskStatus == models.TaskStatusReady {
-			if len(task.DependsOn) > 0 {
-				var unmet []string
-				for _, depID := range task.DependsOn {
-					depTask := state.FindTask(depID)
-					if depTask == nil || depTask.Status != models.TaskStatusMerged {
-						unmet = append(unmet, depID)
-					}
-				}
-				if len(unmet) > 0 {
-					return fmt.Errorf("race condition: dependencies changed: %v", unmet)
-				}
+			if err := ensureNoUnmetDependencies(task, state, "race condition: dependencies changed: %v"); err != nil {
+				return err
 			}
 		}
 
@@ -353,6 +264,162 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		PreviousAssignee:  previousAssignee,
 		WorktreeRecreated: worktreeDeleted && worktreeCreated,
 	}, nil
+}
+
+func unmetDependencies(task *models.Task, state *models.State) []string {
+	var unmet []string
+	for _, depID := range task.DependsOn {
+		depTask := state.FindTask(depID)
+		if depTask == nil || depTask.Status != models.TaskStatusMerged {
+			unmet = append(unmet, depID)
+		}
+	}
+	return unmet
+}
+
+func ensureNoUnmetDependencies(task *models.Task, state *models.State, errFormat string) error {
+	if len(task.DependsOn) == 0 {
+		return nil
+	}
+
+	unmet := unmetDependencies(task, state)
+	if len(unmet) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf(errFormat, unmet)
+}
+
+func handleClaimTaskWorktreePhase(
+	gitWrapper *git.Git,
+	taskID string,
+	taskStatus models.TaskStatus,
+	integrationBranch, previousAssignee, agentID, worktreeDir, worktreeRel string,
+) (claimWorktreePhaseResult, error) {
+	result := claimWorktreePhaseResult{}
+
+	switch taskStatus {
+	case models.TaskStatusReady:
+		if err := handleReadyClaimWorktree(gitWrapper, taskID, integrationBranch, worktreeDir, worktreeRel); err != nil {
+			return result, err
+		}
+		result.created = true
+		return result, nil
+	case models.TaskStatusRejected:
+		return handleRejectedClaimWorktree(
+			gitWrapper,
+			taskID,
+			integrationBranch,
+			previousAssignee,
+			agentID,
+			worktreeDir,
+			worktreeRel,
+		)
+	case models.TaskStatusIntegrationFailed:
+		if err := ensureIntegrationFailedWorktreeExists(worktreeDir, worktreeRel); err != nil {
+			return result, err
+		}
+		return result, nil
+	default:
+		return result, fmt.Errorf("unsupported claim source status in worktree phase: %s", taskStatus)
+	}
+}
+
+func handleReadyClaimWorktree(
+	gitWrapper *git.Git,
+	taskID, integrationBranch, worktreeDir, worktreeRel string,
+) error {
+	branchName := paths.TaskBranchPrefix + taskID
+
+	// Check if branch or worktree already exists - this indicates a race condition
+	// or stale state. Fail fast instead of trying to clean up, as another thread
+	// might have just created it.
+	branchExists, err := gitWrapper.BranchExists(branchName)
+	if err != nil {
+		return fmt.Errorf("failed to check branch existence: %w", err)
+	}
+	if branchExists {
+		return fmt.Errorf("branch %s already exists - another claim may be in progress", branchName)
+	}
+
+	if _, err := os.Stat(worktreeDir); err == nil {
+		return fmt.Errorf("worktree %s already exists for READY task - another claim may be in progress", worktreeRel)
+	}
+
+	if _, err := gitWrapper.CreateWorktree(taskID, integrationBranch); err != nil {
+		return fmt.Errorf("failed to create worktree: %w", err)
+	}
+
+	return nil
+}
+
+func handleRejectedClaimWorktree(
+	gitWrapper *git.Git,
+	taskID, integrationBranch, previousAssignee, agentID, worktreeDir, worktreeRel string,
+) (claimWorktreePhaseResult, error) {
+	result := claimWorktreePhaseResult{}
+	branchName := paths.TaskBranchPrefix + taskID
+
+	if previousAssignee == agentID {
+		// Same coder re-claiming - preserve and validate the existing task worktree.
+		if err := validateRejectedSameCoderWorktree(gitWrapper, taskID, worktreeDir, worktreeRel); err != nil {
+			return result, err
+		}
+		return result, nil
+	}
+
+	// Different coder - recreate worktree. If replacement creation fails after teardown,
+	// restore the previous task worktree so REJECTED state remains recoverable.
+	var recoveryRef string
+	if _, err := os.Stat(worktreeDir); err == nil {
+		branchExists, err := gitWrapper.BranchExists(branchName)
+		if err != nil {
+			return result, fmt.Errorf("failed to check existing task branch: %w", err)
+		}
+		if branchExists {
+			recoveryRef, err = gitWrapper.GetCommitSHA(branchName)
+			if err != nil {
+				return result, fmt.Errorf("failed to capture existing task branch for recovery: %w", err)
+			}
+		}
+
+		if err := gitWrapper.RemoveWorktree(taskID); err != nil {
+			return result, fmt.Errorf("failed to remove existing worktree for reassignment: %w", err)
+		}
+
+		// RemoveWorktree best-effort deletes the task branch. Ensure a clean branch namespace
+		// before creating the replacement.
+		_ = gitWrapper.DeleteBranch(branchName)
+		result.deleted = true
+	}
+
+	if _, err := gitWrapper.CreateWorktree(taskID, integrationBranch); err != nil {
+		if result.deleted {
+			if recoveryErr := restoreRejectedWorktreeAfterCreateFailure(
+				gitWrapper,
+				taskID,
+				recoveryRef,
+				integrationBranch,
+			); recoveryErr != nil {
+				return result, fmt.Errorf(
+					"failed to create worktree: %w; failed to recover previous task worktree: %v",
+					err,
+					recoveryErr,
+				)
+			}
+		}
+		return result, fmt.Errorf("failed to create replacement worktree (previous worktree restored): %w", err)
+	}
+
+	result.created = true
+	return result, nil
+}
+
+func ensureIntegrationFailedWorktreeExists(worktreeDir, worktreeRel string) error {
+	if _, err := os.Stat(worktreeDir); os.IsNotExist(err) {
+		return fmt.Errorf("worktree %s missing for INTEGRATION_FAILED task", worktreeRel)
+	}
+	return nil
 }
 
 func enforceRejectedIterationLimit(
