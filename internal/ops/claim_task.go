@@ -70,8 +70,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 	switch task.Status {
 	case models.TaskStatusReady:
-		if err := ensureNoUnmetDependencies(task, state, "task has unmet dependencies: %v"); err != nil {
-			return nil, err
+		if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+			return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
 		}
 	case models.TaskStatusRejected, models.TaskStatusIntegrationFailed:
 		// These are valid source states
@@ -162,8 +162,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 		// For READY: re-check dependencies
 		if taskStatus == models.TaskStatusReady {
-			if err := ensureNoUnmetDependencies(task, state, "race condition: dependencies changed: %v"); err != nil {
-				return err
+			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+				return fmt.Errorf("race condition: dependencies changed: %v", unmet)
 			}
 		}
 
@@ -275,19 +275,6 @@ func unmetDependencies(task *models.Task, state *models.State) []string {
 		}
 	}
 	return unmet
-}
-
-func ensureNoUnmetDependencies(task *models.Task, state *models.State, errFormat string) error {
-	if len(task.DependsOn) == 0 {
-		return nil
-	}
-
-	unmet := unmetDependencies(task, state)
-	if len(unmet) == 0 {
-		return nil
-	}
-
-	return fmt.Errorf(errFormat, unmet)
 }
 
 func handleClaimTaskWorktreePhase(
