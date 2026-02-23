@@ -123,7 +123,7 @@ func (g *Git) CreateWorktree(taskID, fromBranch string) (string, error) {
 	}
 	worktreeRel := filepath.Join(paths.WorktreesDirName, taskID)
 	worktreePath := filepath.Join(g.projectRoot, worktreeRel)
-	branchName := "task/" + taskID
+	branchName := paths.TaskBranchPrefix + taskID
 
 	// Check if worktree already exists
 	if _, err := os.Stat(worktreePath); err == nil {
@@ -168,7 +168,7 @@ func (g *Git) RemoveWorktree(taskID string) error {
 	}
 	worktreeRel := filepath.Join(paths.WorktreesDirName, taskID)
 	worktreePath := filepath.Join(g.projectRoot, worktreeRel)
-	branchName := "task/" + taskID
+	branchName := paths.TaskBranchPrefix + taskID
 
 	// Check if worktree exists
 	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {

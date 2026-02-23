@@ -132,7 +132,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	switch taskStatus {
 	case models.TaskStatusReady:
 		// New claim - create worktree
-		branchName := "task/" + taskID
+		branchName := paths.TaskBranchPrefix + taskID
 
 		// Check if branch or worktree already exists - this indicates a race condition
 		// or stale state. Fail fast instead of trying to clean up, as another thread
@@ -157,7 +157,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		worktreeCreated = true
 
 	case models.TaskStatusRejected:
-		branchName := "task/" + taskID
+		branchName := paths.TaskBranchPrefix + taskID
 
 		if previousAssignee == agentID {
 			// Same coder re-claiming - preserve and validate the existing task worktree.
@@ -335,7 +335,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 			if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
 				log.Printf("WARNING: claim-task %s: failed to cleanup worktree after claim failure: %v", taskID, cleanupErr)
 			}
-			if cleanupErr := gitWrapper.DeleteBranch("task/" + taskID); cleanupErr != nil {
+			if cleanupErr := gitWrapper.DeleteBranch(paths.TaskBranchPrefix + taskID); cleanupErr != nil {
 				log.Printf("WARNING: claim-task %s: failed to cleanup branch after claim failure: %v", taskID, cleanupErr)
 			}
 		}
@@ -425,7 +425,7 @@ func validateRejectedSameCoderWorktree(
 		return fmt.Errorf("worktree %s missing for REJECTED task (same coder)", worktreeRel)
 	}
 
-	branchName := "task/" + taskID
+	branchName := paths.TaskBranchPrefix + taskID
 	branchExists, err := gitWrapper.BranchExists(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to check branch %s for REJECTED task (same coder): %w", branchName, err)
@@ -451,7 +451,7 @@ func restoreRejectedWorktreeAfterCreateFailure(
 	if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
 		log.Printf("WARNING: claim-task recovery %s: failed to cleanup partial worktree: %v", taskID, cleanupErr)
 	}
-	if cleanupErr := gitWrapper.DeleteBranch("task/" + taskID); cleanupErr != nil {
+	if cleanupErr := gitWrapper.DeleteBranch(paths.TaskBranchPrefix + taskID); cleanupErr != nil {
 		log.Printf("WARNING: claim-task recovery %s: failed to cleanup partial branch: %v", taskID, cleanupErr)
 	}
 

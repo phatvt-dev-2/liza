@@ -59,6 +59,11 @@ func TestConstants(t *testing.T) {
 			constant: ArchiveDirName,
 			want:     "archive",
 		},
+		{
+			name:     "TaskBranchPrefix",
+			constant: TaskBranchPrefix,
+			want:     "task/",
+		},
 	}
 
 	for _, tt := range tests {

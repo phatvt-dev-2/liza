@@ -57,7 +57,7 @@ func DeleteWorktree(projectRoot, taskID string) (*DeleteWorktreeResult, error) {
 		warnings = append(warnings, fmt.Sprintf("failed to remove worktree: %v", err))
 	}
 
-	branchName := "task/" + taskID
+	branchName := paths.TaskBranchPrefix + taskID
 	_ = gitWrapper.DeleteBranch(branchName)
 
 	err = bb.Modify(func(state *models.State) error {

@@ -151,7 +151,7 @@ func DeleteTask(projectRoot, taskID string, force, deleteWorktree bool, reason s
 			}
 
 			// Delete branch (ignore errors if branch doesn't exist)
-			branchName := "task/" + taskID
+			branchName := paths.TaskBranchPrefix + taskID
 			_ = gitWrapper.DeleteBranch(branchName)
 		} else {
 			result.WorktreePreserved = true

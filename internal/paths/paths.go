@@ -19,6 +19,10 @@ const (
 	LogFileName   = "log.yaml"   // Name of the log file
 	LockSuffix    = ".lock"      // Suffix for lock files
 
+	// TaskBranchPrefix is the prefix used for task-specific git branches.
+	// Task branches are named: task/<taskID>
+	TaskBranchPrefix = "task/"
+
 	// Logs and reports
 	AlertsLogFileName            = "alerts.log"                // Alerts log file
 	SprintSummaryFileName        = "sprint_summary.md"         // Sprint summary report

@@ -72,7 +72,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, fmt.Errorf("failed to get worktree branch: %w", err)
 	}
 
-	expectedBranch := "task/" + taskID
+	expectedBranch := paths.TaskBranchPrefix + taskID
 	if wtBranch != expectedBranch {
 		if wtBranch == "" {
 			return nil, fmt.Errorf("worktree is in detached HEAD state (expected branch: %s)", expectedBranch)
