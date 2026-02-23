@@ -258,3 +258,214 @@ func TestSupervisorAbortsQuickly(t *testing.T) {
 		t.Error("CLI should not be executed when ABORT is sent before work")
 	}
 }
+
+func TestResumeHandoffTask_SuccessRenewsLeaseAndUpdatesAgent(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	agentID := "coder-1"
+	taskID := "task-1"
+	worktree := ".worktrees/task-1"
+	expiredLease := time.Now().UTC().Add(-2 * time.Minute)
+
+	state := testhelpers.CreateValidState()
+	state.Config.LeaseDuration = 120
+	state.Tasks = []models.Task{
+		{
+			ID:             taskID,
+			Status:         models.TaskStatusImplementing,
+			AssignedTo:     &agentID,
+			Worktree:       &worktree,
+			HandoffPending: true,
+			LeaseExpires:   &expiredLease,
+			History:        []models.TaskHistoryEntry{},
+		},
+	}
+
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	snapshot, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read snapshot: %v", err)
+	}
+
+	callStart := time.Now().UTC()
+	gotTaskID, gotWorktree, found, err := resumeHandoffTask(bb, snapshot, agentID)
+	if err != nil {
+		t.Fatalf("resumeHandoffTask() error = %v", err)
+	}
+	if !found {
+		t.Fatal("resumeHandoffTask() found = false, want true")
+	}
+	if gotTaskID != taskID {
+		t.Fatalf("resumeHandoffTask() taskID = %q, want %q", gotTaskID, taskID)
+	}
+	if gotWorktree != worktree {
+		t.Fatalf("resumeHandoffTask() worktree = %q, want %q", gotWorktree, worktree)
+	}
+
+	updated, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read updated state: %v", err)
+	}
+
+	task := updated.FindTask(taskID)
+	if task == nil {
+		t.Fatalf("Task %q not found after resume", taskID)
+	}
+	if task.HandoffPending {
+		t.Fatal("task.handoff_pending = true, want false")
+	}
+	if task.LeaseExpires == nil || !task.LeaseExpires.After(callStart) {
+		t.Fatalf("task.lease_expires = %v, want renewed lease after %v", task.LeaseExpires, callStart)
+	}
+	if len(task.History) == 0 || task.History[len(task.History)-1].Event != "handoff_resumed" {
+		t.Fatalf("last history event = %v, want handoff_resumed", task.History)
+	}
+
+	agent, ok := updated.Agents[agentID]
+	if !ok {
+		t.Fatalf("agent %q not found after resume", agentID)
+	}
+	if agent.Status != models.AgentStatusWorking {
+		t.Fatalf("agent status = %q, want %q", agent.Status, models.AgentStatusWorking)
+	}
+	if agent.CurrentTask == nil || *agent.CurrentTask != taskID {
+		t.Fatalf("agent current_task = %v, want %q", agent.CurrentTask, taskID)
+	}
+	if agent.LeaseExpires == nil || !agent.LeaseExpires.Equal(*task.LeaseExpires) {
+		t.Fatalf("agent lease_expires = %v, want %v", agent.LeaseExpires, task.LeaseExpires)
+	}
+}
+
+func TestResumeHandoffTask_FailsWhenWorktreeMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	agentID := "coder-1"
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:             "task-1",
+			Status:         models.TaskStatusImplementing,
+			AssignedTo:     &agentID,
+			HandoffPending: true,
+		},
+	}
+
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	snapshot, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read snapshot: %v", err)
+	}
+
+	_, _, found, err := resumeHandoffTask(bb, snapshot, agentID)
+	if err == nil {
+		t.Fatal("resumeHandoffTask() error = nil, want missing worktree error")
+	}
+	testhelpers.AssertErrorContains(t, err, "missing worktree")
+	if found {
+		t.Fatal("resumeHandoffTask() found = true, want false")
+	}
+
+	updated, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read updated state: %v", err)
+	}
+	task := updated.FindTask("task-1")
+	if task == nil {
+		t.Fatal("task-1 not found")
+	}
+	if !task.HandoffPending {
+		t.Fatal("task.handoff_pending changed on failure, want true")
+	}
+}
+
+func TestResumeHandoffTask_EdgeCases(t *testing.T) {
+	t.Run("no resumable handoff returns not found", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		agentID := "coder-1"
+		worktree := ".worktrees/task-1"
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{
+			{
+				ID:             "task-1",
+				Status:         models.TaskStatusImplementing,
+				AssignedTo:     testhelpers.StringPtr("coder-2"),
+				Worktree:       &worktree,
+				HandoffPending: true,
+			},
+		}
+
+		bb := testhelpers.WriteInitialState(t, statePath, state)
+		snapshot, err := bb.Read()
+		if err != nil {
+			t.Fatalf("Failed to read snapshot: %v", err)
+		}
+
+		_, _, found, err := resumeHandoffTask(bb, snapshot, agentID)
+		if err != nil {
+			t.Fatalf("resumeHandoffTask() error = %v, want nil", err)
+		}
+		if found {
+			t.Fatal("resumeHandoffTask() found = true, want false")
+		}
+	})
+
+	t.Run("stale candidate is skipped and next handoff resumes", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		agentID := "coder-1"
+		worktree1 := ".worktrees/task-1"
+		worktree2 := ".worktrees/task-2"
+
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{
+			{
+				ID:             "task-1",
+				Status:         models.TaskStatusImplementing,
+				AssignedTo:     &agentID,
+				Worktree:       &worktree1,
+				HandoffPending: true,
+			},
+			{
+				ID:             "task-2",
+				Status:         models.TaskStatusImplementing,
+				AssignedTo:     &agentID,
+				Worktree:       &worktree2,
+				HandoffPending: true,
+			},
+		}
+
+		bb := testhelpers.WriteInitialState(t, statePath, state)
+		snapshot, err := bb.Read()
+		if err != nil {
+			t.Fatalf("Failed to read snapshot: %v", err)
+		}
+
+		// Make the first task stale after snapshot to exercise conflict handling.
+		if err := bb.Modify(func(s *models.State) error {
+			t1 := s.FindTask("task-1")
+			if t1 == nil {
+				t.Fatal("task-1 not found")
+			}
+			t1.Status = models.TaskStatusReady
+			return nil
+		}); err != nil {
+			t.Fatalf("Failed to mutate stale candidate: %v", err)
+		}
+
+		gotTaskID, gotWorktree, found, err := resumeHandoffTask(bb, snapshot, agentID)
+		if err != nil {
+			t.Fatalf("resumeHandoffTask() error = %v", err)
+		}
+		if !found {
+			t.Fatal("resumeHandoffTask() found = false, want true")
+		}
+		if gotTaskID != "task-2" || gotWorktree != worktree2 {
+			t.Fatalf("resumeHandoffTask() = (%q, %q), want (%q, %q)", gotTaskID, gotWorktree, "task-2", worktree2)
+		}
+	})
+}

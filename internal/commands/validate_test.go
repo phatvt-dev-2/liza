@@ -550,3 +550,115 @@ func TestValidateCommand_SpecFileValidation(t *testing.T) {
 		t.Errorf("ValidateCommand() with skip spec check error = %v", err)
 	}
 }
+
+func TestValidateAnomalies_RequiredDetailsByType(t *testing.T) {
+	tests := []struct {
+		name        string
+		anomaly     models.Anomaly
+		errContains string
+	}{
+		{
+			name: "retry_loop missing required details fails",
+			anomaly: models.Anomaly{
+				Type:    "retry_loop",
+				Details: map[string]any{"count": 3},
+			},
+			errContains: "retry_loop anomaly",
+		},
+		{
+			name: "trade_off missing required details fails",
+			anomaly: models.Anomaly{
+				Type:    "trade_off",
+				Details: map[string]any{"what": "faster claim path", "why": "reduce lock contention"},
+			},
+			errContains: "trade_off anomaly",
+		},
+		{
+			name: "external_blocker missing required details fails",
+			anomaly: models.Anomaly{
+				Type:    "external_blocker",
+				Details: map[string]any{"note": "service unavailable"},
+			},
+			errContains: "external_blocker anomaly",
+		},
+		{
+			name: "assumption_violated missing required details fails",
+			anomaly: models.Anomaly{
+				Type:    "assumption_violated",
+				Details: map[string]any{"assumption": "state file always present"},
+			},
+			errContains: "assumption_violated anomaly",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := testhelpers.CreateValidState()
+			state.Anomalies = []models.Anomaly{tt.anomaly}
+
+			err := validateAnomalies(state, t.TempDir(), true)
+			if err == nil {
+				t.Fatalf("validateAnomalies() error = nil, want error containing %q", tt.errContains)
+			}
+			testhelpers.AssertErrorContains(t, err, tt.errContains)
+		})
+	}
+}
+
+func TestValidateAnomalies_RequestedTypeBranchesPassWithValidDetails(t *testing.T) {
+	tests := []struct {
+		name    string
+		anomaly models.Anomaly
+	}{
+		{
+			name: "retry_loop branch",
+			anomaly: models.Anomaly{
+				Type:    "retry_loop",
+				Details: map[string]any{"count": 3, "error_pattern": "timeout"},
+			},
+		},
+		{
+			name: "trade_off branch",
+			anomaly: models.Anomaly{
+				Type: "trade_off",
+				Details: map[string]any{
+					"what":         "skip cache warmup",
+					"why":          "reduce startup time",
+					"debt_created": "slower first request",
+				},
+			},
+		},
+		{
+			name: "spec_ambiguity branch",
+			anomaly: models.Anomaly{
+				Type:    "spec_ambiguity",
+				Details: map[string]any{},
+			},
+		},
+		{
+			name: "external_blocker branch",
+			anomaly: models.Anomaly{
+				Type:    "external_blocker",
+				Details: map[string]any{"blocker_service": "github"},
+			},
+		},
+		{
+			name: "assumption_violated branch",
+			anomaly: models.Anomaly{
+				Type:    "assumption_violated",
+				Details: map[string]any{"assumption": "single reviewer", "reality": "reviewer unavailable"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := testhelpers.CreateValidState()
+			state.Anomalies = []models.Anomaly{tt.anomaly}
+
+			if err := validateAnomalies(state, t.TempDir(), true); err != nil {
+				t.Fatalf("validateAnomalies() error = %v, want nil", err)
+			}
+		})
+	}
+}
