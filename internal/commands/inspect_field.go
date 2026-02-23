@@ -62,7 +62,9 @@ func resolveFieldByYAMLPath(current reflect.Value, parts []string, entityPath st
 	}
 
 	if len(parts) == 1 {
-		// Keep previous behavior for "sprint.timeline": require a sub-field.
+		// Historical asymmetry: "sprint.metrics" returns the whole struct, but
+		// "sprint.timeline" required a sub-field in the original switch-based
+		// implementation. Preserved here for backward compatibility.
 		if nextEntityPath == "sprint.timeline" {
 			if value := derefReflectValue(next); value.IsValid() && value.Kind() == reflect.Struct {
 				return nil, &errors.NotFoundError{Entity: "sprint.timeline", Field: ""}
