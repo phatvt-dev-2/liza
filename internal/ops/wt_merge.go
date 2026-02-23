@@ -351,10 +351,14 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	if err := gitWrapper.RemoveWorktree(taskID); err != nil {
 		warnings = append(warnings, fmt.Sprintf("failed to remove worktree: %v", err))
 	}
-	// Delete the task branch
+	// Delete the task branch (idempotent — may already be gone via RemoveWorktree or manual cleanup)
 	taskBranch := "task/" + taskID
-	if err := gitWrapper.DeleteBranch(taskBranch); err != nil {
-		warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", taskBranch, err))
+	if exists, err := gitWrapper.BranchExists(taskBranch); err != nil {
+		warnings = append(warnings, fmt.Sprintf("failed to check branch %s: %v", taskBranch, err))
+	} else if exists {
+		if err := gitWrapper.DeleteBranch(taskBranch); err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", taskBranch, err))
+		}
 	}
 
 	// Update sprint metrics — non-fatal
