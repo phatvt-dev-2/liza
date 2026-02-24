@@ -315,6 +315,9 @@ func TestMergeWorktree_Success(t *testing.T) {
 	if result.TestsRan {
 		t.Error("TestsRan should be false (no integration-test.sh)")
 	}
+	if !result.NoTestScriptFound {
+		t.Error("NoTestScriptFound should be true (no integration-test.sh)")
+	}
 
 	// Verify state updated to MERGED
 	state := readStateForTest(t, stateFile)
@@ -330,6 +333,25 @@ func TestMergeWorktree_Success(t *testing.T) {
 	}
 	if task.Worktree != nil {
 		t.Errorf("Worktree should be nil after merge, got %v", *task.Worktree)
+	}
+
+	// Verify history entry has tests_ran = false
+	if len(task.History) == 0 {
+		t.Fatal("Expected history entry for merge")
+	}
+	lastHistory := task.History[len(task.History)-1]
+	if lastHistory.Event != "merged" {
+		t.Errorf("Last history event = %q, want 'merged'", lastHistory.Event)
+	}
+	if lastHistory.Extra == nil {
+		t.Fatal("Expected Extra map in history entry")
+	}
+	testsRanVal, ok := lastHistory.Extra["tests_ran"]
+	if !ok {
+		t.Fatal("Expected 'tests_ran' field in history Extra")
+	}
+	if testsRanVal != false {
+		t.Errorf("tests_ran = %v, want false", testsRanVal)
 	}
 }
 
@@ -567,6 +589,9 @@ func TestMergeWorktree_SuccessWithPassingTests(t *testing.T) {
 	if !result.TestsRan {
 		t.Error("TestsRan should be true when integration-test.sh exists")
 	}
+	if result.NoTestScriptFound {
+		t.Error("NoTestScriptFound should be false when integration-test.sh exists")
+	}
 	if !strings.Contains(result.TestOutput, "all tests passed") {
 		t.Errorf("TestOutput = %q, want to contain 'all tests passed'", result.TestOutput)
 	}
@@ -607,6 +632,109 @@ func TestMergeWorktree_HEADMismatch(t *testing.T) {
 	}
 	if intErr.Reason != IntegrationReasonHEADMismatch {
 		t.Errorf("Reason = %q, want %q", intErr.Reason, IntegrationReasonHEADMismatch)
+	}
+}
+
+func TestMergeWorktree_NoTestScriptWarning(t *testing.T) {
+	taskID := "merge-notestscript"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+
+	// Verify result distinguishes "no test script found" from "tests ran"
+	if result.TestsRan {
+		t.Error("TestsRan should be false when integration-test.sh is missing")
+	}
+	if !result.NoTestScriptFound {
+		t.Error("NoTestScriptFound should be true when integration-test.sh is missing")
+	}
+
+	// Verify state updated to MERGED
+	state := readStateForTest(t, stateFile)
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found in state")
+	}
+	if task.Status != models.TaskStatusMerged {
+		t.Errorf("Task status = %v, want MERGED", task.Status)
+	}
+
+	// Verify history entry has tests_ran = false
+	if len(task.History) == 0 {
+		t.Fatal("Expected history entry for merge")
+	}
+	lastHistory := task.History[len(task.History)-1]
+	if lastHistory.Event != "merged" {
+		t.Errorf("Last history event = %q, want 'merged'", lastHistory.Event)
+	}
+	if lastHistory.Extra == nil {
+		t.Fatal("Expected Extra map in history entry")
+	}
+	testsRanVal, ok := lastHistory.Extra["tests_ran"]
+	if !ok {
+		t.Fatal("Expected 'tests_ran' field in history Extra")
+	}
+	if testsRanVal != false {
+		t.Errorf("tests_ran = %v, want false", testsRanVal)
+	}
+}
+
+func TestMergeWorktree_TestsRanInHistory(t *testing.T) {
+	taskID := "merge-testshistory"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	// Create a passing integration test script
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatalf("Failed to create scripts dir: %v", err)
+	}
+	script := filepath.Join(scriptsDir, "integration-test.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'ok: all tests passed'\nexit 0\n"), 0755); err != nil {
+		t.Fatalf("Failed to write test script: %v", err)
+	}
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+
+	// Verify result
+	if !result.TestsRan {
+		t.Error("TestsRan should be true when integration-test.sh exists and passes")
+	}
+	if result.NoTestScriptFound {
+		t.Error("NoTestScriptFound should be false when integration-test.sh exists")
+	}
+
+	// Verify state
+	state := readStateForTest(t, stateFile)
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found in state")
+	}
+
+	// Verify history entry has tests_ran = true
+	if len(task.History) == 0 {
+		t.Fatal("Expected history entry for merge")
+	}
+	lastHistory := task.History[len(task.History)-1]
+	if lastHistory.Event != "merged" {
+		t.Errorf("Last history event = %q, want 'merged'", lastHistory.Event)
+	}
+	if lastHistory.Extra == nil {
+		t.Fatal("Expected Extra map in history entry")
+	}
+	testsRanVal, ok := lastHistory.Extra["tests_ran"]
+	if !ok {
+		t.Fatal("Expected 'tests_ran' field in history Extra")
+	}
+	if testsRanVal != true {
+		t.Errorf("tests_ran = %v, want true", testsRanVal)
 	}
 }
 
