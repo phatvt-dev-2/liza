@@ -203,17 +203,17 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 
 **Skill:** systemic-thinking
 **Category:** TENSION
+**Status:** PARTIALLY RESOLVED (`ac4ce6f5`)
 
-**Issue:** The `ops` extraction that resolved "Commands Presentation+Logic Coupling" was structurally incomplete. All task lifecycle mutations from CLI and MCP consumers route through `ops` — a clean business logic layer with typed inputs, structured results, and three-phase validation for claiming. But the `agent` package — the third and most critical consumer — mutates both task and agent state directly via `bb.Modify` in `claimReviewerTask`, `resumeHandoffTask`, `registerAgent`, `resetAgentAfterExit`, and `setAgentToPlanningStatus`. This creates two mutation tracks: `ops` (validated, structured, reusable across CLI/MCP/agent) and `agent` (inline closures, only callable from the supervisor). The reviewer claiming path is the most consequential — it transitions task status, sets `reviewing_by`, updates agent state, and captures return values via closure variables, all in a single `Modify` closure with no structured result type and no way for MCP or CLI to invoke the same logic.
+**Issue:** The `ops` extraction that resolved "Commands Presentation+Logic Coupling" was structurally incomplete. All task lifecycle mutations from CLI and MCP consumers route through `ops` — a clean business logic layer with typed inputs, structured results, and three-phase validation for claiming. But the `agent` package — the third and most critical consumer — ~~mutates both task and agent state directly via `bb.Modify` in `claimReviewerTask`, `resumeHandoffTask`,~~ `registerAgent`, `resetAgentAfterExit`, and `setAgentToPlanningStatus`. ~~This creates two mutation tracks: `ops` (validated, structured, reusable across CLI/MCP/agent) and `agent` (inline closures, only callable from the supervisor). The reviewer claiming path is the most consequential — it transitions task status, sets `reviewing_by`, updates agent state, and captures return values via closure variables, all in a single `Modify` closure with no structured result type and no way for MCP or CLI to invoke the same logic.~~ *(partially resolved: `ac4ce6f5` — reviewer claiming and handoff resumption extracted to `ops.ClaimReviewerTask` and `ops.ResumeHandoff` with structured input/result types and comprehensive test coverage)*
 
-**Implication:** The ops layer promises to be the single source of truth for state mutations, but reviewer claiming, handoff resumption, and all agent lifecycle management are structurally unreachable from non-supervisor consumers, and changes to claiming semantics must be updated in two different architectural layers with different patterns.
+**Remaining gap:** Agent lifecycle management (`registerAgent`, `resetAgentAfterExit`, `setAgentToPlanningStatus`) still mutates state via inline `bb.Modify` closures in the `agent` package. These are agent-identity operations (not task-lifecycle), so the boundary may be intentional.
 
-**Current mitigation:** Reviewer claiming is simpler than coder claiming (no worktree creation, no three-phase pattern needed), so the complexity gap hasn't caused bugs yet.
+**Implication:** The ops layer is now the source of truth for all task lifecycle mutations including reviewer claiming. Agent lifecycle management remains a second mutation track, but with narrower scope (agent state only, not task transitions).
 
 **Future options:**
-- Extract `ops.ClaimReviewerTask` and `ops.ResumeHandoff` with structured result types
 - Extract `ops.RegisterAgent` / `ops.UnregisterAgent` for agent lifecycle
-- Accept the split as intentional: ops owns task lifecycle, agent owns agent lifecycle and reviewer claims (document the boundary)
+- Accept the split as intentional: ops owns task lifecycle, agent owns agent lifecycle (document the boundary)
 
 ### MCP Cross-Layer Read Dependency
 
@@ -541,21 +541,21 @@ Bottlenecks that emerge under load.
 - Git operations queuing (serialization mutex for integration branch merges)
 - Separate integration repo for merges
 
-### Exit Code 42 Restart Loop Without Progress Detection
+### ~~Exit Code 42 Restart Loop Without Progress Detection~~
 
 **Skill:** systemic-thinking
 **Category:** STRESS POINT
+**Status:** RESOLVED (`f15cd61`, `5f05403`)
 
-**Issue:** The supervisor loop (`agent/supervisor.go:293-298`) treats exit code 42 as a graceful restart with a fixed 2-second sleep, with no tracking of restart frequency or progress verification. An agent that repeatedly encounters context pressure and self-aborts will restart indefinitely without triggering circuit breaker patterns or human escalation.
+**Issue:** The supervisor loop treated exit code 42 as a graceful restart with a fixed 2-second sleep, with no tracking of restart frequency or progress verification.
 
-**Implication:** A misconfigured task or environment issue that causes consistent context-exhaustion aborts creates a busy-wait loop consuming compute resources and log volume while making no progress, with no automatic detection or backpressure.
-
-**Current mitigation:** Exit code 42 is intended for context exhaustion where agent believes restart with fresh context will help. No tracking exists to detect when it doesn't.
-
-**Future options:**
-- Track restart count per task and escalate after N restarts without progress
-- Exponential backoff on repeated exit 42 (2s, 4s, 8s, ... up to max)
-- Circuit breaker pattern for exit 42 clusters on same task
+**Fix:** `exit42RestartTracker` in `agent/supervisor.go` implements all three mitigations:
+- Per-task restart count tracking with task-progress signature detection (resets count when task state changes meaningfully between restarts)
+- Capped exponential backoff (2s, 4s, 8s, ... up to configurable `exit42_max_backoff_seconds`, default 60s)
+- Circuit breaker: after `exit42_restart_threshold` (default 5) consecutive restarts without progress, task transitions to BLOCKED with diagnostic reason and questions
+- New config fields: `exit42_restart_threshold`, `exit42_max_backoff_seconds`
+- New task field: `exit42_restart_count`
+- Comprehensive unit tests covering backoff growth/cap, threshold blocking, and counter reset on progress
 
 ### Cache Coherence Gap in Multi-Process Deployments
 
@@ -727,19 +727,19 @@ Unacknowledged forces or gaps the system doesn't model.
 - Canary questions: supervisor tests agent's knowledge of key contract clauses before allowing work
 - Reduce initialization surface by embedding more rules in supervisor-enforced structural mechanisms
 
-### Planner Role Invisible in Type System
+### ~~Planner Role Invisible in Type System~~
 
 **Skill:** systemic-thinking
 **Category:** BLIND SPOT
+**Status:** RESOLVED (`e173f71`)
 
-**Issue:** The planner is identified as the "Single Semantic Interpreter" in this document — the most structurally critical role. Yet it is the only role absent from the type system. The task workflow registry (`taskWorkflows` in `models/state.go`) declares `{coding: [coder, code_reviewer]}`; the planner doesn't appear. Its behavioral rules are distributed implicitly across four files in the `agent` package: infinite wait time override in `waitforwork.go` (`365 * 24 * time.Hour`), wake trigger detection in `workdetection.go` (priority-ordered state inspection), pseudo-task creation in `supervisor.go` (sets `CurrentTask` to string literal `"planning"`), and post-execution state verification in `systemctl.go`. None of these rules reference a declarative definition. `models.RoleCoder` and `models.RoleCodeReviewer` constants exist but there is no `models.RolePlanner`. The agent identity validation in `registration.go` accepts any `{role}-{number}` format — `planner-1` is valid by string convention, not type constraint.
+**Issue:** The planner was the only role absent from the type system. `models.RoleCoder` and `models.RoleCodeReviewer` existed but there was no `models.RolePlanner`. Wake trigger detection used imperative branching rather than declarative definitions.
 
-**Implication:** Adding a second coordinator role (architect, integrator) requires discovering and replicating the planner's implicit behavioral conventions by reading Go control flow, rather than extending a declaration — the most critical role is the least formally defined.
-
-**Future options:**
-- Add `models.RolePlanner` constant and planner-specific type declarations
-- Declare planner wake triggers as data (trigger type → state predicate map) rather than imperative code
-- Extract planner behavioral rules from agent package into a declarative configuration consumed by the supervisor
+**Fix:** All three "future options" addressed:
+- `models.RolePlanner` constant added as alias for `roles.WorkflowPlanner`; `IsClaimable()` now has explicit planner case (returns false — planners don't participate in task claiming)
+- `roles.WorkflowPlanner` added with bidirectional `ToWorkflow()`/`ToRuntime()` mapping; `AllWorkflow()` and `AllRuntime()` include planner; `IsValidRuntime()` no longer special-cases planner
+- `plannerWakeTriggerSpecs` in `workdetection.go` declares wake triggers as data (trigger type → description → state predicate), replacing imperative if-else branching; tests verify trigger order, descriptions, and count functions
+- Remaining implicit behaviors: infinite wait time override in `waitforwork.go`, pseudo-task `"planning"` in `supervisor.go`, post-execution verification in `systemctl.go` — these are supervisor-specific and appropriate for the agent package
 
 ### No Source Type for Pre-Implementation Spec Findings
 
@@ -1001,6 +1001,9 @@ Issues identified through code-level architectural analysis (patterns, structure
 - [x] Stale-lock cleanup error discarded — propagated as `LockErrorFilesystem` *(software-architecture-review)*
 - [x] `DeleteTask` side effects outpace state commit — git cleanup deferred to after state mutation *(software-architecture-review)*
 - [x] `get config.*` projection drift — reflect-based walker discovers all YAML-tagged fields *(software-architecture-review)*
+- [x] Exit code 42 restart loop — per-task restart tracking with exponential backoff and circuit breaker to BLOCKED *(systemic-thinking)*
+- [x] Planner role invisible in type system — `models.RolePlanner`, `roles.WorkflowPlanner`, declarative `plannerWakeTriggerSpecs` *(systemic-thinking)*
+- [x] Two-Track State Mutation (partial) — `ops.ClaimReviewerTask` and `ops.ResumeHandoff` extracted with structured input/result types; agent lifecycle still inline *(systemic-thinking)*
 
 ---
 
@@ -1058,6 +1061,9 @@ Commit SHA where issue details were first marked as fixed (proxy for actual fix 
 | Stale-lock cleanup error discarded | `729da05` |
 | `DeleteTask` side effects outpace state commit | `7dd05ce` |
 | `get config.*` projection drift | `c4bd748` |
+| Exit Code 42 Restart Loop Without Progress Detection | `f15cd61`, `5f05403` |
+| Planner Role Invisible in Type System | `e173f71` |
+| Two-Track State Mutation (partial — reviewer claiming + handoff) | `ac4ce6f` |
 
 ---
 
