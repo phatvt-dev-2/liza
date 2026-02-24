@@ -298,7 +298,9 @@ func TestGetCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset root command
+			// rootCmd is a package-level singleton; reset command/flag state so
+			// repeated runs (e.g. -count=2) do not leak prior executions.
+			resetRootCmdForTest(t)
 			rootCmd.SetArgs(tt.args)
 
 			// Capture output
@@ -341,6 +343,8 @@ func TestGetCommand(t *testing.T) {
 }
 
 func TestGetCommandHelp(t *testing.T) {
+	resetRootCmdForTest(t)
+
 	// Test that help output is generated correctly
 	rootCmd.SetArgs([]string{"get", "--help"})
 

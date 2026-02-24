@@ -6,6 +6,8 @@ import (
 )
 
 func TestConstants(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		constant string
@@ -28,6 +30,8 @@ func TestConstants(t *testing.T) {
 }
 
 func TestToWorkflow(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		runtimeRole string
@@ -81,6 +85,8 @@ func TestToWorkflow(t *testing.T) {
 }
 
 func TestToRuntime(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		workflowRole string
@@ -128,6 +134,8 @@ func TestToRuntime(t *testing.T) {
 }
 
 func TestIsValidRuntime(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		role string
@@ -151,6 +159,8 @@ func TestIsValidRuntime(t *testing.T) {
 }
 
 func TestIsValidWorkflow(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		role string
@@ -174,6 +184,8 @@ func TestIsValidWorkflow(t *testing.T) {
 }
 
 func TestAllRuntime(t *testing.T) {
+	t.Parallel()
+
 	got := AllRuntime()
 	want := []string{RuntimeCoder, RuntimeCodeReviewer, RuntimePlanner}
 
@@ -189,6 +201,8 @@ func TestAllRuntime(t *testing.T) {
 }
 
 func TestAllWorkflow(t *testing.T) {
+	t.Parallel()
+
 	got := AllWorkflow()
 	want := []string{WorkflowCoder, WorkflowCodeReviewer}
 
@@ -205,6 +219,8 @@ func TestAllWorkflow(t *testing.T) {
 
 // TestBidirectionalMapping ensures all valid runtime roles map to workflow and back.
 func TestBidirectionalMapping(t *testing.T) {
+	t.Parallel()
+
 	for _, runtime := range AllRuntime() {
 		// Skip planner - it has no workflow mapping
 		if runtime == RuntimePlanner {
@@ -236,6 +252,8 @@ func TestBidirectionalMapping(t *testing.T) {
 // TestCrossBoundaryResolution verifies the core requirement:
 // agent runtime roles can be resolved to workflow roles for task operations.
 func TestCrossBoundaryResolution(t *testing.T) {
+	t.Parallel()
+
 	// Simulate: agent with ID "code-reviewer-1" claims a task
 	// The agent uses runtime role "code-reviewer"
 	// The task workflow uses "code_reviewer"

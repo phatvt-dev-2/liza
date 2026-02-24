@@ -6,6 +6,8 @@ import (
 )
 
 func TestNotFoundError(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		entity string
@@ -61,6 +63,8 @@ func TestNotFoundError(t *testing.T) {
 }
 
 func TestIsNotFound(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		err  error

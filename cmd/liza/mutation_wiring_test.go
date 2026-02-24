@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"os"
 	"strings"
 	"testing"
@@ -190,17 +189,9 @@ func executeRootCommand(t *testing.T, projectRoot string, args ...string) error 
 		t.Fatalf("failed to chdir to project root: %v", err)
 	}
 
-	// rootCmd is a package-level singleton; reset identity flags to defaults
-	// so each subtest gets clean precedence behavior.
-	if err := rootCmd.PersistentFlags().Set("agent-id", ""); err != nil {
-		t.Fatalf("failed to reset --agent-id: %v", err)
-	}
-	if err := rootCmd.PersistentFlags().Set("changed-by", ""); err != nil {
-		t.Fatalf("failed to reset --changed-by: %v", err)
-	}
-
-	rootCmd.SetOut(io.Discard)
-	rootCmd.SetErr(io.Discard)
+	// rootCmd and db singletons are process globals; reset before each command
+	// execution so tests don't leak state across runs.
+	resetRootCmdForTest(t)
 	rootCmd.SetArgs(args)
 	return rootCmd.Execute()
 }
