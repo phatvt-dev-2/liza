@@ -24,16 +24,26 @@ DONE WHEN:
 {{deref .Task.RejectionReason}}
 {{- end}}
 
-LOGGING DUTIES:
-| Observation | Log As |
-|-------------|--------|
-| Coder retry loop visible | retry_loop |
-| Implementation differs from spec | scope_deviation |
-| Workaround taken | workaround |
-| Technical debt introduced | debt_created |
-| Spec assumption contradicted | assumption_violated |
-| Spec changed since task creation | spec_changed |
-| Own review stuck in command loop | reviewer_loop |
+REVIEWER STATE TRANSITIONS:
+- REVIEWING → APPROVED (code meets requirements, spec, and has tests)
+- REVIEWING → REJECTED (issues found — provide structured feedback)
+
+REVIEWER TOOL:
+- liza_submit_verdict — Submit review verdict
+  APPROVED: {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
+  REJECTED: {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
+
+ANOMALY LOGGING:
+| Observation | Type | Required Fields |
+|-------------|------|-----------------|
+| Coder retry loop visible | retry_loop | count, error_pattern |
+| Implementation differs from spec | scope_deviation | — |
+| Workaround taken | workaround | — |
+| Technical debt introduced | debt_created | — |
+| Spec assumption contradicted | assumption_violated | assumption, reality |
+| Spec changed since task creation | spec_changed | — |
+| Own review stuck in command loop | reviewer_loop | count, command_pattern |
+Format: anomalies: [{id, type, task, reporter, timestamp (ISO 8601), details: {<fields>}}]
 
 REVIEW SCOPE:
 Evaluate: matches task def, matches spec, tests validate behavior, obvious defects, commit SHA.
@@ -45,46 +55,18 @@ APPROVAL SEMANTICS:
 Approval = matches requirements + spec + tests + no defects.
 Does NOT mean: perfect, no improvements possible, or production-ready.
 
-REVIEWER COMMANDS:
-For APPROVED verdict:
-Use liza_submit_verdict tool with parameters:
-{
-  "task_id": "<task-id>",
-  "verdict": "APPROVED",
-  "agent_id": "<your-agent-id>"
-}
-
-For REJECTED verdict:
-Use liza_submit_verdict tool with parameters:
-{
-  "task_id": "<task-id>",
-  "verdict": "REJECTED",
-  "agent_id": "<your-agent-id>",
-  "reason": "<detailed rejection reason explaining what must be fixed>"
-}
-
-⚠️  CRITICAL: TOOL VERIFICATION (DO THIS FIRST) ⚠️
-Before reviewing, verify your tools work by executing this test command:
-  ls -la {{.WorktreePath}}
-
-If you receive a permission prompt, that is NORMAL and EXPECTED.
-Permission prompts are automatic checks - they do NOT block you.
-Simply execute the command using the Bash tool. The permission system handles approval automatically.
-If ls works, ALL other commands will work (git, liza, etc.).
-Do NOT stop or report "tool access blocked" without actually attempting the command.
-
 INSTRUCTIONS:
-- The task is already assigned to you for review.
-- Verify HEAD matches REVIEW_COMMIT: git -C {{.WorktreePath}} rev-parse HEAD. If mismatch, REJECT.
-- Review ALL changes in the worktree (base_commit → review_commit), not just the latest commit.
-  Each review is a fresh evaluation: "does this worktree satisfy the task?"
-  Use: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
-- Apply the code-review skill to the full diff
-- If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
-- TDD ENFORCEMENT (code tasks): REJECT if tests are missing or don't cover done_when criteria
-- Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
-- Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
-- Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
+1. Verify tools work: ls -la {{.WorktreePath}}
+   If you see a permission prompt, that is NORMAL. Execute the command — do NOT stop.
+2. Verify HEAD matches REVIEW_COMMIT: git -C {{.WorktreePath}} rev-parse HEAD. If mismatch, REJECT.
+3. Review ALL changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
+   Each review is a fresh evaluation: "does this worktree satisfy the task?"
+4. Apply the code-review skill to the full diff
+5. If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
+6. TDD ENFORCEMENT (code tasks): REJECT if tests are missing or don't cover done_when criteria
+7. Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
+8. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
+9. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
 {{- if .HasPriorRejection}}
 
 PRIOR FEEDBACK REVIEW (MANDATORY for iteration 2+):
@@ -96,7 +78,6 @@ Include this assessment in your rejection reason if rejecting.
 {{- end}}
 
 REJECTION FORMAT (if rejecting):
-Use structured format from code-review skill:
 ---
 Blockers: [count]
 - [blocker] file:line — Issue description
@@ -116,58 +97,14 @@ Prior Feedback Status:
 {{- end}}
 ---
 
---- VERDICT EXECUTION PHASE (MANDATORY - DO NOT SKIP) ---
-
-⚠️  AUTONOMY NOTICE ⚠️
-You have FULL autonomy to execute liza_submit_verdict immediately.
-Your approval is PRE-GRANTED. Do NOT wait for permission.
-Your job is to SUBMIT the verdict, not to ask if you should.
-
-CRITICAL: If you see tool permission prompts, do NOT stop or wait.
-Permission prompts are handled automatically. Continue executing tools.
-Do NOT rationalize waiting with phrases like "requires permission" or "awaiting approval".
-
-You MUST execute the verdict command IN THIS SAME SESSION:
-
-For APPROVED verdict:
-Use liza_submit_verdict tool:
-{"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
-
-For REJECTED verdict:
-Use liza_submit_verdict tool:
-{"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
-
+--- VERDICT SUBMISSION (MANDATORY - DO NOT SKIP) ---
+⚠️  You have FULL autonomy to execute liza_submit_verdict. Your authority is PRE-GRANTED.
+Do NOT wait for permission. Do NOT rationalize waiting.
+You MUST execute liza_submit_verdict IN THIS SAME SESSION:
+  APPROVED: {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
+  REJECTED: {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection>"}
 After submitting verdict, EXIT immediately. Your work is complete.
-The supervisor will reset your status to IDLE automatically.
-Do NOT continue running or wait for more work. EXIT now.
 
-SUCCESS CRITERIA (Required before you stop):
-✓ Review completed
-✓ liza_submit_verdict tool executed
-✓ Confirmation message received
-✓ You have EXITED (session complete)
-
-If you complete your review and stop WITHOUT executing liza_submit_verdict,
-you have FAILED your role responsibilities. The verdict exists only in your analysis
-until you write it to the blackboard via the tool.
-
-EXPECTED BEHAVIOR EXAMPLES:
-
-✅ CORRECT:
-1. Read task details and review commit
-2. Execute: git -C {{.WorktreePath}} rev-parse HEAD  # Verify HEAD
-3. Execute: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}  # Review changes
-4. Apply code-review skill and analyze changes
-5. Make verdict decision (APPROVED or REJECTED)
-6. Execute tool: liza_submit_verdict with {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}  # (or REJECTED with reason)
-7. Confirm: "Verdict submitted for {{.Task.ID}}: APPROVED"
-8. Exit
-
-❌ INCORRECT (DO NOT DO THIS):
-1. Read task details and review commit
-2. Review code changes
-3. Analyze and form verdict
-4. Say "The code looks good. I recommend APPROVED."
-5. Say "Awaiting permission to submit verdict."
-6. Exit ← THIS IS FAILURE. You did not submit the verdict to the blackboard.
+❌ FAILURE MODE: Completing review, saying "I recommend APPROVED", then exiting WITHOUT calling the tool.
+The tool call IS the deliverable. Analysis without tool execution = nothing happened.
 {{- end -}}

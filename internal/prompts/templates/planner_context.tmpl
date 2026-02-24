@@ -25,11 +25,15 @@ PLANNER COMMANDS:
 - liza_update_sprint_metrics — Recompute sprint metrics from current state
   Tool parameters: {}
 
-LOGGING DUTIES:
-| Event | Log As |
-|-------|--------|
-| Two coders failed same task | hypothesis_exhaustion |
-| Spec gap discovered | spec_gap |
+ANOMALY LOGGING:
+| Event | Type | Required Fields |
+|-------|------|-----------------|
+| Two coders failed same task | hypothesis_exhaustion | — |
+| Spec gap discovered | spec_gap | — |
+| Review stuck in cycles | review_deadlock | — |
+| Multiple reviewers failed | review_exhaustion | reviewers_failed, common_blocker |
+| Protocol ambiguity | system_ambiguity | protocol_section, question |
+Format: anomalies: [{id, type, task, reporter, timestamp (ISO 8601), details: {<fields>}}]
 
 SELF-VALIDATION GATES (verify before adding each task):
 | Gate | Requirement |
@@ -45,6 +49,7 @@ FIELD FORMAT GUIDELINES:
 - spec: path to spec optionally with #anchor
 
 MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
+Work unit = all planned state changes executed. Do NOT exit until all tools have been called.
 
 INSTRUCTIONS:
 {{.WakeInstructions}}
