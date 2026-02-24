@@ -36,8 +36,8 @@ func LoadTaskInputFromFile(path string) (*TaskInput, error) {
 	return &input, nil
 }
 
-// AddTaskCommand adds a new task and runs validation.
-// Delegates business logic to ops.AddTask.
+// AddTaskCommand adds a new task.
+// Delegates business logic (including post-write validation) to ops.AddTask.
 func AddTaskCommand(statePath, logPath string, input *TaskInput, plannerID string) error {
 	opsInput := &ops.AddTaskInput{
 		ID:          input.ID,
@@ -56,11 +56,6 @@ func AddTaskCommand(statePath, logPath string, input *TaskInput, plannerID strin
 	}
 	for _, w := range result.Warnings {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-	}
-
-	// Run validation
-	if err := ValidateCommand(statePath, false); err != nil {
-		return fmt.Errorf("validation failed after adding task: %w", err)
 	}
 
 	return nil

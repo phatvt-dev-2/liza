@@ -96,9 +96,10 @@ func TestWaitForReviewerWork(t *testing.T) {
 	now := time.Now().UTC()
 
 	tests := []struct {
-		name     string
-		tasks    []models.Task
-		wantWork bool
+		name        string
+		tasks       []models.Task
+		wantWork    bool
+		wantCleared bool
 	}{
 		{
 			name: "reviewable task available",
@@ -109,15 +110,14 @@ func TestWaitForReviewerWork(t *testing.T) {
 		},
 		{
 			name: "task with expired review lease",
-			tasks: []models.Task{
-				{
-					ID:                 "task-1",
-					Status:             models.TaskStatusReadyForReview,
-					ReviewingBy:        testhelpers.StringPtr("reviewer-1"),
-					ReviewLeaseExpires: testhelpers.TimePtr(now.Add(-10 * time.Minute)),
-				},
-			},
-			wantWork: true,
+			tasks: func() []models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+				task.ReviewingBy = testhelpers.StringPtr("reviewer-1")
+				task.ReviewLeaseExpires = testhelpers.TimePtr(now.Add(-10 * time.Minute))
+				return []models.Task{task}
+			}(),
+			wantWork:    true,
+			wantCleared: true,
 		},
 		{
 			name: "no reviewable tasks",
@@ -132,7 +132,7 @@ func TestWaitForReviewerWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-			lizaDir := filepath.Dir(statePath)
+			projectRoot := tmpDir
 
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
@@ -146,7 +146,7 @@ func TestWaitForReviewerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "code-reviewer", config, 10*time.Millisecond, 100*time.Millisecond)
+			hasWork, err := waitForWork(ctx, db.New(statePath), projectRoot, "code-reviewer", config, 10*time.Millisecond, 100*time.Millisecond)
 
 			if err != nil {
 				t.Fatalf("waitForWork() error = %v", err)
@@ -154,6 +154,27 @@ func TestWaitForReviewerWork(t *testing.T) {
 
 			if hasWork != tt.wantWork {
 				t.Errorf("waitForWork() = %v, want %v", hasWork, tt.wantWork)
+			}
+
+			if tt.wantCleared {
+				updatedState, err := db.New(statePath).Read()
+				if err != nil {
+					t.Fatalf("failed to read updated state: %v", err)
+				}
+
+				task := updatedState.FindTask("task-1")
+				if task == nil {
+					t.Fatal("expected task-1 to exist")
+				}
+				if task.Status != models.TaskStatusReadyForReview {
+					t.Errorf("task status = %s, want %s", task.Status, models.TaskStatusReadyForReview)
+				}
+				if task.ReviewingBy != nil {
+					t.Errorf("reviewing_by = %v, want nil", *task.ReviewingBy)
+				}
+				if task.ReviewLeaseExpires != nil {
+					t.Errorf("review_lease_expires = %v, want nil", *task.ReviewLeaseExpires)
+				}
 			}
 		})
 	}

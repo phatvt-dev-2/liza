@@ -1,9 +1,11 @@
 package ops
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -75,8 +77,35 @@ func TestAddTask_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, ".liza", "log.jsonl")
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	testhelpers.CreateSpecFile(t, tmpDir, "feature-x.md", "# Feature X\n")
 
 	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	state.Tasks = append(state.Tasks,
+		models.Task{
+			ID:          "dep-1",
+			Description: "Dependency 1",
+			Status:      models.TaskStatusMerged,
+			Priority:    1,
+			SpecRef:     "specs/vision.md",
+			DoneWhen:    "done",
+			Scope:       "scope",
+			Created:     now,
+			History:     []models.TaskHistoryEntry{},
+		},
+		models.Task{
+			ID:          "dep-2",
+			Description: "Dependency 2",
+			Status:      models.TaskStatusMerged,
+			Priority:    1,
+			SpecRef:     "specs/vision.md",
+			DoneWhen:    "done",
+			Scope:       "scope",
+			Created:     now,
+			History:     []models.TaskHistoryEntry{},
+		},
+	)
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	input := &AddTaskInput{
@@ -149,12 +178,13 @@ func TestAddTask_DefaultPlannerID(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, ".liza", "log.jsonl")
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
 
 	state := testhelpers.CreateValidState()
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	input := &AddTaskInput{
-		ID: "task-1", Description: "d", SpecRef: "s",
+		ID: "task-1", Description: "d", SpecRef: "specs/vision.md",
 		DoneWhen: "w", Scope: "sc", Priority: 1,
 	}
 
@@ -190,5 +220,50 @@ func TestAddTask_DuplicateID(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("Error = %q, want to contain 'already exists'", err.Error())
+	}
+}
+
+func TestAddTask_PostWriteValidationFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	logFile := filepath.Join(tmpDir, ".liza", "log.jsonl")
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	testhelpers.CreateSpecFile(t, tmpDir, "feature-x.md", "# Feature X\n")
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = append(state.Tasks, models.Task{
+		ID:          "invalid-existing-task",
+		Description: "Invalid existing task",
+		Status:      models.TaskStatusImplementing, // missing assigned_to/worktree/base_commit
+		Priority:    1,
+		SpecRef:     "specs/vision.md",
+		DoneWhen:    "done",
+		Scope:       "scope",
+		Created:     time.Now().UTC(),
+		History:     []models.TaskHistoryEntry{},
+	})
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	input := &AddTaskInput{
+		ID:          "task-added-before-validation-failure",
+		Description: "Task to trigger post-write validation",
+		SpecRef:     "specs/feature-x.md",
+		DoneWhen:    "tests pass",
+		Scope:       "internal/ops",
+		Priority:    1,
+	}
+
+	_, err := AddTask(stateFile, logFile, input, "planner-1")
+	if err == nil {
+		t.Fatal("expected post-write validation error")
+	}
+
+	var validationErr *PostWriteValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected PostWriteValidationError, got %T: %v", err, err)
+	}
+
+	if !strings.Contains(err.Error(), "state validation failed") {
+		t.Fatalf("error = %q, want to contain %q", err.Error(), "state validation failed")
 	}
 }

@@ -3,45 +3,33 @@ package agent
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/liza-mas/liza/internal/db"
-	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 )
-
-// selectHighestPriorityTask returns the highest-priority task from candidates,
-// using creation time as FIFO tie-breaker. Returns nil if candidates is empty.
-func selectHighestPriorityTask(candidates []*models.Task) *models.Task {
-	var best *models.Task
-	for _, t := range candidates {
-		if best == nil || t.Priority < best.Priority {
-			best = t
-		} else if t.Priority == best.Priority && best.Created.After(t.Created) {
-			best = t
-		}
-	}
-	return best
-}
 
 // claimCoderTask finds and claims a claimable task.
 // If the same coder previously initiated a handoff, it resumes that task first.
 func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, worktree string, err error) {
 	logger := GetLogger()
 
-	state, err := bb.Read()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to read state: %w", err)
-	}
-
-	id, wt, found, err := resumeHandoffTask(bb, state, agentID)
+	// First, try to resume a handoff task
+	handoffResult, err := ops.ResumeHandoff(ops.ResumeHandoffInput{
+		ProjectRoot: projectRoot,
+		AgentID:     agentID,
+	})
 	if err != nil {
 		return "", "", err
 	}
-	if found {
-		logger.Info("Resuming claimed task from handoff", "task_id", id, "agent_id", agentID)
-		return id, wt, nil
+	if handoffResult.Found {
+		logger.Info("Resuming claimed task from handoff", "task_id", handoffResult.TaskID, "agent_id", agentID)
+		return handoffResult.TaskID, handoffResult.Worktree, nil
+	}
+
+	state, err := bb.Read()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read state: %w", err)
 	}
 
 	var candidates []*models.Task
@@ -65,128 +53,36 @@ func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, wor
 	return result.TaskID, result.WorktreeRel, nil
 }
 
-// resumeHandoffTask looks for a handoff task assigned to agentID and resumes it.
-// Returns found=false when no resumable handoff exists.
-func resumeHandoffTask(bb *db.Blackboard, state *models.State, agentID string) (taskID, worktree string, found bool, err error) {
-	for i := range state.Tasks {
-		task := &state.Tasks[i]
-		if !isResumableHandoff(task, agentID) {
-			continue
+// selectHighestPriorityTask returns the highest-priority task from candidates,
+// using creation time as FIFO tie-breaker. Returns nil if candidates is empty.
+func selectHighestPriorityTask(candidates []*models.Task) *models.Task {
+	var best *models.Task
+	for _, t := range candidates {
+		if best == nil || t.Priority < best.Priority {
+			best = t
+		} else if t.Priority == best.Priority && best.Created.After(t.Created) {
+			best = t
 		}
-		if task.Worktree == nil {
-			return "", "", false, fmt.Errorf("handoff task %s missing worktree", task.ID)
-		}
-
-		now := time.Now().UTC()
-		id := task.ID
-		wt := *task.Worktree
-
-		err := bb.Modify(func(s *models.State) error {
-			t := s.FindTask(id)
-			if t == nil {
-				return &lizaerrors.NotFoundError{Entity: "task", ID: id}
-			}
-			if t.Status != models.TaskStatusImplementing {
-				return fmt.Errorf("task %s is no longer IMPLEMENTING", id)
-			}
-			if t.AssignedTo == nil || *t.AssignedTo != agentID {
-				return fmt.Errorf("task %s is no longer assigned to %s", id, agentID)
-			}
-
-			if t.LeaseExpires == nil || t.LeaseExpires.Before(now) {
-				leaseDuration := s.Config.LeaseDuration
-				if leaseDuration <= 0 {
-					leaseDuration = models.DefaultLeaseDurationSeconds
-				}
-				renewed := now.Add(time.Duration(leaseDuration) * time.Second)
-				t.LeaseExpires = &renewed
-			}
-
-			t.HandoffPending = false
-			agentPtr := &agentID
-			t.History = append(t.History, models.TaskHistoryEntry{
-				Time:  now,
-				Event: "handoff_resumed",
-				Agent: agentPtr,
-			})
-
-			agent, ok := s.Agents[agentID]
-			if !ok {
-				agent = models.Agent{Role: "coder"}
-			}
-			agent.Status = models.AgentStatusWorking
-			agent.CurrentTask = &id
-			agent.LeaseExpires = t.LeaseExpires
-			agent.Heartbeat = now
-			s.Agents[agentID] = agent
-			return nil
-		})
-		if err != nil {
-			GetLogger().Warn("Handoff resume conflict, trying next candidate", "task_id", id, "error", err)
-			continue
-		}
-
-		return id, wt, true, nil
 	}
-	return "", "", false, nil
+	return best
 }
 
-// claimReviewerTask finds and claims a reviewable task
-func claimReviewerTask(agentID string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
+// claimReviewerTask finds and claims a reviewable task.
+// Delegates to ops.ClaimReviewerTask for the actual state mutation.
+func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
 	logger := GetLogger()
-	now := time.Now().UTC()
-	leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
 
-	err = bb.Modify(func(state *models.State) error {
-		// Find reviewable task with highest priority
-		// READY_FOR_REVIEW tasks are available for claiming (stale REVIEWING leases
-		// are reverted to READY_FOR_REVIEW by ops.ClearStaleReviewClaims)
-		var candidates []*models.Task
-		for i := range state.Tasks {
-			if state.Tasks[i].IsClaimable(models.RoleCodeReviewer, state.Tasks) {
-				candidates = append(candidates, &state.Tasks[i])
-			}
-		}
-		task := selectHighestPriorityTask(candidates)
-
-		if task == nil {
-			return fmt.Errorf("no reviewable tasks found")
-		}
-
-		// Atomically claim the task and transition to REVIEWING
-		if err := task.Transition(models.TaskStatusReviewing); err != nil {
-			return err
-		}
-		task.ReviewingBy = &agentID
-		task.ReviewLeaseExpires = &leaseExpires
-
-		// Update agent status
-		agent := state.Agents[agentID]
-		agent.Status = models.AgentStatusReviewing
-		currentTask := task.ID
-		agent.CurrentTask = &currentTask
-		agent.Heartbeat = now
-		agent.LeaseExpires = &leaseExpires
-		state.Agents[agentID] = agent
-
-		// Capture values to return
-		taskID = task.ID
-		if task.Worktree != nil {
-			worktree = *task.Worktree
-		}
-		if task.ReviewCommit != nil {
-			reviewCommit = *task.ReviewCommit
-		}
-
-		return nil
+	result, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
+		ProjectRoot:   projectRoot,
+		AgentID:       agentID,
+		LeaseDuration: leaseDuration,
 	})
-
 	if err != nil {
 		logger.Error("Review claim error", "error", err)
 		return "", "", "", err
 	}
 
-	return taskID, worktree, reviewCommit, nil
+	return result.TaskID, result.Worktree, result.ReviewCommit, nil
 }
 
 // handleApprovedMerges handles merging approved tasks

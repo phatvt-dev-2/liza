@@ -203,17 +203,17 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 
 **Skill:** systemic-thinking
 **Category:** TENSION
+**Status:** PARTIALLY RESOLVED (`ac4ce6f5`)
 
-**Issue:** The `ops` extraction that resolved "Commands Presentation+Logic Coupling" was structurally incomplete. All task lifecycle mutations from CLI and MCP consumers route through `ops` — a clean business logic layer with typed inputs, structured results, and three-phase validation for claiming. But the `agent` package — the third and most critical consumer — mutates both task and agent state directly via `bb.Modify` in `claimReviewerTask`, `resumeHandoffTask`, `registerAgent`, `resetAgentAfterExit`, and `setAgentToPlanningStatus`. This creates two mutation tracks: `ops` (validated, structured, reusable across CLI/MCP/agent) and `agent` (inline closures, only callable from the supervisor). The reviewer claiming path is the most consequential — it transitions task status, sets `reviewing_by`, updates agent state, and captures return values via closure variables, all in a single `Modify` closure with no structured result type and no way for MCP or CLI to invoke the same logic.
+**Issue:** The `ops` extraction that resolved "Commands Presentation+Logic Coupling" was structurally incomplete. All task lifecycle mutations from CLI and MCP consumers route through `ops` — a clean business logic layer with typed inputs, structured results, and three-phase validation for claiming. But the `agent` package — the third and most critical consumer — ~~mutates both task and agent state directly via `bb.Modify` in `claimReviewerTask`, `resumeHandoffTask`,~~ `registerAgent`, `resetAgentAfterExit`, and `setAgentToPlanningStatus`. ~~This creates two mutation tracks: `ops` (validated, structured, reusable across CLI/MCP/agent) and `agent` (inline closures, only callable from the supervisor). The reviewer claiming path is the most consequential — it transitions task status, sets `reviewing_by`, updates agent state, and captures return values via closure variables, all in a single `Modify` closure with no structured result type and no way for MCP or CLI to invoke the same logic.~~ *(partially resolved: `ac4ce6f5` — reviewer claiming and handoff resumption extracted to `ops.ClaimReviewerTask` and `ops.ResumeHandoff` with structured input/result types and comprehensive test coverage)*
 
-**Implication:** The ops layer promises to be the single source of truth for state mutations, but reviewer claiming, handoff resumption, and all agent lifecycle management are structurally unreachable from non-supervisor consumers, and changes to claiming semantics must be updated in two different architectural layers with different patterns.
+**Remaining gap:** Agent lifecycle management (`registerAgent`, `resetAgentAfterExit`, `setAgentToPlanningStatus`) still mutates state via inline `bb.Modify` closures in the `agent` package. These are agent-identity operations (not task-lifecycle), so the boundary may be intentional.
 
-**Current mitigation:** Reviewer claiming is simpler than coder claiming (no worktree creation, no three-phase pattern needed), so the complexity gap hasn't caused bugs yet.
+**Implication:** The ops layer is now the source of truth for all task lifecycle mutations including reviewer claiming. Agent lifecycle management remains a second mutation track, but with narrower scope (agent state only, not task transitions).
 
 **Future options:**
-- Extract `ops.ClaimReviewerTask` and `ops.ResumeHandoff` with structured result types
 - Extract `ops.RegisterAgent` / `ops.UnregisterAgent` for agent lifecycle
-- Accept the split as intentional: ops owns task lifecycle, agent owns agent lifecycle and reviewer claims (document the boundary)
+- Accept the split as intentional: ops owns task lifecycle, agent owns agent lifecycle (document the boundary)
 
 ### MCP Cross-Layer Read Dependency
 
@@ -509,21 +509,15 @@ Bottlenecks that emerge under load.
 - Optimistic claiming with conflict resolution
 - Dedicated claim coordinator separate from agent supervisor
 
-### Validation Integrity Split by Ingress
+### ~~Validation Integrity Split by Ingress~~
 
 **Skill:** systemic-thinking
 **Category:** STRESS POINT
+**Status:** RESOLVED (`6fe5bcc`)
 
-**Issue:** Equivalent task-creation mutations do not share equivalent validation pressure by interface. CLI `add-task` executes post-mutation `ValidateCommand`, while MCP `liza_add_task` persists through `ops.AddTask` and returns without that same immediate full-state validation pass. Under scale or automation-heavy MCP usage, validation load shifts from write-time gating to later detection.
+**Issue:** Equivalent task-creation mutations do not share equivalent validation pressure by interface. CLI `add-task` executes post-mutation `ValidateCommand`, while MCP `liza_add_task` persists through `ops.AddTask` and returns without that same immediate full-state validation pass.
 
-**Implication:** State consistency risk concentrates at the highest-throughput ingress, making failures surface later and farther from the originating mutation.
-
-**Current mitigation:** Explicit `liza_validate` calls and watchdog workflows can catch invalid state after the fact.
-
-**Future options:**
-- Move mandatory post-write validation into shared ops mutation flow
-- Add MCP-side atomic mutate+validate command variants for write operations
-- Treat write-without-validation as an explicit mode with telemetry and alerts
+**Fix:** Validation logic extracted from `commands/validate.go` (now a 28 LOC thin wrapper) into a shared `internal/statevalidate` package. `ops.AddTask` now runs `statevalidate.ValidateStateFile()` after every successful write and returns a typed `PostWriteValidationError` when mutation succeeds but validation fails. MCP classifies this as `ValidationError`. Both CLI and MCP ingress paths now share identical validation pressure at the ops layer.
 
 ### Filesystem/Git I/O Contention
 
@@ -541,21 +535,21 @@ Bottlenecks that emerge under load.
 - Git operations queuing (serialization mutex for integration branch merges)
 - Separate integration repo for merges
 
-### Exit Code 42 Restart Loop Without Progress Detection
+### ~~Exit Code 42 Restart Loop Without Progress Detection~~
 
 **Skill:** systemic-thinking
 **Category:** STRESS POINT
+**Status:** RESOLVED (`f15cd61`, `5f05403`)
 
-**Issue:** The supervisor loop (`agent/supervisor.go:293-298`) treats exit code 42 as a graceful restart with a fixed 2-second sleep, with no tracking of restart frequency or progress verification. An agent that repeatedly encounters context pressure and self-aborts will restart indefinitely without triggering circuit breaker patterns or human escalation.
+**Issue:** The supervisor loop treated exit code 42 as a graceful restart with a fixed 2-second sleep, with no tracking of restart frequency or progress verification.
 
-**Implication:** A misconfigured task or environment issue that causes consistent context-exhaustion aborts creates a busy-wait loop consuming compute resources and log volume while making no progress, with no automatic detection or backpressure.
-
-**Current mitigation:** Exit code 42 is intended for context exhaustion where agent believes restart with fresh context will help. No tracking exists to detect when it doesn't.
-
-**Future options:**
-- Track restart count per task and escalate after N restarts without progress
-- Exponential backoff on repeated exit 42 (2s, 4s, 8s, ... up to max)
-- Circuit breaker pattern for exit 42 clusters on same task
+**Fix:** `exit42RestartTracker` in `agent/supervisor.go` implements all three mitigations:
+- Per-task restart count tracking with task-progress signature detection (resets count when task state changes meaningfully between restarts)
+- Capped exponential backoff (2s, 4s, 8s, ... up to configurable `exit42_max_backoff_seconds`, default 60s)
+- Circuit breaker: after `exit42_restart_threshold` (default 5) consecutive restarts without progress, task transitions to BLOCKED with diagnostic reason and questions
+- New config fields: `exit42_restart_threshold`, `exit42_max_backoff_seconds`
+- New task field: `exit42_restart_count`
+- Comprehensive unit tests covering backoff growth/cap, threshold blocking, and counter reset on progress
 
 ### Cache Coherence Gap in Multi-Process Deployments
 
@@ -579,21 +573,20 @@ Bottlenecks that emerge under load.
 
 Failure propagation paths and silent bypass patterns.
 
-### Integration Test Script Silent Absence
+### ~~Integration Test Script Silent Absence~~
 
 **Skill:** systemic-thinking
 **Category:** CASCADE
+**Status:** RESOLVED (`bce626d`, `52ceac5`)
 
-**Issue:** The merge operation (`ops/wt_merge.go:272-308`) checks for `scripts/integration-test.sh` and runs it if present, but silently skips testing if the file doesn't exist. There's no warning, metric, or audit trail that a merge proceeded without validation. The `MergeResult.TestsRan` boolean captures this but it's only visible in the immediate result, not in persistent state or history.
+**Issue:** The merge operation silently skipped testing if `scripts/integration-test.sh` didn't exist — no warning, metric, or audit trail.
 
-**Implication:** Accidental deletion or renaming of the integration test script will not be detected—merges will appear successful while bypassing quality gates, allowing regressions to reach the integration branch without any systemic signal.
-
-**Current mitigation:** Operators can check `TestsRan` in merge output. The integration test script must be created manually or by project setup — `liza init` does not create it.
-
-**Future options:**
-- Require explicit opt-out (flag or config) to merge without tests
-- Log warning when merge proceeds without integration tests
-- Include `tests_ran` in task history for audit trail
+**Fix:** Three mitigations implemented:
+- `MergeResult.NoTestScriptFound` boolean distinguishes "no test script" from "tests ran and passed"
+- `log.Printf` WARNING when merge proceeds without integration test script (audit trail)
+- `tests_ran` boolean persisted in task merge history `Extra` field for persistent audit
+- Stat error handling upgraded to tri-state: exists → run tests, `os.ErrNotExist` → log warning + set flag, other stat error → log distinct warning (addresses the `os.Stat` under-handling smell for this specific site)
+- Comprehensive test coverage: `TestMergeWorktree_NoTestScriptWarning`, `TestMergeWorktree_TestsRanInHistory`, non-`ErrNotExist` stat regression test
 
 ---
 
@@ -629,21 +622,24 @@ Partial failure modes with unclear recovery.
 - `liza validate` checks embedded vs installed contract consistency
 - Single delivery path (eliminate duplication, choose symlinks or embedding)
 
-### MCP Tool Schema Drift
+### ~~MCP Tool Schema Drift~~
 
 **Skill:** systemic-thinking
 **Category:** FRAGILITY
+**Status:** RESOLVED (`642f94e`, `c9b17a3`)
 
-**Issue:** Each of the ~20 MCP tools is registered with an `InputSchema` declaring required fields, types, defaults, and enum constraints. These schemas are the agent-facing contract — agents decide which parameters to provide based on schema declarations. The schemas are hand-coded in `server.go` registration calls with no connection to the corresponding `ops.*` function signatures or input types. A schema declaring a field as required while the ops function derives it internally has already occurred in `submit-for-review` and later regressed, demonstrating recurrence risk. There is no compile-time verification, no test that round-trips schema declarations against handler parameter extraction, and no generated schema. Each tool registration is an independent manual synchronization point between three artifacts: the `InputSchema`, the handler's `requireString`/parameter extraction, and the `ops.*` function's actual parameters.
+**Issue:** Hand-coded MCP `InputSchema` declarations could drift from handler parameter extraction with no compile-time or test-time verification.
 
-**Implication:** Schema-to-implementation drift is a per-tool risk that scales linearly with tool count, and the system's own history demonstrates this failure mode has already occurred.
+**Fix:** `schema_consistency_test.go` (584 LOC) uses Go AST parsing to extract handler parameter requirements directly from source code:
+- Parses `registerTool` calls in `server.go` to map tool name → handler function
+- Parses `handlers.go` to derive required fields from `requireString`, helper calls (`requireTaskAndAgent`), and `extractStringSlice` patterns (len guard)
+- Asserts schema `Required` fields match handler-required fields for all tools
+- Asserts extracted parameters are declared in schema properties
+- Dedicated `submit-for-review` SHA field regression test
+- `Server.GetTool()`, `GetHandler()`, `ToolNames()` methods added for testability
+- All ~20 tools covered; new tools automatically included in consistency checks
 
-**Current mitigation:** Handler functions extract parameters with `requireString` which fails fast on missing fields. MCP dispatch tests cover routing but not schema-to-handler consistency.
-
-**Future options:**
-- Generate `InputSchema` from `ops.*Input` struct tags (single source of truth)
-- Test that each tool's declared required fields match its handler's `requireString` calls
-- Schema validation middleware that rejects calls not matching declared schema before handler invocation
+**Remaining:** Schemas are still hand-coded (not generated from struct tags). The test suite makes drift detectable but not impossible. Schema generation from `ops.*Input` struct tags remains a future option for single-source-of-truth enforcement.
 
 ### Bootstrap Artifact Path Drift
 
@@ -727,19 +723,19 @@ Unacknowledged forces or gaps the system doesn't model.
 - Canary questions: supervisor tests agent's knowledge of key contract clauses before allowing work
 - Reduce initialization surface by embedding more rules in supervisor-enforced structural mechanisms
 
-### Planner Role Invisible in Type System
+### ~~Planner Role Invisible in Type System~~
 
 **Skill:** systemic-thinking
 **Category:** BLIND SPOT
+**Status:** RESOLVED (`e173f71`)
 
-**Issue:** The planner is identified as the "Single Semantic Interpreter" in this document — the most structurally critical role. Yet it is the only role absent from the type system. The task workflow registry (`taskWorkflows` in `models/state.go`) declares `{coding: [coder, code_reviewer]}`; the planner doesn't appear. Its behavioral rules are distributed implicitly across four files in the `agent` package: infinite wait time override in `waitforwork.go` (`365 * 24 * time.Hour`), wake trigger detection in `workdetection.go` (priority-ordered state inspection), pseudo-task creation in `supervisor.go` (sets `CurrentTask` to string literal `"planning"`), and post-execution state verification in `systemctl.go`. None of these rules reference a declarative definition. `models.RoleCoder` and `models.RoleCodeReviewer` constants exist but there is no `models.RolePlanner`. The agent identity validation in `registration.go` accepts any `{role}-{number}` format — `planner-1` is valid by string convention, not type constraint.
+**Issue:** The planner was the only role absent from the type system. `models.RoleCoder` and `models.RoleCodeReviewer` existed but there was no `models.RolePlanner`. Wake trigger detection used imperative branching rather than declarative definitions.
 
-**Implication:** Adding a second coordinator role (architect, integrator) requires discovering and replicating the planner's implicit behavioral conventions by reading Go control flow, rather than extending a declaration — the most critical role is the least formally defined.
-
-**Future options:**
-- Add `models.RolePlanner` constant and planner-specific type declarations
-- Declare planner wake triggers as data (trigger type → state predicate map) rather than imperative code
-- Extract planner behavioral rules from agent package into a declarative configuration consumed by the supervisor
+**Fix:** All three "future options" addressed:
+- `models.RolePlanner` constant added as alias for `roles.WorkflowPlanner`; `IsClaimable()` now has explicit planner case (returns false — planners don't participate in task claiming)
+- `roles.WorkflowPlanner` added with bidirectional `ToWorkflow()`/`ToRuntime()` mapping; `AllWorkflow()` and `AllRuntime()` include planner; `IsValidRuntime()` no longer special-cases planner
+- `plannerWakeTriggerSpecs` in `workdetection.go` declares wake triggers as data (trigger type → description → state predicate), replacing imperative if-else branching; tests verify trigger order, descriptions, and count functions
+- Remaining implicit behaviors: infinite wait time override in `waitforwork.go`, pseudo-task `"planning"` in `supervisor.go`, post-execution verification in `systemctl.go` — these are supervisor-specific and appropriate for the agent package
 
 ### No Source Type for Pre-Implementation Spec Findings
 
@@ -1002,6 +998,12 @@ Issues identified through code-level architectural analysis (patterns, structure
 - [x] `DeleteTask` side effects outpace state commit — git cleanup deferred to after state mutation *(software-architecture-review)*
 - [x] `get config.*` projection drift — reflect-based walker discovers all YAML-tagged fields *(software-architecture-review)*
 - [x] `ReleaseClaim` orphans worktree/branch on coder release — cleanup added post-state-mutation; `handleReadyClaimWorktree` made resilient to stale resources *(bug-fix)*
+- [x] Exit code 42 restart loop — per-task restart tracking with exponential backoff and circuit breaker to BLOCKED *(systemic-thinking)*
+- [x] Planner role invisible in type system — `models.RolePlanner`, `roles.WorkflowPlanner`, declarative `plannerWakeTriggerSpecs` *(systemic-thinking)*
+- [x] Two-Track State Mutation (partial) — `ops.ClaimReviewerTask` and `ops.ResumeHandoff` extracted with structured input/result types; agent lifecycle still inline *(systemic-thinking)*
+- [x] Validation Integrity Split by Ingress — `internal/statevalidate` package extracted; `ops.AddTask` runs post-write validation with typed `PostWriteValidationError`; both CLI and MCP share identical validation pressure *(systemic-thinking)*
+- [x] Integration Test Script Silent Absence — `NoTestScriptFound` field, log WARNING on missing script, `tests_ran` persisted in merge history `Extra`, tri-state stat handling *(systemic-thinking)*
+- [x] MCP Tool Schema Drift — AST-based `schema_consistency_test.go` (584 LOC) verifies schema/handler consistency for all ~20 tools; `GetTool()`/`GetHandler()`/`ToolNames()` accessors added *(systemic-thinking)*
 
 ---
 
@@ -1060,6 +1062,12 @@ Commit SHA where issue details were first marked as fixed (proxy for actual fix 
 | `DeleteTask` side effects outpace state commit | `7dd05ce` |
 | `get config.*` projection drift | `c4bd748` |
 | `ReleaseClaim` orphans worktree/branch on coder release | (pending commit) |
+| Exit Code 42 Restart Loop Without Progress Detection | `f15cd61`, `5f05403` |
+| Planner Role Invisible in Type System | `e173f71` |
+| Two-Track State Mutation (partial — reviewer claiming + handoff) | `ac4ce6f` |
+| Validation Integrity Split by Ingress | `6fe5bcc` |
+| Integration Test Script Silent Absence | `bce626d`, `52ceac5` |
+| MCP Tool Schema Drift | `642f94e`, `c9b17a3` |
 
 ---
 

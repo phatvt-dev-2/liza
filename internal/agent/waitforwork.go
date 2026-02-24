@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -269,6 +270,12 @@ func countResumableHandoffTasks(state *models.State, agentID string) int {
 
 // waitForReviewerWork waits for reviewable tasks using event-driven detection
 func waitForReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
+	if cleared, err := ops.ClearStaleReviewClaims(projectRoot); err != nil {
+		GetLogger().Warn("Failed to clear stale review claims before reviewer wait", "error", err)
+	} else if cleared > 0 {
+		GetLogger().Info("Cleared stale review claims before reviewer wait", "count", cleared)
+	}
+
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			count := models.CountReviewableTasks(s, models.RoleCodeReviewer)

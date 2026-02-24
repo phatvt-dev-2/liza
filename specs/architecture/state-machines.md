@@ -337,7 +337,7 @@ The delay is configurable via `config.coder_poll_interval` (default 30s) — lon
 | Crash (any exit code except 0, 42) | 5s | Recovery delay for unexpected failures |
 | Exit 0 with DRAFT tasks | `coder_poll_interval` (30s) | Wait for Planner to finalize, then re-check |
 
-**v1 Simplification:** No exponential backoff or state-change detection. Simple fixed delays are sufficient for v1 scale. Exponential backoff for persistent failures deferred to v2.
+**v1 Implementation (`f15cd61`):** Per-task `exit42RestartTracker` applies capped exponential backoff (2s, 4s, 8s, ... up to `exit42_max_backoff_seconds`, default 60s). Progress detection via task-state signature comparison resets the counter when meaningful state changes occur between restarts. After `exit42_restart_threshold` (default 5) consecutive restarts without progress, the task transitions to BLOCKED with diagnostic reason and questions. Configurable via `config.exit42_restart_threshold` and `config.exit42_max_backoff_seconds`.
 
 ### Graceful Abort Triggers (Exit 42)
 

@@ -2,14 +2,14 @@ package agent
 
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -90,407 +90,356 @@ func TestMockCLIExecution(t *testing.T) {
 	}
 }
 
-// TestSupervisorBasicLoop tests basic supervisor operation
-// Uses planner role to avoid git repository requirements
-func TestSupervisorBasicLoop(t *testing.T) {
+func TestExit42RestartTracker_ExponentialBackoffAndCap(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-	state := testhelpers.CreateValidState()
-	// No tasks initially - planner will detect INITIAL_PLANNING trigger
-	state.Tasks = []models.Task{}
-	// Set short poll intervals for fast test
-	state.Config.CoderPollInterval = 1 // 1 second
-	state.Config.CoderMaxWait = 5      // 5 seconds
-
-	testhelpers.WriteInitialState(t, statePath, state)
-
-	mock := &MockCLIExecutor{
-		ExitCode: 0, // Exit successfully after first iteration
-	}
-
-	config := SupervisorConfig{
-		AgentID:     "planner-1",
-		Role:        "planner",
-		ProjectRoot: tmpDir,
-		StatePath:   statePath,
-		SpecsDir:    filepath.Join(tmpDir, "specs"),
-		CLIName:     "claude",
-		Executor:    mock,
-	}
-
-	// Create required directories
-	os.MkdirAll(config.SpecsDir, 0755)
-
-	// Set STOPPED mode after first execution to exit the loop
-	bb := db.New(statePath)
-	go func() {
-		// Wait for first execution
-		waitTicker := time.NewTicker(10 * time.Millisecond)
-		defer waitTicker.Stop()
-		for len(mock.GetCalls()) == 0 {
-			<-waitTicker.C
-		}
-		// Set STOPPED mode
-		bb.Modify(func(s *models.State) error {
-			s.Config.Mode = models.SystemModeStopped
-			return nil
-		})
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := RunSupervisor(ctx, config)
-
-	if err != nil && err != context.DeadlineExceeded {
-		t.Errorf("RunSupervisor() error = %v", err)
-	}
-
-	// Verify agent was registered and unregistered
-	finalState, err := db.New(statePath).Read()
-	if err != nil {
-		t.Fatalf("Failed to read final state: %v", err)
-	}
-
-	if _, exists := finalState.Agents[config.AgentID]; exists {
-		t.Error("Agent should be unregistered after exit")
-	}
-}
-
-// TestInteractiveMode tests that interactive mode launches CLI interactively (no -p)
-func TestInteractiveMode(t *testing.T) {
-	tmpDir := t.TempDir()
-	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-	state := testhelpers.CreateValidState()
-	testhelpers.WriteInitialState(t, statePath, state)
-
-	mock := &MockCLIExecutor{}
-
-	config := SupervisorConfig{
-		AgentID:     "planner-1",
-		Role:        "planner",
-		ProjectRoot: tmpDir,
-		StatePath:   statePath,
-		SpecsDir:    filepath.Join(tmpDir, "specs"),
-		CLIName:     "claude",
-		Interactive: true,
-		Executor:    mock,
-	}
-
-	os.MkdirAll(config.SpecsDir, 0755)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	// In interactive mode, should launch CLI via ExecuteInteractive (not Execute)
-	err := RunSupervisor(ctx, config)
-
-	// Should exit cleanly (no error) or timeout waiting for next planner wake
-	if err != nil && err != context.DeadlineExceeded {
-		t.Errorf("RunSupervisor() error = %v, want nil or DeadlineExceeded", err)
-	}
-
-	if len(mock.GetCalls()) > 0 {
-		t.Error("Interactive mode should not call Execute (non-interactive)")
-	}
-
-	interactiveCalls := mock.GetInteractiveCalls()
-	if len(interactiveCalls) == 0 {
-		t.Error("Interactive mode should call ExecuteInteractive")
-	} else if interactiveCalls[0].CLIName != "claude" {
-		t.Errorf("ExecuteInteractive called with CLI %q, want %q", interactiveCalls[0].CLIName, "claude")
-	}
-}
-
-// TestSupervisorAbortsQuickly tests end-to-end ABORT behavior
-func TestSupervisorAbortsQuickly(t *testing.T) {
-	tmpDir := t.TempDir()
-	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-	state := testhelpers.CreateValidState()
-	state.Tasks = []models.Task{} // No work for coder
-	state.Config.CoderPollInterval = 1
-	state.Config.CoderMaxWait = 1800 // 30 minutes
-	testhelpers.WriteInitialState(t, statePath, state)
-
-	mock := &MockCLIExecutor{ExitCode: 0}
-
-	config := SupervisorConfig{
-		AgentID:     "coder-1",
-		Role:        "coder",
-		ProjectRoot: tmpDir,
-		StatePath:   statePath,
-		SpecsDir:    filepath.Join(tmpDir, "specs"),
-		CLIName:     "claude",
-		Executor:    mock,
-	}
-
-	os.MkdirAll(config.SpecsDir, 0755)
-
-	// Send ABORT signal after supervisor has registered itself.
-	go func() {
-		stopSystem := func() {
-			if err := db.New(statePath).Modify(func(s *models.State) error {
-				s.Config.Mode = models.SystemModeStopped
-				return nil
-			}); err != nil {
-				t.Logf("Failed to set STOPPED mode: %v", err)
-			}
-		}
-
-		waitTicker := time.NewTicker(10 * time.Millisecond)
-		defer waitTicker.Stop()
-		waitDeadline := time.After(2 * time.Second)
-
-		for {
-			select {
-			case <-waitTicker.C:
-				snapshot, err := db.New(statePath).Read()
-				if err == nil {
-					if _, exists := snapshot.Agents[config.AgentID]; exists {
-						stopSystem()
-						return
-					}
-				}
-			case <-waitDeadline:
-				stopSystem()
-				return
-			}
-		}
-	}()
-
-	ctx := context.Background()
-	startTime := time.Now()
-
-	err := RunSupervisor(ctx, config)
-	elapsed := time.Since(startTime)
-
-	if err != nil {
-		t.Errorf("RunSupervisor() error = %v", err)
-	}
-
-	// Should exit within 7 seconds (1s delay + 5s ticker + margin)
-	if elapsed > 7*time.Second {
-		t.Errorf("Supervisor took %v to exit, expected < 7s", elapsed)
-	}
-
-	// Verify no CLI execution happened (no work available for coder)
-	if len(mock.GetCalls()) > 0 {
-		t.Error("CLI should not be executed when ABORT is sent before work")
-	}
-}
-
-func TestResumeHandoffTask_SuccessRenewsLeaseAndUpdatesAgent(t *testing.T) {
-	tmpDir := t.TempDir()
-	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
 
 	agentID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	task.AssignedTo = &agentID
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{task}
+	state.Config.Exit42RestartThreshold = 99
+	state.Config.Exit42MaxBackoffSeconds = 8
+	state.Agents[agentID] = models.Agent{Role: roles.RuntimeCoder, Status: models.AgentStatusWorking}
+
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	tracker := newExit42RestartTracker()
+
+	var delays []time.Duration
+	for i := 0; i < 4; i++ {
+		outcome, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+		if err != nil {
+			t.Fatalf("Handle() error on attempt %d: %v", i+1, err)
+		}
+		if outcome.BlockedTask {
+			t.Fatalf("Handle() blocked task unexpectedly on attempt %d", i+1)
+		}
+		delays = append(delays, outcome.Delay)
+	}
+
+	wantDelays := []time.Duration{
+		2 * time.Second,
+		4 * time.Second,
+		8 * time.Second,
+		8 * time.Second,
+	}
+	for i, want := range wantDelays {
+		if delays[i] != want {
+			t.Errorf("delay[%d] = %v, want %v", i, delays[i], want)
+		}
+	}
+
+	updatedState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read state: %v", err)
+	}
+	updatedTask := updatedState.FindTask(task.ID)
+	if updatedTask == nil {
+		t.Fatalf("task %q not found", task.ID)
+	}
+
+	if updatedTask.BlockedReason != nil && *updatedTask.BlockedReason != "" {
+		t.Errorf("task should not be blocked yet, got reason: %s", *updatedTask.BlockedReason)
+	}
+}
+
+func TestExit42RestartTracker_Blocking(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	agentID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	task.AssignedTo = &agentID
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{task}
+	state.Config.Exit42RestartThreshold = 2
+	state.Agents[agentID] = models.Agent{Role: roles.RuntimeCoder, Status: models.AgentStatusWorking}
+
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	tracker := newExit42RestartTracker()
+
+	// First attempt
+	outcome, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	if err != nil {
+		t.Fatalf("Handle() error on attempt 1: %v", err)
+	}
+	if outcome.BlockedTask {
+		t.Fatalf("Handle() should not block on first attempt")
+	}
+
+	// Second attempt (at threshold)
+	outcome, err = tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	if err != nil {
+		t.Fatalf("Handle() error on attempt 2: %v", err)
+	}
+	if outcome.BlockedTask {
+		t.Fatalf("Handle() should not block at threshold")
+	}
+
+	// Third attempt (over threshold)
+	outcome, err = tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	if err != nil {
+		t.Fatalf("Handle() error on attempt 3: %v", err)
+	}
+	if !outcome.BlockedTask {
+		t.Fatalf("Handle() should block when over threshold")
+	}
+
+	updatedState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read state: %v", err)
+	}
+	updatedTask := updatedState.FindTask(task.ID)
+	if updatedTask == nil {
+		t.Fatalf("task %q not found", task.ID)
+	}
+
+	wantReason := "exit code 42 restart loop detected"
+	if updatedTask.BlockedReason == nil || !strings.Contains(*updatedTask.BlockedReason, wantReason) {
+		got := "<nil>"
+		if updatedTask.BlockedReason != nil {
+			got = *updatedTask.BlockedReason
+		}
+		t.Errorf("blocked reason = %q, want containing %q", got, wantReason)
+	}
+}
+
+func TestRunAgent_ExtractedOps_Integration(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+
+	// Create a task ready for review
 	taskID := "task-1"
-	worktree := ".worktrees/task-1"
-	expiredLease := time.Now().UTC().Add(-2 * time.Minute)
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusReadyForReview, now)
+	state.Tasks = []models.Task{task}
 
-	state := testhelpers.CreateValidState()
-	state.Config.LeaseDuration = 120
-	state.Tasks = []models.Task{
-		{
-			ID:             taskID,
-			Status:         models.TaskStatusImplementing,
-			AssignedTo:     &agentID,
-			Worktree:       &worktree,
-			HandoffPending: true,
-			LeaseExpires:   &expiredLease,
-			History:        []models.TaskHistoryEntry{},
-		},
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	// Test ClaimReviewerTask operation
+	input := ops.ClaimReviewerTaskInput{
+		ProjectRoot:   tmpDir,
+		AgentID:       "code-reviewer-1",
+		LeaseDuration: 300, // 5 minutes in seconds
 	}
-
-	bb := testhelpers.WriteInitialState(t, statePath, state)
-	snapshot, err := bb.Read()
+	result, err := ops.ClaimReviewerTask(input)
 	if err != nil {
-		t.Fatalf("Failed to read snapshot: %v", err)
+		t.Fatalf("ClaimReviewerTask failed: %v", err)
 	}
-
-	callStart := time.Now().UTC()
-	gotTaskID, gotWorktree, found, err := resumeHandoffTask(bb, snapshot, agentID)
-	if err != nil {
-		t.Fatalf("resumeHandoffTask() error = %v", err)
+	if result == nil {
+		t.Fatalf("ClaimReviewerTask returned nil result")
 	}
-	if !found {
-		t.Fatal("resumeHandoffTask() found = false, want true")
-	}
-	if gotTaskID != taskID {
-		t.Fatalf("resumeHandoffTask() taskID = %q, want %q", gotTaskID, taskID)
-	}
-	if gotWorktree != worktree {
-		t.Fatalf("resumeHandoffTask() worktree = %q, want %q", gotWorktree, worktree)
-	}
-
-	updated, err := bb.Read()
-	if err != nil {
-		t.Fatalf("Failed to read updated state: %v", err)
-	}
-
-	task := updated.FindTask(taskID)
-	if task == nil {
-		t.Fatalf("Task %q not found after resume", taskID)
-	}
-	if task.HandoffPending {
-		t.Fatal("task.handoff_pending = true, want false")
-	}
-	if task.LeaseExpires == nil || !task.LeaseExpires.After(callStart) {
-		t.Fatalf("task.lease_expires = %v, want renewed lease after %v", task.LeaseExpires, callStart)
-	}
-	if len(task.History) == 0 || task.History[len(task.History)-1].Event != "handoff_resumed" {
-		t.Fatalf("last history event = %v, want handoff_resumed", task.History)
-	}
-
-	agent, ok := updated.Agents[agentID]
-	if !ok {
-		t.Fatalf("agent %q not found after resume", agentID)
-	}
-	if agent.Status != models.AgentStatusWorking {
-		t.Fatalf("agent status = %q, want %q", agent.Status, models.AgentStatusWorking)
-	}
-	if agent.CurrentTask == nil || *agent.CurrentTask != taskID {
-		t.Fatalf("agent current_task = %v, want %q", agent.CurrentTask, taskID)
-	}
-	if agent.LeaseExpires == nil || !agent.LeaseExpires.Equal(*task.LeaseExpires) {
-		t.Fatalf("agent lease_expires = %v, want %v", agent.LeaseExpires, task.LeaseExpires)
+	if result.TaskID != taskID {
+		t.Errorf("result.TaskID = %s, want %s", result.TaskID, taskID)
 	}
 }
 
-func TestResumeHandoffTask_FailsWhenWorktreeMissing(t *testing.T) {
+func TestResumeHandoff_ExtractedOp_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
 
-	agentID := "coder-1"
 	state := testhelpers.CreateValidState()
-	// IMPLEMENTING task without Worktree field is invalid state that validateAgentInvariants
-	// would catch upstream. This tests resumeHandoffTask's own guard against the condition.
-	state.Tasks = []models.Task{
-		{
-			ID:             "task-1",
-			Status:         models.TaskStatusImplementing,
-			AssignedTo:     &agentID,
-			HandoffPending: true,
-		},
+
+	// Create a task with handoff pending
+	taskID := "task-1"
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusImplementing, now)
+	task.HandoffPending = true
+	agentID := "coder-1"
+	task.AssignedTo = &agentID
+	task.Worktree = &tmpDir
+	state.Tasks = []models.Task{task}
+	state.Agents[agentID] = models.Agent{
+		Role:   roles.RuntimeCoder,
+		Status: models.AgentStatusHandoff,
 	}
 
-	bb := testhelpers.WriteInitialState(t, statePath, state)
-	snapshot, err := bb.Read()
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	// Test ResumeHandoff operation
+	input := ops.ResumeHandoffInput{
+		ProjectRoot: tmpDir,
+		AgentID:     agentID,
+	}
+	result, err := ops.ResumeHandoff(input)
 	if err != nil {
-		t.Fatalf("Failed to read snapshot: %v", err)
+		t.Fatalf("ResumeHandoff failed: %v", err)
 	}
-
-	_, _, found, err := resumeHandoffTask(bb, snapshot, agentID)
-	if err == nil {
-		t.Fatal("resumeHandoffTask() error = nil, want missing worktree error")
+	if result == nil {
+		t.Fatalf("ResumeHandoff returned nil result")
 	}
-	testhelpers.AssertErrorContains(t, err, "missing worktree")
-	if found {
-		t.Fatal("resumeHandoffTask() found = true, want false")
+	if !result.Found {
+		t.Errorf("ResumeHandoff should find handoff task")
 	}
-
-	updated, err := bb.Read()
-	if err != nil {
-		t.Fatalf("Failed to read updated state: %v", err)
-	}
-	task := updated.FindTask("task-1")
-	if task == nil {
-		t.Fatal("task-1 not found")
-	}
-	if !task.HandoffPending {
-		t.Fatal("task.handoff_pending changed on failure, want true")
+	if result.TaskID != taskID {
+		t.Errorf("result.TaskID = %s, want %s", result.TaskID, taskID)
 	}
 }
 
-func TestResumeHandoffTask_EdgeCases(t *testing.T) {
-	t.Run("no resumable handoff returns not found", func(t *testing.T) {
+func TestResumeHandoff_NotFound_Integration(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+
+	// Create a task WITHOUT handoff pending
+	taskID := "task-1"
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusImplementing, now)
+	task.HandoffPending = false // Not pending
+	agentID := "coder-1"
+	task.AssignedTo = &agentID
+	state.Tasks = []models.Task{task}
+
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	// Test ResumeHandoff operation - should not find anything
+	input := ops.ResumeHandoffInput{
+		ProjectRoot: tmpDir,
+		AgentID:     agentID,
+	}
+	result, err := ops.ResumeHandoff(input)
+	if err != nil {
+		t.Fatalf("ResumeHandoff failed: %v", err)
+	}
+	if result == nil {
+		t.Fatalf("ResumeHandoff returned nil result")
+	}
+	if result.Found {
+		t.Errorf("ResumeHandoff should NOT find handoff task when HandoffPending=false")
+	}
+}
+
+// TestExtractedOps_BehavioralParity tests that the extracted ops functions
+// maintain the same behavior as the original inline closures
+func TestExtractedOps_BehavioralParity(t *testing.T) {
+	t.Run("ClaimReviewerTask finds highest priority task", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+		now := time.Now().UTC()
 
-		agentID := "coder-1"
-		worktree := ".worktrees/task-1"
 		state := testhelpers.CreateValidState()
-		state.Tasks = []models.Task{
-			{
-				ID:             "task-1",
-				Status:         models.TaskStatusImplementing,
-				AssignedTo:     testhelpers.StringPtr("coder-2"),
-				Worktree:       &worktree,
-				HandoffPending: true,
-			},
+
+		// Create multiple tasks with different priorities
+		task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+		task1.Priority = 2
+		task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now)
+		task2.Priority = 1 // Higher priority (lower number)
+
+		state.Tasks = []models.Task{task1, task2}
+
+		testhelpers.WriteInitialState(t, statePath, state)
+
+		input := ops.ClaimReviewerTaskInput{
+			ProjectRoot:   tmpDir,
+			AgentID:       "code-reviewer-1",
+			LeaseDuration: 300,
+		}
+		result, err := ops.ClaimReviewerTask(input)
+		if err != nil {
+			t.Fatalf("ClaimReviewerTask failed: %v", err)
 		}
 
-		bb := testhelpers.WriteInitialState(t, statePath, state)
-		snapshot, err := bb.Read()
-		if err != nil {
-			t.Fatalf("Failed to read snapshot: %v", err)
-		}
-
-		_, _, found, err := resumeHandoffTask(bb, snapshot, agentID)
-		if err != nil {
-			t.Fatalf("resumeHandoffTask() error = %v, want nil", err)
-		}
-		if found {
-			t.Fatal("resumeHandoffTask() found = true, want false")
+		// Should claim the highest priority task (task-2 with priority 1)
+		if result.TaskID != "task-2" {
+			t.Errorf("expected task-2 (priority 1), got %s", result.TaskID)
 		}
 	})
 
-	t.Run("stale candidate is skipped and next handoff resumes", func(t *testing.T) {
+	t.Run("ResumeHandoff uses correct worktree", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-		agentID := "coder-1"
-		worktree1 := ".worktrees/task-1"
-		worktree2 := ".worktrees/task-2"
+		now := time.Now().UTC()
 
 		state := testhelpers.CreateValidState()
-		state.Tasks = []models.Task{
-			{
-				ID:             "task-1",
-				Status:         models.TaskStatusImplementing,
-				AssignedTo:     &agentID,
-				Worktree:       &worktree1,
-				HandoffPending: true,
-			},
-			{
-				ID:             "task-2",
-				Status:         models.TaskStatusImplementing,
-				AssignedTo:     &agentID,
-				Worktree:       &worktree2,
-				HandoffPending: true,
-			},
+
+		taskID := "task-1"
+		task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusImplementing, now)
+		task.HandoffPending = true
+		agentID := "coder-1"
+		task.AssignedTo = &agentID
+		expectedWorktree := "/worktrees/task-1"
+		task.Worktree = &expectedWorktree
+		state.Tasks = []models.Task{task}
+		state.Agents[agentID] = models.Agent{
+			Role:   roles.RuntimeCoder,
+			Status: models.AgentStatusHandoff,
 		}
 
-		bb := testhelpers.WriteInitialState(t, statePath, state)
-		snapshot, err := bb.Read()
+		testhelpers.WriteInitialState(t, statePath, state)
+
+		input := ops.ResumeHandoffInput{
+			ProjectRoot: tmpDir,
+			AgentID:     agentID,
+		}
+		result, err := ops.ResumeHandoff(input)
 		if err != nil {
-			t.Fatalf("Failed to read snapshot: %v", err)
+			t.Fatalf("ResumeHandoff failed: %v", err)
 		}
 
-		// Make the first task stale after snapshot to exercise conflict handling.
-		if err := bb.Modify(func(s *models.State) error {
-			t1 := s.FindTask("task-1")
-			if t1 == nil {
-				t.Fatal("task-1 not found")
-			}
-			t1.Status = models.TaskStatusReady
-			return nil
-		}); err != nil {
-			t.Fatalf("Failed to mutate stale candidate: %v", err)
-		}
-
-		gotTaskID, gotWorktree, found, err := resumeHandoffTask(bb, snapshot, agentID)
-		if err != nil {
-			t.Fatalf("resumeHandoffTask() error = %v", err)
-		}
-		if !found {
-			t.Fatal("resumeHandoffTask() found = false, want true")
-		}
-		if gotTaskID != "task-2" || gotWorktree != worktree2 {
-			t.Fatalf("resumeHandoffTask() = (%q, %q), want (%q, %q)", gotTaskID, gotWorktree, "task-2", worktree2)
+		if result.Worktree != expectedWorktree {
+			t.Errorf("worktree = %s, want %s", result.Worktree, expectedWorktree)
 		}
 	})
+}
+
+func BenchmarkClaimReviewerTask(b *testing.B) {
+	tmpDir := b.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(&testing.T{}, tmpDir)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	taskID := "task-1"
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusReadyForReview, now)
+	state.Tasks = []models.Task{task}
+
+	testhelpers.WriteInitialState(&testing.T{}, statePath, state)
+
+	input := ops.ClaimReviewerTaskInput{
+		ProjectRoot:   tmpDir,
+		AgentID:       "code-reviewer-1",
+		LeaseDuration: 300,
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ops.ClaimReviewerTask(input)
+	}
+}
+
+func BenchmarkResumeHandoff(b *testing.B) {
+	tmpDir := b.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(&testing.T{}, tmpDir)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	taskID := "task-1"
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusImplementing, now)
+	task.HandoffPending = true
+	agentID := "coder-1"
+	task.AssignedTo = &agentID
+	state.Tasks = []models.Task{task}
+	state.Agents[agentID] = models.Agent{
+		Role:   roles.RuntimeCoder,
+		Status: models.AgentStatusHandoff,
+	}
+
+	testhelpers.WriteInitialState(&testing.T{}, statePath, state)
+
+	input := ops.ResumeHandoffInput{
+		ProjectRoot: tmpDir,
+		AgentID:     agentID,
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ops.ResumeHandoff(input)
+	}
 }

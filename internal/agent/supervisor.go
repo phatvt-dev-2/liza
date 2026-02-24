@@ -2,12 +2,14 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/roles"
 )
@@ -25,6 +27,196 @@ type SupervisorConfig struct {
 	InitialTask      string // Optional task ID to resume
 	Executor         CLIExecutor
 	ExecutionTimeout time.Duration // Max time for agent execution before timeout
+}
+
+type exit42RestartState struct {
+	RestartCount int
+	Signature    string
+}
+
+type exit42RestartOutcome struct {
+	Delay        time.Duration
+	RestartCount int
+	BlockedTask  bool
+}
+
+type exit42RestartTracker struct {
+	byKey map[string]exit42RestartState
+}
+
+func newExit42RestartTracker() *exit42RestartTracker {
+	return &exit42RestartTracker{
+		byKey: make(map[string]exit42RestartState),
+	}
+}
+
+func (t *exit42RestartTracker) reset(taskID string) {
+	if taskID == "" {
+		return
+	}
+	delete(t.byKey, "task:"+taskID)
+}
+
+func (t *exit42RestartTracker) Handle(bb *db.Blackboard, role, taskID, agentID string) (exit42RestartOutcome, error) {
+	state, err := bb.Read()
+	if err != nil {
+		return exit42RestartOutcome{}, fmt.Errorf("read state for exit-42 tracking: %w", err)
+	}
+
+	maxBackoff := effectiveExit42MaxBackoff(state.Config)
+	restartLimit := effectiveExit42RestartLimit(state.Config)
+	key := exit42TrackerKey(taskID, role, agentID)
+	prev := t.byKey[key]
+
+	var signature string
+	if taskID != "" {
+		task := state.FindTask(taskID)
+		if task != nil {
+			signature = exit42TaskProgressSignature(task)
+		}
+	}
+
+	if prev.Signature != "" && signature != "" && prev.Signature != signature {
+		prev.RestartCount = 0
+	}
+
+	prev.RestartCount++
+	prev.Signature = signature
+
+	outcome := exit42RestartOutcome{
+		Delay:        computeExit42BackoffDelay(prev.RestartCount, maxBackoff),
+		RestartCount: prev.RestartCount,
+	}
+
+	blockedTask := false
+	if err := bb.Modify(func(s *models.State) error {
+		if taskID == "" {
+			return nil
+		}
+
+		task := s.FindTask(taskID)
+		if task == nil {
+			return nil
+		}
+
+		task.Exit42RestartCount = outcome.RestartCount
+
+		if role != roles.RuntimeCoder {
+			return nil
+		}
+		if outcome.RestartCount <= restartLimit {
+			return nil
+		}
+		if task.Status != models.TaskStatusImplementing {
+			return nil
+		}
+		if task.AssignedTo == nil || *task.AssignedTo != agentID {
+			return nil
+		}
+
+		reason := fmt.Sprintf(
+			"exit code 42 restart loop detected: %d consecutive restarts without progress (threshold=%d)",
+			outcome.RestartCount,
+			restartLimit,
+		)
+		questions := []string{
+			"What task/environment issue is causing repeated exit code 42 without progress?",
+			"Should this task be decomposed or the spec clarified before retrying?",
+		}
+
+		if err := task.Transition(models.TaskStatusBlocked); err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		task.BlockedReason = &reason
+		task.BlockedQuestions = questions
+		task.AssignedTo = nil
+		task.LeaseExpires = nil
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:   now,
+			Event:  "blocked",
+			Agent:  &agentID,
+			Reason: &reason,
+		})
+		blockedTask = true
+		return nil
+	}); err != nil {
+		return exit42RestartOutcome{}, fmt.Errorf("persist exit-42 tracking state: %w", err)
+	}
+
+	outcome.BlockedTask = blockedTask
+	if blockedTask {
+		outcome.Delay = 0
+		delete(t.byKey, key)
+		return outcome, nil
+	}
+
+	t.byKey[key] = prev
+	return outcome, nil
+}
+
+func exit42TrackerKey(taskID, role, agentID string) string {
+	if taskID != "" {
+		return "task:" + taskID
+	}
+	return "agent:" + role + ":" + agentID
+}
+
+func effectiveExit42MaxBackoff(cfg models.Config) time.Duration {
+	seconds := cfg.Exit42MaxBackoffSeconds
+	if seconds <= 0 {
+		seconds = models.DefaultExit42MaxBackoffSec
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func effectiveExit42RestartLimit(cfg models.Config) int {
+	limit := cfg.Exit42RestartThreshold
+	if limit <= 0 {
+		limit = models.DefaultExit42RestartLimit
+	}
+	return limit
+}
+
+func computeExit42BackoffDelay(restartCount int, maxBackoff time.Duration) time.Duration {
+	if restartCount <= 0 {
+		restartCount = 1
+	}
+	if maxBackoff <= 0 {
+		maxBackoff = time.Duration(models.DefaultExit42MaxBackoffSec) * time.Second
+	}
+
+	delay := 2 * time.Second
+	if delay > maxBackoff {
+		return maxBackoff
+	}
+
+	for i := 1; i < restartCount; i++ {
+		if delay >= maxBackoff {
+			return maxBackoff
+		}
+		if delay > maxBackoff/2 {
+			return maxBackoff
+		}
+		delay *= 2
+	}
+
+	if delay > maxBackoff {
+		return maxBackoff
+	}
+	return delay
+}
+
+func exit42TaskProgressSignature(task *models.Task) string {
+	snapshot := *task
+	snapshot.Exit42RestartCount = 0
+
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return fmt.Sprintf("%s|%d|%t", task.Status, task.Iteration, task.HandoffPending)
+	}
+	return string(payload)
 }
 
 // CLIExecutor interface for testing (mock vs real CLI)
@@ -157,6 +349,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 	const maxMergeRetries = 3
 	mergeRetries := 0
+	exit42Tracker := newExit42RestartTracker()
 
 	for {
 		// Check context cancellation (signal received)
@@ -227,7 +420,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			claimedTaskID = taskID
 		} else if config.Role == roles.RuntimeCodeReviewer {
 			var reviewCommit string
-			taskID, _, reviewCommit, err = claimReviewerTask(config.AgentID, 1800, bb)
+			taskID, _, reviewCommit, err = claimReviewerTask(config.ProjectRoot, config.AgentID, 1800, bb)
 			if err != nil {
 				// Error already logged in claimReviewerTask
 				time.Sleep(5 * time.Second)
@@ -297,10 +490,38 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 						"hint", "Agent may not have executed required commands - check prompt file")
 				}
 			}
+
+			exit42Tracker.reset(taskID)
 		case 42:
-			GetLogger().Info("Agent aborted gracefully, restarting", "exit_code", 42, "delay_seconds", 2)
-			time.Sleep(2 * time.Second)
+			restartTaskID := claimedTaskID
+			if restartTaskID == "" {
+				restartTaskID = taskID
+			}
+
+			outcome, trackErr := exit42Tracker.Handle(bb, config.Role, restartTaskID, config.AgentID)
+			if trackErr != nil {
+				GetLogger().Warn("Exit-42 tracker failed, using default retry delay",
+					"error", trackErr,
+					"task_id", restartTaskID)
+				time.Sleep(2 * time.Second)
+				break
+			}
+
+			if outcome.BlockedTask {
+				GetLogger().Warn("Task transitioned to BLOCKED after repeated exit 42 restarts",
+					"task_id", restartTaskID,
+					"restart_count", outcome.RestartCount)
+				break
+			}
+
+			GetLogger().Info("Agent aborted gracefully, restarting",
+				"exit_code", 42,
+				"task_id", restartTaskID,
+				"restart_count", outcome.RestartCount,
+				"delay_seconds", int(outcome.Delay/time.Second))
+			time.Sleep(outcome.Delay)
 		default:
+			exit42Tracker.reset(taskID)
 			GetLogger().Error("Agent crashed, restarting", "exit_code", exitCode, "delay_seconds", 5)
 			time.Sleep(5 * time.Second)
 		}

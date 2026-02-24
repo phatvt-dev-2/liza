@@ -79,7 +79,7 @@ tasks:
       - { time: "2025-01-17T14:06:00Z", event: "claimed", agent: "coder-1" }
       - { time: "2025-01-17T14:25:00Z", event: "ready_for_review", commit: "a1b2c3d4" }
       - { time: "2025-01-17T14:28:00Z", event: "approved", agent: "code-reviewer-1" }
-      - { time: "2025-01-17T14:29:00Z", event: "merged" }
+      - { time: "2025-01-17T14:29:00Z", event: "merged", extra: { tests_ran: true } }
 
   - id: task-2
     description: "Add retry decorator to OrderAPI.create_order()"
@@ -88,6 +88,7 @@ tasks:
     assigned_to: coder-1
     worktree: .worktrees/task-2
     iteration: 3  # Current iteration within this task (Ralph loop count)
+    exit42_restart_count: 0   # Consecutive exit-42 restarts without progress (reset on state change)
     review_cycles_current: 2  # Reset to 0 on coder reassignment
     review_cycles_total: 2    # Never reset (audit trail)
     review_commit: b2c3d4e5
@@ -514,6 +515,8 @@ config:
   lease_duration: 1800          # Seconds (30 minutes)
   coder_poll_interval: 30       # Seconds between work availability checks
   coder_max_wait: 300           # Max seconds to wait for claimable work
+  exit42_restart_threshold: 5   # Consecutive exit-42 restarts without progress before BLOCKED (default: 5)
+  exit42_max_backoff_seconds: 60 # Max backoff delay between exit-42 restarts (default: 60)
   integration_branch: integration
   escalation_webhook: null      # Optional: URL for external notifications
 ```

@@ -18,6 +18,7 @@ func TestConstants(t *testing.T) {
 		{"RuntimePlanner", RuntimePlanner, "planner"},
 		{"WorkflowCoder", WorkflowCoder, "coder"},
 		{"WorkflowCodeReviewer", WorkflowCodeReviewer, "code_reviewer"},
+		{"WorkflowPlanner", WorkflowPlanner, "planner"},
 	}
 
 	for _, tt := range tests {
@@ -51,10 +52,10 @@ func TestToWorkflow(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name:        "planner not in workflow",
+			name:        "planner maps to planner",
 			runtimeRole: RuntimePlanner,
-			want:        "",
-			wantErr:     true,
+			want:        WorkflowPlanner,
+			wantErr:     false,
 		},
 		{
 			name:        "unknown role returns error",
@@ -103,6 +104,12 @@ func TestToRuntime(t *testing.T) {
 			name:         "code_reviewer maps to code-reviewer",
 			workflowRole: WorkflowCodeReviewer,
 			want:         RuntimeCodeReviewer,
+			wantErr:      false,
+		},
+		{
+			name:         "planner maps to planner",
+			workflowRole: WorkflowPlanner,
+			want:         RuntimePlanner,
 			wantErr:      false,
 		},
 		{
@@ -168,8 +175,8 @@ func TestIsValidWorkflow(t *testing.T) {
 	}{
 		{WorkflowCoder, WorkflowCoder, true},
 		{WorkflowCodeReviewer, WorkflowCodeReviewer, true},
+		{WorkflowPlanner, WorkflowPlanner, true},
 		{"code-reviewer", "code-reviewer", false},
-		{"planner", "planner", false},
 		{"unknown", "unknown", false},
 		{"", "", false},
 	}
@@ -204,7 +211,7 @@ func TestAllWorkflow(t *testing.T) {
 	t.Parallel()
 
 	got := AllWorkflow()
-	want := []string{WorkflowCoder, WorkflowCodeReviewer}
+	want := []string{WorkflowCoder, WorkflowCodeReviewer, WorkflowPlanner}
 
 	if len(got) != len(want) {
 		t.Errorf("AllWorkflow() returned %d roles, want %d", len(got), len(want))
@@ -222,15 +229,6 @@ func TestBidirectionalMapping(t *testing.T) {
 	t.Parallel()
 
 	for _, runtime := range AllRuntime() {
-		// Skip planner - it has no workflow mapping
-		if runtime == RuntimePlanner {
-			_, err := ToWorkflow(runtime)
-			if err == nil {
-				t.Errorf("RuntimePlanner should not have a workflow mapping")
-			}
-			continue
-		}
-
 		workflow, err := ToWorkflow(runtime)
 		if err != nil {
 			t.Errorf("ToWorkflow(%q) failed: %v", runtime, err)

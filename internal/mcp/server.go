@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/mcp/protocol"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -71,6 +72,27 @@ func (s *Server) ListTools() []protocol.Tool {
 		tools = append(tools, tool)
 	}
 	return tools
+}
+
+// GetTool returns a specific tool by name
+func (s *Server) GetTool(name string) (protocol.Tool, bool) {
+	tool, ok := s.tools[name]
+	return tool, ok
+}
+
+// GetHandler returns a specific handler by tool name
+func (s *Server) GetHandler(name string) (ToolHandler, bool) {
+	handler, ok := s.handlers[name]
+	return handler, ok
+}
+
+// ToolNames returns all registered tool names
+func (s *Server) ToolNames() []string {
+	names := make([]string, 0, len(s.tools))
+	for name := range s.tools {
+		names = append(names, name)
+	}
+	return names
 }
 
 // ListResources returns all registered resources
@@ -191,6 +213,10 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	if errors.As(err, &nfe) {
 		return protocol.NewError(protocol.NotFound, "resource not found", nil)
 	}
+	var postWriteValidationErr *ops.PostWriteValidationError
+	if errors.As(err, &postWriteValidationErr) {
+		return protocol.NewError(protocol.ValidationError, "validation failed: precondition not met", nil)
+	}
 
 	msg := err.Error()
 
@@ -212,7 +238,8 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	// Validation errors (status checks, preconditions)
 	if strings.Contains(msg, "not IMPLEMENTING") || strings.Contains(msg, "not REVIEWING") || strings.Contains(msg, "not READY_FOR_REVIEW") ||
 		strings.Contains(msg, "not APPROVED") || strings.Contains(msg, "must be") ||
-		strings.Contains(msg, "is required") || strings.Contains(msg, "invalid task ID") {
+		strings.Contains(msg, "is required") || strings.Contains(msg, "invalid task ID") ||
+		strings.Contains(msg, "validation failed") {
 		return protocol.NewError(protocol.ValidationError, "validation failed: precondition not met", nil)
 	}
 

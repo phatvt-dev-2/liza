@@ -350,7 +350,7 @@ func TestClaimReviewerTask_BasicPrioritySelection(t *testing.T) {
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
 	// Claim a reviewer task
-	taskID, _, _, err := claimReviewerTask("code-reviewer-1", 1800, bb)
+	taskID, _, _, err := claimReviewerTask(tmpDir, "code-reviewer-1", 1800, bb)
 	if err != nil {
 		t.Fatalf("Expected successful claim, got error: %v", err)
 	}
@@ -388,7 +388,7 @@ func TestClaimReviewerTask_TieBreakingByCreationTime(t *testing.T) {
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
 	// Claim a reviewer task
-	taskID, _, _, err := claimReviewerTask("code-reviewer-1", 1800, bb)
+	taskID, _, _, err := claimReviewerTask(tmpDir, "code-reviewer-1", 1800, bb)
 	if err != nil {
 		t.Fatalf("Expected successful claim, got error: %v", err)
 	}
@@ -423,7 +423,7 @@ func TestClaimReviewerTask_SkipsClaimedReviewTasks(t *testing.T) {
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
 	// Claim a reviewer task
-	taskID, _, _, err := claimReviewerTask("code-reviewer-1", 1800, bb)
+	taskID, _, _, err := claimReviewerTask(tmpDir, "code-reviewer-1", 1800, bb)
 	if err != nil {
 		t.Fatalf("Expected successful claim, got error: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestClaimReviewerTask_ReclaimsExpiredLease(t *testing.T) {
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
 	// Claim a reviewer task
-	taskID, _, _, err := claimReviewerTask("code-reviewer-1", 1800, bb)
+	taskID, _, _, err := claimReviewerTask(tmpDir, "code-reviewer-1", 1800, bb)
 	if err != nil {
 		t.Fatalf("Expected successful claim, got error: %v", err)
 	}
@@ -494,7 +494,7 @@ func TestClaimReviewerTask_NoReviewableTasks(t *testing.T) {
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
 	// Attempt to claim a reviewer task
-	_, _, _, err := claimReviewerTask("code-reviewer-1", 1800, bb)
+	_, _, _, err := claimReviewerTask(tmpDir, "code-reviewer-1", 1800, bb)
 	if err == nil {
 		t.Fatal("Expected error when no reviewable tasks, got nil")
 	}
