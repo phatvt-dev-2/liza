@@ -232,6 +232,34 @@ func TestCountReviewableTasks(t *testing.T) {
 	}
 }
 
+func TestPlannerWakeTriggerSpecs(t *testing.T) {
+	wantOrder := []PlannerWakeTrigger{
+		WakeTriggerInitialPlanning,
+		WakeTriggerBlocked,
+		WakeTriggerIntegrationFailed,
+		WakeTriggerHypothesisExhausted,
+		WakeTriggerImmediateDiscovery,
+		WakeTriggerSprintComplete,
+	}
+
+	if len(plannerWakeTriggerSpecs) != len(wantOrder) {
+		t.Fatalf("plannerWakeTriggerSpecs has %d entries, want %d", len(plannerWakeTriggerSpecs), len(wantOrder))
+	}
+
+	for i, wantTrigger := range wantOrder {
+		spec := plannerWakeTriggerSpecs[i]
+		if spec.Trigger != wantTrigger {
+			t.Errorf("plannerWakeTriggerSpecs[%d].Trigger = %q, want %q", i, spec.Trigger, wantTrigger)
+		}
+		if spec.Description == "" {
+			t.Errorf("plannerWakeTriggerSpecs[%d].Description must not be empty", i)
+		}
+		if spec.Count == nil {
+			t.Errorf("plannerWakeTriggerSpecs[%d].Count must not be nil", i)
+		}
+	}
+}
+
 func TestDetectPlannerWakeTriggers(t *testing.T) {
 	now := time.Now().UTC()
 

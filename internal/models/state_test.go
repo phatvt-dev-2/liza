@@ -450,6 +450,18 @@ func TestTaskTypeIsValid(t *testing.T) {
 	}
 }
 
+func TestRoleConstants(t *testing.T) {
+	if RoleCoder != "coder" {
+		t.Errorf("RoleCoder = %q, want %q", RoleCoder, "coder")
+	}
+	if RoleCodeReviewer != "code_reviewer" {
+		t.Errorf("RoleCodeReviewer = %q, want %q", RoleCodeReviewer, "code_reviewer")
+	}
+	if RolePlanner != "planner" {
+		t.Errorf("RolePlanner = %q, want %q", RolePlanner, "planner")
+	}
+}
+
 func TestTaskTypeRoleWorkflow(t *testing.T) {
 	workflow := TaskTypeCoding.RoleWorkflow()
 	if len(workflow) != 2 {
@@ -467,7 +479,7 @@ func TestTaskTypeHasRole(t *testing.T) {
 	if !TaskTypeCoding.HasRole(RoleCodeReviewer) {
 		t.Error("coding type should have code_reviewer role")
 	}
-	if TaskTypeCoding.HasRole("planner") {
+	if TaskTypeCoding.HasRole(RolePlanner) {
 		t.Error("coding type should not have planner role")
 	}
 }
@@ -545,7 +557,7 @@ func TestIsClaimableWithRole(t *testing.T) {
 		{
 			name:      "planner cannot claim any task",
 			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding},
-			role:      "planner",
+			role:      RolePlanner,
 			claimable: false,
 		},
 		{

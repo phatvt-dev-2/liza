@@ -37,6 +37,7 @@ const (
 const (
 	RoleCoder        = roles.WorkflowCoder
 	RoleCodeReviewer = roles.WorkflowCodeReviewer
+	RolePlanner      = roles.WorkflowPlanner
 )
 
 // taskWorkflows maps each TaskType to its ordered role sequence.
@@ -205,6 +206,9 @@ func (t *Task) IsClaimable(role string, allTasks []Task) bool {
 		if !t.Status.CanTransition(TaskStatusReviewing) {
 			return false
 		}
+	case RolePlanner:
+		// Planner does not participate in task claiming workflows.
+		return false
 	default:
 		return false
 	}
