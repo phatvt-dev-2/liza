@@ -151,6 +151,7 @@ type Task struct {
 	Worktree            *string            `yaml:"worktree,omitempty"`
 	BaseCommit          *string            `yaml:"base_commit,omitempty"`
 	Iteration           int                `yaml:"iteration,omitempty"`
+	Exit42RestartCount  int                `yaml:"exit42_restart_count,omitempty"`
 	ReviewCyclesCurrent int                `yaml:"review_cycles_current,omitempty"`
 	ReviewCyclesTotal   int                `yaml:"review_cycles_total,omitempty"`
 	ReviewCommit        *string            `yaml:"review_commit,omitempty"`
@@ -612,6 +613,8 @@ const (
 	DefaultPlannerMaxWait       = 1800 // 30 minutes
 	DefaultReviewerPollInterval = 30
 	DefaultReviewerMaxWait      = 1800 // 30 minutes
+	DefaultExit42MaxBackoffSec  = 60
+	DefaultExit42RestartLimit   = 5
 )
 
 // Bounds for heartbeat interval validation.
@@ -643,14 +646,16 @@ type Config struct {
 	// PlannerMaxWait is the maximum time a planner agent will wait for work
 	// before exiting. When 0, defaults to DefaultPlannerMaxWait (30 minutes).
 	// The planner will exit earlier if STOPPED mode is detected or context is cancelled.
-	PlannerMaxWait       int            `yaml:"planner_max_wait"`
-	ReviewerPollInterval int            `yaml:"reviewer_poll_interval"`
-	ReviewerMaxWait      int            `yaml:"reviewer_max_wait"`
-	IntegrationBranch    string         `yaml:"integration_branch"`
-	EscalationWebhook    *string        `yaml:"escalation_webhook,omitempty"`
-	Mode                 SystemMode     `yaml:"mode,omitempty"`
-	ModeChangedAt        *time.Time     `yaml:"mode_changed_at,omitempty"`
-	ModeChangedBy        *string        `yaml:"mode_changed_by,omitempty"`
-	DiagnosticLogging    bool           `yaml:"diagnostic_logging,omitempty"`
-	Extra                map[string]any `yaml:",inline"`
+	PlannerMaxWait          int            `yaml:"planner_max_wait"`
+	ReviewerPollInterval    int            `yaml:"reviewer_poll_interval"`
+	ReviewerMaxWait         int            `yaml:"reviewer_max_wait"`
+	Exit42RestartThreshold  int            `yaml:"exit42_restart_threshold,omitempty"`
+	Exit42MaxBackoffSeconds int            `yaml:"exit42_max_backoff_seconds,omitempty"`
+	IntegrationBranch       string         `yaml:"integration_branch"`
+	EscalationWebhook       *string        `yaml:"escalation_webhook,omitempty"`
+	Mode                    SystemMode     `yaml:"mode,omitempty"`
+	ModeChangedAt           *time.Time     `yaml:"mode_changed_at,omitempty"`
+	ModeChangedBy           *string        `yaml:"mode_changed_by,omitempty"`
+	DiagnosticLogging       bool           `yaml:"diagnostic_logging,omitempty"`
+	Extra                   map[string]any `yaml:",inline"`
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -87,6 +89,181 @@ func TestMockCLIExecution(t *testing.T) {
 	}
 	if call.Prompt != "test prompt" {
 		t.Errorf("Prompt = %s, want 'test prompt'", call.Prompt)
+	}
+}
+
+func TestExit42RestartTracker_ExponentialBackoffAndCap(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	agentID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	task.AssignedTo = &agentID
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{task}
+	state.Config.Exit42RestartThreshold = 99
+	state.Config.Exit42MaxBackoffSeconds = 8
+	state.Agents[agentID] = models.Agent{Role: roles.RuntimeCoder, Status: models.AgentStatusWorking}
+
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	tracker := newExit42RestartTracker()
+
+	var delays []time.Duration
+	for i := 0; i < 4; i++ {
+		outcome, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+		if err != nil {
+			t.Fatalf("Handle() error on attempt %d: %v", i+1, err)
+		}
+		if outcome.BlockedTask {
+			t.Fatalf("Handle() blocked task unexpectedly on attempt %d", i+1)
+		}
+		delays = append(delays, outcome.Delay)
+	}
+
+	wantDelays := []time.Duration{
+		2 * time.Second,
+		4 * time.Second,
+		8 * time.Second,
+		8 * time.Second,
+	}
+	for i, want := range wantDelays {
+		if delays[i] != want {
+			t.Errorf("delay[%d] = %v, want %v", i, delays[i], want)
+		}
+	}
+
+	updatedState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read state: %v", err)
+	}
+	updatedTask := updatedState.FindTask(task.ID)
+	if updatedTask == nil {
+		t.Fatalf("task %q not found", task.ID)
+	}
+	if updatedTask.Exit42RestartCount != 4 {
+		t.Errorf("task.exit42_restart_count = %d, want 4", updatedTask.Exit42RestartCount)
+	}
+}
+
+func TestExit42RestartTracker_BlocksTaskAfterThresholdWithoutProgress(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	agentID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	task.AssignedTo = &agentID
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{task}
+	state.Config.Exit42RestartThreshold = 3
+	state.Config.Exit42MaxBackoffSeconds = 16
+	state.Agents[agentID] = models.Agent{Role: roles.RuntimeCoder, Status: models.AgentStatusWorking}
+
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	tracker := newExit42RestartTracker()
+
+	for i := 0; i < 2; i++ {
+		outcome, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+		if err != nil {
+			t.Fatalf("Handle() error on attempt %d: %v", i+1, err)
+		}
+		if outcome.BlockedTask {
+			t.Fatalf("Handle() blocked task unexpectedly on attempt %d", i+1)
+		}
+	}
+
+	outcome, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	if err != nil {
+		t.Fatalf("Handle() error on threshold attempt: %v", err)
+	}
+	if !outcome.BlockedTask {
+		t.Fatal("Handle() should block task when threshold is reached")
+	}
+	if outcome.Delay != 0 {
+		t.Fatalf("Handle() delay = %v, want 0 when task gets blocked", outcome.Delay)
+	}
+
+	updatedState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read state: %v", err)
+	}
+	updatedTask := updatedState.FindTask(task.ID)
+	if updatedTask == nil {
+		t.Fatalf("task %q not found", task.ID)
+	}
+	if updatedTask.Status != models.TaskStatusBlocked {
+		t.Fatalf("task.status = %q, want %q", updatedTask.Status, models.TaskStatusBlocked)
+	}
+	if updatedTask.BlockedReason == nil || !strings.Contains(*updatedTask.BlockedReason, "exit code 42 restart loop") {
+		t.Fatalf("task.blocked_reason = %v, want restart-loop diagnostic", updatedTask.BlockedReason)
+	}
+	if len(updatedTask.BlockedQuestions) == 0 {
+		t.Fatal("task.blocked_questions should be populated")
+	}
+	if updatedTask.AssignedTo != nil {
+		t.Fatalf("task.assigned_to = %v, want nil after blocking", *updatedTask.AssignedTo)
+	}
+	if updatedTask.Exit42RestartCount != 3 {
+		t.Fatalf("task.exit42_restart_count = %d, want 3", updatedTask.Exit42RestartCount)
+	}
+}
+
+func TestExit42RestartTracker_ResetsCountOnTaskStateChange(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	agentID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	task.AssignedTo = &agentID
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{task}
+	state.Config.Exit42RestartThreshold = 99
+	state.Config.Exit42MaxBackoffSeconds = 16
+	state.Agents[agentID] = models.Agent{Role: roles.RuntimeCoder, Status: models.AgentStatusWorking}
+
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	tracker := newExit42RestartTracker()
+
+	first, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	if err != nil {
+		t.Fatalf("first Handle() error: %v", err)
+	}
+	if first.RestartCount != 1 || first.Delay != 2*time.Second {
+		t.Fatalf("first outcome = %+v, want count=1 delay=2s", first)
+	}
+
+	second, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	if err != nil {
+		t.Fatalf("second Handle() error: %v", err)
+	}
+	if second.RestartCount != 2 || second.Delay != 4*time.Second {
+		t.Fatalf("second outcome = %+v, want count=2 delay=4s", second)
+	}
+
+	// Simulate meaningful task progress between restarts.
+	reviewCommit := "abc123def"
+	if err := bb.Modify(func(s *models.State) error {
+		updatedTask := s.FindTask(task.ID)
+		if updatedTask == nil {
+			return os.ErrNotExist
+		}
+		updatedTask.ReviewCommit = &reviewCommit
+		return nil
+	}); err != nil {
+		t.Fatalf("failed to mutate task state for progress simulation: %v", err)
+	}
+
+	third, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	if err != nil {
+		t.Fatalf("third Handle() error: %v", err)
+	}
+	if third.RestartCount != 1 || third.Delay != 2*time.Second {
+		t.Fatalf("third outcome = %+v, want count reset to 1 and delay reset to 2s", third)
 	}
 }
 
