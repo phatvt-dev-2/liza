@@ -50,12 +50,13 @@ func (e *IntegrationFailedError) Error() string {
 
 // MergeResult contains the outcome of a successful worktree merge.
 type MergeResult struct {
-	TaskID      string
-	MergeCommit string
-	FastForward bool
-	TestsRan    bool
-	TestOutput  string   // captured stdout+stderr from integration tests (if any)
-	Warnings    []string // non-fatal warnings from cleanup/metrics
+	TaskID            string
+	MergeCommit       string
+	FastForward       bool
+	TestsRan          bool
+	NoTestScriptFound bool     // true when integration test script was missing (distinguishes from "tests ran")
+	TestOutput        string   // captured stdout+stderr from integration tests (if any)
+	Warnings          []string // non-fatal warnings from cleanup/metrics
 }
 
 // appendUniqueAgentID adds an agent ID to failed_by if not already present
@@ -268,6 +269,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 
 	// Run integration tests if they exist
 	var testsRan bool
+	var noTestScriptFound bool
 	var testOutput string
 	integrationTestScript := filepath.Join(projectRoot, "scripts", "integration-test.sh")
 	if _, statErr := os.Stat(integrationTestScript); statErr == nil {
@@ -305,6 +307,13 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		}
 
 		testOutput = combinedOutput.String()
+	} else if errors.Is(statErr, os.ErrNotExist) {
+		// Integration test script not found — log warning for audit trail.
+		noTestScriptFound = true
+		log.Printf("wt-merge %s: WARNING — integration test script not found at %s, proceeding without tests", taskID, integrationTestScript)
+	} else {
+		// Distinguish actual stat failures from true missing-script cases.
+		log.Printf("wt-merge %s: WARNING — unable to stat integration test script at %s: %v; proceeding without tests", taskID, integrationTestScript, statErr)
 	}
 
 	// Update state to MERGED (before worktree cleanup — if write fails,
@@ -331,12 +340,14 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		}
 
 		// Add history entry
-		t.History = append(t.History, models.TaskHistoryEntry{
+		historyEntry := models.TaskHistoryEntry{
 			Time:   time.Now(),
 			Event:  "merged",
 			Agent:  &agentID,
 			Commit: &mergeCommit,
-		})
+			Extra:  map[string]any{"tests_ran": testsRan},
+		}
+		t.History = append(t.History, historyEntry)
 
 		return nil
 	})
@@ -367,11 +378,12 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	}
 
 	return &MergeResult{
-		TaskID:      taskID,
-		MergeCommit: mergeCommit,
-		FastForward: fastForward,
-		TestsRan:    testsRan,
-		TestOutput:  testOutput,
-		Warnings:    warnings,
+		TaskID:            taskID,
+		MergeCommit:       mergeCommit,
+		FastForward:       fastForward,
+		TestsRan:          testsRan,
+		NoTestScriptFound: noTestScriptFound,
+		TestOutput:        testOutput,
+		Warnings:          warnings,
 	}, nil
 }
