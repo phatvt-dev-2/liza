@@ -509,21 +509,15 @@ Bottlenecks that emerge under load.
 - Optimistic claiming with conflict resolution
 - Dedicated claim coordinator separate from agent supervisor
 
-### Validation Integrity Split by Ingress
+### ~~Validation Integrity Split by Ingress~~
 
 **Skill:** systemic-thinking
 **Category:** STRESS POINT
+**Status:** RESOLVED (`6fe5bcc`)
 
-**Issue:** Equivalent task-creation mutations do not share equivalent validation pressure by interface. CLI `add-task` executes post-mutation `ValidateCommand`, while MCP `liza_add_task` persists through `ops.AddTask` and returns without that same immediate full-state validation pass. Under scale or automation-heavy MCP usage, validation load shifts from write-time gating to later detection.
+**Issue:** Equivalent task-creation mutations do not share equivalent validation pressure by interface. CLI `add-task` executes post-mutation `ValidateCommand`, while MCP `liza_add_task` persists through `ops.AddTask` and returns without that same immediate full-state validation pass.
 
-**Implication:** State consistency risk concentrates at the highest-throughput ingress, making failures surface later and farther from the originating mutation.
-
-**Current mitigation:** Explicit `liza_validate` calls and watchdog workflows can catch invalid state after the fact.
-
-**Future options:**
-- Move mandatory post-write validation into shared ops mutation flow
-- Add MCP-side atomic mutate+validate command variants for write operations
-- Treat write-without-validation as an explicit mode with telemetry and alerts
+**Fix:** Validation logic extracted from `commands/validate.go` (now a 28 LOC thin wrapper) into a shared `internal/statevalidate` package. `ops.AddTask` now runs `statevalidate.ValidateStateFile()` after every successful write and returns a typed `PostWriteValidationError` when mutation succeeds but validation fails. MCP classifies this as `ValidationError`. Both CLI and MCP ingress paths now share identical validation pressure at the ops layer.
 
 ### Filesystem/Git I/O Contention
 
@@ -579,21 +573,20 @@ Bottlenecks that emerge under load.
 
 Failure propagation paths and silent bypass patterns.
 
-### Integration Test Script Silent Absence
+### ~~Integration Test Script Silent Absence~~
 
 **Skill:** systemic-thinking
 **Category:** CASCADE
+**Status:** RESOLVED (`bce626d`, `52ceac5`)
 
-**Issue:** The merge operation (`ops/wt_merge.go:272-308`) checks for `scripts/integration-test.sh` and runs it if present, but silently skips testing if the file doesn't exist. There's no warning, metric, or audit trail that a merge proceeded without validation. The `MergeResult.TestsRan` boolean captures this but it's only visible in the immediate result, not in persistent state or history.
+**Issue:** The merge operation silently skipped testing if `scripts/integration-test.sh` didn't exist — no warning, metric, or audit trail.
 
-**Implication:** Accidental deletion or renaming of the integration test script will not be detected—merges will appear successful while bypassing quality gates, allowing regressions to reach the integration branch without any systemic signal.
-
-**Current mitigation:** Operators can check `TestsRan` in merge output. The integration test script must be created manually or by project setup — `liza init` does not create it.
-
-**Future options:**
-- Require explicit opt-out (flag or config) to merge without tests
-- Log warning when merge proceeds without integration tests
-- Include `tests_ran` in task history for audit trail
+**Fix:** Three mitigations implemented:
+- `MergeResult.NoTestScriptFound` boolean distinguishes "no test script" from "tests ran and passed"
+- `log.Printf` WARNING when merge proceeds without integration test script (audit trail)
+- `tests_ran` boolean persisted in task merge history `Extra` field for persistent audit
+- Stat error handling upgraded to tri-state: exists → run tests, `os.ErrNotExist` → log warning + set flag, other stat error → log distinct warning (addresses the `os.Stat` under-handling smell for this specific site)
+- Comprehensive test coverage: `TestMergeWorktree_NoTestScriptWarning`, `TestMergeWorktree_TestsRanInHistory`, non-`ErrNotExist` stat regression test
 
 ---
 
@@ -629,21 +622,24 @@ Partial failure modes with unclear recovery.
 - `liza validate` checks embedded vs installed contract consistency
 - Single delivery path (eliminate duplication, choose symlinks or embedding)
 
-### MCP Tool Schema Drift
+### ~~MCP Tool Schema Drift~~
 
 **Skill:** systemic-thinking
 **Category:** FRAGILITY
+**Status:** RESOLVED (`642f94e`, `c9b17a3`)
 
-**Issue:** Each of the ~20 MCP tools is registered with an `InputSchema` declaring required fields, types, defaults, and enum constraints. These schemas are the agent-facing contract — agents decide which parameters to provide based on schema declarations. The schemas are hand-coded in `server.go` registration calls with no connection to the corresponding `ops.*` function signatures or input types. A schema declaring a field as required while the ops function derives it internally has already occurred in `submit-for-review` and later regressed, demonstrating recurrence risk. There is no compile-time verification, no test that round-trips schema declarations against handler parameter extraction, and no generated schema. Each tool registration is an independent manual synchronization point between three artifacts: the `InputSchema`, the handler's `requireString`/parameter extraction, and the `ops.*` function's actual parameters.
+**Issue:** Hand-coded MCP `InputSchema` declarations could drift from handler parameter extraction with no compile-time or test-time verification.
 
-**Implication:** Schema-to-implementation drift is a per-tool risk that scales linearly with tool count, and the system's own history demonstrates this failure mode has already occurred.
+**Fix:** `schema_consistency_test.go` (584 LOC) uses Go AST parsing to extract handler parameter requirements directly from source code:
+- Parses `registerTool` calls in `server.go` to map tool name → handler function
+- Parses `handlers.go` to derive required fields from `requireString`, helper calls (`requireTaskAndAgent`), and `extractStringSlice` patterns (len guard)
+- Asserts schema `Required` fields match handler-required fields for all tools
+- Asserts extracted parameters are declared in schema properties
+- Dedicated `submit-for-review` SHA field regression test
+- `Server.GetTool()`, `GetHandler()`, `ToolNames()` methods added for testability
+- All ~20 tools covered; new tools automatically included in consistency checks
 
-**Current mitigation:** Handler functions extract parameters with `requireString` which fails fast on missing fields. MCP dispatch tests cover routing but not schema-to-handler consistency.
-
-**Future options:**
-- Generate `InputSchema` from `ops.*Input` struct tags (single source of truth)
-- Test that each tool's declared required fields match its handler's `requireString` calls
-- Schema validation middleware that rejects calls not matching declared schema before handler invocation
+**Remaining:** Schemas are still hand-coded (not generated from struct tags). The test suite makes drift detectable but not impossible. Schema generation from `ops.*Input` struct tags remains a future option for single-source-of-truth enforcement.
 
 ### Bootstrap Artifact Path Drift
 
@@ -1004,6 +1000,9 @@ Issues identified through code-level architectural analysis (patterns, structure
 - [x] Exit code 42 restart loop — per-task restart tracking with exponential backoff and circuit breaker to BLOCKED *(systemic-thinking)*
 - [x] Planner role invisible in type system — `models.RolePlanner`, `roles.WorkflowPlanner`, declarative `plannerWakeTriggerSpecs` *(systemic-thinking)*
 - [x] Two-Track State Mutation (partial) — `ops.ClaimReviewerTask` and `ops.ResumeHandoff` extracted with structured input/result types; agent lifecycle still inline *(systemic-thinking)*
+- [x] Validation Integrity Split by Ingress — `internal/statevalidate` package extracted; `ops.AddTask` runs post-write validation with typed `PostWriteValidationError`; both CLI and MCP share identical validation pressure *(systemic-thinking)*
+- [x] Integration Test Script Silent Absence — `NoTestScriptFound` field, log WARNING on missing script, `tests_ran` persisted in merge history `Extra`, tri-state stat handling *(systemic-thinking)*
+- [x] MCP Tool Schema Drift — AST-based `schema_consistency_test.go` (584 LOC) verifies schema/handler consistency for all ~20 tools; `GetTool()`/`GetHandler()`/`ToolNames()` accessors added *(systemic-thinking)*
 
 ---
 
@@ -1064,6 +1063,9 @@ Commit SHA where issue details were first marked as fixed (proxy for actual fix 
 | Exit Code 42 Restart Loop Without Progress Detection | `f15cd61`, `5f05403` |
 | Planner Role Invisible in Type System | `e173f71` |
 | Two-Track State Mutation (partial — reviewer claiming + handoff) | `ac4ce6f` |
+| Validation Integrity Split by Ingress | `6fe5bcc` |
+| Integration Test Script Silent Absence | `bce626d`, `52ceac5` |
+| MCP Tool Schema Drift | `642f94e`, `c9b17a3` |
 
 ---
 

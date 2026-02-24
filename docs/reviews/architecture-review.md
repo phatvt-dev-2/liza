@@ -53,7 +53,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 
 **Two binaries:** `liza` (CLI with 25+ cobra commands) and `liza-mcp` (MCP JSON-RPC server over stdio).
 
-**Source size:** ~15,300 LOC production Go, ~36,700 LOC test Go (2.4:1 test-to-code ratio). *(pass 7: updated from ~15,400/~30,800)*
+**Source size:** ~15,800 LOC production Go, ~41,700 LOC test Go (2.6:1 test-to-code ratio). *(pass 7: updated from ~15,400/~30,800; updated: statevalidate extraction + schema consistency tests)*
 
 ### 1.2 Component Walkthrough
 
@@ -113,14 +113,24 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - **Duplicated identity validation**: `registration.go:validateIdentity()` reimplements `identity.ValidateFormat()` + `identity.ValidateRole()` — same algorithm (split on last hyphen, validate numeric suffix, check role prefix) without importing the `identity` package *(pass 6, Coupling lens)*
 - **Hardcoded `"terminal-1"` and raw `1800`**: `supervisor.go:127` passes `"terminal-1"` literal and `1800` instead of `models.DefaultLeaseDurationSeconds`; `supervisor.go:221` also uses raw `1800` *(pass 6, Coupling lens)*
 
-#### ops (`internal/ops/`) — ~3,200 LOC production, ~5,000 LOC test (21 files)
+#### statevalidate (`internal/statevalidate/`) — 463 LOC
+
+**Purpose:** Shared state validation pipeline, extracted from `commands/validate.go` to allow both CLI and ops to run identical validation without import cycles.
+
+**Observations:**
+- `ValidateStateFile()` runs 9 validators: required fields, task states, task invariants, dependencies, agent invariants, handoff, discovered, anomalies, sprint
+- Accepts `io.Writer` for non-fatal warnings (nil defaults to `io.Discard`)
+- Exported shims `ValidateAgentInvariants()` and `ValidateAnomalies()` expose individual validators for existing `commands/` test callsites
+- Used by: `commands/validate.go` (CLI `liza validate`), `ops/add_task.go` (post-write validation)
+
+#### ops (`internal/ops/`) — ~3,750 LOC production, ~6,450 LOC test (25 files)
 
 **Purpose:** Pure business logic layer for all task workflow and system operations. Returns structured results with no terminal I/O side effects.
 
 **Pattern:** Service layer — extracted from `commands` to break the agent→commands upward dependency and eliminate MCP protocol corruption risk.
 
 **Observations:**
-- 21 operations covering all mutation commands:
+- 25 operations covering all mutation commands:
   - Task workflow: `ClaimTask`, `ClaimReviewerTask`, `SubmitForReview`, `SubmitVerdict`, `Handoff`, `ResumeHandoff`, `MarkBlocked`, `ReleaseClaim`, `SupersedeTask`, `AddTask`, `CheckDeleteTask`, `DeleteTask`
   - Agent lifecycle: `DeleteAgent`, `IsAgentProcessRunning`
   - System mode: `Start`, `Stop`, `Pause`, `Resume`
@@ -130,14 +140,14 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - Each function returns a typed result struct (e.g., `*VerdictResult`, `*HandoffResult`, `*ModeChangeResult`)
 - Zero `fmt.Print*` or `os.Stdin` calls — verified by grep
 - Three consumers: `agent/` (orchestration), `commands/` (CLI presentation), `mcp/` (JSON-RPC adapter)
-- Depends on: `db`, `models`, `git`, `log`, `paths`, `analysis` — same layer as `commands` minus presentation concerns
+- Depends on: `db`, `models`, `git`, `log`, `paths`, `analysis`, `statevalidate` — same layer as `commands` minus presentation concerns
 - ~~`claim_task.go` (299 LOC): `ClaimTask` is 265 LOC with nesting depth 6~~ *(pass 7, Complexity lens — resolved: `e86abd4`)*: Phase 2 worktree handling extracted into status-specific helper functions with a `phaseResult` struct. Dependency checking extracted to `unmetDependencies()` shared between TOCTOU phases (format-string wrapper further removed in `0158b64`). File is now 519 LOC total (helpers + main function), but `ClaimTask` itself is shorter with reduced nesting depth. Direct tests added for dependency resolution behavior.
-- `wt_merge.go` (377 LOC): `MergeWorktree` — linear phased flow (validate → merge → integration tests → update state → cleanup) but the phase count and error handling paths contribute significant cognitive load *(pass 7, Complexity lens)*
+- `wt_merge.go` (389 LOC): `MergeWorktree` — linear phased flow (validate → merge → integration tests → update state → cleanup). Now logs WARNING when integration test script is missing and persists `tests_ran` in merge history. Tri-state stat handling for test script presence *(pass 7, Complexity lens; `bce626d`, `52ceac5`)*
 - `helpers.go` provides `readTaskState()` for Read-path task lookup, but no equivalent exists for the Modify-callback path *(pass 5, Duplication lens)*
 - **Structural repetition within ops** *(pass 5, Duplication lens)*: Most ops functions share an identical skeleton — input validation → `paths.New(projectRoot)` + `db.For(lp.StatePath())` → `bb.Modify(func(state) { FindTask + nil check + status check + mutate + history append })` → wrap error → return result. Quantified: `if taskID == ""` guard in 10/21 files, `FindTask + NotFoundError` inside Modify in 10 files, `task.History = append(...)` in 12 files. See Duplication smell below.
 - **Inconsistent parameter conventions** *(pass 6, Coupling lens)*: Some ops functions take `projectRoot` and internally construct `paths.New()` + `db.For()` (ClaimTask, MergeWorktree, DeleteTask, SubmitReview, etc.), while others take `statePath`/`logPath` directly (AddTask). Callers must know which convention each function uses. See Coupling smell below.
 
-#### commands (`internal/commands/`) — ~4,300 LOC *(pass 7: updated from ~2,800)*
+#### commands (`internal/commands/`) — ~3,980 LOC *(pass 7: updated from ~2,800; `6fe5bcc`: validation logic extracted to `statevalidate`)*
 
 **Purpose:** CLI presentation wrappers over `ops/` business logic, plus read-only query commands.
 
@@ -146,7 +156,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 **Observations:**
 - 25+ command implementations — mutation commands are thin wrappers (~20-75 LOC each), read-only commands retain logic
 - `watch.go` (516 LOC): 11 health checks with alert deduplication, comprehensive monitoring
-- `validate.go` (448 LOC): 9 validators checking all state invariants, `validateTaskInvariants` at 142 LOC — sequential if-chain checking ~15 status-specific invariants with no early-exit grouping *(pass 2; pass 7: LOC updated, complexity note)*
+- `validate.go` (28 LOC): thin wrapper delegating to `internal/statevalidate` package *(pass 2; pass 7: LOC updated; `6fe5bcc`: validation logic extracted to shared package)*
 - ~~`inspect_field.go` (327 LOC): Manual reflection system with 9 switch statements~~ *(pass 7, Complexity lens — resolved: `c4bd748`)*: Direct-field switch dispatch replaced with reflect-based YAML-tag walker for `getField`. File is now 275 LOC. Exhaustive tests enumerate all config/sprint tagged paths and assert `getField` can resolve every field — adding a model field with a YAML tag automatically makes it accessible via `liza inspect`. Computed-field behavior preserved. Historical note: `sprint.timeline` retains a hardcoded check for backward compatibility (`a35735e` documents rationale)
 - ~~`wt_merge.go` (356 LOC)~~ now ~60 LOC wrapper over `ops.MergeWorktree()`
 - `format.go` (164 LOC): centralized JSON/YAML/table formatting
@@ -165,17 +175,18 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `cmd/liza/main.go` (1,275 LOC, 5 functions): 1,100+ lines of inline cobra command `var` blocks + 111-line `init()` for flag registration. Business logic correctly delegates to `commands` package — complexity is organizational, not behavioral. *(pass 2, Complexity lens)*
 - `cmd/liza-mcp/main.go` (69 LOC): thin stdio transport launcher. Cross-assigns version info via mutable package globals: `mcp.Version = embedded.Version` *(pass 3, Boundaries lens)*
 
-#### mcp (`internal/mcp/`) — 1,399 LOC
+#### mcp (`internal/mcp/`) — 1,460 LOC
 
 **Purpose:** MCP JSON-RPC server exposing tools and resources to AI agents.
 
 **Observations:**
-- `server.go` (704 LOC): tool/resource registration, request dispatch. `registerMutationTools()` is 242 LOC of declarative tool schema definitions — LOC is mostly boilerplate, not algorithmic complexity *(pass 2, Complexity lens)*
+- `server.go` (757 LOC): tool/resource registration, request dispatch. `registerMutationTools()` is 242 LOC of declarative tool schema definitions — LOC is mostly boilerplate, not algorithmic complexity. `GetTool()`, `GetHandler()`, `ToolNames()` accessors added for test introspection *(pass 2, Complexity lens; `642f94e`)*
 - `handlers.go` (~600 LOC, 29 functions): tool implementations delegating to `ops` package for mutations, `commands` package for read-only queries. 14% branch density — each handler is thin. *(pass 2; pass 5: updated LOC and ops import)*
 - `protocol/` subpackage (232 LOC): clean DTO types, stdio transport, error codes
 - 4 registration categories: read-only tools, read-only resources, mutation tools, complex operations
 - Clean adapter boundary: mcp translates JSON-RPC into `ops` calls (mutations) and `commands` calls (queries), adds error classification, holds no business logic *(pass 3, Boundaries lens; pass 5: updated — handlers now import ops directly for all mutations)*
 - **Server dispatch layer untested**: `server_test.go` has only 4 tests (initialization/registration). The entire request dispatch layer — `HandleRequest`, `Run`, `classifyError`, `handleToolCall`, `handleResourceRead`, `handleNotification` — is at 0% coverage. Handlers tested directly via `handlers_test.go` (1,298 LOC), but the routing/error-classification layer has no tests *(pass 4, Coverage lens)*
+- ~~**Hand-coded schema declarations can drift from handler extraction**~~ *(systemic-thinking — resolved: `642f94e`, `c9b17a3`)*: `schema_consistency_test.go` (584 LOC) uses AST parsing to extract handler-required fields from source and asserts consistency with schema `Required` declarations for all tools. `server_dispatch_test.go` (573 LOC) covers routing, error classification, and MCP-level validation failures (including `PostWriteValidationError` classification)
 - ~~`protocol/` entirely untested~~ *(pass 4, Coverage lens — partially resolved: `c2fe02b`)*: stdio transport now has bounded request size enforcement (`MaxRequestSize` 10MB, `readLineBounded()`) with comprehensive tests (214 LOC in `stdio_test.go`). Error constructors remain untested. `RequestTooLarge` JSON-RPC error code added
 
 #### git (`internal/git/`) — 351 LOC
@@ -357,7 +368,8 @@ commands/ (volatile, high-level)
 | state.go | 631 | — | 2 | 20+ cohesive structs |
 | handlers.go | 603 | — | 3 | Thin handlers, 14% branch density |
 | watch.go | 516 | — | 3 | 11 health checks, well-decomposed |
-| validate.go | 448 | validateTaskInvariants (142) | 3 | Sequential if-chain, no early-exit grouping |
+| validate.go (commands) | 28 | — | 1 | Thin wrapper over `statevalidate` *(was 448 LOC; `6fe5bcc`)* |
+| validate.go (statevalidate) | 463 | validateTaskInvariants (142) | 3 | Sequential if-chain, no early-exit grouping |
 | inspect_field.go | 327 | — | 3 | **9 switch statements** — manual reflection *(pass 7)* |
 | **ops/claim_task.go** | **299** | **ClaimTask (265)** | **6** | **Highest complexity — 3-phase TOCTOU with duplicated dep check** *(pass 7)* |
 | **ops/wt_merge.go** | **285** | **MergeWorktree (189)** | **4** | **Linear but many error-handling paths** *(pass 7)* |
@@ -383,8 +395,9 @@ commands/ (volatile, high-level)
 | `embedded` | paths | 0 | 2 (commands, liza-mcp) |
 | `analysis` | models | yaml.v3 | 1 package |
 | `prompts` | models | 0 | 1 package |
-| `ops` | 6 packages (db, models, git, log, paths, analysis) | 0 | 3 (agent, commands, mcp) |
-| `commands` | **8 packages** (incl. ops) | yaml.v3 | 2 (mcp queries, liza) |
+| `statevalidate` | db, models | 0 | 2 (ops, commands) |
+| `ops` | 7 packages (db, models, git, log, paths, analysis, statevalidate) | 0 | 3 (agent, commands, mcp) |
+| `commands` | **8 packages** (incl. statevalidate) | yaml.v3 | 2 (mcp queries, liza) |
 | `agent` | **5 packages** (incl. ops) | 0 | 1 binary |
 | `mcp` | ops, commands, mcp/protocol, paths | 0 | 1 binary |
 
@@ -855,7 +868,7 @@ Resolved: `ops.ClaimTask` now enforces coder iteration ceilings (effective polic
 
 ### 2.5 Test Coverage
 
-**Overall:** ~15,300 source LOC, ~36,700 test LOC. 2.4:1 ratio. **75.3% statement coverage** (from `go tool cover -func`). *(pass 4: statement-level data added; pass 7: LOC updated)*
+**Overall:** ~15,800 source LOC, ~41,700 test LOC. 2.6:1 ratio. **75.3% statement coverage** (from `go tool cover -func`; may have improved — recommend re-running). *(pass 4: statement-level data added; pass 7: LOC updated; statevalidate + schema tests)*
 
 **Well-covered:**
 | Package | Ratio | Notes |
@@ -913,14 +926,14 @@ The 24.7% uncovered code concentrates in two patterns:
 | **Low** | Temporal test coupling *(Adversarial pass, entry: tests/ — partially resolved: `1914732`, `1ff88d2`)* | 5 `time.Sleep()` calls (down from 21), 15 `t.Parallel()` uses (up from 0), ratchet tests prevent regression; remaining serial tests constrained by process-global state | Continue tightening ratchets; `--project-root` flag would enable full parallelization |
 | **Low** | Residual raw `1800` in supervisor.go *(pass 6)* | 2 call sites bypass `models.DefaultLeaseDurationSeconds` constant | Replace with named constant |
 | **Low** | Duplicated identity validation *(pass 6)* | `agent/registration.go` reimplements `identity` package logic | Replace with `identity.ValidateFormat()` + `ValidateRole()` |
-| **Low** | Inconsistent ops parameter conventions *(pass 6)* | `AddTask` takes `statePath` while 15+ others take `projectRoot` | Standardize on `projectRoot` |
+| **Low** | Inconsistent ops parameter conventions *(pass 6)* | `AddTask` takes `statePath`/`logPath` while 15+ others take `projectRoot` | Standardize on `projectRoot` |
 | **Low** | `StdioTransport` not injectable *(partially addressed: `c2fe02b`)* | Bounded read tests achieved without injection; `Run()` still untestable | Accept `io.Reader`/`io.Writer` params for full loop testing |
 | **Low** | `PlannerContextConfig` empty struct | Premature abstraction | Remove or document intent |
 | **Low** | Duplicated template execution pattern *(pass 3)* | `commands/templates.go` and `prompts/templates.go` near-identical | Extract shared template infrastructure or accept as coincidental similarity |
 | **Low** | `derefString` duplicated | In builder.go and templates.go funcMap | Use template func only |
 | **Low** | `LIZA_LOG_LEVEL` documentation drift *(Adversarial pass, entry: config/)* | Env var documented but no runtime reader; logger is fixed at INFO | Implement env-driven log level or remove from docs |
-| **Low** | `os.Stat` existence checks under-handle non-`IsNotExist` errors *(Adversarial pass, entry: error handling)* | Some presence checks classify only exists/missing and miss permission/I/O distinctions | Standardize tri-state handling (exists / missing / other error) with contextual wrapping |
-| **Low** | `validateTaskInvariants` monolithic if-chain *(pass 7)* | 142 LOC, ~15 checks ungrouped by status; hard to verify completeness | Group checks by status or use switch |
+| **Low** | `os.Stat` existence checks under-handle non-`IsNotExist` errors *(Adversarial pass, entry: error handling — partially resolved: `52ceac5`)* | Some presence checks classify only exists/missing and miss permission/I/O distinctions. `wt_merge.go` integration-test stat now handles tri-state correctly | Standardize tri-state handling in remaining sites |
+| **Low** | `validateTaskInvariants` monolithic if-chain *(pass 7; now in `statevalidate/`)* | 142 LOC, ~15 checks ungrouped by status; hard to verify completeness | Group checks by status or use switch |
 | **Low** | High nesting in `claiming.go` helpers *(pass 7, partially resolved: `ac4ce6f5`)* | `handleApprovedMerges` depth 6 remains; ~~`resumeHandoffTask` depth 5~~ extracted to `ops.ResumeHandoff` | Extract inner merge-attempt body |
 | **Low** | `cmd/liza/main.go` (1,275 LOC) *(pass 2)* | Organizational god file; behavioral complexity is low | Consider splitting cobra definitions into per-command files if growth continues |
 | **Low** | No interface-based seams *(pass 3)* | Deliberate simplicity; acceptable for v1 | Monitor test suite time; introduce seams if needed |
@@ -977,6 +990,9 @@ The 24.7% uncovered code concentrates in two patterns:
 | Exit code 42 restart loop (no progress detection) | Medium | `f15cd61`, `5f05403` | 2026-02-24 | Per-task restart tracking, exponential backoff (2s→max), circuit breaker to BLOCKED after threshold |
 | Planner role invisible in type system | Medium | `e173f71` | 2026-02-24 | `models.RolePlanner`, `roles.WorkflowPlanner`, declarative `plannerWakeTriggerSpecs` |
 | Two-Track State Mutation (partial) | Medium | `ac4ce6f` | 2026-02-24 | `ops.ClaimReviewerTask` + `ops.ResumeHandoff` extracted; agent lifecycle still inline |
+| Validation Integrity Split by Ingress | Medium | `6fe5bcc` | 2026-02-24 | `internal/statevalidate` package; `ops.AddTask` post-write validation; `PostWriteValidationError` type |
+| Integration Test Script Silent Absence | Medium | `bce626d`, `52ceac5` | 2026-02-24 | `NoTestScriptFound` field, WARNING log, `tests_ran` in merge history, tri-state stat handling |
+| MCP Tool Schema Drift | Medium | `642f94e`, `c9b17a3` | 2026-02-24 | AST-based `schema_consistency_test.go` (584 LOC); schema/handler consistency for all ~20 tools |
 
 ---
 
@@ -990,7 +1006,7 @@ Liza's architecture is well-suited to its constraints: a file-based multi-agent 
 
 **Pass 4 (Coverage lens)** adds quantitative depth: 75.3% statement coverage overall, with the uncovered 24.7% concentrated in two patterns — runtime orchestration code (supervisor Execute, MCP server dispatch) and I/O-coupled functions. The most actionable finding: `mcp/server.classifyError` and `HandleRequest` are pure logic at 0% that can be tested trivially without any refactoring. Similarly, `models/diagnostics.go` (127 LOC, 4 functions, no test file) is critical work-detection logic that's entirely untested despite being pure functions on `*State`. I/O coupling (already flagged as a Boundaries smell) is now quantitatively confirmed as the primary driver of untested critical paths — functions with hardwired `os.Stdin`/`os.Stdout`/`os/exec` account for the majority of the 0% coverage.
 
-The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), ~~(2) commands presentation+logic coupling~~ (resolved — all 15 MCP-exposed mutation commands extracted to `internal/ops/`; MCP handlers call ops directly; protocol corruption risk eliminated), ~~(3) monolithic command functions~~ (resolved — all 4 monolithic commands extracted to ops; `DeleteTaskCommand` was the last, using the two-function pre-check + action pattern from `DeleteAgentCommand`), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). The ops layer now contains 21 operations (~3,200 LOC) serving 3 consumers (agent, commands, mcp). ~~Remaining concerns: interactive stdin in CLI-only commands~~ (fully resolved: `7a5e79c` — `io.Reader` injection).
+The primary structural concerns in priority order: ~~(1) `supervisor.go` god file~~ (resolved — decomposed into 6 files), ~~(2) commands presentation+logic coupling~~ (resolved — all 15 MCP-exposed mutation commands extracted to `internal/ops/`; MCP handlers call ops directly; protocol corruption risk eliminated), ~~(3) monolithic command functions~~ (resolved — all 4 monolithic commands extracted to ops; `DeleteTaskCommand` was the last, using the two-function pre-check + action pattern from `DeleteAgentCommand`), ~~(4) MCP handler bypassing Blackboard locking~~ (resolved), ~~(5) untested MCP dispatch and diagnostics~~ (resolved), ~~(6) agent→commands upward dependency~~ (resolved — `internal/ops/` service layer). The ops layer now contains 25 operations (~3,750 LOC) serving 3 consumers (agent, commands, mcp). ~~Remaining concerns: interactive stdin in CLI-only commands~~ (fully resolved: `7a5e79c` — `io.Reader` injection).
 
 **Pass 5 (Duplication lens)** examined cross-file repetition patterns. The most significant duplication pattern is within the `ops/` package itself: 10 of 19 ops files repeat an identical 3-line FindTask+NotFoundError guard inside `bb.Modify` callbacks, and 12 files share structurally similar history-append code. The `readTaskState()` helper addresses this for the Read path but has no equivalent for the Modify path. This is idiomatic Go — each function is independently authored with the same pattern — and the impact is low (maintenance burden if the guard pattern changes). In test code, 23 command test files construct near-identical `initialState` objects; a `testhelpers.DefaultState()` helper would be a low-risk improvement. Overall, the codebase's earlier duplication issues (task-lookup loops 55×, file-locking, magic numbers) have been resolved. The remaining repetition is largely structural — Go's explicit style trading conciseness for clarity.
 

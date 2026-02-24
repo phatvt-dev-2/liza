@@ -79,7 +79,7 @@ tasks:
       - { time: "2025-01-17T14:06:00Z", event: "claimed", agent: "coder-1" }
       - { time: "2025-01-17T14:25:00Z", event: "ready_for_review", commit: "a1b2c3d4" }
       - { time: "2025-01-17T14:28:00Z", event: "approved", agent: "code-reviewer-1" }
-      - { time: "2025-01-17T14:29:00Z", event: "merged" }
+      - { time: "2025-01-17T14:29:00Z", event: "merged", extra: { tests_ran: true } }
 
   - id: task-2
     description: "Add retry decorator to OrderAPI.create_order()"
