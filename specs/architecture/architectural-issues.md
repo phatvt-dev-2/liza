@@ -29,7 +29,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Role-Boundary Severity Drift](#role-boundary-severity-drift)
   - [Reviewer Role Namespace Fragmentation](#reviewer-role-namespace-fragmentation)
   - [Merge Execution Authority Split](#merge-execution-authority-split)
-  - [Lease Duration Default Split](#lease-duration-default-split)
   - [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope)
   - [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows)
 - [Feedback Loops](#feedback-loops)
@@ -278,22 +277,6 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 - Normalize all protocol docs to one merge authority model
 - Record merge executor identity explicitly in task history for auditability
 - Add validation/docs linting to flag authority contradictions across artifacts
-
-### Lease Duration Default Split
-
-**Skill:** systemic-thinking
-**Category:** TENSION
-
-**Issue:** The blackboard schema document contradicts itself internally: the YAML example declares `config.lease_duration: 1800` (30 minutes), while prose in the same document states "Lease duration: 300 seconds (5 minutes)" and "default: 5 minutes". The runtime code uses 1800 (`DefaultLeaseDurationSeconds` in `models/state.go`, passed through `supervisor.go` and `claimReviewerTask`), so the actual system behavior matches the YAML example, not the prose.
-
-**Implication:** Readers who follow the prose (5-minute model) will have incorrect expectations about lease expiry timing. Operational procedures referencing "5 minutes" describe behavior that doesn't match the code.
-
-**Current mitigation:** None — the schema prose and the code disagree, and the prose is what operators read.
-
-**Future options:**
-- Define one canonical lease default source and generate docs from it
-- Surface active lease config in runtime status output for operator confirmation
-- Add docs consistency checks for duplicated default-value declarations
 
 ### Task Type Registry Only Supports Coding Workflows
 
@@ -997,6 +980,7 @@ Issues identified through code-level architectural analysis (patterns, structure
 - [x] Documentation/Implementation Desynchronization — replaced all operational `yq` references across 8 docs/specs files with `liza` CLI equivalents or tool-agnostic instructions *(systemic-thinking)*
 - [x] YAML Round-Trip Data Loss — added `Extra map[string]any` with `yaml:",inline"` to all model structs; unknown YAML fields now survive round-trips *(systemic-thinking)*
 - [x] Inconsistent NotFoundError Usage — added `ID` field to `NotFoundError`, migrated 25+ ad-hoc string errors to structured type across `ops/`, `db/`, `agent/`, `commands/`; `IsNotFound()` uses `errors.As`; MCP `classifyError()` uses type-based detection with string fallback *(software-architecture-review)*
+- [x] Lease Duration Default Split — corrected prose in blackboard-schema.md to match YAML example and runtime code (1800 seconds / 30 minutes) *(systemic-thinking)*
 - [x] MCP parse-error response write failure ignored — made `WriteError` failure terminal; `Run` returns error instead of silently continuing *(architecture-review)*
 - [x] `submit-for-review` `commit_sha` contract drift — aligned contract in `d4c688e`; **REGRESSED**: caller-provided SHA is currently required again in CLI/MCP and ops surfaces *(architecture-review)*
 - [x] REJECTED reassignment can orphan worktree on recreate failure — reordered reassignment to secure replacement before teardown with compensating recovery *(architecture-review)*
@@ -1052,6 +1036,7 @@ Commit SHA where issue details were first marked as fixed (proxy for actual fix 
 | Pervasive Task-Lookup Duplication | `363b440` |
 | Untested MCP Server Dispatch Layer | `40ef645` |
 | Untested Work Detection Logic | `40ef645` |
+| Lease Duration Default Split | (pending commit) |
 | Iteration-Limit Config Drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) | `5fceaad` |
 | MCP parse-error response write failure ignored | `80297b9` |
 | `submit-for-review` `commit_sha` contract drift | `d4c688e` (regressed) |

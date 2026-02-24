@@ -602,7 +602,7 @@ agents:
 ```
 
 **Lease rules:**
-- On claim: set `lease_expires` to now + lease_duration (default: 5 minutes)
+- On claim: set `lease_expires` to now + lease_duration (default: 30 minutes)
 - Heartbeat extends lease by lease_duration
 - Task reclaimable only after lease expires
 - If original agent returns after expiry → must self-abort immediately
@@ -627,7 +627,7 @@ agents:
 Code Reviewer lease prevents two Code Reviewers examining same task simultaneously and enables recovery from Code Reviewer crash.
 
 **Heartbeat interval:** 60 seconds
-**Lease duration:** 300 seconds (5 minutes)
+**Lease duration:** 1800 seconds (30 minutes)
 **Stale threshold:** lease_expires in the past
 
 This resolves "slow but alive" ambiguity cleanly.
