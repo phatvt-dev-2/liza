@@ -307,10 +307,13 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		}
 
 		testOutput = combinedOutput.String()
-	} else {
-		// Integration test script not found — log warning for audit trail
+	} else if errors.Is(statErr, os.ErrNotExist) {
+		// Integration test script not found — log warning for audit trail.
 		noTestScriptFound = true
 		log.Printf("wt-merge %s: WARNING — integration test script not found at %s, proceeding without tests", taskID, integrationTestScript)
+	} else {
+		// Distinguish actual stat failures from true missing-script cases.
+		log.Printf("wt-merge %s: WARNING — unable to stat integration test script at %s: %v; proceeding without tests", taskID, integrationTestScript, statErr)
 	}
 
 	// Update state to MERGED (before worktree cleanup — if write fails,

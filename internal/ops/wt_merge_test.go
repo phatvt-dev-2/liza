@@ -1,8 +1,10 @@
 package ops
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -640,7 +642,11 @@ func TestMergeWorktree_NoTestScriptWarning(t *testing.T) {
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
 
-	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	var result *MergeResult
+	var err error
+	logOutput := captureLogOutput(t, func() {
+		result, err = MergeWorktree(tmpDir, taskID, agentID)
+	})
 	if err != nil {
 		t.Fatalf("MergeWorktree() unexpected error: %v", err)
 	}
@@ -651,6 +657,12 @@ func TestMergeWorktree_NoTestScriptWarning(t *testing.T) {
 	}
 	if !result.NoTestScriptFound {
 		t.Error("NoTestScriptFound should be true when integration-test.sh is missing")
+	}
+	if !strings.Contains(logOutput, "WARNING") {
+		t.Fatalf("expected warning log when integration-test.sh is missing, got logs: %q", logOutput)
+	}
+	if !strings.Contains(logOutput, "integration test script not found") {
+		t.Errorf("expected missing-script warning log, got logs: %q", logOutput)
 	}
 
 	// Verify state updated to MERGED
@@ -736,6 +748,69 @@ func TestMergeWorktree_TestsRanInHistory(t *testing.T) {
 	if testsRanVal != true {
 		t.Errorf("tests_ran = %v, want true", testsRanVal)
 	}
+}
+
+func TestMergeWorktree_NonNotExistStatErrorNotMisclassified(t *testing.T) {
+	taskID := "merge-script-stat-error"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	// Create a regular file at <projectRoot>/scripts so os.Stat on
+	// <projectRoot>/scripts/integration-test.sh returns ENOTDIR.
+	scriptsPath := filepath.Join(tmpDir, "scripts")
+	if err := os.WriteFile(scriptsPath, []byte("not-a-directory"), 0644); err != nil {
+		t.Fatalf("Failed to create scripts path fixture: %v", err)
+	}
+
+	var result *MergeResult
+	var err error
+	logOutput := captureLogOutput(t, func() {
+		result, err = MergeWorktree(tmpDir, taskID, agentID)
+	})
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+
+	if result.TestsRan {
+		t.Error("TestsRan should be false when integration-test.sh cannot be stat'ed")
+	}
+	if result.NoTestScriptFound {
+		t.Error("NoTestScriptFound should be false for non-not-exist stat errors")
+	}
+	if !strings.Contains(logOutput, "unable to stat integration test script") {
+		t.Fatalf("expected stat-error warning log, got logs: %q", logOutput)
+	}
+
+	state := readStateForTest(t, stateFile)
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found in state")
+	}
+	if task.Status != models.TaskStatusMerged {
+		t.Errorf("Task status = %v, want MERGED", task.Status)
+	}
+}
+
+func captureLogOutput(t *testing.T, fn func()) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+	origWriter := log.Writer()
+	origFlags := log.Flags()
+	origPrefix := log.Prefix()
+
+	log.SetOutput(&buf)
+	log.SetFlags(0)
+	log.SetPrefix("")
+
+	defer func() {
+		log.SetOutput(origWriter)
+		log.SetFlags(origFlags)
+		log.SetPrefix(origPrefix)
+	}()
+
+	fn()
+	return buf.String()
 }
 
 // readStateForTest reads state from a state file for test verification.
