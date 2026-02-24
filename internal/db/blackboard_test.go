@@ -422,20 +422,20 @@ func TestBlackboardLockTimeout(t *testing.T) {
 	bb2 := New(statePath).WithLockTimeout(testTimeout)
 
 	// Acquire lock with bb1 and hold it longer than timeout
-	locked := make(chan bool)
-	done := make(chan bool)
+	locked := make(chan struct{})
+	done := make(chan struct{})
+	releaseLock := make(chan struct{})
 
 	go func() {
 		err := bb1.Modify(func(s *models.State) error {
-			locked <- true
-			// Hold lock longer than timeout period to force timeout
-			time.Sleep(2 * time.Second)
+			close(locked)
+			<-releaseLock
 			return nil
 		})
 		if err != nil {
 			t.Errorf("bb1 Modify failed: %v", err)
 		}
-		done <- true
+		close(done)
 	}()
 
 	// Wait for lock to be acquired
@@ -452,6 +452,7 @@ func TestBlackboardLockTimeout(t *testing.T) {
 	if elapsed < 900*time.Millisecond || elapsed > 1200*time.Millisecond {
 		t.Errorf("Timeout duration unexpected: %v (expected ~1s)", elapsed)
 	}
+	close(releaseLock)
 
 	// Wait for first goroutine to finish
 	<-done
@@ -981,12 +982,13 @@ func TestBlackboardLiveLockNotCleaned(t *testing.T) {
 	}
 
 	// bb1 holds lock for 2 seconds
-	lockHeld := make(chan bool)
+	lockHeld := make(chan struct{})
 	done := make(chan error)
+	releaseLock := make(chan struct{})
 	go func() {
 		err := bb1.Modify(func(s *models.State) error {
-			lockHeld <- true
-			time.Sleep(2 * time.Second)
+			close(lockHeld)
+			<-releaseLock
 			return nil
 		})
 		done <- err
@@ -1005,6 +1007,7 @@ func TestBlackboardLiveLockNotCleaned(t *testing.T) {
 	if !strings.Contains(err.Error(), "timeout") && !strings.Contains(err.Error(), "lock") {
 		t.Errorf("Error should mention timeout or lock, got: %v", err)
 	}
+	close(releaseLock)
 
 	// Wait for goroutine to complete
 	if goroutineErr := <-done; goroutineErr != nil {

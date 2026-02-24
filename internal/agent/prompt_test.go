@@ -176,8 +176,21 @@ func TestSavePromptMultipleCalls(t *testing.T) {
 		t.Fatalf("savePrompt() error = %v", err)
 	}
 
-	// Small delay to ensure different timestamp
-	time.Sleep(1 * time.Second)
+	// savePrompt uses second-resolution timestamps (20060102-150405).
+	// Wait until the wall-clock second advances so the next call produces
+	// a distinct filename, instead of polling savePrompt in a tight loop
+	// which would create dozens of duplicate files as a side effect.
+	startSec := time.Now().UTC().Truncate(time.Second)
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for time.Now().UTC().Truncate(time.Second).Equal(startSec) {
+		select {
+		case <-deadline:
+			t.Fatal("wall-clock second did not advance within timeout")
+		case <-ticker.C:
+		}
+	}
 
 	path2, err := savePrompt(promptDir, "coder-1", "prompt 2")
 	if err != nil {

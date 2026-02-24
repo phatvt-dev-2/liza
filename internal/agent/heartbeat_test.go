@@ -96,8 +96,8 @@ func TestHeartbeat(t *testing.T) {
 
 			// Cancel early if requested
 			if tt.cancelEarly {
-				time.Sleep(tt.runDuration / 2)
-				cancel()
+				cancelTimer := time.AfterFunc(tt.runDuration/2, cancel)
+				defer cancelTimer.Stop()
 			}
 
 			// Wait for completion
@@ -235,8 +235,28 @@ func TestHeartbeatStop(t *testing.T) {
 		doneCh <- hb.Start(ctx)
 	}()
 
-	// Let it run for a bit
-	time.Sleep(150 * time.Millisecond)
+	// Wait until at least one heartbeat update is observed.
+	bb := db.New(stateFile)
+	waitDeadline := time.After(1 * time.Second)
+	waitTicker := time.NewTicker(10 * time.Millisecond)
+	defer waitTicker.Stop()
+
+	updated := false
+	for !updated {
+		select {
+		case <-waitDeadline:
+			t.Fatal("Heartbeat was not observed before cancellation")
+		case <-waitTicker.C:
+			state, err := bb.Read()
+			if err != nil {
+				continue
+			}
+			agent, exists := state.Agents["coder-1"]
+			if exists && agent.Heartbeat.After(now) {
+				updated = true
+			}
+		}
+	}
 
 	// Cancel context to stop heartbeat
 	cancel()

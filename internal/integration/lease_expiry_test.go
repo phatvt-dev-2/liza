@@ -231,10 +231,9 @@ func TestLeaseRenewal(t *testing.T) {
 
 	// Simulate heartbeat by updating lease
 	t.Log("Simulating heartbeat/lease renewal")
-	time.Sleep(100 * time.Millisecond) // Small delay to ensure time difference
 
 	err = bb.Modify(func(state *models.State) error {
-		newExpiry := time.Now().UTC().Add(30 * time.Minute)
+		newExpiry := initialExpiry.Add(100 * time.Millisecond)
 		for i := range state.Tasks {
 			if state.Tasks[i].ID == taskID {
 				state.Tasks[i].LeaseExpires = &newExpiry

@@ -253,15 +253,16 @@ func TestConcurrentReadsDuringWrite(t *testing.T) {
 
 	// Start a long-running write
 	var wg sync.WaitGroup
-	writeStarted := make(chan bool)
-	writeCompleted := make(chan bool)
+	writeStarted := make(chan struct{})
+	writeCompleted := make(chan struct{})
+	allowWriteFinish := make(chan struct{})
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := bb.Modify(func(state *models.State) error {
 			close(writeStarted)
-			time.Sleep(100 * time.Millisecond) // Simulate slow operation
+			<-allowWriteFinish
 			state.Config.HeartbeatInterval = 999
 			return nil
 		})
@@ -274,16 +275,28 @@ func TestConcurrentReadsDuringWrite(t *testing.T) {
 	// Wait for write to start
 	<-writeStarted
 
-	// Try to read during the write - should be blocked until write completes
+	// Try to read during the write - it should stay blocked while the writer holds the lock.
+	readDone := make(chan struct{})
+	var readErr error
 	readStart := time.Now()
-	_, err := bb.Read()
+	go func() {
+		_, readErr = bb.Read()
+		close(readDone)
+	}()
+
+	select {
+	case <-readDone:
+		t.Fatal("Read completed too quickly, may not have been properly blocked by write lock")
+	case <-time.After(50 * time.Millisecond):
+		// Expected: still blocked while write lock is held.
+	}
+	close(allowWriteFinish)
+
+	<-readDone
 	readDuration := time.Since(readStart)
-
-	testhelpers.AssertNoError(t, err)
-
-	// Verify read was blocked (took at least as long as the write sleep)
+	testhelpers.AssertNoError(t, readErr)
 	if readDuration < 50*time.Millisecond {
-		t.Error("Read completed too quickly, may not have been properly blocked by write lock")
+		t.Errorf("Read completed too quickly, expected it to remain blocked for at least 50ms (got %v)", readDuration)
 	}
 
 	// Wait for write to complete

@@ -168,14 +168,12 @@ func TestMetricsRecorderStatsEmpty(t *testing.T) {
 }
 
 func TestMeasureLockOperation(t *testing.T) {
-	// Simulate lock operation with delays
+	// Use deterministic durations without sleeping.
 	acquireStart := time.Now()
-	time.Sleep(10 * time.Millisecond) // Simulate acquisition delay
-	acquireEnd := time.Now()
+	acquireEnd := acquireStart.Add(10 * time.Millisecond)
 
 	holdStart := acquireEnd
-	time.Sleep(20 * time.Millisecond) // Simulate operation
-	holdEnd := time.Now()
+	holdEnd := holdStart.Add(20 * time.Millisecond)
 
 	metrics := &Metrics{
 		Operation:       "test-op",

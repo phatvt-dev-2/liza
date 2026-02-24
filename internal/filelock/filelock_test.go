@@ -93,7 +93,6 @@ func TestFileLockConcurrent(t *testing.T) {
 		go func() {
 			err := fl.WithLock(func() error {
 				counter.Add(1)
-				time.Sleep(1 * time.Millisecond) // Simulate work
 				return nil
 			})
 			done <- err
@@ -243,11 +242,11 @@ func TestWithLockStaleLockRecovery(t *testing.T) {
 	// Acquire lock1
 	lock1Acquired := make(chan struct{})
 	lock1Done := make(chan struct{})
+	releaseLock1 := make(chan struct{})
 	go func() {
 		_ = lock1.WithLock(func() error {
 			close(lock1Acquired)
-			// Hold the lock for a bit
-			time.Sleep(200 * time.Millisecond)
+			<-releaseLock1
 			return nil
 		})
 		close(lock1Done)
@@ -284,6 +283,7 @@ func TestWithLockStaleLockRecovery(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("lock2 should have timed out quickly")
 	}
+	close(releaseLock1)
 
 	// Wait for lock1 to release
 	select {

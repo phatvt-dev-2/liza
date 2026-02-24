@@ -126,8 +126,10 @@ func TestSupervisorBasicLoop(t *testing.T) {
 	bb := db.New(statePath)
 	go func() {
 		// Wait for first execution
+		waitTicker := time.NewTicker(10 * time.Millisecond)
+		defer waitTicker.Stop()
 		for len(mock.GetCalls()) == 0 {
-			time.Sleep(10 * time.Millisecond)
+			<-waitTicker.C
 		}
 		// Set STOPPED mode
 		bb.Modify(func(s *models.State) error {
@@ -227,14 +229,35 @@ func TestSupervisorAbortsQuickly(t *testing.T) {
 
 	os.MkdirAll(config.SpecsDir, 0755)
 
-	// Send ABORT signal after 1 second
+	// Send ABORT signal after supervisor has registered itself.
 	go func() {
-		time.Sleep(1 * time.Second)
-		if err := db.New(statePath).Modify(func(s *models.State) error {
-			s.Config.Mode = models.SystemModeStopped
-			return nil
-		}); err != nil {
-			t.Logf("Failed to set STOPPED mode: %v", err)
+		stopSystem := func() {
+			if err := db.New(statePath).Modify(func(s *models.State) error {
+				s.Config.Mode = models.SystemModeStopped
+				return nil
+			}); err != nil {
+				t.Logf("Failed to set STOPPED mode: %v", err)
+			}
+		}
+
+		waitTicker := time.NewTicker(10 * time.Millisecond)
+		defer waitTicker.Stop()
+		waitDeadline := time.After(2 * time.Second)
+
+		for {
+			select {
+			case <-waitTicker.C:
+				snapshot, err := db.New(statePath).Read()
+				if err == nil {
+					if _, exists := snapshot.Agents[config.AgentID]; exists {
+						stopSystem()
+						return
+					}
+				}
+			case <-waitDeadline:
+				stopSystem()
+				return
+			}
 		}
 	}()
 

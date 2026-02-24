@@ -409,13 +409,14 @@ func TestWaitForWorkCancellation(t *testing.T) {
 
 	// Start waiting in goroutine
 	errCh := make(chan error, 1)
+	started := make(chan struct{})
 	go func() {
+		close(started)
 		_, err := waitForWork(ctx, bb, lizaDir, "coder", config, 10*time.Millisecond, 10*time.Second)
 		errCh <- err
 	}()
 
-	// Cancel after short delay
-	time.Sleep(50 * time.Millisecond)
+	<-started
 	cancel()
 
 	// Should return context.Canceled error quickly
@@ -484,7 +485,9 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	// Start waiting in background
+	started := make(chan struct{})
 	go func() {
+		close(started)
 		hasWork, err := waitForCoderWork(ctx, bb, lizaDir, "coder-1", 10*time.Millisecond, 5*time.Second)
 		if err != nil {
 			errCh <- err
@@ -493,8 +496,7 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 		resultCh <- hasWork
 	}()
 
-	// Wait for watcher to start
-	time.Sleep(50 * time.Millisecond)
+	<-started
 
 	// Set state to STOPPED
 	if err := bb.Modify(func(s *models.State) error {
@@ -548,7 +550,9 @@ func TestWaitForWorkPollingAbortStateMode(t *testing.T) {
 	}
 
 	// Start waiting in background
+	started := make(chan struct{})
 	go func() {
+		close(started)
 		hasWork, err := waitForWorkPolling(ctx, bb, lizaDir, 50*time.Millisecond, 5*time.Second, checkWork)
 		if err != nil {
 			errCh <- err
@@ -557,8 +561,7 @@ func TestWaitForWorkPollingAbortStateMode(t *testing.T) {
 		resultCh <- hasWork
 	}()
 
-	// Wait a bit then set STOPPED mode
-	time.Sleep(25 * time.Millisecond)
+	<-started
 
 	if err := bb.Modify(func(s *models.State) error {
 		s.Config.Mode = models.SystemModeStopped

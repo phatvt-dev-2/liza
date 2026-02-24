@@ -30,6 +30,46 @@ func setupWatcherTest(t *testing.T) (*Blackboard, string) {
 	return bb, statePath
 }
 
+func drainWatcherEvents(watcher *stateWatcher) {
+	for {
+		select {
+		case <-watcher.Events():
+		default:
+			return
+		}
+	}
+}
+
+func waitForWatcherReady(t *testing.T, bb *Blackboard, watcher *stateWatcher) {
+	t.Helper()
+
+	readyDeadline := time.Now().Add(2 * time.Second)
+	// Start well above any version used in tests to avoid collisions with
+	// test-specific version values (tests typically use single-digit versions).
+	probeVersion := 1000
+	for time.Now().Before(readyDeadline) {
+		probeVersion++
+		if err := bb.Modify(func(s *models.State) error {
+			s.Version = probeVersion
+			return nil
+		}); err != nil {
+			t.Fatalf("probe modify failed while waiting for watcher readiness: %v", err)
+		}
+
+		select {
+		case <-watcher.Events():
+			drainWatcherEvents(watcher)
+			return
+		case err := <-watcher.Errors():
+			t.Fatalf("watcher readiness error: %v", err)
+		case <-time.After(200 * time.Millisecond):
+			// Retry until watcher emits an event or deadline expires.
+		}
+	}
+
+	t.Fatal("watcher did not become ready in time")
+}
+
 // TestStateWatcherBasicNotification tests that watcher sends notifications on file changes
 func TestStateWatcherBasicNotification(t *testing.T) {
 	bb, _ := setupWatcherTest(t)
@@ -42,7 +82,7 @@ func TestStateWatcherBasicNotification(t *testing.T) {
 	defer watcher.Close()
 
 	// Modify state
-	time.Sleep(10 * time.Millisecond) // Allow watcher to start
+	waitForWatcherReady(t, bb, watcher)
 	if err := bb.Modify(func(s *models.State) error {
 		s.Version = 2
 		return nil
@@ -72,7 +112,7 @@ func TestStateWatcherMultipleWrites(t *testing.T) {
 	}
 	defer watcher.Close()
 
-	time.Sleep(10 * time.Millisecond) // Allow watcher to start
+	waitForWatcherReady(t, bb, watcher)
 
 	// Perform multiple rapid modifications
 	for i := 2; i <= 5; i++ {
@@ -214,7 +254,7 @@ func TestStateWatcherExternalModification(t *testing.T) {
 	}
 	defer watcher.Close()
 
-	time.Sleep(10 * time.Millisecond) // Allow watcher to start
+	waitForWatcherReady(t, bb, watcher)
 
 	// External modification (direct file write)
 	state, err := bb.Read()
