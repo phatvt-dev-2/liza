@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/mcp/protocol"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -191,6 +192,10 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	if errors.As(err, &nfe) {
 		return protocol.NewError(protocol.NotFound, "resource not found", nil)
 	}
+	var postWriteValidationErr *ops.PostWriteValidationError
+	if errors.As(err, &postWriteValidationErr) {
+		return protocol.NewError(protocol.ValidationError, "validation failed: precondition not met", nil)
+	}
 
 	msg := err.Error()
 
@@ -212,7 +217,8 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	// Validation errors (status checks, preconditions)
 	if strings.Contains(msg, "not IMPLEMENTING") || strings.Contains(msg, "not REVIEWING") || strings.Contains(msg, "not READY_FOR_REVIEW") ||
 		strings.Contains(msg, "not APPROVED") || strings.Contains(msg, "must be") ||
-		strings.Contains(msg, "is required") || strings.Contains(msg, "invalid task ID") {
+		strings.Contains(msg, "is required") || strings.Contains(msg, "invalid task ID") ||
+		strings.Contains(msg, "validation failed") {
 		return protocol.NewError(protocol.ValidationError, "validation failed: precondition not met", nil)
 	}
 

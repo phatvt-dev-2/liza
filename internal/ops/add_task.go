@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
 // AddTaskInput represents the input parameters for adding a task.
@@ -27,6 +29,20 @@ type AddTaskInput struct {
 type AddTaskResult struct {
 	TaskID   string
 	Warnings []string
+}
+
+// PostWriteValidationError indicates the mutation succeeded but state
+// validation failed immediately afterward.
+type PostWriteValidationError struct {
+	Err error
+}
+
+func (e *PostWriteValidationError) Error() string {
+	return fmt.Sprintf("task added but state validation failed: %v", e.Err)
+}
+
+func (e *PostWriteValidationError) Unwrap() error {
+	return e.Err
 }
 
 // AddTask atomically persists a new task after validating inputs and checking
@@ -133,6 +149,10 @@ func AddTask(statePath, logPath string, input *AddTaskInput, plannerID string) (
 
 	if err := logger.Append(logEntry); err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("activity log write failed: %v", err))
+	}
+
+	if err := statevalidate.ValidateStateFile(statePath, false, io.Discard); err != nil {
+		return nil, &PostWriteValidationError{Err: err}
 	}
 
 	return result, nil

@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/mcp/protocol"
+	"github.com/liza-mas/liza/internal/models"
 )
 
 func reqID(id int) json.RawMessage {
@@ -255,6 +259,57 @@ func TestHandleRequest_ToolCall_NilArguments(t *testing.T) {
 	}
 	if len(receivedArgs) != 0 {
 		t.Errorf("args should be empty, got %v", receivedArgs)
+	}
+}
+
+func TestHandleRequest_ToolCall_AddTaskPostWriteValidationFailure(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	if err := bb.Modify(func(state *models.State) error {
+		state.Tasks = append(state.Tasks, models.Task{
+			ID:          "invalid-existing-task",
+			Description: "Invalid existing task",
+			Status:      models.TaskStatusImplementing, // missing required IMPLEMENTING fields
+			Priority:    1,
+			SpecRef:     "specs/test-spec.md",
+			DoneWhen:    "done",
+			Scope:       "scope",
+			Created:     time.Now().UTC(),
+			History:     []models.TaskHistoryEntry{},
+		})
+		return nil
+	}); err != nil {
+		t.Fatalf("failed to seed invalid state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+	req := &protocol.JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      reqID(1),
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name": "liza_add_task",
+			"arguments": map[string]any{
+				"id":       "task-post-write-validation",
+				"desc":     "Task should trigger post-write validation failure",
+				"spec":     "specs/test-spec.md",
+				"done":     "done",
+				"scope":    "scope",
+				"priority": 1,
+				"agent_id": "planner-1",
+			},
+		},
+	}
+
+	resp := server.HandleRequest(req)
+	if resp.Error == nil {
+		t.Fatalf("expected validation error, got result: %#v", resp.Result)
+	}
+	if resp.Error.Code != protocol.ValidationError {
+		t.Fatalf("error code = %d, want %d; error=%v", resp.Error.Code, protocol.ValidationError, resp.Error)
 	}
 }
 
