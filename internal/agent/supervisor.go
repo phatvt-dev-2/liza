@@ -104,7 +104,7 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, role, taskID, agentID s
 		if role != roles.RuntimeCoder {
 			return nil
 		}
-		if outcome.RestartCount < restartLimit {
+		if outcome.RestartCount <= restartLimit {
 			return nil
 		}
 		if task.Status != models.TaskStatusImplementing {
