@@ -1001,6 +1001,7 @@ Issues identified through code-level architectural analysis (patterns, structure
 - [x] Stale-lock cleanup error discarded — propagated as `LockErrorFilesystem` *(software-architecture-review)*
 - [x] `DeleteTask` side effects outpace state commit — git cleanup deferred to after state mutation *(software-architecture-review)*
 - [x] `get config.*` projection drift — reflect-based walker discovers all YAML-tagged fields *(software-architecture-review)*
+- [x] `ReleaseClaim` orphans worktree/branch on coder release — cleanup added post-state-mutation; `handleReadyClaimWorktree` made resilient to stale resources *(bug-fix)*
 
 ---
 
@@ -1058,6 +1059,7 @@ Commit SHA where issue details were first marked as fixed (proxy for actual fix 
 | Stale-lock cleanup error discarded | `729da05` |
 | `DeleteTask` side effects outpace state commit | `7dd05ce` |
 | `get config.*` projection drift | `c4bd748` |
+| `ReleaseClaim` orphans worktree/branch on coder release | (pending commit) |
 
 ---
 

@@ -556,6 +556,70 @@ func TestClaimTask_RejectedAtIterationLimitTransitionsToBlocked(t *testing.T) {
 	}
 }
 
+func TestClaimTask_ReadyWithStaleBranchAndWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Create a stale worktree and branch (simulating orphaned resources from
+	// a previous claim that was released without cleanup).
+	gitWrapper := git.New(tmpDir)
+	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("Failed to create stale worktree: %v", err)
+	}
+
+	// Verify stale resources exist before claim
+	wtDir := filepath.Join(tmpDir, ".worktrees", "task-1")
+	if _, err := os.Stat(wtDir); os.IsNotExist(err) {
+		t.Fatal("Stale worktree should exist before claim")
+	}
+	branchExists, err := gitWrapper.BranchExists("task/task-1")
+	if err != nil {
+		t.Fatalf("Failed to check branch: %v", err)
+	}
+	if !branchExists {
+		t.Fatal("Stale branch should exist before claim")
+	}
+
+	// Claim should succeed despite stale resources
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
+	}
+
+	if result.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+	if result.SourceStatus != models.TaskStatusReady {
+		t.Errorf("SourceStatus = %v, want READY", result.SourceStatus)
+	}
+
+	// Verify worktree exists (freshly created)
+	if _, err := os.Stat(wtDir); os.IsNotExist(err) {
+		t.Error("Worktree should exist after successful claim")
+	}
+
+	// Verify state is correct
+	readState := readClaimStateForTest(t, stateFile)
+	task := readState.FindTask("task-1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Status = %v, want IMPLEMENTING", task.Status)
+	}
+	if task.Worktree == nil {
+		t.Error("Worktree should be set")
+	}
+}
+
 // readClaimStateForTest reads state for claim test verification.
 func readClaimStateForTest(t *testing.T, stateFile string) *models.State {
 	t.Helper()

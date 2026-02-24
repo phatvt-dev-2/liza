@@ -1,11 +1,14 @@
 package ops
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -93,6 +96,74 @@ func TestReleaseClaim_CoderClaim(t *testing.T) {
 	lastHistory := readTask.History[len(readTask.History)-1]
 	if lastHistory.Event != "coder_claim_released" {
 		t.Errorf("History event = %q, want %q", lastHistory.Event, "coder_claim_released")
+	}
+}
+
+func TestReleaseClaim_CoderClaim_ClearsWorktreeFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	// BuildTaskByStatus sets Worktree, BaseCommit, Iteration for IMPLEMENTING
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: testhelpers.StringPtr("task-1"),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Create a real worktree so cleanup has something to remove
+	gitWrapper := git.New(tmpDir)
+	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+
+	result, err := ReleaseClaim(tmpDir, "task-1", "coder", true, "manual cleanup", "human")
+	if err != nil {
+		t.Fatalf("ReleaseClaim() error: %v", err)
+	}
+	if !result.ReleasedCoder {
+		t.Fatal("ReleasedCoder should be true")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	readTask := readState.FindTask("task-1")
+	if readTask == nil {
+		t.Fatal("Task not found")
+	}
+
+	// Verify stale task fields are cleared
+	if readTask.Worktree != nil {
+		t.Errorf("Worktree should be nil, got %q", *readTask.Worktree)
+	}
+	if readTask.BaseCommit != nil {
+		t.Errorf("BaseCommit should be nil, got %q", *readTask.BaseCommit)
+	}
+	if readTask.Iteration != 0 {
+		t.Errorf("Iteration = %d, want 0", readTask.Iteration)
+	}
+
+	// Verify git worktree and branch are cleaned up
+	branchExists, err := gitWrapper.BranchExists("task/task-1")
+	if err != nil {
+		t.Fatalf("Failed to check branch existence: %v", err)
+	}
+	if branchExists {
+		t.Error("Branch task/task-1 should be deleted after release")
+	}
+
+	wtDir := filepath.Join(tmpDir, ".worktrees", "task-1")
+	if _, err := os.Stat(wtDir); !os.IsNotExist(err) {
+		t.Errorf("Worktree directory should not exist after release, got err: %v", err)
 	}
 }
 

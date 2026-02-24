@@ -318,19 +318,25 @@ func handleReadyClaimWorktree(
 ) error {
 	branchName := paths.TaskBranchPrefix + taskID
 
-	// Check if branch or worktree already exists - this indicates a race condition
-	// or stale state. Fail fast instead of trying to clean up, as another thread
-	// might have just created it.
+	// Clean up stale worktree/branch if they exist from a previous claim that
+	// was released without proper cleanup (crash during release, manual state edits, etc.).
 	branchExists, err := gitWrapper.BranchExists(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to check branch existence: %w", err)
 	}
-	if branchExists {
-		return fmt.Errorf("branch %s already exists - another claim may be in progress", branchName)
-	}
 
-	if _, err := os.Stat(worktreeDir); err == nil {
-		return fmt.Errorf("worktree %s already exists for READY task - another claim may be in progress", worktreeRel)
+	if _, statErr := os.Stat(worktreeDir); statErr == nil {
+		log.Printf("WARNING: claim-task %s: removing stale worktree %s for READY task", taskID, worktreeRel)
+		if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
+			return fmt.Errorf("failed to remove stale worktree %s: %w", worktreeRel, cleanupErr)
+		}
+		// RemoveWorktree best-effort deletes the branch; ensure it's gone.
+		_ = gitWrapper.DeleteBranch(branchName)
+	} else if branchExists {
+		log.Printf("WARNING: claim-task %s: removing stale branch %s for READY task", taskID, branchName)
+		if cleanupErr := gitWrapper.DeleteBranch(branchName); cleanupErr != nil {
+			return fmt.Errorf("failed to remove stale branch %s: %w", branchName, cleanupErr)
+		}
 	}
 
 	if _, err := gitWrapper.CreateWorktree(taskID, integrationBranch); err != nil {

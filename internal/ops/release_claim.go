@@ -2,10 +2,12 @@ package ops
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -57,10 +59,16 @@ var coderRelease = claimRelease{
 		}
 		return t.LeaseExpires
 	},
-	activeStatus:    models.TaskStatusImplementing,
-	releasedStatus:  models.TaskStatusReady,
-	eventName:       "coder_claim_released",
-	clearFn:         func(t *models.Task) { t.AssignedTo = nil; t.LeaseExpires = nil },
+	activeStatus:   models.TaskStatusImplementing,
+	releasedStatus: models.TaskStatusReady,
+	eventName:      "coder_claim_released",
+	clearFn: func(t *models.Task) {
+		t.AssignedTo = nil
+		t.LeaseExpires = nil
+		t.Worktree = nil
+		t.BaseCommit = nil
+		t.Iteration = 0
+	},
 	missingLeaseMsg: "lease expires missing for task %s, use --force to clear",
 	activeLeaseMsg:  "coder lease still valid until %s, use --force to clear",
 }
@@ -165,6 +173,19 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to release claim: %w", err)
+	}
+
+	// Clean up worktree and branch after successful coder release.
+	// Errors are warnings — state is already correct.
+	if releasedCoder {
+		gitWrapper := git.New(lp.ProjectRoot())
+		branchName := paths.TaskBranchPrefix + taskID
+		if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
+			log.Printf("WARNING: release-claim %s: failed to remove worktree: %v", taskID, cleanupErr)
+		}
+		if cleanupErr := gitWrapper.DeleteBranch(branchName); cleanupErr != nil {
+			log.Printf("WARNING: release-claim %s: failed to delete branch %s: %v", taskID, branchName, cleanupErr)
+		}
 	}
 
 	return &ReleaseClaimResult{

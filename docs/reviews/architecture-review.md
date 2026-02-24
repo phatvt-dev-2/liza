@@ -808,6 +808,14 @@ Resolved: `ops.ClaimTask` now enforces coder iteration ceilings (effective polic
 
 **Fix:** Moved worktree/branch cleanup to run only after successful state mutation. Existing warning behavior preserved for cleanup failures. Regression test added that forces commit failure and asserts task, worktree, and branch are preserved.
 
+#### ~~Smell: `ReleaseClaim` coder release orphans worktree and branch~~ *(Bug fix — resolved: pending commit)*
+
+**Signal:** `internal/ops/release_claim.go` transitions IMPLEMENTING → READY and clears `assigned_to`/`lease_expires` but does not clean up the git worktree, branch, or stale task fields (`worktree`, `base_commit`, `iteration`). When another coder later claims the now-READY task, `handleReadyClaimWorktree` fatally errors on the existing branch/worktree.
+
+**Impact:** High. Caused cascading failure in sprint-1 where 4 tasks were stuck as READY-but-unclaimable. State↔filesystem drift pattern (same class as `DeleteTask` side-effects issue).
+
+**Fix:** Two changes: (1) `ReleaseClaim` now cleans up worktree/branch after successful state mutation (errors are warnings) and clears stale task fields (`worktree`, `base_commit`, `iteration` reset to 0) inside the Modify closure. (2) `handleReadyClaimWorktree` now cleans up stale worktree/branch before creating fresh ones (belt-and-suspenders for crash/manual-edit scenarios). Tests added for both paths.
+
 #### Smell: REJECTED reassignment deletes old worktree before replacement is secured *(Adversarial pass, entry: documented smells)*
 
 **Status: Fixed** (`ccaf9b0`)
@@ -974,6 +982,7 @@ The 24.7% uncovered code concentrates in two patterns:
 | Test guidance drift for short mode | Medium | `84b5a64` | 2026-02-24 | `testing.Short()` guards added to all integration tests; docs updated |
 | CLI contract coverage gap | Medium | `9d95c1c` | 2026-02-24 | `mutation_wiring_test.go` (215 LOC) covers 4 mutation commands + identity resolution through cobra path |
 | Temporal test coupling (partial) | Medium→Low | `1914732`, `1ff88d2` | 2026-02-24 | `time.Sleep` reduced 21→5; `t.Parallel()` added (15 uses); ratchet tests in `testguard/` prevent regression |
+| `ReleaseClaim` orphans worktree/branch on coder release | High | (pending commit) | 2026-02-24 | Worktree/branch cleanup after state mutation; stale field clearing; defensive cleanup in `handleReadyClaimWorktree` |
 
 ---
 
