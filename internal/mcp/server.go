@@ -73,6 +73,27 @@ func (s *Server) ListTools() []protocol.Tool {
 	return tools
 }
 
+// GetTool returns a specific tool by name
+func (s *Server) GetTool(name string) (protocol.Tool, bool) {
+	tool, ok := s.tools[name]
+	return tool, ok
+}
+
+// GetHandler returns a specific handler by tool name
+func (s *Server) GetHandler(name string) (ToolHandler, bool) {
+	handler, ok := s.handlers[name]
+	return handler, ok
+}
+
+// ToolNames returns all registered tool names
+func (s *Server) ToolNames() []string {
+	names := make([]string, 0, len(s.tools))
+	for name := range s.tools {
+		names = append(names, name)
+	}
+	return names
+}
+
 // ListResources returns all registered resources
 func (s *Server) ListResources() []protocol.Resource {
 	resources := make([]protocol.Resource, 0, len(s.resources))
