@@ -248,21 +248,20 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 - Add consistency checks in contract maintenance workflow for severity-classified rules
 - Publish one canonical severity table referenced by all contracts
 
-### Reviewer Role Namespace Fragmentation
+### ~~Reviewer Role Namespace Fragmentation~~
 
 **Skill:** systemic-thinking
 **Category:** TENSION
+**Status:** RESOLVED (`a60c72e`)
 
-**Issue:** Internal role semantics for the reviewer are encoded as three incompatible namespace forms across internal boundaries: `code_reviewer` in task workflow typing, `code-reviewer` in runtime supervisor/agent role handling, and `reviewer` in claim-release mutation interfaces. These are bridged by implicit string translation rather than a declared canonical mapping. Interface docs already drift from implementation in this surface (for example, MCP `liza_release_claim` describes `code-reviewer` while the ops layer accepts `reviewer`).
+**Issue:** Internal role semantics for the reviewer were encoded as three incompatible namespace forms across internal boundaries: `code_reviewer` in task workflow typing, `code-reviewer` in runtime supervisor/agent role handling, and `reviewer` in claim-release mutation interfaces. These were bridged by implicit string translation rather than a declared canonical mapping.
 
-**Implication:** Recovery and control operations become interface-dependent string guessing rather than type-safe role operations, increasing the chance of operational no-ops or rejected commands during incidents.
-
-**Current mitigation:** Localized per-command parsing and string checks handle common paths, but without a shared role-namespace contract.
-
-**Future options:**
-- Declare one canonical runtime role namespace and generate interface aliases from it
-- Add validation tests for role-name compatibility across CLI, MCP, ops, and models
-- Replace raw string role checks with typed role enums at package boundaries
+**Fix:** Created `internal/roles` package with unified constants and explicit mapping:
+- Runtime constants: `RuntimeCoder`, `RuntimeCodeReviewer`, `RuntimePlanner`
+- Workflow constants: `WorkflowCoder`, `WorkflowCodeReviewer`
+- Mapping functions: `ToWorkflow()`, `ToRuntime()`, validation helpers `IsValidRuntime()`, `IsValidWorkflow()`
+- All agent/, cmd/, and ops/ production code migrated to use role constants
+- Comprehensive tests (253 LOC) cover all mappings, validation, and list functions
 
 ### Merge Execution Authority Split
 
@@ -910,19 +909,15 @@ Long-term concerns about system evolution.
 
 Issues identified through code-level architectural analysis (patterns, structure, duplication).
 
-### Interactive Stdin in Library Packages
+### ~~Interactive Stdin in Library Packages~~
 
 **Skill:** software-architecture-review
 **Category:** Untestable by design
-**Status:** PARTIALLY RESOLVED — MCP-exposed commands no longer read stdin (business logic in ops); remaining stdin reads are in CLI-only commands not exposed to MCP
+**Status:** RESOLVED (`7a5e79c`)
 
-**Issue:** Direct `os.Stdin` reads via `bufio.NewReader(os.Stdin)` or `bufio.NewScanner(os.Stdin)` in: `embedded/embedded.go` (2 locations: `WriteClaudeSettings`, `WriteMCPSettings`), `commands/setup.go` (2 locations), `commands/init.go` (1), `commands/delete_task.go` (2), `commands/delete_agent.go` (1). Total: 8 locations across 5 files in 2 packages.
+**Issue:** Direct `os.Stdin` reads via `bufio.NewReader(os.Stdin)` or `bufio.NewScanner(os.Stdin)` in 8 locations across 5 files in 2 packages (`embedded/embedded.go`, `commands/setup.go`, `commands/init.go`, `commands/delete_task.go`, `commands/delete_agent.go`).
 
-**Current state:** The ops extraction resolved the MCP protocol corruption risk — MCP handlers now call `ops.*` functions that have zero I/O. The remaining stdin reads are in CLI-only interactive commands (`setup`, `init`, `delete_task`, `delete_agent`) and `embedded/` settings management, none of which are MCP-exposed. Both `delete_task.go` and `delete_agent.go` retain interactive confirmation at the CLI wrapper level but delegate business logic to `ops.CheckDeleteTask()` + `ops.DeleteTask()` and `ops.DeleteAgent()` respectively — business logic is fully testable without stdin.
-
-**Remaining concern:** Functions with hardwired stdin still cannot be used non-interactively. Tests work around this by replacing `os.Stdin` with pipe readers (observed in 8+ test files) — fragile and not safe for concurrent test execution.
-
-**Direction:** Accept an `io.Reader` parameter or a `Confirmer` callback for interactive prompts. Default to `os.Stdin` at the CLI call site in `cmd/liza/main.go`.
+**Fix:** All 8 locations now accept an `io.Reader` parameter, defaulting to `os.Stdin` when nil (CLI behavior unchanged). `cmd/liza/main.go` passes `os.Stdin` at call sites. Tests use `strings.NewReader` for mock input — the `os.Stdin` monkey-patching pattern (`os.Stdin = r` / `defer`) is fully eliminated. `withMockStdin` helper removed.
 
 
 ---
@@ -1005,6 +1000,23 @@ Issues identified through code-level architectural analysis (patterns, structure
 - [x] MCP parse-error response write failure ignored — made `WriteError` failure terminal; `Run` returns error instead of silently continuing *(architecture-review)*
 - [x] `submit-for-review` `commit_sha` contract drift — aligned contract in `d4c688e`; **REGRESSED**: caller-provided SHA is currently required again in CLI/MCP and ops surfaces *(architecture-review)*
 - [x] REJECTED reassignment can orphan worktree on recreate failure — reordered reassignment to secure replacement before teardown with compensating recovery *(architecture-review)*
+- [x] Reviewer Role Namespace Fragmentation — `internal/roles` package with unified constants and explicit `ToWorkflow()`/`ToRuntime()` mapping *(systemic-thinking)*
+- [x] Interactive Stdin in Library Packages — all 8 locations accept `io.Reader` parameter; `os.Stdin` monkey-patching eliminated *(software-architecture-review)*
+- [x] Hardcoded `"task/"` branch prefix — `paths.TaskBranchPrefix` constant; all 7 production files migrated *(software-architecture-review)*
+- [x] Role naming divergence — unified via `internal/roles` package *(software-architecture-review)*
+- [x] Divergent GracePeriod values (60s vs 120s) — unified `models.LeaseExpiryGracePeriod` *(software-architecture-review)*
+- [x] `ClaimTask` function complexity (265 LOC) — phase helpers extracted, `unmetDependencies()` shared *(software-architecture-review)*
+- [x] `inspect_field.go` manual reflection — replaced with reflect-based YAML-tag walker *(software-architecture-review)*
+- [x] `validate.validateAnomalies` at 13.3% coverage — targeted table-driven tests for all anomaly types *(software-architecture-review)*
+- [x] `supervisor.resumeHandoffTask` at 11.4% coverage — success/failure/edge-case tests *(software-architecture-review)*
+- [x] MCP stdio transport no frame-size guard — `MaxRequestSize` (10MB) with bounded read *(software-architecture-review)*
+- [x] Watch stall detection parses YAML text directly — uses `log.GetLastTimestamp()` typed parser *(software-architecture-review)*
+- [x] Watch/log O(n) growth paths — append-only writes + bounded tail-window reads *(software-architecture-review)*
+- [x] `heartbeat_interval` config ignored — `NormalizeHeartbeatInterval()` with bounds validation *(software-architecture-review)*
+- [x] Planner max-wait config ignored — planners respect configured value *(software-architecture-review)*
+- [x] Stale-lock cleanup error discarded — propagated as `LockErrorFilesystem` *(software-architecture-review)*
+- [x] `DeleteTask` side effects outpace state commit — git cleanup deferred to after state mutation *(software-architecture-review)*
+- [x] `get config.*` projection drift — reflect-based walker discovers all YAML-tagged fields *(software-architecture-review)*
 
 ---
 
@@ -1044,6 +1056,23 @@ Commit SHA where issue details were first marked as fixed (proxy for actual fix 
 | MCP parse-error response write failure ignored | `80297b9` |
 | `submit-for-review` `commit_sha` contract drift | `d4c688e` (regressed) |
 | REJECTED reassignment can orphan worktree on recreate failure | `ccaf9b0` |
+| Reviewer Role Namespace Fragmentation | `a60c72e` |
+| Interactive Stdin in Library Packages | `7a5e79c` |
+| Hardcoded `"task/"` branch prefix | `59a8e3e` |
+| Role naming divergence | `a60c72e` |
+| Divergent GracePeriod values | `b9f20ff` |
+| `ClaimTask` function complexity | `e86abd4` |
+| `inspect_field.go` manual reflection | `c4bd748` |
+| `validate.validateAnomalies` low coverage | `d8533ab` |
+| `supervisor.resumeHandoffTask` low coverage | `d8533ab` |
+| MCP stdio transport no frame-size guard | `c2fe02b` |
+| Watch stall detection YAML text parsing | `61b16d5` |
+| Watch/log O(n) growth paths | `fe8de6b` |
+| `heartbeat_interval` config ignored | `9e59acf` |
+| Planner max-wait config ignored | `1d4f4f4` |
+| Stale-lock cleanup error discarded | `729da05` |
+| `DeleteTask` side effects outpace state commit | `7dd05ce` |
+| `get config.*` projection drift | `c4bd748` |
 
 ---
 
