@@ -205,15 +205,15 @@ mkdir -p specs && vi specs/vision.md
 
 ### Worktree directory not found
 
-**Error:** `INVALID: IMPLEMENTING task task-1 has worktree=.worktrees/task-1 but directory does not exist`
+**Error:** `INVALID: IMPLEMENTING task <task-id> has worktree=.worktrees/<task-id> but directory does not exist`
 
-**Recreate:** `git worktree add .worktrees/task-1 -b task/task-1 <base-commit>`
+**Recreate:** `git worktree add .worktrees/<task-id> -b task/<task-id> <base-commit>`
 
-*(Replace `<base-commit>` with the task's `base_commit` value from `liza get tasks task-1`)*
+*(Replace `<base-commit>` with the task's `base_commit` value from `liza get tasks <task-id>`.)*
 
 **Or reset task** (if work was lost — edit `.liza/state.yaml` directly):
 ```yaml
-# Find the task-1 entry and set:
+# Find the <task-id> entry and set:
 status: READY
 assigned_to: null
 worktree: null
@@ -223,26 +223,26 @@ worktree: null
 
 ```bash
 # Option 1: Delete and recreate
-liza wt-delete task-1
-liza wt-create task-1
+liza wt-delete <task-id>
+liza wt-create <task-id>
 
 # Option 2: Manual cleanup
-git worktree remove .worktrees/task-1
-rm -rf .worktrees/task-1
-git branch -D task/task-1
-liza wt-create task-1
+git worktree remove .worktrees/<task-id>
+rm -rf .worktrees/<task-id>
+git branch -D task/<task-id>
+liza wt-create <task-id>
 ```
 
 ### Cannot remove worktree: branch is checked out
 
 ```bash
-git worktree remove .worktrees/task-1 --force
+git worktree remove .worktrees/<task-id> --force
 ```
 
 ### Worktree directory is dirty
 
 ```bash
-cd .worktrees/task-1 && git status
+cd .worktrees/<task-id> && git status
 
 # Commit, stash, or discard as appropriate
 git add . && git commit -m "Save progress"   # save
@@ -250,15 +250,15 @@ git stash                                      # stash
 git reset --hard HEAD                          # discard
 ```
 
-### Invalid reference: task/task-1
+### Invalid reference: task/<task-id>
 
 Task branch doesn't exist:
 ```bash
 git branch -a | grep task/          # List task branches
-git branch task/task-1 <base-commit>  # Recreate from base_commit
+git branch task/<task-id> <base-commit>  # Recreate from base_commit
 ```
 
-*(Replace `<base-commit>` with the task's `base_commit` value from `liza get tasks task-1`)*
+*(Replace `<base-commit>` with the task's `base_commit` value from `liza get tasks <task-id>`.)*
 
 ---
 
