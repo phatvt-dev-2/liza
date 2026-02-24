@@ -683,21 +683,19 @@ These are operational tuning parameters with no path to `models.Config`.
 
 **Status:** Resolved in `0f6fe19`. `specs/architecture/state-machines.md` now forbids `BLOCKED -> READY` and aligns with runtime (`BLOCKED -> SUPERSEDED|ABANDONED`).
 
-#### Smell: Worktree recovery doc uses non-canonical branch name *(Adversarial pass)*
+#### ~~Smell: Worktree recovery doc uses non-canonical branch name~~ *(Adversarial pass — resolved: `ee8a55d`)*
 
 **Signal:** `docs/TROUBLESHOOTING.md` used `git worktree add ... -b task-1` while runtime checks and worktree creation consistently use `task/<id>` (e.g., `"task/" + taskID` in `internal/git/worktree.go` and `internal/ops/submit_review.go`).
 
 **Impact:** Medium. Following documented recovery can produce a local branch layout that later fails submit/merge validation (`expected: task/<id>`), turning recovery into a second failure.
 
-**Direction:** Align recovery docs with runtime invariant: branch names must be `task/<task-id>`.
+**Fix:** Canonicalized all worktree recovery examples in `docs/TROUBLESHOOTING.md` to use `task/<task-id>` placeholders, matching the runtime `paths.TaskBranchPrefix` convention.
 
-#### Smell: Test guidance drift for short mode *(Adversarial pass)*
+#### ~~Smell: Test guidance drift for short mode~~ *(Adversarial pass — resolved: `84b5a64`)*
 
 **Signal:** `docs/TESTING.md` claimed integration tests are skipped in `go test -short` via `testing.Short()`, but `internal/integration/*.go` currently has no `testing.Short()` guards and tests execute under `-short`.
 
-**Impact:** Medium. CI/runtime expectations diverge from reality; teams relying on short mode for fast feedback get unexpectedly slow runs and inconsistent documentation.
-
-**Direction:** Document current behavior accurately now. Optionally add explicit `testing.Short()` guards later if the desired behavior is to skip integration tests in short mode.
+**Fix:** Added `testing.Short()` guards to all integration test files in `internal/integration/`. Documentation in `docs/TESTING.md` updated to accurately reflect that integration tests now skip when `go test -short` is used.
 
 #### Smell: Pairing initialization doc pointer drift (`docs/USAGE.md`) *(Adversarial pass, entry: specs/)*
 
@@ -721,21 +719,21 @@ These are operational tuning parameters with no path to `models.Config`.
 
 **Direction:** Update the related-doc link to the canonical Vision path.
 
-#### Smell: CLI contract coverage gap in `cmd/liza/main.go` *(Adversarial pass, entry: tests/)*
+#### ~~Smell: CLI contract coverage gap in `cmd/liza/main.go`~~ *(Adversarial pass, entry: tests/ — resolved: `9d95c1c`)*
 
 **Signal:** The command tree defines 31 cobra commands in `cmd/liza/main.go`, but CLI parser/wiring execution is covered only by `cmd/liza/get_test.go` through `rootCmd.SetArgs(...); rootCmd.Execute()`. Most command behavior is validated at `internal/commands/*_test.go` level (direct function calls), which bypasses cobra parsing, flag wiring, and env/flag precedence paths. Helper paths like `requireAgentID()` and `resolveChangedBy()` are currently uncovered in statement-level coverage.
 
-**Impact:** Medium. A regression in CLI contract wiring (flag names, env fallback precedence, command registration) can pass package-level command tests and fail only in the actual binary invocation path.
+**Fix:** Added `cmd/liza/mutation_wiring_test.go` (215 LOC) with end-to-end cobra command tests for 4 representative mutation commands (`claim-task`, `submit-verdict`, `wt-merge`, `release-claim`) exercising positional args, `--agent-id` flag, `LIZA_AGENT_ID` env fallback, `--changed-by` flag precedence over env, and rejection reason forwarding through the full CLI→ops path. Added `rootcmd_test_helpers_test.go` (122 LOC) with `resetRootCmdForTest(t)` helper that resets identity flags (`--agent-id`, `--changed-by`) and clears `db.For()` singletons between test runs, enabling reliable repeated execution (`-count=2`). `cmd/liza` test LOC grew from 376 to 717 (0.6:1 ratio, up from 0.3:1).
 
-**Direction:** Add focused `cmd/liza` command-tree tests for representative mutation commands (`wt-merge`, `claim-task`, `submit-verdict`) and identity resolution paths (`--agent-id`, `LIZA_AGENT_ID`, `--changed-by`) to validate the CLI surface, not just command internals.
+#### Smell: Temporal test coupling and non-parallelizable suite *(Adversarial pass, entry: tests/ — partially resolved: `1914732`, `1ff88d2`)*
 
-#### Smell: Temporal test coupling and non-parallelizable suite *(Adversarial pass, entry: tests/)*
+**Signal:** ~~Test suite currently has 93 `_test.go` files with 0 uses of `t.Parallel()` and 21 explicit `time.Sleep()` calls (notably in watcher/heartbeat paths).~~ Shared process-level globals exist (`db.instances` singleton map and package-level `rootCmd`), which encourages serial execution in packages that use them.
 
-**Signal:** Test suite currently has 93 `_test.go` files with 0 uses of `t.Parallel()` and 21 explicit `time.Sleep()` calls (notably in watcher/heartbeat paths). Shared process-level globals exist (`db.instances` singleton map and package-level `rootCmd`), which encourages serial execution and timing-based synchronization.
+**Partial fix:** `resetRootCmdForTest(t)` helper isolates `rootCmd` flag state and `db.For()` singletons between tests. `t.Parallel()` introduced in 15 call sites across 4 test files (stateless tests in `roles`, `errors`, `filelock/metrics`, `agent/prompt`). `time.Sleep()` calls reduced from 21 to 5 by replacing brittle sleep-based waits with event-driven synchronization (polling with condition checks) in watcher, heartbeat, and supervisor tests. `internal/testguard/` package (116 LOC) added with ratchet tests enforcing `t.Parallel()` floor (≥10 calls) and `time.Sleep()` ceiling (≤11 calls), preventing regression.
 
-**Impact:** Medium. Timing-sensitive tests are more brittle and slower, and the all-serial suite limits scalability as test volume grows. This is an architectural testability concern rather than a single flaky test.
+**Remaining:** Tests sharing process-global `rootCmd` (all `cmd/liza` tests) cannot use `t.Parallel()` due to `os.Chdir` and cobra flag state. Further parallelization requires either a `--project-root` flag on rootCmd or test-level process isolation.
 
-**Direction:** Replace fixed sleeps with event-driven synchronization where possible, add explicit reset helpers for global state between tests, and introduce `t.Parallel()` selectively in pure/stateless tests to increase confidence and reduce runtime.
+**Impact:** Low (downgraded from Medium). The ratchet tests and global-reset helpers address the structural concern; remaining serial tests are constrained by process-global state, not by missing infrastructure.
 
 #### Smell: Configured iteration limits are declarative but unenforced *(Adversarial pass, entry: config/; resolved)*
 
@@ -873,10 +871,10 @@ Resolved: `ops.ClaimTask` now enforces coder iteration ceilings (effective polic
 
 **Gaps:**
 - `cmd/liza-mcp/main.go` (69 LOC): zero tests
-- `cmd/liza/main.go` (1,275 LOC): only 376 LOC tests (0.3:1) — CLI wiring, hard to unit test
+- `cmd/liza/main.go` (1,275 LOC): 717 LOC tests (0.6:1) — CLI wiring; ~~only `get` exercised through cobra path~~ *(resolved: `9d95c1c` added mutation wiring tests for 4 commands + identity resolution)*
 - `internal/models/diagnostics.go` (127 LOC): zero tests, no test file — work detection functions used by supervisor *(pass 4)*
 - `internal/mcp/protocol/errors.go` (68 LOC): zero tests, no test file *(pass 4)*
-- CLI contract coverage is narrow: only `get` is exercised through cobra `rootCmd.Execute()` path; most commands are validated below CLI layer *(Adversarial pass, entry: tests/)*
+- ~~CLI contract coverage is narrow: only `get` is exercised through cobra `rootCmd.Execute()` path~~ *(resolved: `9d95c1c`)*: `claim-task`, `submit-verdict`, `wt-merge`, `release-claim` now exercised through cobra path with flag/env wiring validation
 
 **Critical 0% coverage paths** *(pass 4, Coverage lens)*:
 The 24.7% uncovered code concentrates in two patterns:
@@ -894,11 +892,11 @@ The 24.7% uncovered code concentrates in two patterns:
 
 **I/O coupling as testability barrier** *(pass 4, Coverage lens)*: Functions at 0% coverage strongly correlate with hardwired I/O — this is the Coverage lens perspective on the Boundaries smell (pass 3). The `CLIExecutor` interface demonstrates the solution pattern: abstracting one I/O boundary enabled comprehensive supervisor testing. ~~`DeleteTaskCommand` prompts~~ (resolved: business logic extracted to `ops.CheckDeleteTask` + `ops.DeleteTask`, both fully testable without I/O). ~~`WriteMCPSettings`~~ stdin coupling resolved (`7a5e79c`: `io.Reader` injection). `StdioTransport` bounded read tests achieved without injection (`c2fe02b`), but full `Run()` loop testing still requires I/O injection.
 
-**Integration tests:** 4 files in `internal/integration/` (1,397 LOC) covering concurrent operations, sprint/merge workflows, e2e command sequences, lease expiry. No build tags — run with regular `go test`.
+**Integration tests:** 4 files in `internal/integration/` (1,397 LOC) covering concurrent operations, sprint/merge workflows, e2e command sequences, lease expiry. All files guarded by `testing.Short()` — skipped under `go test -short` *(resolved: `84b5a64`)*.
 
 **Test patterns:** Table-driven (dominant), filesystem isolation, hand-written mocks (no frameworks), real git operations. No property-based or fuzz testing. *(pass 3: `os.Stdin` monkey-patching pattern noted as testing boundary smell — 8+ test files)*
 
-**Temporal coupling signal** *(Adversarial pass, entry: tests/)*: 21 explicit `time.Sleep()` calls and 0 `t.Parallel()` uses across 93 test files indicate a mostly serialized, timing-driven suite. Combined with package-level global state (`rootCmd`, `db` singleton map), this creates avoidable runtime and brittleness pressure.
+**Temporal coupling signal** *(Adversarial pass, entry: tests/ — partially resolved: `1914732`, `1ff88d2`)*: ~~21 explicit `time.Sleep()` calls and 0 `t.Parallel()` uses across 93 test files~~ Now 5 `time.Sleep()` calls and 15 `t.Parallel()` uses across 101 test files. `resetRootCmdForTest(t)` isolates process-global state. `internal/testguard/` ratchet tests enforce `t.Parallel()` floor (≥10) and `time.Sleep()` ceiling (≤11), preventing regression. Remaining serial tests are constrained by process-global state (`rootCmd`, `os.Chdir`), not by missing infrastructure.
 
 **`check-testhelpers` build guard** *(pass 4)*: Makefile target prevents `testhelpers` import in production code — good practice for maintaining test/production boundary.
 
@@ -909,10 +907,10 @@ The 24.7% uncovered code concentrates in two patterns:
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
 | **High** | Pairing initialization doc pointer drift (`docs/USAGE.md`) *(Adversarial pass, entry: specs/)* | Session Initialization in `PAIRING_MODE.md` requires a non-existent file; startup protocol can fail before task execution | Point initialization to canonical docs (`USAGE_PAIRING.md` and/or `docs/README.md`) |
-| **Medium** | Troubleshooting worktree recovery branch mismatch *(Adversarial pass)* | Recovery command used `task-1`; runtime expects `task/<id>` | Standardize docs to `task/<id>` branch naming |
-| **Medium** | Testing `-short` behavior mismatch *(Adversarial pass)* | Docs implied integration tests skip in short mode; implementation currently runs them | Correct docs now; optionally add `testing.Short()` guards in integration tests if skip semantics are desired |
-| **Medium** | CLI contract coverage gap in `cmd/liza/main.go` *(Adversarial pass, entry: tests/)* | Command logic is tested, but cobra parsing/wiring/env precedence paths are barely exercised | Add `cmd/liza` parser/wiring tests for representative mutation commands and identity flags/env fallback |
-| **Medium** | Temporal test coupling and all-serial execution *(Adversarial pass, entry: tests/)* | 21 `time.Sleep()` calls, 0 `t.Parallel()`, and shared globals increase brittleness and slow feedback | Replace fixed sleeps with event signals, isolate globals, and parallelize stateless tests |
+| ~~**Medium**~~ | ~~Troubleshooting worktree recovery branch mismatch~~ *(Adversarial pass — resolved: `ee8a55d`)* | Canonicalized recovery examples to `task/<id>` | Moved to Fixed (Traceability) |
+| ~~**Medium**~~ | ~~Testing `-short` behavior mismatch~~ *(Adversarial pass — resolved: `84b5a64`)* | Added `testing.Short()` guards; docs updated | Moved to Fixed (Traceability) |
+| ~~**Medium**~~ | ~~CLI contract coverage gap in `cmd/liza/main.go`~~ *(Adversarial pass — resolved: `9d95c1c`)* | 4 mutation commands + identity resolution exercised through cobra path | Moved to Fixed (Traceability) |
+| **Low** | Temporal test coupling *(Adversarial pass, entry: tests/ — partially resolved: `1914732`, `1ff88d2`)* | 5 `time.Sleep()` calls (down from 21), 15 `t.Parallel()` uses (up from 0), ratchet tests prevent regression; remaining serial tests constrained by process-global state | Continue tightening ratchets; `--project-root` flag would enable full parallelization |
 | **Low** | Residual raw `1800` in supervisor.go *(pass 6)* | 2 call sites bypass `models.DefaultLeaseDurationSeconds` constant | Replace with named constant |
 | **Low** | Duplicated identity validation *(pass 6)* | `agent/registration.go` reimplements `identity` package logic | Replace with `identity.ValidateFormat()` + `ValidateRole()` |
 | **Low** | Inconsistent ops parameter conventions *(pass 6)* | `AddTask` takes `statePath` while 15+ others take `projectRoot` | Standardize on `projectRoot` |
@@ -972,6 +970,10 @@ The 24.7% uncovered code concentrates in two patterns:
 | Stale-lock cleanup error discarded | Medium | `729da05` | 2026-02-24 | `cleanupStaleLock()` failure propagated as `LockErrorFilesystem` |
 | `DeleteTask` side effects outpace state commit | Medium | `7dd05ce` | 2026-02-24 | Git cleanup deferred to after successful state mutation |
 | `get config.*` projection drift | Low | `c4bd748` | 2026-02-24 | Reflect-based walker discovers all YAML-tagged fields |
+| Worktree recovery doc branch mismatch | Medium | `ee8a55d` | 2026-02-24 | Recovery examples canonicalized to `task/<task-id>` placeholders |
+| Test guidance drift for short mode | Medium | `84b5a64` | 2026-02-24 | `testing.Short()` guards added to all integration tests; docs updated |
+| CLI contract coverage gap | Medium | `9d95c1c` | 2026-02-24 | `mutation_wiring_test.go` (215 LOC) covers 4 mutation commands + identity resolution through cobra path |
+| Temporal test coupling (partial) | Medium→Low | `1914732`, `1ff88d2` | 2026-02-24 | `time.Sleep` reduced 21→5; `t.Parallel()` added (15 uses); ratchet tests in `testguard/` prevent regression |
 
 ---
 
@@ -993,11 +995,11 @@ The primary structural concerns in priority order: ~~(1) `supervisor.go` god fil
 
 **Pass 7 (Complexity lens)** revisits complexity with the benefit of 6 prior passes of context. The earlier Complexity lens (pass 2) correctly identified the monolithic commands and task-lookup duplication — both now resolved. This pass reveals the complexity that *replaced* them: ~~`ops/claim_task.go:ClaimTask` at 265 LOC is now the longest function in the codebase~~ (resolved: `e86abd4` extracted phase helpers and `unmetDependencies()` shared function; `0158b64` removed format-string wrapper). `ops/wt_merge.go:MergeWorktree` at 377 LOC (file total) remains a complex function with phased flow. ~~A new finding not in previous passes: `commands/inspect_field.go` (327 LOC, 9 switch statements) is a hand-written reflection system where every model field requires a manual switch case~~ (resolved: `c4bd748` replaced with reflect-based YAML-tag walker; now 275 LOC with exhaustive tag tests). LOC figures updated: production code is ~15,300 LOC (stable), test code grew to ~36,700 LOC (2.4:1 ratio, up from 2:1 at pass 1), and `commands/` is 4,300 LOC (up from 2,800 recorded earlier, likely due to test growth during ops extraction).
 
-**Adversarial pass (entry: docs/)** forced a doc-first path and surfaced contract-level drift missed by prior code-centric passes. One item is now resolved: ~~state-machine spec said `BLOCKED -> READY` while runtime disallowed it~~ (fixed in `0f6fe19`). Remaining open items are (1) troubleshooting recovery branch naming drift (`task-1` vs `task/<id>`) and (2) testing-doc short-mode drift for integration tests. These are medium-to-high leverage because they affect operator behavior and architectural understanding directly, not just implementation internals.
+**Adversarial pass (entry: docs/)** forced a doc-first path and surfaced contract-level drift missed by prior code-centric passes. All items now resolved: ~~state-machine spec said `BLOCKED -> READY` while runtime disallowed it~~ (fixed in `0f6fe19`), ~~troubleshooting recovery branch naming drift (`task-1` vs `task/<id>`)~~ (resolved: `ee8a55d` — canonicalized to `task/<task-id>`), and ~~testing-doc short-mode drift for integration tests~~ (resolved: `84b5a64` — `testing.Short()` guards added, docs updated).
 
 **Adversarial pass (entry: specs/)** surfaced three additional coherence gaps: (1) Pairing Session Initialization still references `docs/USAGE.md` even though docs were split into `USAGE_PAIRING.md` and `USAGE_MULTI_AGENTS.md`, ~~(2) watcher stall detection parses raw `log.yaml` text for `timestamp:` instead of using typed log parsing~~ (resolved: `61b16d5` — uses `log.GetLastTimestamp()`), and (3) sprint governance links Vision via `../vision.md` while canonical Vision lives in `specs/build/0 - Vision.md`. The initialization-path drift remains high leverage because it can break startup behavior before execution begins.
 
-**Adversarial pass (entry: tests/)** highlighted a distinct quality boundary: the suite strongly validates command/ops internals but under-exercises the binary CLI contract (`cmd/liza/main.go` wiring, flag/env precedence, command-tree registration). It also surfaced temporal coupling signals (0 `t.Parallel()` usage and 21 explicit sleeps across 93 test files) that point to a serialized, timing-dependent test architecture. Neither issue is immediately blocking, but both will become higher-cost as command surface and concurrency grow.
+**Adversarial pass (entry: tests/)** highlighted a distinct quality boundary: ~~the suite strongly validates command/ops internals but under-exercises the binary CLI contract~~ (resolved: `9d95c1c` — `mutation_wiring_test.go` covers 4 mutation commands + identity resolution through cobra path; `cmd/liza` test ratio improved from 0.3:1 to 0.6:1). Temporal coupling signals also addressed (partially resolved: `1914732`, `1ff88d2` — `time.Sleep` calls reduced from 21 to 5, `t.Parallel()` introduced with 15 uses across 4 files, ratchet tests in `internal/testguard/` prevent regression). Remaining serial tests are constrained by process-global state (`rootCmd`, `os.Chdir`), not by missing infrastructure.
 
 **Adversarial pass (entry: config/)** exposed a config-contract gap cluster: key control knobs are modeled and documented but not always executable. One high-priority gap is now closed: ~~iteration limits (`config.max_coder_iterations`, `config.max_review_cycles`, and `task.max_iterations`) are not enforced in runtime task/review flow~~ (resolved in `5fceaad` via `ClaimTask`/`SubmitVerdict` enforcement; clean-code-only refactor follow-up in `be93dee`). Subsequent fixes closed more config gaps: ~~`heartbeat_interval` is still ignored in favor of a hardcoded 60s scheduler~~ (resolved: `9e59acf` — wired to config with bounds validation), ~~`get config.*` still projects only a subset of `models.Config`~~ (resolved: `c4bd748` — reflect-based walker). Remaining open config drift: `LIZA_LOG_LEVEL` remains unimplemented.
 

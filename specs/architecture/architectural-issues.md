@@ -703,7 +703,7 @@ Partial failure modes with unclear recovery.
 
 **Implication:** Between reviewer agent restarts, tasks can remain stuck in REVIEWING with an expired lease. The gap is not "no mechanism exists" but "no periodic mechanism" — recovery depends on a reviewer agent restarting or manual intervention.
 
-**Current mitigation:** Reviewer registration auto-clears stale claims on startup. `liza clear-stale-review-claims` command available for manual or automated invocation.
+**Current mitigation:** Reviewer registration auto-clears stale claims on startup. `liza clear-stale-review-claims` command available for manual or automated invocation. Signal handling (`SIGINT`/`SIGTERM`) triggers `unregisterAgent()` which atomically releases active review claims on graceful exit — tasks return to READY_FOR_REVIEW immediately rather than waiting for lease expiry. The remaining gap is crash scenarios where the agent cannot execute cleanup.
 
 **Future options:**
 - Supervisor periodically runs stale claim clearing before claiming
