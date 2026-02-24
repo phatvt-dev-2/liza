@@ -79,6 +79,10 @@ func setupIntegrationTest(t *testing.T, projectDir string, taskIDs []string) (*d
 
 // TestSimpleWorkflow tests: init -> add-task -> claim -> submit-for-review -> approve -> merge
 func TestSimpleWorkflow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -210,6 +214,10 @@ func TestSimpleWorkflow(t *testing.T) {
 
 // TestTaskDependencyWorkflow tests that task dependencies are enforced across the workflow
 func TestTaskDependencyWorkflow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 

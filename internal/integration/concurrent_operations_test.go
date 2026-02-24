@@ -22,6 +22,10 @@ import (
 // TestConcurrentClaimAttempts tests that only one agent can claim a task
 // when multiple agents try to claim simultaneously.
 func TestConcurrentClaimAttempts(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -95,6 +99,10 @@ func TestConcurrentClaimAttempts(t *testing.T) {
 // TestConcurrentClaimsOfDifferentTasks tests that multiple agents can
 // claim different tasks simultaneously without interference.
 func TestConcurrentClaimsOfDifferentTasks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -163,6 +171,10 @@ func TestConcurrentClaimsOfDifferentTasks(t *testing.T) {
 // TestConcurrentStateModifications tests that concurrent modifications to state
 // are properly serialized and no updates are lost.
 func TestConcurrentStateModifications(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	tmpDir := t.TempDir()
 
 	// Setup minimal state
@@ -226,6 +238,10 @@ func TestConcurrentStateModifications(t *testing.T) {
 // TestConcurrentReadsDuringWrite tests that reads are blocked during writes
 // (verifying lock behavior).
 func TestConcurrentReadsDuringWrite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	tmpDir := t.TempDir()
 
 	// Setup
@@ -288,6 +304,10 @@ func TestConcurrentReadsDuringWrite(t *testing.T) {
 // coders try to claim the same task and create worktrees simultaneously,
 // ensuring only one succeeds and invalid state is never created.
 func TestConcurrentClaimWithWorktreeConflict(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -395,6 +415,10 @@ func TestConcurrentClaimWithWorktreeConflict(t *testing.T) {
 // succeeds. This validates the fix for the task coordination race condition
 // where ReadCached() was allowing multiple agents to select the same task.
 func TestConcurrentClaimIntegrationFailedTask(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -519,6 +543,10 @@ func TestConcurrentClaimIntegrationFailedTask(t *testing.T) {
 // This verifies the fix for the MergeWorktree race condition where
 // concurrent reviewers would corrupt the integration branch.
 func TestConcurrentMerges(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 

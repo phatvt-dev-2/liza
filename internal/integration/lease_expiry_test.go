@@ -16,6 +16,10 @@ import (
 
 // TestExpiredClaimLease tests that tasks with expired leases can be re-claimed
 func TestExpiredClaimLease(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -72,6 +76,10 @@ func TestExpiredClaimLease(t *testing.T) {
 
 // TestExpiredReviewLease tests that review leases can expire and be reclaimed
 func TestExpiredReviewLease(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -193,6 +201,10 @@ func TestExpiredReviewLease(t *testing.T) {
 
 // TestLeaseRenewal tests that heartbeats can extend leases
 func TestLeaseRenewal(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 

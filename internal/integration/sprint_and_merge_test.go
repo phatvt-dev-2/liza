@@ -19,6 +19,10 @@ import (
 
 // TestSprintMetricsUpdates tests that sprint metrics are correctly updated as tasks progress
 func TestSprintMetricsUpdates(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -148,6 +152,10 @@ func TestSprintMetricsUpdates(t *testing.T) {
 
 // TestSprintCompletion tests detection of sprint completion
 func TestSprintCompletion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -203,6 +211,10 @@ func TestSprintCompletion(t *testing.T) {
 
 // TestSuccessfulMerge tests a simple successful merge operation
 func TestSuccessfulMerge(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
@@ -297,6 +309,10 @@ func TestSuccessfulMerge(t *testing.T) {
 
 // TestMergeWithoutApproval tests that merge fails if task is not approved
 func TestMergeWithoutApproval(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
 	projectDir, cleanup := setupTestProject(t)
 	defer cleanup()
 
