@@ -1,13 +1,21 @@
-// Package log provides structured logging to log.yaml with atomic file operations.
+// Package log provides structured logging to log.yaml with lock-guarded append operations.
 package log
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"github.com/liza-mas/liza/internal/filelock"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	defaultTailReadBytes int64 = 64 * 1024
+	maxTailReadBytes     int64 = 256 * 1024
 )
 
 // Entry represents a single log entry
@@ -30,7 +38,7 @@ func (e *Entry) Validate() error {
 	return nil
 }
 
-// Logger provides atomic append operations to log.yaml
+// Logger provides append operations to log.yaml guarded by a file lock.
 type Logger struct {
 	logPath  string
 	fileLock *filelock.FileLock
@@ -52,7 +60,7 @@ func (l *Logger) WithLockTimeout(timeout time.Duration) *Logger {
 	}
 }
 
-// Append adds a log entry to the log file atomically.
+// Append adds a log entry to the log file.
 // The timestamp is automatically set to the current UTC time.
 func (l *Logger) Append(entry Entry) error {
 	// Validate entry
@@ -65,48 +73,37 @@ func (l *Logger) Append(entry Entry) error {
 		entry.Timestamp = time.Now().UTC()
 	}
 
+	sequenceItem, err := yaml.Marshal([]Entry{entry})
+	if err != nil {
+		return fmt.Errorf("failed to marshal log entry: %w", err)
+	}
+
 	return l.fileLock.WithLockOperation("append", func() error {
-		// Read existing entries
-		var entries []Entry
+		file, err := os.OpenFile(l.logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open log file for append: %w", err)
+		}
+		defer file.Close()
 
-		// Check if file exists
-		if _, err := os.Stat(l.logPath); err == nil {
-			// File exists, read it
-			data, err := os.ReadFile(l.logPath)
-			if err != nil {
-				return fmt.Errorf("failed to read log file: %w", err)
-			}
-
-			// Only unmarshal if file is not empty
-			if len(data) > 0 {
-				if err := yaml.Unmarshal(data, &entries); err != nil {
-					return fmt.Errorf("failed to parse log file: %w", err)
-				}
-			}
-		} else if !os.IsNotExist(err) {
-			// Some other error
+		info, err := file.Stat()
+		if err != nil {
 			return fmt.Errorf("failed to stat log file: %w", err)
 		}
-		// If file doesn't exist, entries will be empty slice
 
-		// Append new entry
-		entries = append(entries, entry)
-
-		// Marshal to YAML
-		data, err := yaml.Marshal(entries)
-		if err != nil {
-			return fmt.Errorf("failed to marshal log entries: %w", err)
+		if info.Size() > 0 {
+			lastByte := make([]byte, 1)
+			if _, err := file.ReadAt(lastByte, info.Size()-1); err != nil {
+				return fmt.Errorf("failed to read log file tail: %w", err)
+			}
+			if lastByte[0] != '\n' {
+				if _, err := file.Write([]byte("\n")); err != nil {
+					return fmt.Errorf("failed to append separator newline: %w", err)
+				}
+			}
 		}
 
-		// Write atomically
-		tmpPath := l.logPath + ".tmp"
-		if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-			return fmt.Errorf("failed to write temporary log file: %w", err)
-		}
-
-		if err := os.Rename(tmpPath, l.logPath); err != nil {
-			os.Remove(tmpPath) // Clean up temp file on error
-			return fmt.Errorf("failed to rename log file: %w", err)
+		if _, err := file.Write(sequenceItem); err != nil {
+			return fmt.Errorf("failed to append log entry: %w", err)
 		}
 
 		return nil
@@ -140,14 +137,85 @@ func (l *Logger) Read() ([]Entry, error) {
 // GetLastTimestamp returns the timestamp of the most recent log entry.
 // Returns zero time if the log file doesn't exist or is empty.
 func (l *Logger) GetLastTimestamp() (time.Time, error) {
-	entries, err := l.Read()
+	file, err := os.Open(l.logPath)
 	if err != nil {
-		return time.Time{}, err
+		if os.IsNotExist(err) {
+			return time.Time{}, nil
+		}
+		return time.Time{}, fmt.Errorf("failed to open log file: %w", err)
 	}
+	defer file.Close()
 
-	if len(entries) == 0 {
+	info, err := file.Stat()
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to stat log file: %w", err)
+	}
+	if info.Size() == 0 {
 		return time.Time{}, nil
 	}
 
-	return entries[len(entries)-1].Timestamp, nil
+	size := info.Size()
+	window := defaultTailReadBytes
+	if size < window {
+		window = size
+	}
+
+	for {
+		start := size - window
+		buf := make([]byte, window)
+		n, readErr := file.ReadAt(buf, start)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return time.Time{}, fmt.Errorf("failed to read log file tail: %w", readErr)
+		}
+		buf = buf[:n]
+
+		entryData := extractLastEntryYAML(buf, start == 0)
+		if len(entryData) > 0 {
+			var entries []Entry
+			if err := yaml.Unmarshal(entryData, &entries); err == nil && len(entries) > 0 {
+				return entries[len(entries)-1].Timestamp, nil
+			}
+		}
+		if start == 0 {
+			var entries []Entry
+			if err := yaml.Unmarshal(bytes.TrimSpace(buf), &entries); err == nil {
+				if len(entries) == 0 {
+					return time.Time{}, nil
+				}
+				return entries[len(entries)-1].Timestamp, nil
+			}
+		}
+
+		if start == 0 || window >= maxTailReadBytes || window >= size {
+			break
+		}
+		window *= 2
+		if window > maxTailReadBytes {
+			window = maxTailReadBytes
+		}
+		if window > size {
+			window = size
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("failed to parse last log entry from bounded tail window")
+}
+
+func extractLastEntryYAML(data []byte, atFileStart bool) []byte {
+	if len(data) == 0 {
+		return nil
+	}
+
+	if idx := bytes.LastIndex(data, []byte("\n- ")); idx >= 0 {
+		return bytes.TrimSpace(data[idx+1:])
+	}
+
+	if atFileStart {
+		trimmed := bytes.TrimLeft(data, " \t\r\n")
+		if bytes.HasPrefix(trimmed, []byte("- ")) {
+			return bytes.TrimSpace(trimmed)
+		}
+	}
+
+	return nil
 }
