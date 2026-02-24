@@ -88,8 +88,8 @@ func TestServerRun_ParseErrorWriteFailureIsTerminal(t *testing.T) {
 	if !errors.Is(err, writeErr) {
 		t.Fatalf("error = %v, want wrapped write error %v", err, writeErr)
 	}
-	if !strings.Contains(err.Error(), "failed to write parse error response") {
-		t.Fatalf("error = %q, want parse-error write context", err.Error())
+	if !strings.Contains(err.Error(), "failed to write error response") {
+		t.Fatalf("error = %q, want write-error context", err.Error())
 	}
 	if transport.writeErrorCalls != 1 {
 		t.Fatalf("WriteError call count = %d, want 1", transport.writeErrorCalls)
