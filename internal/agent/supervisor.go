@@ -420,7 +420,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			claimedTaskID = taskID
 		} else if config.Role == roles.RuntimeCodeReviewer {
 			var reviewCommit string
-			taskID, _, reviewCommit, err = claimReviewerTask(config.AgentID, 1800, bb)
+			taskID, _, reviewCommit, err = claimReviewerTask(config.ProjectRoot, config.AgentID, 1800, bb)
 			if err != nil {
 				// Error already logged in claimReviewerTask
 				time.Sleep(5 * time.Second)
