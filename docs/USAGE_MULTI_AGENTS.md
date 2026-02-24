@@ -101,6 +101,8 @@ Terminal 3 — Code Reviewer:
 liza agent code-reviewer --agent-id code-reviewer-1
 ```
 
+Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --agent-id coder-1 --cli gemini`.
+
 Note that it is possible to run multiple agents of the same roles in different terminals.
 ```bash
 liza agent coder --agent-id coder-1
@@ -134,6 +136,8 @@ liza stop
 # Checkpoint (halt + generate summary)
 liza checkpoint
 ```
+
+**Signal handling:** Agents cleanly exit on `Ctrl+C` (SIGINT) or `kill` (SIGTERM). On exit, the agent unregisters and atomically releases any active task claim — the task returns to READY (coder) or READY_FOR_REVIEW (reviewer) — so no orphaned claims are left behind.
 
 **5. Review Results**
 ```bash

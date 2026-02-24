@@ -2,6 +2,11 @@
 
 ## Terminology
 
+**Implementation:** Role constants are defined in `internal/roles/roles.go`, which provides:
+- Runtime names (hyphenated: `coder`, `code-reviewer`, `planner`) — used in agent IDs and CLI
+- Workflow names (underscore: `coder`, `code_reviewer`) — used in YAML state
+- Bidirectional mapping: `ToWorkflow()` and `ToRuntime()` convert between the two forms
+
 | Canonical Name | YAML Identifier | Agent ID Prefix | Agent Name Pattern |
 |----------------|-----------------|-----------------|-------------------|
 | Planner | `planner` | `planner-` | `planner-1`, `planner-2` |
@@ -483,6 +488,15 @@ Implemented by `liza agent` (see `internal/agent/registration.go`). The supervis
 3. If active lease found: exits with `COLLISION` error
 4. If no conflict: writes agent entry with role, status, lease, heartbeat
 5. Releases lock
+
+### Agent Exit and Claim Release
+
+When an agent exits (signal, crash, or graceful shutdown), `unregisterAgent()` atomically releases any active task claim and deletes the agent entry in a single `Modify` transaction. This prevents orphaned claims:
+
+- **Coder exit:** Task transitions from IMPLEMENTING back to READY; `assigned_to` and `lease_expires` are cleared
+- **Reviewer exit:** Task transitions from REVIEWING back to READY_FOR_REVIEW; `reviewing_by` and `review_lease_expires` are cleared
+
+The supervisor defers `unregisterAgent` immediately after registration, ensuring cleanup runs regardless of how the agent exits.
 
 ### Identity Validation
 

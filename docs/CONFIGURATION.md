@@ -78,10 +78,14 @@ All configuration lives in `.liza/state.yaml` under the `config` section.
 |-----------|---------|-----|-----|------|---------|
 | `max_coder_iterations` | 10 | 1 | 100 | count | Max iterations per coder per task |
 | `max_review_cycles` | 5 | 1 | 20 | count | Max review rejection cycles |
-| `heartbeat_interval` | 60 | 10 | 300 | seconds | Heartbeat frequency |
+| `heartbeat_interval` | 60 | 1 | 300 | seconds | Heartbeat frequency |
 | `lease_duration` | 1800 | 300 | 7200 | seconds | Task lease duration |
 | `coder_poll_interval` | 30 | 5 | 120 | seconds | Check interval (legacy, now event-driven) |
 | `coder_max_wait` | 1800 | 300 | 7200 | seconds | Max idle before agent exits |
+| `planner_poll_interval` | 60 | — | — | seconds | Planner polling interval |
+| `planner_max_wait` | 1800 | — | — | seconds | Max planner idle before exit |
+| `reviewer_poll_interval` | 30 | — | — | seconds | Reviewer polling interval |
+| `reviewer_max_wait` | 1800 | — | — | seconds | Max reviewer idle before exit |
 
 ### Agent Execution Timeouts
 
@@ -92,6 +96,8 @@ All configuration lives in `.liza/state.yaml` under the `config` section.
 | Planner | 4 hours | Complex planning needs time |
 
 When exceeded, supervisor kills CLI, resets agent to IDLE, retries after 5s delay.
+
+**Note:** Planners now respect `planner_max_wait` (default 30 minutes). Previously planners ran indefinitely; they now exit after the configured idle timeout, same as coders and reviewers.
 
 ## Tuning Guidelines
 
@@ -165,6 +171,18 @@ When `liza watch` triggers the circuit breaker, it also sets `sprint.status` to 
 | ABANDONED | No | No | **Yes** |
 | SUPERSEDED | No | No | **Yes** |
 | INTEGRATION_FAILED | Yes | No | No |
+
+## Supported CLIs
+
+The `--cli` flag on `liza agent` selects which coding agent to invoke:
+
+| CLI | Default | Notes |
+|-----|---------|-------|
+| `claude` | Yes | Claude Code |
+| `codex` | No | OpenAI Codex CLI |
+| `gemini` | No | Google Gemini CLI |
+| `mistral` | No | Mistral Le Chat CLI |
+| `kimi` | No | Kimi (alias to claude with Kimi-specific env vars) |
 
 ## Agent Identity
 

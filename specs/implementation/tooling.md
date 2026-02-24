@@ -32,7 +32,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza watch` | Alarm monitor daemon |
 | `liza analyze` | Circuit breaker analysis (human-triggered) |
 | `liza checkpoint` | Create checkpoint and generate sprint summary |
-| `liza agent <role> --agent-id x` | Agent supervisor |
+| `liza agent <role> --agent-id x [--cli C]` | Agent supervisor (`--cli`: claude, codex, gemini, mistral, kimi) |
 | `liza claim-task <task> <agent>` | Claim task with two-phase commit (called by supervisor) |
 | `liza submit-for-review <task> <sha>` | Validate `<sha>` matches pre-rebase worktree HEAD, then set READY_FOR_REVIEW + post-rebase `review_commit` + history |
 | `liza submit-verdict <task> <V> [reason]` | Atomically set APPROVED/REJECTED + review fields + history |
@@ -210,6 +210,8 @@ The supervisor handles:
 - Detecting exit codes
 - Respecting system mode (`config.mode: PAUSED`, `STOPPED`) and sprint status (`CHECKPOINT`)
 - Backoff timing on crashes
+
+**Signal handling:** The supervisor respects SIGINT/SIGTERM via `signal.NotifyContext`. On signal, the context is cancelled and the supervisor checks `ctx.Err()` at the top of its loop, exiting gracefully. Agent unregistration (`unregisterAgent`) atomically releases any active task claim — tasks return to READY (coder) or READY_FOR_REVIEW (reviewer) — before deleting the agent entry.
 
 Agents do not call supervisor-only scripts or manage their own lifecycle.
 
@@ -452,7 +454,7 @@ Human owns the intent and acts as observer and circuit-breaker, not approver.
 
 | Action | Mechanism | Effect |
 |--------|-----------|--------|
-| Kill agent | Ctrl+C / kill | Supervisor restarts; agent re-reads blackboard |
+| Kill agent | Ctrl+C / kill | Agent releases task claims on exit; supervisor restarts and re-reads blackboard |
 | Pause all | `liza pause` | Sets `config.mode: PAUSED`; agents exit gracefully (code 42), supervisors wait |
 | Resume | `liza resume` | Sets `config.mode: RUNNING`; supervisors restart agents |
 | Force replan | `liza mark-blocked <task> --reason "human override"` | Planner escalation triggered |
