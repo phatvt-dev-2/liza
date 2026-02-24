@@ -1,533 +1,584 @@
 package mcp
 
 import (
-	"slices"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strconv"
 	"testing"
-
-	"github.com/liza-mas/liza/internal/mcp/protocol"
 )
 
-// ToolSchemaConsistencyTest verifies that each MCP tool's declared InputSchema
-// matches its handler's actual parameter extraction.
-//
-// This test addresses the schema drift issue where hand-coded InputSchemas
-// can diverge from handler implementations (e.g., submit-for-review SHA field regression).
-//
-// For each tool, it verifies:
-// 1. Schema-declared Required fields are actually extracted by the handler
-// 2. Handler doesn't require fields not declared in schema
-//
-// Note: This test uses a parameter map based on code review of handlers.go
-// to define expected parameter extraction patterns.
+type fieldSet map[string]struct{}
 
-// ParameterExpectation defines expected handler behavior for a parameter
-type ParameterExpectation struct {
-	Required bool
-	Source   string // extraction pattern: "requireString", "requireTaskAndAgent", "extractStringSlice", "direct"
+func newFieldSet(fields ...string) fieldSet {
+	set := make(fieldSet, len(fields))
+	for _, field := range fields {
+		if field == "" {
+			continue
+		}
+		set[field] = struct{}{}
+	}
+	return set
 }
 
-// expectedToolParams maps tool names to their expected parameter extraction patterns
-// This is derived from manual analysis of handlers.go
-var expectedToolParams = map[string]map[string]ParameterExpectation{
-	"liza_get": {
-		"query":  {Required: true, Source: "requireString"},
-		"format": {Required: false, Source: "direct"},
-	},
-	"liza_status": {},
-	"liza_validate": {
-		"skip_spec_check": {Required: false, Source: "direct"},
-	},
-	"liza_version": {},
-	"liza_add_task": {
-		"id":       {Required: true, Source: "requireString"},
-		"desc":     {Required: true, Source: "requireString"},
-		"spec":     {Required: true, Source: "requireString"},
-		"done":     {Required: true, Source: "requireString"},
-		"scope":    {Required: true, Source: "requireString"},
-		"agent_id": {Required: false, Source: "direct"},
-		"priority": {Required: false, Source: "direct"},
-		"depends":  {Required: false, Source: "extractStringSlice"},
-		"type":     {Required: false, Source: "direct"},
-	},
-	"liza_claim_task": {
-		"task_id":  {Required: true, Source: "requireTaskAndAgent"},
-		"agent_id": {Required: true, Source: "requireTaskAndAgent"},
-	},
-	"liza_submit_for_review": {
-		"task_id":    {Required: true, Source: "requireString"},
-		"commit_sha": {Required: true, Source: "requireString"},
-		"agent_id":   {Required: true, Source: "requireString"},
-	},
-	"liza_handoff": {
-		"task_id":     {Required: true, Source: "requireTaskAndAgent"},
-		"agent_id":    {Required: true, Source: "requireTaskAndAgent"},
-		"summary":     {Required: true, Source: "requireString"},
-		"next_action": {Required: true, Source: "requireString"},
-	},
-	"liza_submit_verdict": {
-		"task_id":  {Required: true, Source: "requireString"},
-		"verdict":  {Required: true, Source: "requireString"},
-		"agent_id": {Required: true, Source: "requireString"},
-		"reason":   {Required: false, Source: "direct"},
-	},
-	"liza_mark_blocked": {
-		"task_id":   {Required: true, Source: "requireTaskAndAgent"},
-		"agent_id":  {Required: true, Source: "requireTaskAndAgent"},
-		"reason":    {Required: true, Source: "requireString"},
-		"questions": {Required: true, Source: "extractStringSlice"},
-	},
-	"liza_release_claim": {
-		"task_id":  {Required: true, Source: "requireString"},
-		"role":     {Required: true, Source: "requireString"},
-		"agent_id": {Required: true, Source: "requireString"},
-		"reason":   {Required: false, Source: "direct"},
-		"force":    {Required: false, Source: "direct"},
-	},
-	"liza_supersede_task": {
-		"task_id":         {Required: true, Source: "requireTaskAndAgent"},
-		"agent_id":        {Required: true, Source: "requireTaskAndAgent"},
-		"reason":          {Required: true, Source: "requireString"},
-		"replacement_ids": {Required: false, Source: "extractStringSlice"},
-	},
-	"liza_wt_create": {
-		"task_id": {Required: true, Source: "requireString"},
-		"fresh":   {Required: false, Source: "direct"},
-	},
-	"liza_wt_delete": {
-		"task_id": {Required: true, Source: "requireString"},
-	},
-	"liza_wt_merge": {
-		"task_id":  {Required: true, Source: "requireTaskAndAgent"},
-		"agent_id": {Required: true, Source: "requireTaskAndAgent"},
-	},
-	"liza_analyze":                   {},
-	"liza_update_sprint_metrics":     {},
-	"liza_checkpoint":                {},
-	"liza_clear_stale_review_claims": {},
-	"liza_delete_agent": {
-		"agent_id": {Required: true, Source: "requireString"},
-		"reason":   {Required: true, Source: "requireString"},
-		"force":    {Required: false, Source: "direct"},
-	},
+func (s fieldSet) add(field string) {
+	if field == "" {
+		return
+	}
+	s[field] = struct{}{}
 }
 
-// TestAllToolsSchemaConsistency verifies that schema Required fields match
-// the expected parameter extraction patterns defined in expectedToolParams.
-func TestAllToolsSchemaConsistency(t *testing.T) {
+func (s fieldSet) union(other fieldSet) {
+	for field := range other {
+		s[field] = struct{}{}
+	}
+}
+
+func (s fieldSet) clone() fieldSet {
+	cloned := make(fieldSet, len(s))
+	for field := range s {
+		cloned[field] = struct{}{}
+	}
+	return cloned
+}
+
+func (s fieldSet) sorted() []string {
+	fields := make([]string, 0, len(s))
+	for field := range s {
+		fields = append(fields, field)
+	}
+	sort.Strings(fields)
+	return fields
+}
+
+func diffFieldSets(left, right fieldSet) []string {
+	var diff []string
+	for field := range left {
+		if _, ok := right[field]; ok {
+			continue
+		}
+		diff = append(diff, field)
+	}
+	sort.Strings(diff)
+	return diff
+}
+
+type handlerParamUsage struct {
+	required  fieldSet
+	extracted fieldSet
+}
+
+func TestToolSchemaRequiredMatchesHandlerExtraction(t *testing.T) {
+	mcpDir := mcpSourceDir(t)
+
+	toolHandlers, err := parseRegisteredToolHandlers(filepath.Join(mcpDir, "server.go"))
+	if err != nil {
+		t.Fatalf("parse tool registrations: %v", err)
+	}
+
+	usageByHandler, err := parseHandlerParamUsages(filepath.Join(mcpDir, "handlers.go"))
+	if err != nil {
+		t.Fatalf("parse handler parameter extraction: %v", err)
+	}
+
 	server := NewServer("/tmp", "/tmp/log.yaml")
-
 	toolNames := server.ToolNames()
-	if len(toolNames) == 0 {
-		t.Fatal("No tools registered")
+	sort.Strings(toolNames)
+
+	if len(toolNames) < 18 {
+		t.Fatalf("expected ~20 tools, got %d (%v)", len(toolNames), toolNames)
 	}
 
 	for _, toolName := range toolNames {
-		t.Run(toolName, func(t *testing.T) {
-			tool, ok := server.GetTool(toolName)
-			if !ok {
-				t.Fatalf("Tool %s not found", toolName)
-			}
+		tool, ok := server.GetTool(toolName)
+		if !ok {
+			t.Fatalf("tool %q not found", toolName)
+		}
 
-			expectedParams, hasExpectations := expectedToolParams[toolName]
-			if !hasExpectations {
-				t.Fatalf("No parameter expectations defined for tool %s - add to expectedToolParams map", toolName)
-			}
+		handlerName, ok := toolHandlers[toolName]
+		if !ok {
+			t.Fatalf("tool %q not mapped to a handler in server.go registration", toolName)
+		}
 
-			// Extract required fields from schema
-			schemaRequired := extractSchemaRequired(tool.InputSchema)
+		handlerUsage, ok := usageByHandler[handlerName]
+		if !ok {
+			t.Fatalf("handler %q for tool %q not found in handlers.go", handlerName, toolName)
+		}
 
-			// Extract required fields from expectations
-			expectedRequired := make([]string, 0)
-			expectedOptional := make([]string, 0)
-			for paramName, exp := range expectedParams {
-				if exp.Required {
-					expectedRequired = append(expectedRequired, paramName)
-				} else {
-					expectedOptional = append(expectedOptional, paramName)
-				}
-			}
+		schemaRequired := newFieldSet(tool.InputSchema.Required...)
 
-			// Check 1: Schema Required fields must be in expected Required
-			for _, schemaReq := range schemaRequired {
-				found := false
-				for _, expReq := range expectedRequired {
-					if schemaReq == expReq {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("Field %q is declared Required in schema but handler does NOT extract it as required", schemaReq)
-				}
-			}
+		schemaOnly := diffFieldSets(schemaRequired, handlerUsage.required)
+		handlerOnly := diffFieldSets(handlerUsage.required, schemaRequired)
+		if len(schemaOnly) > 0 || len(handlerOnly) > 0 {
+			t.Errorf(
+				"tool %q (handler %q) required-field mismatch:\n  schema only: %v\n  handler only: %v",
+				toolName,
+				handlerName,
+				schemaOnly,
+				handlerOnly,
+			)
+		}
 
-			// Check 2: Expected Required fields must be in schema Required
-			for _, expReq := range expectedRequired {
-				found := false
-				for _, schemaReq := range schemaRequired {
-					if expReq == schemaReq {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("Handler extracts %q as required but schema does NOT declare it as Required", expReq)
-				}
-			}
+		declaredSchemaFields := newFieldSet(tool.InputSchema.Required...)
+		for name := range tool.InputSchema.Properties {
+			declaredSchemaFields.add(name)
+		}
 
-			// Check 3: Expected Optional fields must exist in schema Properties
-			for _, optField := range expectedOptional {
-				if _, ok := tool.InputSchema.Properties[optField]; !ok {
-					t.Errorf("Handler extracts optional field %q but it is NOT defined in schema Properties", optField)
-				}
-			}
-
-			// Check 4: Schema Properties should have expectations defined
-			for propName := range tool.InputSchema.Properties {
-				if _, ok := expectedParams[propName]; !ok {
-					t.Errorf("Schema defines property %q but no expectation defined in test - potential untested parameter", propName)
-				}
-			}
-		})
+		undeclaredExtracted := diffFieldSets(handlerUsage.extracted, declaredSchemaFields)
+		if len(undeclaredExtracted) > 0 {
+			t.Errorf(
+				"tool %q (handler %q) extracts fields missing from schema declaration: %v",
+				toolName,
+				handlerName,
+				undeclaredExtracted,
+			)
+		}
 	}
 }
 
-// TestSpecificToolConsistency tests specific tools with known expected patterns
-func TestSpecificToolConsistency(t *testing.T) {
-	server := NewServer("/tmp", "/tmp/log.yaml")
+func TestHandlerParamExtractionKnownPatterns(t *testing.T) {
+	mcpDir := mcpSourceDir(t)
+	usageByHandler, err := parseHandlerParamUsages(filepath.Join(mcpDir, "handlers.go"))
+	if err != nil {
+		t.Fatalf("parse handler parameter extraction: %v", err)
+	}
 
 	tests := []struct {
-		name           string
-		expectRequired []string
-		expectOptional []string
+		handler           string
+		required          []string
+		extractedMustHave []string
 	}{
 		{
-			name:           "liza_get",
-			expectRequired: []string{"query"},
-			expectOptional: []string{"format"},
+			handler:           "handleGet",
+			required:          []string{"query"},
+			extractedMustHave: []string{"format"},
 		},
 		{
-			name:           "liza_status",
-			expectRequired: nil,
-			expectOptional: nil,
+			handler:           "handleAddTask",
+			required:          []string{"id", "desc", "spec", "done", "scope"},
+			extractedMustHave: []string{"agent_id", "priority", "depends", "type"},
 		},
 		{
-			name:           "liza_validate",
-			expectRequired: nil,
-			expectOptional: []string{"skip_spec_check"},
+			handler:           "handleClaimTask",
+			required:          []string{"task_id", "agent_id"},
+			extractedMustHave: []string{"task_id", "agent_id"},
 		},
 		{
-			name:           "liza_add_task",
-			expectRequired: []string{"id", "desc", "spec", "done", "scope"},
-			expectOptional: []string{"priority", "depends", "type", "agent_id"},
+			handler:           "handleMarkBlocked",
+			required:          []string{"task_id", "agent_id", "reason", "questions"},
+			extractedMustHave: []string{"questions"},
 		},
 		{
-			name:           "liza_claim_task",
-			expectRequired: []string{"task_id", "agent_id"},
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_submit_for_review",
-			expectRequired: []string{"task_id", "commit_sha", "agent_id"},
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_handoff",
-			expectRequired: []string{"task_id", "summary", "next_action", "agent_id"},
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_submit_verdict",
-			expectRequired: []string{"task_id", "verdict", "agent_id"},
-			expectOptional: []string{"reason"},
-		},
-		{
-			name:           "liza_mark_blocked",
-			expectRequired: []string{"task_id", "agent_id", "reason", "questions"},
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_release_claim",
-			expectRequired: []string{"task_id", "role", "agent_id"},
-			expectOptional: []string{"reason", "force"},
-		},
-		{
-			name:           "liza_supersede_task",
-			expectRequired: []string{"task_id", "reason", "agent_id"},
-			expectOptional: []string{"replacement_ids"},
-		},
-		{
-			name:           "liza_wt_create",
-			expectRequired: []string{"task_id"},
-			expectOptional: []string{"fresh"},
-		},
-		{
-			name:           "liza_wt_delete",
-			expectRequired: []string{"task_id"},
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_wt_merge",
-			expectRequired: []string{"task_id", "agent_id"},
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_analyze",
-			expectRequired: nil,
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_update_sprint_metrics",
-			expectRequired: nil,
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_checkpoint",
-			expectRequired: nil,
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_clear_stale_review_claims",
-			expectRequired: nil,
-			expectOptional: nil,
-		},
-		{
-			name:           "liza_delete_agent",
-			expectRequired: []string{"agent_id", "reason"},
-			expectOptional: []string{"force"},
+			handler:           "handleSubmitForReview",
+			required:          []string{"task_id", "commit_sha", "agent_id"},
+			extractedMustHave: []string{"task_id", "commit_sha", "agent_id"},
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tool, ok := server.GetTool(tt.name)
+		t.Run(tt.handler, func(t *testing.T) {
+			usage, ok := usageByHandler[tt.handler]
 			if !ok {
-				t.Fatalf("Tool %s not found", tt.name)
+				t.Fatalf("handler %q not found", tt.handler)
 			}
 
-			// Verify schema required fields match expectations
-			schemaRequired := extractSchemaRequired(tool.InputSchema)
+			wantRequired := newFieldSet(tt.required...)
+			gotRequired := usage.required
 
-			if !stringSlicesEqual(schemaRequired, tt.expectRequired) {
-				t.Errorf("Schema required fields mismatch:\n  got: %v\n  want: %v",
-					schemaRequired, tt.expectRequired)
+			missingRequired := diffFieldSets(wantRequired, gotRequired)
+			unexpectedRequired := diffFieldSets(gotRequired, wantRequired)
+			if len(missingRequired) > 0 || len(unexpectedRequired) > 0 {
+				t.Fatalf(
+					"required fields mismatch:\n  missing: %v\n  unexpected: %v\n  got: %v",
+					missingRequired,
+					unexpectedRequired,
+					gotRequired.sorted(),
+				)
 			}
 
-			// Verify optional fields exist in schema properties
-			for _, optField := range tt.expectOptional {
-				if _, ok := tool.InputSchema.Properties[optField]; !ok {
-					t.Errorf("Expected optional field %q not found in schema properties", optField)
+			for _, field := range tt.extractedMustHave {
+				if _, ok := usage.extracted[field]; ok {
+					continue
 				}
-			}
-
-			// Verify required fields are NOT in optional list
-			for _, reqField := range tt.expectRequired {
-				if slices.Contains(tt.expectOptional, reqField) {
-					t.Errorf("Field %q appears in both required and optional lists", reqField)
-				}
+				t.Errorf("expected extracted fields to include %q, got %v", field, usage.extracted.sorted())
 			}
 		})
 	}
 }
 
-// TestSchemaDriftRegression ensures the specific submit-for-review SHA field issue is caught
-// This test will FAIL if commit_sha is missing from either schema or handler expectations
-func TestSchemaDriftRegression(t *testing.T) {
-	server := NewServer("/tmp", "/tmp/log.yaml")
-
-	tool, ok := server.GetTool("liza_submit_for_review")
-	if !ok {
-		t.Fatal("liza_submit_for_review tool not found")
+func parseRegisteredToolHandlers(path string) (map[string]string, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return nil, err
 	}
 
-	// The regression was: schema declared commit_sha as required,
-	// but handler didn't extract it properly (or vice versa)
-	required := extractSchemaRequired(tool.InputSchema)
-
-	// commit_sha must be required
-	if !slices.Contains(required, "commit_sha") {
-		t.Error("commit_sha is not declared as required in schema - this would cause a regression")
-	}
-
-	// Handler must require commit_sha (from expectedToolParams)
-	params, ok := expectedToolParams["liza_submit_for_review"]
-	if !ok {
-		t.Fatal("No expectations defined for liza_submit_for_review")
-	}
-
-	commitSHAExpectation, ok := params["commit_sha"]
-	if !ok {
-		t.Fatal("commit_sha expectation not defined - this would cause a regression")
-	}
-
-	if !commitSHAExpectation.Required {
-		t.Error("Handler expectation does not mark commit_sha as required - this would cause a regression")
-	}
-}
-
-// TestToolRegistrationCompleteness verifies all ~20 tools are registered
-func TestToolRegistrationCompleteness(t *testing.T) {
-	server := NewServer("/tmp", "/tmp/log.yaml")
-
-	// Expected tools count (approximately 20 as mentioned in issue)
-	expectedMinTools := 18
-	expectedMaxTools := 25
-
-	toolNames := server.ToolNames()
-	toolCount := len(toolNames)
-
-	if toolCount < expectedMinTools {
-		t.Errorf("Expected at least %d tools, got %d: %v",
-			expectedMinTools, toolCount, toolNames)
-	}
-	if toolCount > expectedMaxTools {
-		t.Errorf("Expected at most %d tools, got %d: %v",
-			expectedMaxTools, toolCount, toolNames)
-	}
-
-	t.Logf("Registered %d tools: %v", toolCount, toolNames)
-
-	// Verify all expected tools exist
-	expectedTools := []string{
-		"liza_get",
-		"liza_status",
-		"liza_validate",
-		"liza_version",
-		"liza_add_task",
-		"liza_claim_task",
-		"liza_submit_for_review",
-		"liza_handoff",
-		"liza_submit_verdict",
-		"liza_mark_blocked",
-		"liza_release_claim",
-		"liza_supersede_task",
-		"liza_wt_create",
-		"liza_wt_delete",
-		"liza_wt_merge",
-		"liza_analyze",
-		"liza_update_sprint_metrics",
-		"liza_checkpoint",
-		"liza_clear_stale_review_claims",
-		"liza_delete_agent",
-	}
-
-	for _, expected := range expectedTools {
-		if _, ok := server.GetTool(expected); !ok {
-			t.Errorf("Expected tool %s not found", expected)
-		}
-	}
-}
-
-// TestAllToolsHaveExpectations ensures every registered tool has parameter expectations defined
-func TestAllToolsHaveExpectations(t *testing.T) {
-	server := NewServer("/tmp", "/tmp/log.yaml")
-
-	toolNames := server.ToolNames()
-
-	var missingExpectations []string
-	for _, toolName := range toolNames {
-		if _, ok := expectedToolParams[toolName]; !ok {
-			missingExpectations = append(missingExpectations, toolName)
-		}
-	}
-
-	if len(missingExpectations) > 0 {
-		t.Errorf("Tools missing parameter expectations: %v", missingExpectations)
-		t.Log("Add these tools to the expectedToolParams map in schema_consistency_test.go")
-	}
-}
-
-// TestSchemaPropertiesCoverage verifies schema properties match expectation keys
-func TestSchemaPropertiesCoverage(t *testing.T) {
-	server := NewServer("/tmp", "/tmp/log.yaml")
-
-	for toolName, expectations := range expectedToolParams {
-		tool, ok := server.GetTool(toolName)
+	toolHandlers := map[string]string{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
 		if !ok {
-			t.Fatalf("Tool %s from expectations not found in server", toolName)
+			return true
 		}
 
-		// Check that all expected params exist in schema properties
-		for paramName := range expectations {
-			if _, ok := tool.InputSchema.Properties[paramName]; !ok {
-				// It's okay if required params don't have properties (they just need to be in Required)
-				isRequired := slices.Contains(tool.InputSchema.Required, paramName)
-				if !isRequired {
-					t.Errorf("Tool %s: expected param %q not found in schema properties and not required",
-						toolName, paramName)
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || selector.Sel.Name != "registerTool" {
+			return true
+		}
+
+		if len(call.Args) != 2 {
+			return true
+		}
+
+		toolName, ok := extractRegisteredToolName(call.Args[0])
+		if !ok {
+			return true
+		}
+
+		handlerName := extractHandlerName(call.Args[1])
+		if handlerName == "" {
+			return true
+		}
+
+		toolHandlers[toolName] = handlerName
+		return true
+	})
+
+	return toolHandlers, nil
+}
+
+func parseHandlerParamUsages(path string) (map[string]handlerParamUsage, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	helperFuncs := map[string]*ast.FuncDecl{}
+	handlerFuncs := map[string]*ast.FuncDecl{}
+
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		if fn.Recv == nil {
+			helperFuncs[fn.Name.Name] = fn
+			continue
+		}
+		handlerFuncs[fn.Name.Name] = fn
+	}
+
+	helperRequired := map[string]fieldSet{}
+	for helperName := range helperFuncs {
+		resolveHelperRequiredFields(helperName, helperFuncs, helperRequired, map[string]bool{})
+	}
+
+	usageByHandler := map[string]handlerParamUsage{}
+	for handlerName, fn := range handlerFuncs {
+		usageByHandler[handlerName] = analyzeHandlerParamUsage(fn, helperRequired)
+	}
+
+	return usageByHandler, nil
+}
+
+func resolveHelperRequiredFields(
+	helperName string,
+	helperFuncs map[string]*ast.FuncDecl,
+	cache map[string]fieldSet,
+	visiting map[string]bool,
+) fieldSet {
+	if cached, ok := cache[helperName]; ok {
+		return cached.clone()
+	}
+	if visiting[helperName] {
+		return newFieldSet()
+	}
+
+	visiting[helperName] = true
+	required := newFieldSet()
+
+	fn, ok := helperFuncs[helperName]
+	if ok && fn.Body != nil {
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+
+			callName, args, ok := extractCall(call)
+			if !ok {
+				return true
+			}
+
+			if callName == "requireString" {
+				if key, ok := parameterKeyArg(args); ok {
+					required.add(key)
+				}
+				return true
+			}
+
+			if len(args) == 0 || !isParamsIdent(args[0]) {
+				return true
+			}
+
+			required.union(resolveHelperRequiredFields(callName, helperFuncs, cache, visiting))
+			return true
+		})
+	}
+
+	delete(visiting, helperName)
+	cache[helperName] = required.clone()
+	return required
+}
+
+func analyzeHandlerParamUsage(fn *ast.FuncDecl, helperRequired map[string]fieldSet) handlerParamUsage {
+	usage := handlerParamUsage{
+		required:  newFieldSet(),
+		extracted: newFieldSet(),
+	}
+	if fn == nil || fn.Body == nil {
+		return usage
+	}
+
+	optionalSliceVars := map[string]string{}
+
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.AssignStmt:
+			recordExtractStringSliceAssignment(node, usage.extracted, optionalSliceVars)
+
+		case *ast.CallExpr:
+			callName, args, ok := extractCall(node)
+			if !ok {
+				break
+			}
+
+			switch callName {
+			case "requireString":
+				if key, ok := parameterKeyArg(args); ok {
+					usage.required.add(key)
+					usage.extracted.add(key)
+				}
+
+			case "extractStringSlice":
+				if key, ok := parameterKeyArg(args); ok {
+					usage.extracted.add(key)
+				}
+
+			default:
+				if len(args) == 0 || !isParamsIdent(args[0]) {
+					break
+				}
+				if fields, ok := helperRequired[callName]; ok {
+					usage.required.union(fields)
+					usage.extracted.union(fields)
 				}
 			}
-		}
 
-		// Check that all schema properties have expectations
-		for propName := range tool.InputSchema.Properties {
-			if _, ok := expectations[propName]; !ok {
-				t.Errorf("Tool %s: schema property %q has no expectation defined", toolName, propName)
+		case *ast.IndexExpr:
+			if key, ok := paramsIndexKey(node); ok {
+				usage.extracted.add(key)
+			}
+
+		case *ast.IfStmt:
+			varName, ok := lenComparedToZero(node.Cond)
+			if !ok {
+				break
+			}
+			key, ok := optionalSliceVars[varName]
+			if !ok {
+				break
+			}
+			if ifReturnsError(node.Body) {
+				usage.required.add(key)
+				usage.extracted.add(key)
 			}
 		}
-	}
+		return true
+	})
+
+	return usage
 }
 
-// TestRequiredFieldsHaveProperties ensures all required fields are also in properties
-func TestRequiredFieldsHaveProperties(t *testing.T) {
-	server := NewServer("/tmp", "/tmp/log.yaml")
+func recordExtractStringSliceAssignment(assign *ast.AssignStmt, extracted fieldSet, optionalSliceVars map[string]string) {
+	if assign == nil || len(assign.Rhs) != 1 || len(assign.Lhs) == 0 {
+		return
+	}
 
-	for _, toolName := range server.ToolNames() {
-		tool, ok := server.GetTool(toolName)
+	call, ok := assign.Rhs[0].(*ast.CallExpr)
+	if !ok {
+		return
+	}
+
+	callName, args, ok := extractCall(call)
+	if !ok || callName != "extractStringSlice" {
+		return
+	}
+
+	key, ok := parameterKeyArg(args)
+	if !ok {
+		return
+	}
+	extracted.add(key)
+
+	ident, ok := assign.Lhs[0].(*ast.Ident)
+	if !ok || ident.Name == "_" {
+		return
+	}
+	optionalSliceVars[ident.Name] = key
+}
+
+func extractRegisteredToolName(expr ast.Expr) (string, bool) {
+	composite, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return "", false
+	}
+	for _, elt := range composite.Elts {
+		entry, ok := elt.(*ast.KeyValueExpr)
 		if !ok {
 			continue
 		}
-
-		for _, required := range tool.InputSchema.Required {
-			if _, ok := tool.InputSchema.Properties[required]; !ok {
-				// Required fields should typically have property definitions
-				// but it's not strictly required by JSON schema
-				t.Logf("Tool %s: required field %q has no property definition", toolName, required)
-			}
+		keyIdent, ok := entry.Key.(*ast.Ident)
+		if !ok || keyIdent.Name != "Name" {
+			continue
 		}
+		return stringLiteral(entry.Value)
+	}
+	return "", false
+}
+
+func extractHandlerName(expr ast.Expr) string {
+	switch value := expr.(type) {
+	case *ast.SelectorExpr:
+		return value.Sel.Name
+	case *ast.Ident:
+		return value.Name
+	default:
+		return ""
 	}
 }
 
-// TestNoDuplicateToolNames ensures no duplicate tool registrations
-func TestNoDuplicateToolNames(t *testing.T) {
-	server := NewServer("/tmp", "/tmp/log.yaml")
-
-	toolNames := server.ToolNames()
-	seen := make(map[string]bool)
-
-	for _, name := range toolNames {
-		if seen[name] {
-			t.Errorf("Tool %s is registered more than once", name)
-		}
-		seen[name] = true
+func extractCall(call *ast.CallExpr) (string, []ast.Expr, bool) {
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		return fn.Name, call.Args, true
+	case *ast.SelectorExpr:
+		return fn.Sel.Name, call.Args, true
+	default:
+		return "", nil, false
 	}
 }
 
-// extractSchemaRequired gets required fields from InputSchema
-func extractSchemaRequired(schema protocol.InputSchema) []string {
-	result := make([]string, len(schema.Required))
-	copy(result, schema.Required)
-	return result
+func parameterKeyArg(args []ast.Expr) (string, bool) {
+	if len(args) < 2 || !isParamsIdent(args[0]) {
+		return "", false
+	}
+	return stringLiteral(args[1])
 }
 
-// stringSlicesEqual compares two string slices for equality (order-independent)
-func stringSlicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
+func paramsIndexKey(index *ast.IndexExpr) (string, bool) {
+	if !isParamsIdent(index.X) {
+		return "", false
+	}
+	return stringLiteral(index.Index)
+}
+
+func isParamsIdent(expr ast.Expr) bool {
+	ident, ok := expr.(*ast.Ident)
+	return ok && ident.Name == "params"
+}
+
+func stringLiteral(expr ast.Expr) (string, bool) {
+	literal, ok := expr.(*ast.BasicLit)
+	if !ok || literal.Kind != token.STRING {
+		return "", false
+	}
+	unquoted, err := strconv.Unquote(literal.Value)
+	if err != nil {
+		return "", false
+	}
+	return unquoted, true
+}
+
+func lenComparedToZero(expr ast.Expr) (string, bool) {
+	binary, ok := expr.(*ast.BinaryExpr)
+	if !ok {
+		return "", false
+	}
+
+	switch binary.Op {
+	case token.EQL, token.LEQ, token.LSS:
+	default:
+		return "", false
+	}
+
+	if name, ok := lenCallVar(binary.X); ok && isZeroLiteral(binary.Y) {
+		return name, true
+	}
+	if name, ok := lenCallVar(binary.Y); ok && isZeroLiteral(binary.X) {
+		return name, true
+	}
+
+	return "", false
+}
+
+func lenCallVar(expr ast.Expr) (string, bool) {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return "", false
+	}
+	fn, ok := call.Fun.(*ast.Ident)
+	if !ok || fn.Name != "len" || len(call.Args) != 1 {
+		return "", false
+	}
+	arg, ok := call.Args[0].(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	return arg.Name, true
+}
+
+func isZeroLiteral(expr ast.Expr) bool {
+	literal, ok := expr.(*ast.BasicLit)
+	return ok && literal.Kind == token.INT && literal.Value == "0"
+}
+
+func ifReturnsError(body *ast.BlockStmt) bool {
+	if body == nil {
 		return false
 	}
 
-	aMap := make(map[string]bool)
-	bMap := make(map[string]bool)
-	for _, v := range a {
-		aMap[v] = true
-	}
-	for _, v := range b {
-		bMap[v] = true
-	}
-	for k := range aMap {
-		if !bMap[k] {
-			return false
+	returnsErr := false
+	ast.Inspect(body, func(n ast.Node) bool {
+		stmt, ok := n.(*ast.ReturnStmt)
+		if !ok || len(stmt.Results) == 0 {
+			return true
 		}
+		last := stmt.Results[len(stmt.Results)-1]
+		if isNil(last) {
+			return true
+		}
+		returnsErr = true
+		return false
+	})
+
+	return returnsErr
+}
+
+func isNil(expr ast.Expr) bool {
+	ident, ok := expr.(*ast.Ident)
+	return ok && ident.Name == "nil"
+}
+
+func mcpSourceDir(t *testing.T) string {
+	t.Helper()
+
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
 	}
-	return true
+	return filepath.Dir(currentFile)
 }
