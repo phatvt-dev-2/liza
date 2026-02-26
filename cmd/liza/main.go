@@ -1081,6 +1081,37 @@ Example:
 	},
 }
 
+// recover-task command
+var recoverTaskCmd = &cobra.Command{
+	Use:   "recover-task <task-id>",
+	Short: "Recover a task (release claims, remove worktree and branch)",
+	Long: `Recover a task by performing full cleanup:
+
+- Release agent claims (coder and/or reviewer)
+- Remove git worktree and branch
+- Recover the claiming agent from state
+
+Normal mode (no --force): requires the task to exist in state. Refuses if the
+claiming agent's PID is still alive.
+
+Force mode (--force): cleans up git artifacts (worktree + branch) even if the
+task is not in state. Use this when state is already clean but orphaned git
+artifacts remain after a hard crash.
+
+Idempotent: safe to run multiple times.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+		force, _ := cmd.Flags().GetBool("force")
+		reason, _ := cmd.Flags().GetString("reason")
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+		return commands.RecoverTaskCommand(projectRoot, taskID, force, reason)
+	},
+}
+
 // recover-agent command
 var recoverAgentCmd = &cobra.Command{
 	Use:   "recover-agent <agent-id>",
@@ -1216,6 +1247,7 @@ func init() {
 	rootCmd.AddCommand(resumeCmd)
 	rootCmd.AddCommand(checkpointCmd)
 	rootCmd.AddCommand(agentCmd)
+	rootCmd.AddCommand(recoverTaskCmd)
 	rootCmd.AddCommand(recoverAgentCmd)
 	rootCmd.AddCommand(deleteCmd)
 
@@ -1284,6 +1316,10 @@ func init() {
 	// Agent command flags
 	agentCmd.Flags().String("cli", "claude", "CLI to use (claude, codex, gemini, mistral)")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")
+
+	// Recover-task command flags
+	recoverTaskCmd.Flags().Bool("force", false, "clean up git artifacts even if task is not in state")
+	recoverTaskCmd.Flags().String("reason", "task recovery", "reason for recovering the task")
 
 	// Recover-agent command flags
 	recoverAgentCmd.Flags().Bool("force", false, "override PID liveness check (refuse by default if process is alive)")

@@ -170,7 +170,8 @@ The `liza` binary provides all system operations. Key commands:
 | `liza claim-task <task-id> <agent-id>` | Atomically claim a task for a coder (creates worktree, updates state) |
 | `liza validate [state.yaml]` | Validate blackboard state against schema invariants |
 | `liza watch` | Monitor blackboard, alert on anomalies, and auto-checkpoint on circuit-breaker trigger |
-| `liza recover-agent <agent-id>` | Full crash recovery (release claim + remove worktree + delete agent) |
+| `liza recover-task <task-id>` | Recover by task ID (release claims + remove worktree/branch + recover agent) |
+| `liza recover-agent <agent-id>` | Recover by agent ID (release claim + remove worktree + delete agent) |
 | `liza release-claim <task-id> [--role R]` | Release claim on a task (manual, granular recovery) |
 | `liza checkpoint` | Create a checkpoint (halt + summary) |
 | `liza status` | Show system status |

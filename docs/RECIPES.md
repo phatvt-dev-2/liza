@@ -72,19 +72,22 @@ Watch daemon alerts on high review cycles (>= 5). Check with `liza get tasks tas
 
 ## Recovering from Agent Crashes
 
-**One-command recovery** (recommended):
+**Recover by task ID** (recommended — you usually know the task):
 
 ```bash
-# Recover and respawn
-liza recover-agent coder-1 --cli claude
-# Releases claim, removes worktree, deletes agent, respawns
-
-# Or recover without respawn
-liza recover-agent coder-1
-liza agent coder --agent-id coder-1
+liza recover-task task-1              # Release claims, remove worktree/branch, recover agent
+liza recover-task task-1 --force      # Also works when task not in state (orphaned git artifacts)
 ```
 
-`recover-agent` auto-detects the role and performs the right cleanup. Idempotent — safe to run multiple times. Use `--force` if the agent's PID is still alive.
+**Recover by agent ID** (when you know the agent):
+
+```bash
+liza recover-agent coder-1 --cli claude   # Recover + respawn
+liza recover-agent coder-1                # Recover only
+liza agent coder --agent-id coder-1       # Then restart manually
+```
+
+Both commands are idempotent — safe to run multiple times. Use `--force` if the agent's PID is still alive.
 
 **Automatic recovery**: If the agent's lease has expired, restarting the supervisor also works:
 

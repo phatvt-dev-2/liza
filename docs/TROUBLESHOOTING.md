@@ -222,14 +222,11 @@ worktree: null
 ### Worktree already exists
 
 ```bash
-# Option 1: Delete and recreate
-liza wt-delete <task-id>
-liza wt-create <task-id>
+# Option 1: Recover task (cleans worktree + branch + state)
+liza recover-task <task-id> --force
 
-# Option 2: Manual cleanup
-git worktree remove .worktrees/<task-id>
-rm -rf .worktrees/<task-id>
-git branch -D task/<task-id>
+# Option 2: Delete and recreate (task must be in terminal state)
+liza wt-delete <task-id>
 liza wt-create <task-id>
 ```
 
@@ -439,22 +436,19 @@ EOF
 
 When a coder agent crashes (usage limit, OOM, SIGKILL) while a task is IMPLEMENTING:
 
-**One-command recovery:**
+**Recover by task ID** (recommended — you usually know the task, not the agent):
 ```bash
-# Recover and respawn in one step
-liza recover-agent <agent-id> --cli claude
-
-# Or recover without respawn
-liza recover-agent <agent-id>
-liza agent coder --agent-id <agent-id>
+liza recover-task <task-id>
+liza recover-task <task-id> --force    # if task not in state or agent PID alive
 ```
 
-`recover-agent` auto-detects the agent's role and performs all cleanup:
-- Releases the task claim (IMPLEMENTING → READY)
-- Removes the git worktree and branch
-- Deletes the agent from state
+**Recover by agent ID** (when you know the agent):
+```bash
+liza recover-agent <agent-id> --cli claude   # recover + respawn
+liza recover-agent <agent-id>                # recover only
+```
 
-Idempotent — safe to run multiple times. If the agent's PID is still alive, use `--force`.
+Both commands perform full cleanup: release claims, remove worktree/branch, delete agent from state. Both are idempotent — safe to run multiple times. Use `--force` if the agent's PID is still alive or (for `recover-task`) if the task is no longer in state but git artifacts remain.
 
 **Diagnosis (if needed):**
 ```bash
@@ -494,7 +488,10 @@ liza init "Goal description"
 ### Agent stuck in WORKING state
 
 ```bash
-# Full recovery in one command
+# Recover by task
+liza recover-task <task-id>
+
+# Or recover by agent
 liza recover-agent coder-1
 
 # Then restart

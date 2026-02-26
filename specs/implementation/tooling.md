@@ -41,7 +41,8 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza wt-delete <task>` | Clean up abandoned/merged worktree |
 | `liza update-sprint-metrics` | Recompute sprint.metrics from task state |
 | `liza clear-stale-review-claims` | Clear expired review claims |
-| `liza recover-agent <agent-id>` | Full crash recovery (release claim + worktree + delete agent) |
+| `liza recover-task <task-id>` | Recover by task ID (release claims + worktree/branch + agent) |
+| `liza recover-agent <agent-id>` | Recover by agent ID (release claim + worktree + delete agent) |
 | `liza release-claim <task> [--role R]` | Release claim on task or review |
 | `liza pause` / `liza resume` | Pause/resume system |
 | `liza stop` / `liza start` | Stop/start system |
@@ -403,7 +404,14 @@ liza wt-delete task-3
 # Removes worktree and branch for abandoned/superseded tasks
 ```
 
-**liza recover-agent** — Recover a crashed agent
+**liza recover-task** — Recover by task ID
+```bash
+liza recover-task task-1                    # Release claims + remove worktree/branch + recover agent
+liza recover-task task-1 --force            # Also works when task is not in state (git-only cleanup)
+# Idempotent. Refuses if claiming agent's PID is alive (use --force to override).
+```
+
+**liza recover-agent** — Recover by agent ID
 ```bash
 liza recover-agent coder-1                  # Release claim + remove worktree + delete agent
 liza recover-agent coder-1 --cli claude     # Same + respawn agent
