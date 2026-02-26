@@ -18,12 +18,8 @@ Persistent record of issues identified by architectural analysis skills.
 
 - [Update Policy](#update-policy)
 - [Structural Load-Bearing Elements](#structural-load-bearing-elements)
-  - [Planner as Single Semantic Interpreter](#planner-as-single-semantic-interpreter)
-  - [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate)
   - [Mode Selection Trigger Coupled to Prompt Lexeme](#mode-selection-trigger-coupled-to-prompt-lexeme)
 - [Systemic Tensions](#systemic-tensions)
-  - [Spec Completeness vs Reality](#spec-completeness-vs-reality)
-  - [Code Reviewer Structural Accountability Gap](#code-reviewer-structural-accountability-gap)
   - [Two-Track State Mutation](#two-track-state-mutation)
   - [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency)
   - [Role-Boundary Severity Drift](#role-boundary-severity-drift)
@@ -32,20 +28,16 @@ Persistent record of issues identified by architectural analysis skills.
   - [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope)
   - [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows)
 - [Feedback Loops](#feedback-loops)
-  - [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause)
-  - [Restart/Lease Churn Under Load](#restartlease-churn-under-load)
   - [Supervisor Wait-Claim-Spawn Loop](#supervisor-wait-claim-spawn-loop)
   - [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure)
   - [Issue Registry Resolution Drift](#issue-registry-resolution-drift)
 - [Assumptions](#assumptions)
-  - [Human Availability as Bottleneck](#human-availability-as-bottleneck)
   - [Implicit Planner Provenance Default](#implicit-planner-provenance-default)
   - [Spec Maturity Dependency](#spec-maturity-dependency)
   - [Well-Formed Blackboard State](#well-formed-blackboard-state)
   - [Single-Goal Data Model Constrains Applicability](#single-goal-data-model-constrains-applicability)
   - [Planner State Change Verification is Non-Binding](#planner-state-change-verification-is-non-binding)
 - [Stress Points](#stress-points)
-  - [Supervisor Contention](#supervisor-contention)
   - [Validation Integrity Split by Ingress](#validation-integrity-split-by-ingress)
   - [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
   - [Exit Code 42 Restart Loop Without Progress Detection](#exit-code-42-restart-loop-without-progress-detection)
@@ -54,7 +46,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Integration Test Script Silent Absence](#integration-test-script-silent-absence)
 - [Fragility](#fragility)
   - [Cross-Script State Mutation](#cross-script-state-mutation)
-  - [Dual Contract Delivery Paths](#dual-contract-delivery-paths)
   - [Bootstrap Artifact Path Drift](#bootstrap-artifact-path-drift)
   - [File-Based Spec References Without Version Anchors](#file-based-spec-references-without-version-anchors)
   - [MCP Tool Schema Drift](#mcp-tool-schema-drift)
@@ -76,6 +67,15 @@ Persistent record of issues identified by architectural analysis skills.
 - [Code-Level Architectural Smells](#code-level-architectural-smells)
   - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
 - [Accepted v1 Limitations](#accepted-v1-limitations)
+  - [Planner as Single Semantic Interpreter](#planner-as-single-semantic-interpreter)
+  - [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate)
+  - [Spec Completeness vs Reality](#spec-completeness-vs-reality)
+  - [Code Reviewer Structural Accountability Gap](#code-reviewer-structural-accountability-gap)
+  - [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause)
+  - [Restart/Lease Churn Under Load](#restartlease-churn-under-load)
+  - [Human Availability as Bottleneck](#human-availability-as-bottleneck)
+  - [Supervisor Contention](#supervisor-contention)
+  - [Dual Contract Delivery Paths](#dual-contract-delivery-paths)
   - [Self-Reported Validation](#self-reported-validation)
   - [Kill Switch Granularity](#kill-switch-granularity)
 - [Completed Fixes](#completed-fixes)
@@ -113,38 +113,6 @@ Persistent record of issues identified by architectural analysis skills.
 
 Single points of failure with no redundancy or validation mechanism.
 
-### Planner as Single Semantic Interpreter
-
-**Skill:** systemic-thinking
-**Category:** LOAD-BEARING
-
-**Issue:** Planner carries the entire semantic burden. It decomposes goals, interprets failure signals, resolves blocked reviews, converts discoveries to tasks, and maintains goal alignment. All other roles execute mechanical functions (implement spec, validate against spec) while Planner alone interprets intent. No second opinion, no validation mechanism, no structural redundancy.
-
-**Implication:** Planner drift compounds silently across all tasks until human checkpoint reveals accumulated misalignment. Correction costs scale with drift duration.
-
-**Current mitigation:** Human checkpoints provide periodic correction opportunities.
-
-**Future options:**
-- Planner self-review before finalizing task decomposition
-- Second Planner instance for cross-validation on critical decisions
-- Automated coherence checks against vision.md
-
-### Supervisor as Single Correctness Gate
-
-**Skill:** systemic-thinking
-**Category:** LOAD-BEARING
-
-**Issue:** System depends on supervisors (`liza agent`) performing correct pre-claim/assignment for all roles. This single gate defines whether tasks can proceed and whether agents stay within protocol. Correctness is concentrated in a single control loop that is neither redundant nor independently validated.
-
-**Implication:** A supervisor bug, crash loop, or misconfiguration stalls the entire system and blocks recovery without manual intervention.
-
-**Current mitigation:** Supervisor is implemented in the `liza` Go binary with type-safe error handling. `liza validate` catches invalid states.
-
-**Future options:**
-- Supervisor health check endpoint
-- Redundant supervisor with leader election
-- Agent self-validation of claim state on startup
-
 ### Mode Selection Trigger Coupled to Prompt Lexeme
 
 **Skill:** systemic-thinking
@@ -166,38 +134,6 @@ Single points of failure with no redundancy or validation mechanism.
 ## Systemic Tensions
 
 Design contradictions that create structural friction.
-
-### Spec Completeness vs Reality
-
-**Skill:** systemic-thinking
-**Category:** TENSION
-
-**Issue:** The vision positions specs as the mechanism for context survival ("if it's not written down, it doesn't exist") while stating "Liza v1 assumes specs substantially complete before work" and excluding "domains where requirements emerge through implementation."
-
-Incomplete specs—normal in real projects—trigger a reinforcing loop: coders block on spec gaps, Planner logs spec_gap anomalies, human must update specs, system pauses. The spec-first design shifts work from agents to humans while promising to reduce human workload.
-
-**Implication:** System selects for a narrow project profile (complete specs, solo developers) rather than adapting to common project conditions.
-
-**Current mitigation:** BLOCKED resolution via `human_notes`. Planner reads human_notes on wake.
-
-**Future options:**
-- Spike mode for spec discovery
-- Planner-assisted spec drafting from coder discoveries
-- Graceful degradation when specs incomplete (proceed with explicit assumptions)
-
-### Code Reviewer Structural Accountability Gap
-
-**Skill:** systemic-thinking
-**Category:** TENSION
-
-**Issue:** The Code Reviewer has binding approval/rejection authority but no structural accountability for verdict quality. The contract specifies detection of reviewer dysfunction in two modes: rubber-stamping (>95% approval rate metric, `MULTI_AGENT_MODE.md`) and abandonment (review exhaustion — 2 reviewers exit without verdict). However, these are contract-specified behaviors, not structurally enforced in the supervisor flow — the supervisor does not compute approval rates or detect review exhaustion patterns at runtime. The system cannot detect a third, more damaging mode: incorrect verdicts with plausible reasoning. A reviewer that rejects valid work forces full implement-review cycles before the Planner evaluates (governed by `effectiveCoderIterationLimit` and `effectiveReviewCycleLimit` in `iteration_limits.go`), and the Planner's assessment is itself the unvalidated judgment of the single semantic interpreter. A reviewer that approves flawed work is invisible unless integration tests catch it — but the system doesn't mandate integration tests on the integration branch. The power asymmetry is structural: Coders must address every rejection point-by-point, but there's no mechanism for Coders to challenge a rejection except by re-implementing and re-submitting. Note: with current LLM-based reviewers, over-rejection (spurious rejections with plausible reasoning) is the empirically dominant failure mode, making the iteration limit the most exercised circuit breaker in practice.
-
-**Implication:** Code review quality is the least observable dimension of system health, yet it gates all task completion — the system optimizes for reviewer throughput signals while reviewer accuracy remains unmeasured.
-
-**Future options:**
-- Reviewer accuracy metric (compare rejected items against final merged state)
-- Coder appeal mechanism (structured objection triggers Planner evaluation before 5 cycles)
-- Post-merge validation on integration branch (automated tests catch reviewer misses)
 
 ### Two-Track State Mutation
 
@@ -317,37 +253,6 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 
 Self-reinforcing patterns that can amplify failures.
 
-### Hypothesis Exhaustion Without Root Cause
-
-**Skill:** systemic-thinking
-**Category:** FEEDBACK
-
-**Issue:** Hypothesis exhaustion rule (two coders fail = must rescope) forces Planner intervention but doesn't require root cause identification. Planner may split task-3 into task-3a/task-3b without diagnosing why two coders failed. If underlying cause is spec ambiguity or architecture flaw, new tasks encounter same obstacle.
-
-Circuit breaker theoretically catches this via spec_gap_cluster, but pattern detection uses exact string matching—different coders may describe same issue differently.
-
-**Implication:** System may cycle through rescope iterations without converging, consuming time and compute on task churn rather than progress.
-
-**Future options:**
-- Similarity matching for anomaly clustering (semantic, not exact)
-- Escalate to human after N rescopes of same original task
-
-### Restart/Lease Churn Under Load
-
-**Skill:** systemic-thinking
-**Category:** FEEDBACK
-
-**Issue:** Protocol restarts agents on exit 42 and uses leases/heartbeats for coordination. Under load or long-running operations, lease pressure and restart frequency can amplify each other. The restart loop is assumed stabilizing but can become self-sustaining when work exceeds lease windows.
-
-**Implication:** Under stress, system enters churn state—progress stops but resource usage and log noise increase.
-
-**Current mitigation:** Grace periods on lease checks. Context self-diagnosis triggers graceful abort.
-
-**Future options:**
-- Adaptive lease duration based on task complexity
-- Supervisor watchdog with timeout detection
-- Exponential backoff on repeated restarts
-
 ### Supervisor Wait-Claim-Spawn Loop
 
 **Skill:** systemic-thinking
@@ -398,22 +303,6 @@ Circuit breaker theoretically catches this via spec_gap_cluster, but pattern det
 ## Assumptions
 
 Implicit dependencies that constrain system behavior.
-
-### Human Availability as Bottleneck
-
-**Skill:** systemic-thinking
-**Category:** ASSUMPTION
-
-**Issue:** Human is circuit breaker, escalation point, spec author, checkpoint reviewer, and resolution authority for deadlocks. Sprint governance states agents pause indefinitely awaiting human action. The "solo developers, small teams" deployment context is load-bearing, not merely scope-limiting.
-
-If human attention becomes bottleneck (competing priorities, vacation, scaling), system has no degradation path. All escalation paths terminate at same person with no delegation.
-
-**Implication:** Human availability constrains throughput more than agent capacity, inverting goal of reducing human bandwidth as bottleneck.
-
-**Future options:**
-- Timeout with automatic abort after N hours without human response
-- Delegation mechanism for escalation routing
-- Async human review queue with SLA tracking
 
 ### Implicit Planner Provenance Default
 
@@ -494,20 +383,6 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 ## Stress Points
 
 Bottlenecks that emerge under load.
-
-### Supervisor Contention
-
-**Skill:** systemic-thinking
-**Category:** STRESS POINT
-
-**Issue:** Supervisor-only worktree creation and claim handling centralize concurrency control and state transitions. All contention and race resolution concentrated in single process. Coders and Reviewers fully dependent on its throughput and correctness.
-
-**Implication:** Supervisor contention becomes primary bottleneck when scaling beyond small task counts.
-
-**Future options:**
-- Partition by task ID for parallel claim handling
-- Optimistic claiming with conflict resolution
-- Dedicated claim coordinator separate from agent supervisor
 
 ### ~~Validation Integrity Split by Ingress~~
 
@@ -607,20 +482,6 @@ Partial failure modes with unclear recovery.
 - State machine validation after each operation
 - Transaction log for rollback capability
 - Centralized state mutation through single entry point
-
-### Dual Contract Delivery Paths
-
-**Skill:** systemic-thinking
-**Category:** FRAGILITY
-
-**Issue:** Contracts reach agents through two paths: symlinks from repo root (development: `CLAUDE.md → ~/.liza/CORE.md → contracts/CORE.md`) and installed copies (`liza setup` writes to `~/.liza/`). Changes to contracts in the repo don't propagate to installed copies until `liza setup --force` is run. The Go binary embeds contracts at build time (`internal/embedded/`); installed copies are from the last `setup` run; symlinks resolve at read time. A running system can have three contract versions active simultaneously: the embedded version (used by prompt templates), the installed version (in `~/.liza/`), and the repo version (via symlinks). `liza setup` writes version metadata into installed contracts, providing partial version tracking, but there is no compatibility check between binary version and installed contract version, and `state.yaml`'s `version: 1` field is inert. `liza validate` validates state schema, not contract consistency. Note: agent prompts are built from Go templates (`internal/prompts/templates/`), not from embedded contract markdown directly — the embedded copies serve `liza setup`, not runtime prompt construction.
-
-**Implication:** Contract drift between delivery paths is silent — agents may operate under different behavioral rules than the system operator believes are active, with no error signal.
-
-**Future options:**
-- Content hash in contract files, verified at agent startup
-- `liza validate` checks embedded vs installed contract consistency
-- Single delivery path (eliminate duplication, choose symlinks or embedding)
 
 ### ~~MCP Tool Schema Drift~~
 
@@ -922,6 +783,147 @@ Issues identified through code-level architectural analysis (patterns, structure
 **Why accept:** Per-task kills add complexity. Rare failure mode.
 
 **Future option:** Per-task pause via `liza pause --task task-{id}`.
+
+### Planner as Single Semantic Interpreter
+
+**Skill:** systemic-thinking
+**Category:** LOAD-BEARING
+
+**Issue:** Planner carries the entire semantic burden. It decomposes goals, interprets failure signals, resolves blocked reviews, converts discoveries to tasks, and maintains goal alignment. All other roles execute mechanical functions (implement spec, validate against spec) while Planner alone interprets intent. No second opinion, no validation mechanism, no structural redundancy.
+
+**Implication:** Planner drift compounds silently across all tasks until human checkpoint reveals accumulated misalignment. Correction costs scale with drift duration.
+
+**Current mitigation:** Human checkpoints provide periodic correction opportunities.
+
+**Future options:**
+- Planner self-review before finalizing task decomposition
+- Second Planner instance for cross-validation on critical decisions
+- Automated coherence checks against vision.md
+
+### Supervisor as Single Correctness Gate
+
+**Skill:** systemic-thinking
+**Category:** LOAD-BEARING
+
+**Issue:** System depends on supervisors (`liza agent`) performing correct pre-claim/assignment for all roles. This single gate defines whether tasks can proceed and whether agents stay within protocol. Correctness is concentrated in a single control loop that is neither redundant nor independently validated.
+
+**Implication:** A supervisor bug, crash loop, or misconfiguration stalls the entire system and blocks recovery without manual intervention.
+
+**Current mitigation:** Supervisor is implemented in the `liza` Go binary with type-safe error handling. `liza validate` catches invalid states.
+
+**Future options:**
+- Supervisor health check endpoint
+- Redundant supervisor with leader election
+- Agent self-validation of claim state on startup
+
+### Spec Completeness vs Reality
+
+**Skill:** systemic-thinking
+**Category:** TENSION
+
+**Issue:** The vision positions specs as the mechanism for context survival ("if it's not written down, it doesn't exist") while stating "Liza v1 assumes specs substantially complete before work" and excluding "domains where requirements emerge through implementation."
+
+Incomplete specs—normal in real projects—trigger a reinforcing loop: coders block on spec gaps, Planner logs spec_gap anomalies, human must update specs, system pauses. The spec-first design shifts work from agents to humans while promising to reduce human workload.
+
+**Implication:** System selects for a narrow project profile (complete specs, solo developers) rather than adapting to common project conditions.
+
+**Current mitigation:** BLOCKED resolution via `human_notes`. Planner reads human_notes on wake.
+
+**Future options:**
+- Spike mode for spec discovery
+- Planner-assisted spec drafting from coder discoveries
+- Graceful degradation when specs incomplete (proceed with explicit assumptions)
+
+### Code Reviewer Structural Accountability Gap
+
+**Skill:** systemic-thinking
+**Category:** TENSION
+
+**Issue:** The Code Reviewer has binding approval/rejection authority but no structural accountability for verdict quality. The contract specifies detection of reviewer dysfunction in two modes: rubber-stamping (>95% approval rate metric, `MULTI_AGENT_MODE.md`) and abandonment (review exhaustion — 2 reviewers exit without verdict). However, these are contract-specified behaviors, not structurally enforced in the supervisor flow — the supervisor does not compute approval rates or detect review exhaustion patterns at runtime. The system cannot detect a third, more damaging mode: incorrect verdicts with plausible reasoning. A reviewer that rejects valid work forces full implement-review cycles before the Planner evaluates (governed by `effectiveCoderIterationLimit` and `effectiveReviewCycleLimit` in `iteration_limits.go`), and the Planner's assessment is itself the unvalidated judgment of the single semantic interpreter. A reviewer that approves flawed work is invisible unless integration tests catch it — but the system doesn't mandate integration tests on the integration branch. The power asymmetry is structural: Coders must address every rejection point-by-point, but there's no mechanism for Coders to challenge a rejection except by re-implementing and re-submitting. Note: with current LLM-based reviewers, over-rejection (spurious rejections with plausible reasoning) is the empirically dominant failure mode, making the iteration limit the most exercised circuit breaker in practice.
+
+**Implication:** Code review quality is the least observable dimension of system health, yet it gates all task completion — the system optimizes for reviewer throughput signals while reviewer accuracy remains unmeasured.
+
+**Future options:**
+- Reviewer accuracy metric (compare rejected items against final merged state)
+- Coder appeal mechanism (structured objection triggers Planner evaluation before 5 cycles)
+- Post-merge validation on integration branch (automated tests catch reviewer misses)
+
+**Decision:** Integration Reviewer role. Would also catch incompatible changes made within the various merged worktrees.
+
+### Hypothesis Exhaustion Without Root Cause
+
+**Skill:** systemic-thinking
+**Category:** FEEDBACK
+
+**Issue:** Hypothesis exhaustion rule (two coders fail = must rescope) forces Planner intervention but doesn't require root cause identification. Planner may split task-3 into task-3a/task-3b without diagnosing why two coders failed. If underlying cause is spec ambiguity or architecture flaw, new tasks encounter same obstacle.
+
+Circuit breaker theoretically catches this via spec_gap_cluster, but pattern detection uses exact string matching—different coders may describe same issue differently.
+
+**Implication:** System may cycle through rescope iterations without converging, consuming time and compute on task churn rather than progress.
+
+**Future options:**
+- Similarity matching for anomaly clustering (semantic, not exact)
+- Escalate to human after N rescopes of same original task
+
+### Restart/Lease Churn Under Load
+
+**Skill:** systemic-thinking
+**Category:** FEEDBACK
+
+**Issue:** Protocol restarts agents on exit 42 and uses leases/heartbeats for coordination. Under load or long-running operations, lease pressure and restart frequency can amplify each other. The restart loop is assumed stabilizing but can become self-sustaining when work exceeds lease windows.
+
+**Implication:** Under stress, system enters churn state—progress stops but resource usage and log noise increase.
+
+**Current mitigation:** Grace periods on lease checks. Context self-diagnosis triggers graceful abort.
+
+**Future options:**
+- Adaptive lease duration based on task complexity
+- Supervisor watchdog with timeout detection
+- Exponential backoff on repeated restarts
+
+### Human Availability as Bottleneck
+
+**Skill:** systemic-thinking
+**Category:** ASSUMPTION
+
+**Issue:** Human is circuit breaker, escalation point, spec author, checkpoint reviewer, and resolution authority for deadlocks. Sprint governance states agents pause indefinitely awaiting human action. The "solo developers, small teams" deployment context is load-bearing, not merely scope-limiting.
+
+If human attention becomes bottleneck (competing priorities, vacation, scaling), system has no degradation path. All escalation paths terminate at same person with no delegation.
+
+**Implication:** Human availability constrains throughput more than agent capacity, inverting goal of reducing human bandwidth as bottleneck.
+
+**Future options:**
+- Timeout with automatic abort after N hours without human response
+- Delegation mechanism for escalation routing
+- Async human review queue with SLA tracking
+
+### Supervisor Contention
+
+**Skill:** systemic-thinking
+**Category:** STRESS POINT
+
+**Issue:** Supervisor-only worktree creation and claim handling centralize concurrency control and state transitions. All contention and race resolution concentrated in single process. Coders and Reviewers fully dependent on its throughput and correctness.
+
+**Implication:** Supervisor contention becomes primary bottleneck when scaling beyond small task counts.
+
+**Future options:**
+- Partition by task ID for parallel claim handling
+- Optimistic claiming with conflict resolution
+- Dedicated claim coordinator separate from agent supervisor
+
+### Dual Contract Delivery Paths
+
+**Skill:** systemic-thinking
+**Category:** FRAGILITY
+
+**Issue:** Contracts reach agents through two paths: symlinks from repo root (development: `CLAUDE.md → ~/.liza/CORE.md → contracts/CORE.md`) and installed copies (`liza setup` writes to `~/.liza/`). Changes to contracts in the repo don't propagate to installed copies until `liza setup --force` is run. The Go binary embeds contracts at build time (`internal/embedded/`); installed copies are from the last `setup` run; symlinks resolve at read time. A running system can have three contract versions active simultaneously: the embedded version (used by prompt templates), the installed version (in `~/.liza/`), and the repo version (via symlinks). `liza setup` writes version metadata into installed contracts, providing partial version tracking, but there is no compatibility check between binary version and installed contract version, and `state.yaml`'s `version: 1` field is inert. `liza validate` validates state schema, not contract consistency. Note: agent prompts are built from Go templates (`internal/prompts/templates/`), not from embedded contract markdown directly — the embedded copies serve `liza setup`, not runtime prompt construction.
+
+**Implication:** Contract drift between delivery paths is silent — agents may operate under different behavioral rules than the system operator believes are active, with no error signal.
+
+**Future options:**
+- Content hash in contract files, verified at agent startup
+- `liza validate` checks embedded vs installed contract consistency
+- Single delivery path (eliminate duplication, choose symlinks or embedding)
 
 ---
 
