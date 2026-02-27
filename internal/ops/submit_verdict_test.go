@@ -1,12 +1,15 @@
 package ops
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -388,6 +391,108 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 			assertReleasedAgent(t, readState, "coder-1")
 			assertReleasedAgent(t, readState, "code-reviewer-1")
 		})
+	}
+}
+
+func TestSubmitVerdict_ReviewCommitMismatch(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Setup git repo + liza dir
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create worktree
+	g := git.New(tmpDir)
+	_, err := g.CreateWorktree("task-1", "integration")
+	if err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+	wtPath := g.GetWorktreePath("task-1")
+
+	// Make a commit in the worktree so HEAD diverges from integration
+	implFile := filepath.Join(wtPath, "feature.go")
+	if err := os.WriteFile(implFile, []byte("package feature\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "feature.go")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Add feature")
+
+	// Record a stale ReviewCommit (integration HEAD, not worktree HEAD)
+	staleCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	task.ReviewCommit = &staleCommit
+	worktreeRel := g.GetWorktreeRelPath("task-1")
+	task.Worktree = &worktreeRel
+	state.Tasks = []models.Task{task}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusWorking,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err = SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	if err == nil {
+		t.Fatal("Expected error for ReviewCommit vs worktree HEAD mismatch")
+	}
+	if !strings.Contains(err.Error(), "does not match worktree HEAD") {
+		t.Fatalf("Expected mismatch error, got: %v", err)
+	}
+
+	// Verify task state unchanged
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	readTask := readState.FindTask("task-1")
+	if readTask.Status != models.TaskStatusReviewing {
+		t.Errorf("Status = %v, want REVIEWING (unchanged)", readTask.Status)
+	}
+}
+
+func TestSubmitVerdict_StatErrorNotSilenced(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	reviewCommit := "abc123def456"
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	task.ReviewCommit = &reviewCommit
+	state.Tasks = []models.Task{task}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusWorking,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Create a regular file at .worktrees so os.Stat(.worktrees/task-1)
+	// returns ENOTDIR instead of ENOENT.
+	wtParent := filepath.Join(tmpDir, ".worktrees")
+	if err := os.WriteFile(wtParent, []byte("not-a-directory"), 0644); err != nil {
+		t.Fatalf("Failed to create fixture: %v", err)
+	}
+
+	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	if err == nil {
+		t.Fatal("Expected stat error, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to stat worktree") {
+		t.Fatalf("Expected 'failed to stat worktree' error, got: %v", err)
+	}
+
+	// Verify task state unchanged
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	readTask := readState.FindTask("task-1")
+	if readTask.Status != models.TaskStatusReviewing {
+		t.Errorf("Status = %v, want REVIEWING (unchanged)", readTask.Status)
 	}
 }
 

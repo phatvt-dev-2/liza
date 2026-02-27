@@ -58,15 +58,14 @@ Does NOT mean: perfect, no improvements possible, or production-ready.
 INSTRUCTIONS:
 1. Verify tools work: ls -la {{.WorktreePath}}
    If you see a permission prompt, that is NORMAL. Execute the command — do NOT stop.
-2. Verify HEAD matches REVIEW_COMMIT: git -C {{.WorktreePath}} rev-parse HEAD. If mismatch, REJECT.
+2. Early drift check: git -C {{.WorktreePath}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 3. Review ALL changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
    Each review is a fresh evaluation: "does this worktree satisfy the task?"
 4. Apply the code-review skill to the full diff
 5. If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
-6. TDD ENFORCEMENT (code tasks): REJECT if tests are missing or don't cover done_when criteria
+6. TDD QUALITY (code tasks): Tests must cover done_when criteria — REJECT if tests are superficial or don't exercise the actual requirements
 7. Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
-8. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
-9. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
+8. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
 {{- if .HasPriorRejection}}
 
 PRIOR FEEDBACK REVIEW (MANDATORY for iteration 2+):

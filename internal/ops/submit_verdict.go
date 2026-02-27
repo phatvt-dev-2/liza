@@ -2,11 +2,13 @@ package ops
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -46,11 +48,43 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
+
+	// Phase 1: Read state and validate preconditions
+	_, task, err := readTaskState(bb, taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fast-fail before git operations; re-checked authoritatively inside Modify.
+	if task.Status != models.TaskStatusReviewing {
+		return nil, fmt.Errorf("task %s is not REVIEWING (current status: %s)", taskID, task.Status)
+	}
+
+	// Phase 2: Validate ReviewCommit matches worktree HEAD (if worktree exists on disk)
+	if task.ReviewCommit != nil {
+		g := git.New(projectRoot)
+		wtPath := g.GetWorktreePath(taskID)
+		if _, statErr := os.Stat(wtPath); os.IsNotExist(statErr) {
+			// Worktree absent on disk (e.g. tests without real worktrees) — skip check.
+		} else if statErr != nil {
+			return nil, fmt.Errorf("failed to stat worktree %s: %w", wtPath, statErr)
+		} else {
+			wtHEAD, headErr := g.GetWorktreeHEAD(taskID)
+			if headErr != nil {
+				return nil, fmt.Errorf("failed to get worktree HEAD: %w", headErr)
+			}
+			if *task.ReviewCommit != wtHEAD {
+				return nil, fmt.Errorf("review_commit %s does not match worktree HEAD %s — worktree was modified after submission", *task.ReviewCommit, wtHEAD)
+			}
+		}
+	}
+
+	// Phase 3: Atomic state update
 	now := time.Now().UTC()
 	escalatedToBlocked := false
 	blockedReasonOut := ""
 
-	err := bb.Modify(func(state *models.State) error {
+	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}

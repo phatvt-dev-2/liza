@@ -34,6 +34,7 @@ CODER STATE TRANSITIONS:
 - REJECTED → IMPLEMENTING (address reviewer feedback, re-submit)
 - INTEGRATION_FAILED → IMPLEMENTING (fix merge conflicts, re-submit)
 Stop triggers: spec ambiguity → BLOCKED, assumption budget exceeded → BLOCKED, same rejection reason twice → BLOCKED (escalate)
+LIMITS: Iteration and review cycle limits are enforced — task escalates to BLOCKED when exceeded.
 
 CODER TOOLS:
 - liza_submit_for_review — Submit completed work for review
@@ -43,6 +44,9 @@ CODER TOOLS:
   {"task_id": "{{.Task.ID}}", "summary": "<what is done>", "next_action": "<exact next step>", "agent_id": "{{.Config.AgentID}}"}
 - liza_mark_blocked — Cannot proceed (spec ambiguity, missing dependency)
   {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+- liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
+  Optional: "assumptions", "risks", "tdd_not_required" (justification if no new tests needed)
 
 ANOMALY LOGGING:
 | Event | Type | Required Fields |
@@ -70,9 +74,10 @@ If a required tool or dependency is missing (e.g., pip, npm, cargo):
 3. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
 4. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.
 5. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
-6. Use the clean-code skill at the end of the implementation
-7. Validate ALL done_when criteria are met
-8. If context exhaustion is near (~90%): run liza_handoff with summary + next_action, then exit with code 42
+6. TDD waiver: For cosmetic-only changes (comment fixes, formatting), set tdd_not_required in checkpoint with justification
+7. Use the clean-code skill at the end of the implementation
+8. Validate ALL done_when criteria are met
+9. If context exhaustion is near (~90%): run liza_handoff with summary + next_action, then exit with code 42
 
 --- SUBMISSION (MANDATORY - DO NOT SKIP) ---
 After implementation and tests pass, you MUST submit for review:
