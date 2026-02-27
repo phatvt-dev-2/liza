@@ -104,7 +104,7 @@ liza agent code-reviewer --agent-id code-reviewer-1
 Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --agent-id coder-1 --cli gemini`.
 
 Pass `--log` to persist the agent's output to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Incompatible with `-i`.
-You may use `jq -c 'select(.item) | .item | {type, text, command, tool, usage} | with_entries(select(.value != null))' .liza/agent-outputs/coder-1-YYYYMMDD-HHMMSS.txt` to inspect the logs.
+See [Analyzing Agent Logs](#analyzing-agent-logs) for analysis tools.
 
 Note that it is possible to run multiple agents of the same roles in different terminals.
 ```bash
@@ -228,6 +228,49 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
 Both CLI commands (e.g., `liza add-task`) and MCP tools (e.g., `liza_add_task`) operate on the same `.liza/state.yaml` file. Claude Code agents use MCP tools for better error handling; the CLI is for manual use.
 
 The root-level `claude-settings.json` and `mcp.json` are templates embedded into the binary. `liza init` writes the active copies to `.claude/settings.json` and `.mcp.json` in the project directory.
+
+### Analyzing Agent Logs
+
+Logs captured with `--log` are NDJSON files (one JSON object per line) from `claude --verbose --output-format stream-json`. Two formats exist depending on the agent role:
+
+| Format | First event | Seen in | Token detail |
+|--------|-------------|---------|--------------|
+| **Rich** | `type: system` | Planner | Per-API-call breakdown (input, cache, output) |
+| **Sparse** | `type: thread.started` | Coder, Reviewer | Aggregate only (`turn.completed`) |
+
+Both analysis tools auto-detect the format.
+
+**CLI analyzer** (`scripts/analyze-log.py`) — stdlib-only Python 3.12+, for batch/CI use:
+
+```bash
+# Single file
+python3 scripts/analyze-log.py .liza/agent-outputs/planner-1-*.txt
+
+# Multiple files
+python3 scripts/analyze-log.py .liza/agent-outputs/*.txt
+```
+
+Report sections: session header, token summary (fresh/cached/output, cache hit rate), content breakdown by type (chars, estimated tokens, share %), top 10 items by size, tool call frequency. Rich format adds per-turn context growth and cost breakdown.
+
+**Browser analyzer** (`liza-session-analyzer.html`) — drag-and-drop, visual charts:
+
+```bash
+open liza-session-analyzer.html   # or xdg-open on Linux
+```
+
+Drop one or more log files. Produces the same analysis with bar charts for content breakdown and context growth.
+
+**Raw inspection** with `jq` (no dependencies):
+
+```bash
+# Sparse format: extract items
+jq -c 'select(.item) | .item | {type, text, command, tool, usage}
+  | with_entries(select(.value != null))' .liza/agent-outputs/coder-1-*.txt
+
+# Rich format: extract token usage per API call
+jq -c 'select(.type == "assistant") | {id: .message.id, usage: .message.usage}' \
+  .liza/agent-outputs/planner-1-*.txt
+```
 
 ### Differences from Pairing Mode
 

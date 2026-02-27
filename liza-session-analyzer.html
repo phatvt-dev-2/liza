@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Liza Session Analyzer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', -apple-system, sans-serif; }
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useCallback } = React;
+
+// --- Parsers ---
+
+function measureSparseItem(item) {
+  const t = item.type;
+  if (t === "command_execution") return (item.aggregated_output || "").length;
+  if (t === "reasoning" || t === "agent_message") return (item.text || "").length;
+  if (t === "file_change") return JSON.stringify(item.changes || []).length;
+  if (t === "mcp_tool_call") {
+    const args = typeof item.arguments === "object" ? JSON.stringify(item.arguments) : String(item.arguments || "");
+    const result = typeof item.result === "object" ? JSON.stringify(item.result) : String(item.result || "");
+    return args.length + result.length;
+  }
+  return 0;
+}
+
+function parseCoderLog(lines) {
+  const items = [];
+  let usage = null;
+  let threadId = null;
+  for (const line of lines) {
+    try {
+      const obj = JSON.parse(line);
+      if (obj.type === "thread.started") threadId = obj.thread_id;
+      if (obj.type === "turn.completed" && obj.usage) usage = obj.usage;
+      if (obj.type === "item.completed" && obj.item) {
+        const it = obj.item;
+        items.push({
+          id: it.id, type: it.type,
+          status: it.status || "completed",
+          command: it.command || null, text: it.text || null,
+          outputLen: (it.aggregated_output || "").length,
+          chars: measureSparseItem(it),
+          exitCode: it.exit_code,
+          server: it.server || null, tool: it.tool || null,
+        });
+      }
+    } catch {}
+  }
+  const byId = {};
+  for (const item of items) { if (!byId[item.id] || item.status === "completed") byId[item.id] = item; }
+  const dedupedItems = Object.values(byId).sort((a, b) => parseInt(a.id.replace("item_","")) - parseInt(b.id.replace("item_","")));
+  return { format: "codex", threadId, items: dedupedItems, usage };
+}
+
+function measureRichBlock(block) {
+  if (block.type === "thinking") return (block.thinking || "").length;
+  if (block.type === "text") return (block.text || "").length;
+  if (block.type === "tool_use") return JSON.stringify(block.input || {}).length;
+  return 0;
+}
+
+function measureToolResult(content) {
+  if (typeof content === "string") return content.length;
+  if (Array.isArray(content)) return content.reduce((s, p) => s + (typeof p === "string" ? p.length : (p?.text || "").length), 0);
+  return 0;
+}
+
+function parsePlannerLog(lines) {
+  const events = [];
+  let systemInfo = null;
+  let resultInfo = null;
+  const seenMsgIds = new Set();
+  const perMsgUsage = [];
+  for (const line of lines) {
+    try {
+      const obj = JSON.parse(line);
+      if (obj.type === "system") {
+        systemInfo = { model: obj.model, sessionId: obj.session_id, tools: obj.tools?.length || 0,
+          mcpServers: obj.mcp_servers || [], skills: obj.skills?.length || 0, plugins: obj.plugins || [] };
+      }
+      if (obj.type === "assistant" && obj.message) {
+        const msg = obj.message;
+        // Dedup usage by message.id
+        if (msg.id && !seenMsgIds.has(msg.id)) {
+          seenMsgIds.add(msg.id);
+          if (msg.usage) {
+            perMsgUsage.push({
+              msgId: msg.id,
+              inputTokens: msg.usage.input_tokens || 0,
+              cacheCreation: msg.usage.cache_creation_input_tokens || 0,
+              cacheRead: msg.usage.cache_read_input_tokens || 0,
+              outputTokens: msg.usage.output_tokens || 0,
+            });
+          }
+        }
+        // Process ALL content blocks, not just the first
+        for (const block of (msg.content || [])) {
+          events.push({ type: "assistant", contentType: block.type, toolName: block.name || null,
+            toolInput: block.input || null, text: block.text || block.thinking || null,
+            chars: measureRichBlock(block),
+            usage: msg.usage || null, msgId: msg.id });
+        }
+      }
+      if (obj.type === "user") {
+        if (obj.tool_use_result !== undefined) {
+          const resultChars = Array.isArray(obj.tool_use_result)
+            ? obj.tool_use_result.reduce((s, p) => s + (p?.text || "").length, 0)
+            : measureToolResult(obj.tool_use_result);
+          events.push({ type: "tool_result", result: obj.tool_use_result, chars: resultChars });
+        }
+        // Also measure nested tool_result content
+        for (const part of (obj.message?.content || [])) {
+          if (part?.content) {
+            const nested = measureToolResult(part.content);
+            if (nested > 0) events.push({ type: "tool_result", result: part.content, chars: nested });
+          }
+        }
+      }
+      if (obj.type === "result") {
+        resultInfo = { success: !obj.is_error, durationMs: obj.duration_ms, durationApiMs: obj.duration_api_ms,
+          numTurns: obj.num_turns, totalCostUsd: obj.total_cost_usd, usage: obj.usage, modelUsage: obj.modelUsage };
+      }
+      if (obj.type === "rate_limit_event") { events.push({ type: "rate_limit", info: obj.rate_limit_info }); }
+    } catch {}
+  }
+  return { format: "claude_code", systemInfo, events, resultInfo, perMsgUsage };
+}
+
+function detectAndParse(text) {
+  const lines = text.trim().split("\n").filter(Boolean);
+  if (!lines.length) return null;
+  try {
+    const first = JSON.parse(lines[0]);
+    if (first.type === "thread.started" || first.type === "turn.started") return parseCoderLog(lines);
+    if (first.type === "system" || first.type === "assistant") return parsePlannerLog(lines);
+  } catch {}
+  const coder = parseCoderLog(lines);
+  if (coder.items.length > 0) return coder;
+  const planner = parsePlannerLog(lines);
+  if (planner.events.length > 0) return planner;
+  return null;
+}
+
+// --- Analysis ---
+
+function analyzeCodex(parsed) {
+  const { items, usage } = parsed;
+  const totalInput = usage?.input_tokens || 0;
+  const cachedInput = usage?.cached_input_tokens || 0;
+  const freshInput = totalInput - cachedInput;
+  const output = usage?.output_tokens || 0;
+  const itemsByType = {};
+  let totalCharsAll = 0;
+  for (const item of items) {
+    const t = item.type;
+    if (!itemsByType[t]) itemsByType[t] = { count: 0, chars: 0 };
+    itemsByType[t].count++;
+    itemsByType[t].chars += item.chars || 0;
+    totalCharsAll += item.chars || 0;
+  }
+  let topItems = items.filter(i => i.chars > 0).sort((a, b) => b.chars - a.chars).slice(0, 15)
+    .map(i => ({
+      type: i.type, chars: i.chars, estTokens: Math.ceil(i.chars / 4),
+      preview: truncate(i.command || i.text || (i.server ? `${i.server}/${i.tool}` : "") || "", 80),
+    }));
+  return {
+    summary: { totalInputTokens: totalInput, cachedInputTokens: cachedInput, freshInputTokens: freshInput,
+      outputTokens: output, cacheHitRate: totalInput > 0 ? ((cachedInput / totalInput) * 100).toFixed(1) : "0",
+      totalItems: items.length },
+    breakdown: itemsByType, totalCharsAll, topItems,
+  };
+}
+
+function analyzeClaudeCode(parsed) {
+  const { systemInfo, events, resultInfo, perMsgUsage } = parsed;
+  const turns = [];
+  let currentTurn = null;
+  for (const ev of events) {
+    if (ev.type === "assistant") {
+      if (!currentTurn || (currentTurn.results.length > 0 && ev.contentType !== "text")) {
+        if (currentTurn) turns.push(currentTurn);
+        currentTurn = { actions: [], results: [], usage: ev.usage };
+      }
+      currentTurn.actions.push(ev);
+      if (ev.usage) currentTurn.usage = ev.usage;
+    } else if (ev.type === "tool_result" && currentTurn) { currentTurn.results.push(ev); }
+  }
+  if (currentTurn) turns.push(currentTurn);
+
+  const totalUsage = resultInfo?.usage || {};
+  const modelUsage = resultInfo?.modelUsage || {};
+  const cacheCreation = totalUsage.cache_creation_input_tokens || 0;
+  const cacheRead = totalUsage.cache_read_input_tokens || 0;
+  const plainInput = totalUsage.input_tokens || 0;
+  const totalContextTokens = plainInput + cacheCreation + cacheRead;
+  const outputTokens = totalUsage.output_tokens || 0;
+  const mcpStatus = systemInfo?.mcpServers?.map(s => ({ name: s.name, status: s.status })) || [];
+
+  // Content breakdown with chars
+  const contentByType = {};
+  let totalCharsAll = 0;
+  for (const ev of events) {
+    const ct = ev.contentType || ev.type;
+    const chars = ev.chars || 0;
+    if (!contentByType[ct]) contentByType[ct] = { count: 0, chars: 0 };
+    contentByType[ct].count++;
+    contentByType[ct].chars += chars;
+    totalCharsAll += chars;
+  }
+
+  return {
+    summary: { model: Object.keys(modelUsage)[0] || systemInfo?.model || "unknown",
+      totalCostUsd: resultInfo?.totalCostUsd || 0, durationMs: resultInfo?.durationMs || 0,
+      durationApiMs: resultInfo?.durationApiMs || 0, numTurns: resultInfo?.numTurns || turns.length,
+      plainInputTokens: plainInput, cacheCreationTokens: cacheCreation, cacheReadTokens: cacheRead,
+      totalContextTokens, outputTokens,
+      cacheHitRate: totalContextTokens > 0 ? ((cacheRead / totalContextTokens) * 100).toFixed(1) : "0",
+      contextWindow: Object.values(modelUsage)[0]?.contextWindow || null,
+      contextUtilization: Object.values(modelUsage)[0]?.contextWindow
+        ? ((totalContextTokens / Object.values(modelUsage)[0].contextWindow) * 100).toFixed(1) : null },
+    turns, mcpStatus, toolsAvailable: systemInfo?.tools || 0, skillsAvailable: systemInfo?.skills || 0,
+    perMsgUsage: perMsgUsage || [], contentByType, totalCharsAll,
+  };
+}
+
+// --- Helpers ---
+
+function truncate(s, n) { if (!s) return ""; return s.length > n ? s.slice(0, n) + "…" : s; }
+function formatTokens(n) { if (n == null) return "—"; if (n >= 1e6) return (n/1e6).toFixed(2)+"M"; if (n >= 1e3) return (n/1e3).toFixed(1)+"K"; return String(n); }
+function formatDuration(ms) { if (!ms) return "—"; if (ms < 1000) return ms+"ms"; const s = ms/1000; if (s < 60) return s.toFixed(1)+"s"; return Math.floor(s/60)+"m "+(s%60).toFixed(0)+"s"; }
+function formatCost(usd) { if (!usd) return "—"; return "$"+usd.toFixed(4); }
+
+const C = { bg:"#0d1117", surface:"#161b22", surfaceHover:"#1c2333", border:"#30363d", borderAccent:"#3d444d",
+  text:"#e6edf3", textMuted:"#8b949e", textDim:"#656d76", accent:"#58a6ff", accentDim:"#1f6feb33",
+  green:"#3fb950", greenDim:"#238636", orange:"#d29922", red:"#f85149", purple:"#bc8cff", cyan:"#39d2c0", pink:"#f778ba" };
+
+// --- Components ---
+
+function StatCard({ label, value, sub, color = C.accent }) {
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 18px", minWidth: 140, flex: "1 1 140px" }}>
+      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.2, color: C.textDim, marginBottom: 6, fontFamily: "monospace" }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return <h3 style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.5, color: C.textMuted,
+    margin: "28px 0 12px", paddingBottom: 8, borderBottom: `1px solid ${C.border}`, fontFamily: "monospace" }}>{children}</h3>;
+}
+
+function ContextBar({ segments, total }) {
+  return (
+    <div>
+      <div style={{ display: "flex", height: 28, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}` }}>
+        {segments.map((seg, i) => {
+          const pct = total > 0 ? (seg.value / total) * 100 : 0;
+          if (pct < 0.3) return null;
+          return <div key={i} title={`${seg.label}: ${formatTokens(seg.value)} (${pct.toFixed(1)}%)`}
+            style={{ width: `${pct}%`, background: seg.color, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 10, fontWeight: 600, color: "#fff", fontFamily: "monospace", overflow: "hidden", whiteSpace: "nowrap", transition: "width 0.3s ease" }}>
+            {pct > 8 ? `${pct.toFixed(0)}%` : ""}
+          </div>;
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+        {segments.map((seg, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.textMuted }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: seg.color }} />
+            <span>{seg.label}: <strong style={{ color: C.text }}>{formatTokens(seg.value)}</strong></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Table({ columns, rows }) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+        <thead><tr>
+          {columns.map((col, i) => (
+            <th key={i} style={{ textAlign: col.align || "left", padding: "8px 12px", borderBottom: `2px solid ${C.border}`,
+              color: C.textMuted, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: 1, whiteSpace: "nowrap" }}>{col.label}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={ri} style={{ borderBottom: `1px solid ${C.border}` }}>
+              {columns.map((col, ci) => (
+                <td key={ci} style={{ padding: "7px 12px", textAlign: col.align || "left", color: C.text,
+                  maxWidth: col.maxWidth || "auto", overflow: "hidden", textOverflow: "ellipsis",
+                  whiteSpace: col.wrap ? "normal" : "nowrap" }}>
+                  {col.render ? col.render(row) : row[col.key]}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CodexReport({ parsed }) {
+  const analysis = useMemo(() => analyzeCodex(parsed), [parsed]);
+  const { summary, breakdown, totalCharsAll, topItems } = analysis;
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+        <span style={{ background: C.orange, color: "#000", padding: "3px 10px", borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>CODEX</span>
+        <span style={{ color: C.textMuted, fontSize: 12 }}>Thread: {parsed.threadId ? truncate(parsed.threadId, 20) : "—"}</span>
+      </div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <StatCard label="Total Input" value={formatTokens(summary.totalInputTokens)} color={C.accent} />
+        <StatCard label="Cached" value={formatTokens(summary.cachedInputTokens)} sub={`${summary.cacheHitRate}% hit rate`} color={C.green} />
+        <StatCard label="Fresh Input" value={formatTokens(summary.freshInputTokens)} color={C.orange} />
+        <StatCard label="Output" value={formatTokens(summary.outputTokens)} color={C.purple} />
+        <StatCard label="Items" value={summary.totalItems} color={C.cyan} />
+      </div>
+      <SectionTitle>Context Composition</SectionTitle>
+      <ContextBar total={summary.totalInputTokens} segments={[
+        { label: "Cache Hit", value: summary.cachedInputTokens, color: C.green },
+        { label: "Fresh Input", value: summary.freshInputTokens, color: C.orange },
+      ]} />
+      <SectionTitle>Content Breakdown</SectionTitle>
+      <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 8 }}>
+        Total content: {(totalCharsAll / 1024).toFixed(0)} KB ({formatTokens(Math.ceil(totalCharsAll / 4))} est. tokens)
+      </div>
+      <Table columns={[
+        { label: "Type", key: "type" },
+        { label: "Count", key: "count", align: "right" },
+        { label: "Chars", key: "chars", align: "right", render: r => r.chars > 0 ? `${(r.chars/1024).toFixed(1)} KB` : "—" },
+        { label: "Est. Tokens", key: "estTok", align: "right", render: r => r.chars > 0 ? formatTokens(Math.ceil(r.chars/4)) : "—" },
+        { label: "Share", key: "share", align: "right" },
+      ]} rows={Object.entries(breakdown).sort((a,b) => b[1].chars - a[1].chars)
+        .map(([type, data]) => ({ type, count: data.count, chars: data.chars,
+          estTok: Math.ceil(data.chars / 4),
+          share: totalCharsAll > 0 ? ((data.chars / totalCharsAll)*100).toFixed(1)+"%" : "—" }))} />
+      <SectionTitle>Top Items by Size</SectionTitle>
+      <Table columns={[
+        { label: "#", key: "rank", align: "right" },
+        { label: "Type", key: "type" },
+        { label: "Preview", key: "preview", maxWidth: 300, wrap: true },
+        { label: "Size", key: "chars", align: "right", render: r => `${(r.chars/1024).toFixed(1)} KB` },
+        { label: "Est. Tokens", key: "estTokens", align: "right", render: r => formatTokens(r.estTokens) },
+      ]} rows={topItems.map((c,i) => ({ rank: i+1, ...c }))} />
+    </div>
+  );
+}
+
+function ClaudeCodeReport({ parsed }) {
+  const analysis = useMemo(() => analyzeClaudeCode(parsed), [parsed]);
+  const { summary, turns, mcpStatus, perMsgUsage, contentByType, totalCharsAll } = analysis;
+  const toolCalls = turns.flatMap(t => t.actions.filter(a => a.contentType === "tool_use").map(a => a.toolName)).filter(Boolean);
+  const toolFreq = {};
+  for (const t of toolCalls) toolFreq[t] = (toolFreq[t] || 0) + 1;
+
+  const ctxWindow = summary.contextWindow || 200000;
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+        <span style={{ background: C.purple, color: "#000", padding: "3px 10px", borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>CLAUDE CODE</span>
+        <span style={{ color: C.textMuted, fontSize: 12 }}>Model: {summary.model}</span>
+      </div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <StatCard label="Cost" value={formatCost(summary.totalCostUsd)} color={C.green} />
+        <StatCard label="Duration" value={formatDuration(summary.durationMs)} sub={`API: ${formatDuration(summary.durationApiMs)}`} color={C.accent} />
+        <StatCard label="Turns" value={summary.numTurns} color={C.cyan} />
+        <StatCard label="Output" value={formatTokens(summary.outputTokens)} color={C.purple} />
+      </div>
+      <SectionTitle>Context Token Breakdown</SectionTitle>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <StatCard label="Cache Created" value={formatTokens(summary.cacheCreationTokens)} color={C.orange} />
+        <StatCard label="Cache Read" value={formatTokens(summary.cacheReadTokens)} sub={`${summary.cacheHitRate}% of context`} color={C.green} />
+        <StatCard label="Uncached Input" value={formatTokens(summary.plainInputTokens)} color={C.red} />
+        <StatCard label="Total Context" value={formatTokens(summary.totalContextTokens)} color={C.accent} />
+      </div>
+      <ContextBar total={summary.totalContextTokens} segments={[
+        { label: "Cache Read", value: summary.cacheReadTokens, color: C.green },
+        { label: "Cache Created", value: summary.cacheCreationTokens, color: C.orange },
+        { label: "Uncached", value: summary.plainInputTokens, color: C.red },
+      ]} />
+      {summary.contextWindow && (<>
+        <SectionTitle>Context Window Utilization</SectionTitle>
+        <ContextBar total={summary.contextWindow} segments={[
+          { label: "Used", value: summary.totalContextTokens, color: C.accent },
+          { label: "Available", value: summary.contextWindow - summary.totalContextTokens, color: C.borderAccent },
+        ]} />
+        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>
+          {summary.contextUtilization}% of {formatTokens(summary.contextWindow)} context window
+        </div>
+      </>)}
+
+      {perMsgUsage.length > 0 && (<>
+        <SectionTitle>Per-Turn Context Growth</SectionTitle>
+        <Table columns={[
+          { label: "#", key: "turn", align: "right" },
+          { label: "Input", key: "input", align: "right", render: r => formatTokens(r.input) },
+          { label: "Cache Create", key: "cacheCreate", align: "right", render: r => formatTokens(r.cacheCreate) },
+          { label: "Cache Read", key: "cacheRead", align: "right", render: r => formatTokens(r.cacheRead) },
+          { label: "Output", key: "output", align: "right", render: r => formatTokens(r.output) },
+          { label: "Total In", key: "totalIn", align: "right", render: r => formatTokens(r.totalIn) },
+          { label: "Fill %", key: "fillPct", align: "right" },
+        ]} rows={perMsgUsage.map((u, i) => {
+          const totalIn = u.inputTokens + u.cacheCreation + u.cacheRead;
+          return { turn: i + 1, input: u.inputTokens, cacheCreate: u.cacheCreation,
+            cacheRead: u.cacheRead, output: u.outputTokens, totalIn,
+            fillPct: ((totalIn / ctxWindow) * 100).toFixed(1) + "%" };
+        })} />
+      </>)}
+
+      {totalCharsAll > 0 && (<>
+        <SectionTitle>Content Breakdown</SectionTitle>
+        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 8 }}>
+          Total content: {(totalCharsAll / 1024).toFixed(0)} KB ({formatTokens(Math.ceil(totalCharsAll / 4))} est. tokens)
+        </div>
+        <Table columns={[
+          { label: "Type", key: "type" },
+          { label: "Count", key: "count", align: "right" },
+          { label: "Chars", key: "chars", align: "right", render: r => r.chars > 0 ? `${(r.chars/1024).toFixed(1)} KB` : "—" },
+          { label: "Est. Tokens", key: "estTok", align: "right", render: r => r.chars > 0 ? formatTokens(Math.ceil(r.chars/4)) : "—" },
+          { label: "Share", key: "share", align: "right" },
+        ]} rows={Object.entries(contentByType).sort((a,b) => b[1].chars - a[1].chars)
+          .map(([type, data]) => ({ type, count: data.count, chars: data.chars,
+            estTok: Math.ceil(data.chars / 4),
+            share: totalCharsAll > 0 ? ((data.chars / totalCharsAll)*100).toFixed(1)+"%" : "—" }))} />
+      </>)}
+
+      <SectionTitle>Tool Usage</SectionTitle>
+      <Table columns={[ { label: "Tool", key: "tool" }, { label: "Calls", key: "count", align: "right" } ]}
+        rows={Object.entries(toolFreq).sort((a,b) => b[1] - a[1]).map(([tool, count]) => ({ tool, count }))} />
+      {mcpStatus.length > 0 && (<>
+        <SectionTitle>MCP Servers</SectionTitle>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {mcpStatus.map((s, i) => (
+            <span key={i} style={{ padding: "4px 10px", borderRadius: 4, fontSize: 11, fontFamily: "monospace",
+              background: s.status === "connected" ? C.greenDim : s.status === "failed" ? "#f8514922" : C.accentDim,
+              color: s.status === "connected" ? C.green : s.status === "failed" ? C.red : C.orange,
+              border: `1px solid ${(s.status === "connected" ? C.green : s.status === "failed" ? C.red : C.orange) + "33"}` }}>
+              {s.name}: {s.status}
+            </span>
+          ))}
+        </div>
+      </>)}
+    </div>
+  );
+}
+
+function App() {
+  const [files, setFiles] = useState([]);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleFiles = useCallback((fileList) => {
+    const readers = Array.from(fileList).map(f => new Promise(res => {
+      const reader = new FileReader();
+      reader.onload = () => res({ name: f.name, text: reader.result });
+      reader.readAsText(f);
+    }));
+    Promise.all(readers).then(results => {
+      setFiles(prev => [...prev, ...results.map(r => ({ name: r.name, parsed: detectAndParse(r.text) }))]);
+    });
+  }, []);
+
+  const handleDrop = useCallback((e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); }, [handleFiles]);
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Segoe UI', -apple-system, sans-serif", padding: "24px 20px" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, fontFamily: "'JetBrains Mono', monospace" }}>
+              <span style={{ color: C.cyan }}>liza</span><span style={{ color: C.textDim }}>::</span>session_analyzer
+            </h1>
+            <span style={{ fontSize: 11, color: C.textDim, fontFamily: "monospace" }}>v0.1</span>
+          </div>
+          <p style={{ fontSize: 12, color: C.textMuted, margin: "6px 0 0" }}>Drop agent session JSON logs to analyze context usage, cache efficiency, and cost breakdown.</p>
+        </div>
+
+        <div onDrop={handleDrop} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)}
+          onClick={() => { const input = document.createElement("input"); input.type = "file"; input.multiple = true; input.accept = ".txt,.json,.jsonl"; input.onchange = e => handleFiles(e.target.files); input.click(); }}
+          style={{ border: `2px dashed ${dragOver ? C.accent : C.border}`, borderRadius: 10, padding: "28px 20px", textAlign: "center",
+            cursor: "pointer", background: dragOver ? C.accentDim : "transparent", transition: "all 0.2s ease", marginBottom: 24 }}>
+          <div style={{ fontSize: 14, color: dragOver ? C.accent : C.textMuted }}>{dragOver ? "Drop files here" : "Drop session logs here or click to browse"}</div>
+          <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>Supports Codex (coder) and Claude Code (planner/reviewer) formats</div>
+        </div>
+
+        {files.length > 0 && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+            <button onClick={() => setFiles([])} style={{ background: "transparent", border: `1px solid ${C.border}`,
+              color: C.textMuted, padding: "4px 12px", borderRadius: 4, cursor: "pointer", fontSize: 11, fontFamily: "monospace" }}>Clear all</button>
+          </div>
+        )}
+
+        {files.map((file, i) => (
+          <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 24, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 16, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ color: C.textDim }}>📄</span> {file.name}
+              {!file.parsed && <span style={{ color: C.red, fontSize: 11 }}> — unrecognized format</span>}
+            </div>
+            {file.parsed?.format === "codex" && <CodexReport parsed={file.parsed} />}
+            {file.parsed?.format === "claude_code" && <ClaudeCodeReport parsed={file.parsed} />}
+          </div>
+        ))}
+
+        {files.length === 0 && (
+          <div style={{ textAlign: "center", padding: "40px 20px", color: C.textDim, fontSize: 13 }}>
+            <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.5 }}>⬆</div>
+            No session logs loaded yet. Drop files above to start.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
