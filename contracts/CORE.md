@@ -225,7 +225,7 @@ If this cannot be stated unambiguously → BLOCKED.
 ```
 Doc Impact: [none | list of affected docs]
 ```
-Categories: API/interface → usage docs, behavior → specs, new capability → README/feature docs, config/env → setup docs. "None" must be stated explicitly.
+Categories: API/interface → usage docs, behavior → specs, new capability → README/feature docs, config/env → setup docs. "None" requires a search (`grep -rl "related-feature" docs/ specs/`); if siblings are documented, the new feature needs the same treatment.
 
 **Test Impact Declaration:** Before execution, declare:
 ```
