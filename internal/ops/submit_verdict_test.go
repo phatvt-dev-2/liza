@@ -394,6 +394,30 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 	}
 }
 
+func TestSubmitVerdict_MissingReviewCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	task.ReviewCommit = nil // Corrupt: REVIEWING without review_commit
+	state.Tasks = []models.Task{task}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusWorking,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	if err == nil {
+		t.Fatal("Expected error for missing review_commit, got nil")
+	}
+	if !strings.Contains(err.Error(), "no review_commit") {
+		t.Errorf("Error = %q, want to contain 'no review_commit'", err.Error())
+	}
+}
+
 func TestSubmitVerdict_ReviewCommitMismatch(t *testing.T) {
 	tmpDir := t.TempDir()
 

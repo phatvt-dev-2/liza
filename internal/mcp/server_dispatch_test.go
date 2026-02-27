@@ -12,6 +12,7 @@ import (
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/mcp/protocol"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 )
 
 func reqID(id int) json.RawMessage {
@@ -504,6 +505,32 @@ func TestClassifyError(t *testing.T) {
 			wantCode: protocol.ValidationError,
 			wantMsg:  "validation failed: precondition not met",
 		},
+		// PreconditionError (typed — exposes Reason)
+		{
+			name:     "typed PreconditionError",
+			err:      &ops.PreconditionError{Reason: "task t1: code tasks must include test files — TDD is mandatory"},
+			wantCode: protocol.ValidationError,
+			wantMsg:  "task t1: code tasks must include test files — TDD is mandatory",
+		},
+		{
+			name:     "wrapped PreconditionError",
+			err:      fmt.Errorf("submit failed: %w", &ops.PreconditionError{Reason: "task t1: pre-execution checkpoint required"}),
+			wantCode: protocol.ValidationError,
+			wantMsg:  "task t1: pre-execution checkpoint required",
+		},
+		// String fallback — must include / mandatory
+		{
+			name:     "must include fallback",
+			err:      errors.New("commit must include test files"),
+			wantCode: protocol.ValidationError,
+			wantMsg:  "validation failed: precondition not met",
+		},
+		{
+			name:     "mandatory fallback",
+			err:      errors.New("TDD is mandatory for coding tasks"),
+			wantCode: protocol.ValidationError,
+			wantMsg:  "validation failed: precondition not met",
+		},
 		// Default: internal error
 		{
 			name:     "generic error",
@@ -540,6 +567,26 @@ func TestClassifyError_DoesNotLeakInternalDetails(t *testing.T) {
 		if jerr.Message == err.Error() {
 			t.Errorf("classifyError leaked raw error: %q", err.Error())
 		}
+	}
+}
+
+func TestClassifyError_PreconditionErrorExposesReason(t *testing.T) {
+	server := NewServer("/tmp/test", "/tmp/test/.liza/log.yaml")
+
+	reason := "task t1: code tasks must include test files — TDD is mandatory"
+	precondErr := &ops.PreconditionError{Reason: reason}
+
+	jerr := server.classifyError(precondErr)
+
+	// Reason should be exposed as the MCP message (actionable for agents)
+	if jerr.Message != reason {
+		t.Errorf("message = %q, want %q", jerr.Message, reason)
+	}
+
+	// Error() wraps with prefix — verify it's different from Reason
+	// (so the no-leak test still passes: Error() != Message for generic errors)
+	if precondErr.Error() == precondErr.Reason {
+		t.Error("PreconditionError.Error() should differ from Reason (has prefix)")
 	}
 }
 

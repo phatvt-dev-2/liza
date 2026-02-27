@@ -47,12 +47,14 @@ func TestClaimReviewerTask_DefaultLeaseDuration(t *testing.T) {
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
 	worktree := ".worktrees/task-1"
+	reviewCommit := "abc123"
 	state.Tasks = []models.Task{
 		{
-			ID:       "task-1",
-			Status:   models.TaskStatusReadyForReview,
-			Worktree: &worktree,
-			Created:  now,
+			ID:           "task-1",
+			Status:       models.TaskStatusReadyForReview,
+			Worktree:     &worktree,
+			ReviewCommit: &reviewCommit,
+			Created:      now,
 		},
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
@@ -193,20 +195,24 @@ func TestClaimReviewerTask_PrioritySelection(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	worktree1 := ".worktrees/task-low"
 	worktree2 := ".worktrees/task-high"
+	reviewCommit1 := "abc123"
+	reviewCommit2 := "def456"
 	state.Tasks = []models.Task{
 		{
-			ID:       "task-low",
-			Status:   models.TaskStatusReadyForReview,
-			Priority: 3,
-			Worktree: &worktree1,
-			Created:  now.Add(-1 * time.Minute),
+			ID:           "task-low",
+			Status:       models.TaskStatusReadyForReview,
+			Priority:     3,
+			Worktree:     &worktree1,
+			ReviewCommit: &reviewCommit1,
+			Created:      now.Add(-1 * time.Minute),
 		},
 		{
-			ID:       "task-high",
-			Status:   models.TaskStatusReadyForReview,
-			Priority: 1,
-			Worktree: &worktree2,
-			Created:  now,
+			ID:           "task-high",
+			Status:       models.TaskStatusReadyForReview,
+			Priority:     1,
+			Worktree:     &worktree2,
+			ReviewCommit: &reviewCommit2,
+			Created:      now,
 		},
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
@@ -235,20 +241,24 @@ func TestClaimReviewerTask_TieBreaking(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	worktree1 := ".worktrees/task-old"
 	worktree2 := ".worktrees/task-new"
+	reviewCommit1 := "abc123"
+	reviewCommit2 := "def456"
 	state.Tasks = []models.Task{
 		{
-			ID:       "task-new",
-			Status:   models.TaskStatusReadyForReview,
-			Priority: 2,
-			Worktree: &worktree2,
-			Created:  now,
+			ID:           "task-new",
+			Status:       models.TaskStatusReadyForReview,
+			Priority:     2,
+			Worktree:     &worktree2,
+			ReviewCommit: &reviewCommit2,
+			Created:      now,
 		},
 		{
-			ID:       "task-old",
-			Status:   models.TaskStatusReadyForReview,
-			Priority: 2,
-			Worktree: &worktree1,
-			Created:  now.Add(-1 * time.Minute),
+			ID:           "task-old",
+			Status:       models.TaskStatusReadyForReview,
+			Priority:     2,
+			Worktree:     &worktree1,
+			ReviewCommit: &reviewCommit1,
+			Created:      now.Add(-1 * time.Minute),
 		},
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
@@ -268,6 +278,41 @@ func TestClaimReviewerTask_TieBreaking(t *testing.T) {
 	}
 }
 
+func TestClaimReviewerTask_MissingReviewCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	worktree := ".worktrees/task-1"
+	// Task is READY_FOR_REVIEW but missing ReviewCommit (corrupted state)
+	state.Tasks = []models.Task{
+		{
+			ID:       "task-1",
+			Status:   models.TaskStatusReadyForReview,
+			Priority: 1,
+			Worktree: &worktree,
+			// ReviewCommit intentionally nil
+			History: []models.TaskHistoryEntry{},
+			Created: now,
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+		ProjectRoot:   tmpDir,
+		AgentID:       "code-reviewer-1",
+		LeaseDuration: 1800,
+	})
+	if err == nil {
+		t.Fatal("Expected error for missing review_commit, got nil")
+	}
+	if !strings.Contains(err.Error(), "no review_commit") {
+		t.Errorf("Error = %q, want to contain 'no review_commit'", err.Error())
+	}
+}
+
 func TestClaimReviewerTask_SkipsAlreadyReviewing(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
@@ -279,22 +324,26 @@ func TestClaimReviewerTask_SkipsAlreadyReviewing(t *testing.T) {
 	worktree2 := ".worktrees/task-available"
 	reviewer := "code-reviewer-99"
 	leaseExpires := now.Add(1 * time.Hour)
+	reviewCommit1 := "abc123"
+	reviewCommit2 := "def456"
 	state.Tasks = []models.Task{
 		{
 			ID:                 "task-reviewing",
 			Status:             models.TaskStatusReviewing,
 			Priority:           1, // High priority but already claimed
 			Worktree:           &worktree1,
+			ReviewCommit:       &reviewCommit1,
 			ReviewingBy:        &reviewer,
 			ReviewLeaseExpires: &leaseExpires,
 			Created:            now,
 		},
 		{
-			ID:       "task-available",
-			Status:   models.TaskStatusReadyForReview,
-			Priority: 3, // Lower priority but available
-			Worktree: &worktree2,
-			Created:  now,
+			ID:           "task-available",
+			Status:       models.TaskStatusReadyForReview,
+			Priority:     3, // Lower priority but available
+			Worktree:     &worktree2,
+			ReviewCommit: &reviewCommit2,
+			Created:      now,
 		},
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)

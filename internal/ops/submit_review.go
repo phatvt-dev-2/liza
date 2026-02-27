@@ -61,7 +61,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 
 	// Pre-execution checkpoint required before submission
 	if !HasCheckpoint(task.History, agentID) {
-		return nil, fmt.Errorf("task %s: pre-execution checkpoint required before submission (use liza_write_checkpoint)", taskID)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s: pre-execution checkpoint required before submission (use liza_write_checkpoint)", taskID)}
 	}
 
 	// Phase 2: Execute git operations outside the lock
@@ -100,7 +100,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 			return nil, fmt.Errorf("failed to check test files: %w", err)
 		}
 		if !hasTests && GetTDDWaiver(task.History, agentID) == "" {
-			return nil, fmt.Errorf("task %s: code tasks must include test files (*_test.go) — TDD is mandatory", taskID)
+			return nil, &PreconditionError{Reason: fmt.Sprintf("task %s: code tasks must include test files (e.g. *_test.go, *.test.ts, test_*.py) — TDD is mandatory", taskID)}
 		}
 	}
 

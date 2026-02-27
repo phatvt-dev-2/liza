@@ -139,6 +139,25 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 			errContains: "READY_FOR_REVIEW task without review_commit",
 		},
 		{
+			name: "APPROVED without review_commit",
+			setupTask: func() models.Task {
+				approvedBy := "code-reviewer-1"
+				return models.Task{
+					ID:          "task-1",
+					Description: "Test",
+					Status:      models.TaskStatusApproved,
+					ApprovedBy:  &approvedBy,
+					// ReviewCommit intentionally nil
+					Created:  time.Now().UTC(),
+					SpecRef:  "specs/test.md",
+					DoneWhen: "Complete",
+					History:  []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr:     true,
+			errContains: "APPROVED task without review_commit",
+		},
+		{
 			name: "BLOCKED without blocked_reason",
 			setupTask: func() models.Task {
 				return models.Task{

@@ -158,6 +158,11 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 		}
 
+		// APPROVED task must have review_commit
+		if task.Status == models.TaskStatusApproved && task.ReviewCommit == nil {
+			return fmt.Errorf("APPROVED task without review_commit: %s", task.ID)
+		}
+
 		// MERGED task must NOT have worktree
 		if task.Status == models.TaskStatusMerged && task.Worktree != nil {
 			return fmt.Errorf("MERGED task still has worktree: %s", task.ID)

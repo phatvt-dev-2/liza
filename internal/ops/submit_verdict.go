@@ -60,22 +60,24 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		return nil, fmt.Errorf("task %s is not REVIEWING (current status: %s)", taskID, task.Status)
 	}
 
-	// Phase 2: Validate ReviewCommit matches worktree HEAD (if worktree exists on disk)
-	if task.ReviewCommit != nil {
-		g := git.New(projectRoot)
-		wtPath := g.GetWorktreePath(taskID)
-		if _, statErr := os.Stat(wtPath); os.IsNotExist(statErr) {
-			// Worktree absent on disk (e.g. tests without real worktrees) — skip check.
-		} else if statErr != nil {
-			return nil, fmt.Errorf("failed to stat worktree %s: %w", wtPath, statErr)
-		} else {
-			wtHEAD, headErr := g.GetWorktreeHEAD(taskID)
-			if headErr != nil {
-				return nil, fmt.Errorf("failed to get worktree HEAD: %w", headErr)
-			}
-			if *task.ReviewCommit != wtHEAD {
-				return nil, fmt.Errorf("review_commit %s does not match worktree HEAD %s — worktree was modified after submission", *task.ReviewCommit, wtHEAD)
-			}
+	// Phase 2: Validate ReviewCommit exists and matches worktree HEAD
+	if task.ReviewCommit == nil {
+		return nil, fmt.Errorf("task %s has no review_commit — cannot submit verdict", taskID)
+	}
+
+	g := git.New(projectRoot)
+	wtPath := g.GetWorktreePath(taskID)
+	if _, statErr := os.Stat(wtPath); os.IsNotExist(statErr) {
+		// Worktree absent on disk (e.g. tests without real worktrees) — skip check.
+	} else if statErr != nil {
+		return nil, fmt.Errorf("failed to stat worktree %s: %w", wtPath, statErr)
+	} else {
+		wtHEAD, headErr := g.GetWorktreeHEAD(taskID)
+		if headErr != nil {
+			return nil, fmt.Errorf("failed to get worktree HEAD: %w", headErr)
+		}
+		if *task.ReviewCommit != wtHEAD {
+			return nil, fmt.Errorf("review_commit %s does not match worktree HEAD %s — worktree was modified after submission", *task.ReviewCommit, wtHEAD)
 		}
 	}
 

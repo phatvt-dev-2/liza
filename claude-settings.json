@@ -26,6 +26,7 @@
       "mcp__liza__liza_update_sprint_metrics",
       "mcp__liza__liza_clear_stale_review_claims",
       "mcp__liza__liza_checkpoint",
+      "mcp__liza__liza_write_checkpoint",
       "mcp__liza__liza_delete_agent",
 
       "Skill(adr-backfill)",

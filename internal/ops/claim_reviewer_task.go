@@ -59,6 +59,11 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 			return fmt.Errorf("no reviewable tasks found")
 		}
 
+		// Invariant: task must have review_commit before it can be claimed for review
+		if task.ReviewCommit == nil {
+			return fmt.Errorf("task %s has no review_commit — cannot claim for review", task.ID)
+		}
+
 		// Atomically claim the task and transition to REVIEWING
 		if err := task.Transition(models.TaskStatusReviewing); err != nil {
 			return err
