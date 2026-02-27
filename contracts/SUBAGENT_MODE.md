@@ -1,6 +1,6 @@
 # Subagent Mode Contract
 
-Lightweight mode for delegated read-only work. Subagents research, analyze, and return digests.
+Lightweight mode for delegated work. Default: read-only (research, analyze, return digests). `READ-WRITE` variant permits state modification under stricter ceremony.
 
 **Prerequisite:** Read [CORE.md](~/.liza/CORE.md) first.
 
@@ -22,8 +22,16 @@ The caller agent defines the task. The subagent executes within scope.
 - **No unstated-requirement assumptions** — work within what the brief provides; vague goals are valid when they reflect genuine uncertainty (exploration IS the delegated work)
 - **Compressed output** — return results and concerns, not process trace
 - **Scope is hard boundary** — refuse work outside declared scope, don't ask to expand
-- **Approval gates relaxed** — no gates, yet **internal** ceremony remains (Intent Gate, DoR/DoD)
-- **No state-modifying actions** that would require a gate
+- **Approval gates relaxed** — no external gates; internal ceremony remains (Intent Gate, DoR/DoD)
+- **Read-only by default** — no state-modifying actions unless brief contains `MODE: SUBAGENT READ-WRITE`
+
+### READ-WRITE Subagents
+
+When brief contains `MODE: SUBAGENT READ-WRITE`:
+- State modification (file edits, git operations) is permitted within declared SCOPE
+- **Intent Gate is mandatory** before each logical action (not each file) — state what changes and how to validate
+- All other behavioral adjustments still apply (no user interaction, scope boundary, compressed output)
+- Pre-commit on touched files before returning results
 
 ---
 
@@ -63,3 +71,4 @@ Return immediately with explanation if:
 - Scope is insufficient to accomplish goal
 - Necessary information is missing that cannot be derived without hazardous assumption
 - Task would require violating Tier 0 invariants
+- Brief requests state modification but mode is `MODE: SUBAGENT` (not READ-WRITE)

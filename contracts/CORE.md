@@ -508,7 +508,7 @@ MANDATORY: When considering delegation, read and comply with `~/.liza/skills/gen
 
 The main agent retains accountability. Subagent output is advisory digest.
 
-**Task Tool Rule:** All agents spawned via Task tool are subagents. Include `MODE: SUBAGENT` in every Task tool prompt.
+**Task Tool Rule:** All agents spawned via Task tool are subagents. Read `~/.liza/skills/generic-subagent/SKILL.md` before delegating. Include `MODE: SUBAGENT` (read-only) or `MODE: SUBAGENT READ-WRITE` (state-modifying) in every Task tool prompt.
 
 **Tools**
 MANDATORY: Read and comply with `~/.liza/AGENT_TOOLS.md`.

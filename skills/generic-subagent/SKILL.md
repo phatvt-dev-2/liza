@@ -1,10 +1,10 @@
 ---
 name: generic-subagent
-description: Context-efficient read-only delegation to subagents
+description: Context-efficient delegation to subagents (read-only default, READ-WRITE opt-in)
 ---
 
-Subagents offload context-expensive **read-only** work. The caller receives a digest, not the full trace.
-Subagents cannot modify state — they research, analyze, and summarize.
+Subagents offload context-expensive work. The caller receives a digest, not the full trace.
+Default subagents are read-only (research, analyze, summarize). `READ-WRITE` subagents may modify state within declared scope.
 
 # When to Delegate
 
@@ -42,6 +42,7 @@ stat --printf="%s\n" src/api/*.py | awk '{sum+=$1} END {print sum}'
 
 ```
 MODE: SUBAGENT
+MODE: SUBAGENT READ-WRITE    ← only when objective requires state changes
 GOAL: {{objective}}
 CONTEXT: {{what caller already knows — no pre-analysis required}}
 SCOPE: {{files, directories, or boundaries}}
@@ -54,7 +55,7 @@ SCOPE: {{files, directories, or boundaries}}
 
 ## 3. Dispatch
 
-Use Task tool. Subagent inherits contract but operates in Subagent Mode (read-only, no gates, compressed output).
+Use Task tool. Subagent inherits contract but operates in Subagent Mode (no external gates, compressed output). Default is read-only; `READ-WRITE` permits state modification with mandatory Intent Gate per action.
 
 ---
 
@@ -98,7 +99,7 @@ DETAILED RESPONSE: [findings]
 # Anti-Patterns
 
 **Don't delegate:**
-- State-modifying operations (subagents are read-only)
+- State-modifying operations without `READ-WRITE` marker — default subagents are read-only
 - Decisions requiring user input
 - The debugging hypothesis loop (requires iterative testing with full context)
 
