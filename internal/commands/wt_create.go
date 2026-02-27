@@ -17,13 +17,15 @@ func WtCreateCommand(projectRoot, taskID string, fresh bool) error {
 
 	if result.AlreadyExisted {
 		fmt.Printf("Worktree already exists: %s\n", result.WorktreeDir)
-		return nil
+	} else {
+		if fresh {
+			fmt.Fprintln(os.Stderr, "Reassignment: deleting existing worktree")
+		}
+		fmt.Printf("Created worktree: %s\n", result.WorktreeDir)
 	}
 
-	if fresh {
-		fmt.Fprintln(os.Stderr, "Reassignment: deleting existing worktree")
+	for _, w := range result.Warnings {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 	}
-
-	fmt.Printf("Created worktree: %s\n", result.WorktreeDir)
 	return nil
 }

@@ -3,6 +3,7 @@ package ops
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -18,6 +19,7 @@ type CreateWorktreeResult struct {
 	WorktreeDir    string
 	BaseCommit     string
 	AlreadyExisted bool // true if worktree existed and fresh was false
+	Warnings       []string
 }
 
 // CreateWorktree provisions a git worktree from the integration branch for an
@@ -49,11 +51,16 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	// Check if worktree already exists
 	if _, err := os.Stat(worktreeDir); err == nil {
 		if !fresh {
-			return &CreateWorktreeResult{
+			result := &CreateWorktreeResult{
 				TaskID:         taskID,
 				WorktreeDir:    worktreeDir,
 				AlreadyExisted: true,
-			}, nil
+			}
+			// Sync even on existing worktrees — idempotent, catches prior failures.
+			if err := syncEmbedded(worktreeDir); err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("sync-embedded: %v", err))
+			}
+			return result, nil
 		}
 	}
 
@@ -82,9 +89,28 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 		return nil, fmt.Errorf("failed to update state: %w", err)
 	}
 
-	return &CreateWorktreeResult{
+	result := &CreateWorktreeResult{
 		TaskID:      taskID,
 		WorktreeDir: worktreeDir,
 		BaseCommit:  baseCommit,
-	}, nil
+	}
+
+	// Sync embedded assets so the worktree is build/test-ready.
+	// Non-fatal: agents can run `make sync-embedded` manually.
+	if err := syncEmbedded(worktreeDir); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("sync-embedded: %v", err))
+	}
+
+	return result, nil
+}
+
+// syncEmbedded runs `make sync-embedded` in the given directory.
+func syncEmbedded(dir string) error {
+	cmd := exec.Command("make", "sync-embedded")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, out)
+	}
+	return nil
 }

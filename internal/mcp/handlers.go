@@ -473,10 +473,11 @@ func (s *Server) handleWtCreate(params map[string]any) (any, error) {
 		return nil, fmt.Errorf("wt-create failed: %w", err)
 	}
 
+	msg := fmt.Sprintf("Worktree created for task %s", taskID)
 	if result.AlreadyExisted {
-		return textResult(fmt.Sprintf("Worktree already exists for task %s", taskID))
+		msg = fmt.Sprintf("Worktree already exists for task %s", taskID)
 	}
-	return textResult(fmt.Sprintf("Worktree created for task %s", taskID))
+	return textResult(appendWarnings(msg, result.Warnings))
 }
 
 // handleWtDelete implements the liza_wt_delete tool
