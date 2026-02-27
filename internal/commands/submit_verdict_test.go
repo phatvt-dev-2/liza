@@ -25,12 +25,12 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			taskID:  "t1",
 			verdict: "APPROVED",
 			reason:  "",
-			agentID: "reviewer-1",
+			agentID: "code-reviewer-1",
 			wantErr: false,
 			setupState: func(s *models.State) {
 				now := time.Now().UTC()
 				reviewCommit := "abc123"
-				reviewingBy := "reviewer-1"
+				reviewingBy := "code-reviewer-1"
 				reviewLeaseExpires := now.Add(30 * time.Minute)
 				currentTask := "t1"
 				s.Tasks = []models.Task{
@@ -45,7 +45,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 						History:            []models.TaskHistoryEntry{},
 					},
 				}
-				s.Agents["reviewer-1"] = models.Agent{
+				s.Agents["code-reviewer-1"] = models.Agent{
 					Role:         "code-reviewer",
 					Status:       models.AgentStatusReviewing,
 					CurrentTask:  &currentTask,
@@ -58,8 +58,8 @@ func TestSubmitVerdictCommand(t *testing.T) {
 				if task.Status != models.TaskStatusApproved {
 					t.Errorf("expected status APPROVED, got %s", task.Status)
 				}
-				if task.ApprovedBy == nil || *task.ApprovedBy != "reviewer-1" {
-					t.Errorf("expected approved_by reviewer-1, got %v", task.ApprovedBy)
+				if task.ApprovedBy == nil || *task.ApprovedBy != "code-reviewer-1" {
+					t.Errorf("expected approved_by code-reviewer-1, got %v", task.ApprovedBy)
 				}
 				if task.RejectionReason != nil {
 					t.Errorf("expected rejection_reason to be nil, got %v", task.RejectionReason)
@@ -76,11 +76,11 @@ func TestSubmitVerdictCommand(t *testing.T) {
 				if task.History[0].Event != "approved" {
 					t.Errorf("expected event approved, got %s", task.History[0].Event)
 				}
-				if task.History[0].Agent == nil || *task.History[0].Agent != "reviewer-1" {
-					t.Errorf("expected agent reviewer-1 in history, got %v", task.History[0].Agent)
+				if task.History[0].Agent == nil || *task.History[0].Agent != "code-reviewer-1" {
+					t.Errorf("expected agent code-reviewer-1 in history, got %v", task.History[0].Agent)
 				}
 
-				agent := s.Agents["reviewer-1"]
+				agent := s.Agents["code-reviewer-1"]
 				if agent.Status != models.AgentStatusIdle {
 					t.Errorf("expected reviewer status IDLE, got %s", agent.Status)
 				}
@@ -94,12 +94,12 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			taskID:  "t2",
 			verdict: "REJECTED",
 			reason:  "Code doesn't meet requirements",
-			agentID: "reviewer-1",
+			agentID: "code-reviewer-1",
 			wantErr: false,
 			setupState: func(s *models.State) {
 				now := time.Now().UTC()
 				reviewCommit := "def456"
-				reviewingBy := "reviewer-1"
+				reviewingBy := "code-reviewer-1"
 				reviewLeaseExpires := now.Add(30 * time.Minute)
 				currentTask := "t2"
 				s.Tasks = []models.Task{
@@ -116,7 +116,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 						History:             []models.TaskHistoryEntry{},
 					},
 				}
-				s.Agents["reviewer-1"] = models.Agent{
+				s.Agents["code-reviewer-1"] = models.Agent{
 					Role:         "code-reviewer",
 					Status:       models.AgentStatusReviewing,
 					CurrentTask:  &currentTask,
@@ -150,14 +150,14 @@ func TestSubmitVerdictCommand(t *testing.T) {
 				if task.History[0].Event != "rejected" {
 					t.Errorf("expected event rejected, got %s", task.History[0].Event)
 				}
-				if task.History[0].Agent == nil || *task.History[0].Agent != "reviewer-1" {
-					t.Errorf("expected agent reviewer-1 in history, got %v", task.History[0].Agent)
+				if task.History[0].Agent == nil || *task.History[0].Agent != "code-reviewer-1" {
+					t.Errorf("expected agent code-reviewer-1 in history, got %v", task.History[0].Agent)
 				}
 				if task.History[0].Reason == nil || *task.History[0].Reason != "Code doesn't meet requirements" {
 					t.Errorf("expected reason in history, got %v", task.History[0].Reason)
 				}
 
-				agent := s.Agents["reviewer-1"]
+				agent := s.Agents["code-reviewer-1"]
 				if agent.Status != models.AgentStatusIdle {
 					t.Errorf("expected reviewer status IDLE, got %s", agent.Status)
 				}
@@ -171,7 +171,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			taskID:  "t3",
 			verdict: "REJECTED",
 			reason:  "Try again",
-			agentID: "reviewer-1",
+			agentID: "code-reviewer-1",
 			wantErr: false,
 			setupState: func(s *models.State) {
 				reviewCommit := "ghi789"
@@ -203,7 +203,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			taskID:     "",
 			verdict:    "APPROVED",
 			reason:     "",
-			agentID:    "reviewer-1",
+			agentID:    "code-reviewer-1",
 			wantErr:    true,
 			wantErrMsg: "task ID is required",
 		},
@@ -212,7 +212,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			taskID:     "t1",
 			verdict:    "",
 			reason:     "",
-			agentID:    "reviewer-1",
+			agentID:    "code-reviewer-1",
 			wantErr:    true,
 			wantErrMsg: "verdict is required",
 		},
@@ -221,7 +221,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			taskID:     "t1",
 			verdict:    "MAYBE",
 			reason:     "",
-			agentID:    "reviewer-1",
+			agentID:    "code-reviewer-1",
 			wantErr:    true,
 			wantErrMsg: "verdict must be APPROVED or REJECTED",
 		},
@@ -239,7 +239,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			taskID:     "t1",
 			verdict:    "REJECTED",
 			reason:     "",
-			agentID:    "reviewer-1",
+			agentID:    "code-reviewer-1",
 			wantErr:    true,
 			wantErrMsg: "rejection reason is required for REJECTED verdict",
 		},
@@ -248,7 +248,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			taskID:     "nonexistent",
 			verdict:    "APPROVED",
 			reason:     "",
-			agentID:    "reviewer-1",
+			agentID:    "code-reviewer-1",
 			wantErr:    true,
 			wantErrMsg: "task not found",
 			setupState: func(s *models.State) {
@@ -260,7 +260,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			taskID:     "t1",
 			verdict:    "APPROVED",
 			reason:     "",
-			agentID:    "reviewer-1",
+			agentID:    "code-reviewer-1",
 			wantErr:    true,
 			wantErrMsg: "task t1 is not REVIEWING",
 			setupState: func(s *models.State) {

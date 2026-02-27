@@ -234,7 +234,7 @@ func TestBlackboardGetAgent(t *testing.T) {
 				Terminal:  "term-1",
 			},
 			"agent-2": {
-				Role:      "reviewer",
+				Role:      "code-reviewer",
 				Status:    models.AgentStatusWorking,
 				Heartbeat: now,
 				Terminal:  "term-2",
@@ -256,8 +256,8 @@ func TestBlackboardGetAgent(t *testing.T) {
 	if agent == nil {
 		t.Fatal("GetAgent returned nil for existing agent")
 	}
-	if agent.Role != "reviewer" {
-		t.Errorf("Agent role mismatch: got %s, want reviewer", agent.Role)
+	if agent.Role != "code-reviewer" {
+		t.Errorf("Agent role mismatch: got %s, want code-reviewer", agent.Role)
 	}
 
 	// Get non-existent agent

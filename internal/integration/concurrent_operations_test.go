@@ -574,9 +574,9 @@ func TestConcurrentMerges(t *testing.T) {
 	for i := 0; i < numTasks; i++ {
 		taskIDs[i] = "task-merge-" + string(rune('a'+i))
 		agentIDs[i] = "coder-" + string(rune('1'+i))
-		reviewerIDs[i] = "reviewer-" + string(rune('1'+i))
+		reviewerIDs[i] = "code-reviewer-" + string(rune('1'+i))
 		testhelpers.RegisterTestAgent(t, bb, agentIDs[i], "coder")
-		testhelpers.RegisterTestAgent(t, bb, reviewerIDs[i], "code_reviewer")
+		testhelpers.RegisterTestAgent(t, bb, reviewerIDs[i], "code-reviewer")
 	}
 
 	// Create approved tasks with worktrees

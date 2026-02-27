@@ -112,7 +112,7 @@ func TestWaitForReviewerWork(t *testing.T) {
 			name: "task with expired review lease",
 			tasks: func() []models.Task {
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
-				task.ReviewingBy = testhelpers.StringPtr("reviewer-1")
+				task.ReviewingBy = testhelpers.StringPtr("code-reviewer-1")
 				task.ReviewLeaseExpires = testhelpers.TimePtr(now.Add(-10 * time.Minute))
 				return []models.Task{task}
 			}(),

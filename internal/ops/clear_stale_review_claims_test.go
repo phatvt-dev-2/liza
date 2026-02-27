@@ -21,7 +21,7 @@ func TestClearStaleReviewClaims_NoStale(t *testing.T) {
 
 	// REVIEWING task with future lease — not stale
 	futureLease := now.Add(30 * time.Minute)
-	reviewer := "reviewer-1"
+	reviewer := "code-reviewer-1"
 	state.Tasks = []models.Task{
 		{
 			ID: "t1", Description: "Active review", Status: models.TaskStatusReviewing,
@@ -52,7 +52,7 @@ func TestClearStaleReviewClaims_ExpiredLease(t *testing.T) {
 
 	// REVIEWING task with expired lease
 	expiredLease := now.Add(-5 * time.Minute)
-	reviewer := "reviewer-1"
+	reviewer := "code-reviewer-1"
 	coder := "coder-1"
 	state.Tasks = []models.Task{
 		{
@@ -99,7 +99,7 @@ func TestClearStaleReviewClaims_MissingLease(t *testing.T) {
 	state := testhelpers.CreateValidState()
 
 	// REVIEWING task with reviewer but no lease (malformed state)
-	reviewer := "reviewer-1"
+	reviewer := "code-reviewer-1"
 	state.Tasks = []models.Task{
 		{
 			ID: "t1", Description: "Malformed review", Status: models.TaskStatusReviewing,
@@ -154,8 +154,8 @@ func TestClearStaleReviewClaims_MultipleStale(t *testing.T) {
 	state := testhelpers.CreateValidState()
 
 	expiredLease := now.Add(-10 * time.Minute)
-	reviewer1 := "reviewer-1"
-	reviewer2 := "reviewer-2"
+	reviewer1 := "code-reviewer-1"
+	reviewer2 := "code-reviewer-2"
 	state.Tasks = []models.Task{
 		{
 			ID: "t1", Description: "Stale 1", Status: models.TaskStatusReviewing,

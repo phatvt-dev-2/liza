@@ -100,7 +100,7 @@ func TestBuildStatusData(t *testing.T) {
 						Heartbeat: now.Add(-30 * time.Second),
 						PID:       12345,
 					},
-					"reviewer-1": {
+					"code-reviewer-1": {
 						Role:      "code-reviewer",
 						Status:    models.AgentStatusIdle,
 						Heartbeat: now.Add(-10 * time.Second),
@@ -127,7 +127,7 @@ func TestBuildStatusData(t *testing.T) {
 							t.Errorf("expected WORKING status, got %s", agent.Status)
 						}
 					}
-					if agent.ID == "reviewer-1" {
+					if agent.ID == "code-reviewer-1" {
 						foundReviewer = true
 					}
 				}
@@ -135,7 +135,7 @@ func TestBuildStatusData(t *testing.T) {
 					t.Error("coder-1 not found in agents")
 				}
 				if !foundReviewer {
-					t.Error("reviewer-1 not found in agents")
+					t.Error("code-reviewer-1 not found in agents")
 				}
 			},
 		},

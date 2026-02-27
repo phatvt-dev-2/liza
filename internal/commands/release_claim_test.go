@@ -24,12 +24,12 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:    "release expired reviewer claim",
 			taskID:  "t1",
-			role:    "reviewer",
+			role:    "code-reviewer",
 			force:   false,
 			reason:  "manual release",
 			agentID: "human",
 			setupState: func(s *models.State) {
-				reviewingBy := "reviewer-1"
+				reviewingBy := "code-reviewer-1"
 				reviewLeaseExpires := time.Now().UTC().Add(-1 * time.Hour) // expired
 				reviewCommit := "abc123"
 				s.Tasks = []models.Task{
@@ -115,7 +115,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 			setupState: func(s *models.State) {
 				assignedTo := "coder-1"
 				leaseExpires := time.Now().UTC().Add(-1 * time.Hour)
-				reviewingBy := "reviewer-1"
+				reviewingBy := "code-reviewer-1"
 				reviewLeaseExpires := time.Now().UTC().Add(-1 * time.Hour)
 				s.Tasks = []models.Task{
 					{
@@ -147,14 +147,14 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:       "error on valid reviewer lease without force",
 			taskID:     "t4",
-			role:       "reviewer",
+			role:       "code-reviewer",
 			force:      false,
 			reason:     "manual release",
 			agentID:    "human",
 			wantErr:    true,
 			wantErrMsg: "review lease still valid",
 			setupState: func(s *models.State) {
-				reviewingBy := "reviewer-1"
+				reviewingBy := "code-reviewer-1"
 				reviewLeaseExpires := time.Now().UTC().Add(1 * time.Hour) // still valid
 				reviewCommit := "abc123"
 				s.Tasks = []models.Task{
@@ -174,12 +174,12 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:    "force release valid reviewer lease",
 			taskID:  "t5",
-			role:    "reviewer",
+			role:    "code-reviewer",
 			force:   true,
 			reason:  "emergency release",
 			agentID: "admin",
 			setupState: func(s *models.State) {
-				reviewingBy := "reviewer-1"
+				reviewingBy := "code-reviewer-1"
 				reviewLeaseExpires := time.Now().UTC().Add(1 * time.Hour) // still valid
 				reviewCommit := "abc123"
 				s.Tasks = []models.Task{
@@ -298,7 +298,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 			reason:     "manual release",
 			agentID:    "human",
 			wantErr:    true,
-			wantErrMsg: "role must be reviewer, coder, or both",
+			wantErrMsg: "role must be code-reviewer, coder, or both",
 		},
 		{
 			name:       "task not found",

@@ -49,7 +49,7 @@ func TestAnalyzeCommand(t *testing.T) {
 				{
 					Timestamp: time.Now(),
 					Task:      "task-3",
-					Reporter:  "reviewer-1",
+					Reporter:  "code-reviewer-1",
 					Type:      "retry_loop",
 					Details: map[string]any{
 						"error_pattern": "timeout",

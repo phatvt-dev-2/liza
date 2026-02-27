@@ -239,7 +239,7 @@ func TestGetComputedField(t *testing.T) {
 				Status:    models.AgentStatusIdle,
 				Heartbeat: now.Add(-3 * time.Second),
 			},
-			"reviewer-1": {
+			"code-reviewer-1": {
 				Role:      "code-reviewer",
 				Status:    models.AgentStatusWorking,
 				Heartbeat: now.Add(-2 * time.Second),

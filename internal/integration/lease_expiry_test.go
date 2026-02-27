@@ -88,11 +88,11 @@ func TestExpiredReviewLease(t *testing.T) {
 
 	// Register agents
 	coderID := "coder-1"
-	reviewer1 := "reviewer-1"
-	reviewer2 := "reviewer-2"
+	reviewer1 := "code-reviewer-1"
+	reviewer2 := "code-reviewer-2"
 	testhelpers.RegisterTestAgent(t, bb, coderID, "coder")
-	testhelpers.RegisterTestAgent(t, bb, reviewer1, "reviewer")
-	testhelpers.RegisterTestAgent(t, bb, reviewer2, "reviewer")
+	testhelpers.RegisterTestAgent(t, bb, reviewer1, "code-reviewer")
+	testhelpers.RegisterTestAgent(t, bb, reviewer2, "code-reviewer")
 
 	// Claim and submit task for review
 	if err := commands.ClaimTaskCommand(projectDir, taskID, coderID); err != nil {

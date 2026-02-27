@@ -213,7 +213,7 @@ func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) m
 		task.AssignedTo = &agent
 		reviewCommit := "review123"
 		task.ReviewCommit = &reviewCommit
-		reviewingBy := "reviewer-1"
+		reviewingBy := "code-reviewer-1"
 		task.ReviewingBy = &reviewingBy
 		reviewLeaseExpires := now.Add(30 * time.Minute)
 		task.ReviewLeaseExpires = &reviewLeaseExpires
@@ -234,7 +234,7 @@ func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) m
 		task.Worktree = &worktree
 
 	case models.TaskStatusApproved:
-		agent := "reviewer-1"
+		agent := "code-reviewer-1"
 		task.ApprovedBy = &agent
 		reviewCommit := "review123"
 		task.ReviewCommit = &reviewCommit
@@ -242,7 +242,7 @@ func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) m
 		task.Worktree = &worktree
 
 	case models.TaskStatusMerged:
-		agent := "reviewer-1"
+		agent := "code-reviewer-1"
 		task.ApprovedBy = &agent
 		mergeCommit := "merge456"
 		task.MergeCommit = &mergeCommit
@@ -330,7 +330,7 @@ func TransitionToReviewing(t *testing.T, bb *db.Blackboard, taskID, reviewerID s
 // Usage:
 //
 //	testhelpers.RegisterTestAgent(t, bb, "coder-1", "coder")
-//	testhelpers.RegisterTestAgent(t, bb, "reviewer-1", "reviewer")
+//	testhelpers.RegisterTestAgent(t, bb, "code-reviewer-1", "code-reviewer")
 func RegisterTestAgent(t *testing.T, bb *db.Blackboard, agentID, role string) {
 	t.Helper()
 

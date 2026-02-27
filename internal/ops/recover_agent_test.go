@@ -139,7 +139,7 @@ func TestRecoverAgent_ReviewerWithReviewingTask(t *testing.T) {
 	now := time.Now().UTC()
 	leaseExpires := now.Add(-10 * time.Minute)
 	state := testhelpers.CreateValidState()
-	state.Agents["reviewer-1"] = models.Agent{
+	state.Agents["code-reviewer-1"] = models.Agent{
 		Role:         "code-reviewer",
 		Status:       models.AgentStatusReviewing,
 		CurrentTask:  &taskRef,
@@ -150,7 +150,7 @@ func TestRecoverAgent_ReviewerWithReviewingTask(t *testing.T) {
 		Description:        "test task",
 		Status:             models.TaskStatusReviewing,
 		Priority:           1,
-		ReviewingBy:        strPtr("reviewer-1"),
+		ReviewingBy:        strPtr("code-reviewer-1"),
 		ReviewLeaseExpires: &leaseExpires,
 		SpecRef:            "spec.md",
 		DoneWhen:           "tests pass",
@@ -158,7 +158,7 @@ func TestRecoverAgent_ReviewerWithReviewingTask(t *testing.T) {
 	})
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := RecoverAgent(tmpDir, "reviewer-1", false, "crashed")
+	result, err := RecoverAgent(tmpDir, "code-reviewer-1", false, "crashed")
 	if err != nil {
 		t.Fatalf("RecoverAgent() error: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestRecoverAgent_ReviewerWithReviewingTask(t *testing.T) {
 	}
 
 	// Agent should be gone
-	if _, exists := readState.Agents["reviewer-1"]; exists {
+	if _, exists := readState.Agents["code-reviewer-1"]; exists {
 		t.Error("Agent should be removed from state")
 	}
 

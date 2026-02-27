@@ -75,7 +75,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			name: "role title formatting for multi-word roles",
 			config: BasePromptConfig{
 				Role:        "code-reviewer",
-				AgentID:     "reviewer-1",
+				AgentID:     "code-reviewer-1",
 				SpecsDir:    "/specs",
 				ProjectRoot: "/project",
 				StatePath:   "/project/.liza/state.yaml",

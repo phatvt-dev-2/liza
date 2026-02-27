@@ -44,8 +44,8 @@ func TestInspectAgents(t *testing.T) {
 				IterationsTotal: 3,
 				ContextPercent:  20,
 			},
-			"reviewer-1": {
-				Role:            "reviewer",
+			"code-reviewer-1": {
+				Role:            "code-reviewer",
 				Status:          models.AgentStatusReviewing,
 				PID:             999999,
 				CurrentTask:     &task2,
@@ -81,7 +81,7 @@ func TestInspectAgents(t *testing.T) {
 			name:       "list all agents",
 			opts:       inspectAgentsOptions{},
 			wantCount:  3,
-			wantIDs:    []string{"coder-1", "coder-2", "reviewer-1"},
+			wantIDs:    []string{"coder-1", "coder-2", "code-reviewer-1"},
 			wantFormat: "table",
 		},
 		{
@@ -94,12 +94,12 @@ func TestInspectAgents(t *testing.T) {
 			wantFormat: "table",
 		},
 		{
-			name: "filter by role reviewer",
+			name: "filter by role code-reviewer",
 			opts: inspectAgentsOptions{
-				RoleFilter: "reviewer",
+				RoleFilter: "code-reviewer",
 			},
 			wantCount:  1,
-			wantIDs:    []string{"reviewer-1"},
+			wantIDs:    []string{"code-reviewer-1"},
 			wantFormat: "table",
 		},
 		{
@@ -238,8 +238,8 @@ func TestInspectAgent(t *testing.T) {
 				IterationsTotal: 5,
 				ContextPercent:  45,
 			},
-			"reviewer-1": {
-				Role:            "reviewer",
+			"code-reviewer-1": {
+				Role:            "code-reviewer",
 				Status:          models.AgentStatusIdle,
 				PID:             0,
 				CurrentTask:     nil,
@@ -285,9 +285,9 @@ func TestInspectAgent(t *testing.T) {
 		},
 		{
 			name:        "get agent with YAML format",
-			agentID:     "reviewer-1",
+			agentID:     "code-reviewer-1",
 			opts:        inspectAgentsOptions{Format: "yaml"},
-			wantAgentID: "reviewer-1",
+			wantAgentID: "code-reviewer-1",
 		},
 		{
 			name:        "get agent with value format",
@@ -564,7 +564,7 @@ func TestFormatAgentsTable_IncludesPID(t *testing.T) {
 		},
 		{
 			ID:                 "agent-3",
-			Role:               "reviewer",
+			Role:               "code-reviewer",
 			Status:             "IDLE",
 			PID:                0,
 			ProcessStatus:      "n/a",

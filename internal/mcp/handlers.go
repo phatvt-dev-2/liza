@@ -4,8 +4,10 @@ import (
 	"fmt"
 
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // Version and BuildCommit are set from the embedded package's build-time
@@ -98,6 +100,18 @@ func requireTaskAndAgent(params map[string]any) (taskID, agentID string, err err
 		return "", "", err
 	}
 	return taskID, agentID, nil
+}
+
+// requireRole validates agent ID format and that it matches the expected runtime role.
+func requireRole(agentID, expectedRole string) error {
+	if err := identity.ValidateFormat(agentID); err != nil {
+		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
+	}
+	role, _ := identity.ExtractRole(agentID) // cannot fail after ValidateFormat
+	if role != expectedRole {
+		return fmt.Errorf("requires %s role (got %s from %s)", expectedRole, role, agentID)
+	}
+	return nil
 }
 
 // handleGet implements the liza_get tool
@@ -240,6 +254,10 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 		agentID = "planner-1"
 	}
 
+	if err := requireRole(agentID, roles.RuntimePlanner); err != nil {
+		return nil, err
+	}
+
 	priority := 1
 	if p, ok := params["priority"].(float64); ok {
 		priority = int(p)
@@ -282,6 +300,9 @@ func (s *Server) handleClaimTask(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := requireRole(agentID, roles.RuntimeCoder); err != nil {
+		return nil, err
+	}
 
 	result, err := ops.ClaimTask(s.projectRoot, taskID, agentID)
 	if err != nil {
@@ -310,6 +331,10 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 		return nil, err
 	}
 
+	if err := requireRole(agentID, roles.RuntimeCoder); err != nil {
+		return nil, err
+	}
+
 	result, err := ops.SubmitForReview(s.projectRoot, taskID, commitSHA, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("submit for review failed: %w", err)
@@ -323,6 +348,9 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 func (s *Server) handleHandoff(params map[string]any) (any, error) {
 	taskID, agentID, err := requireTaskAndAgent(params)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireRole(agentID, roles.RuntimeCoder); err != nil {
 		return nil, err
 	}
 
@@ -359,6 +387,10 @@ func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {
 
 	agentID, err := requireString(params, "agent_id")
 	if err != nil {
+		return nil, err
+	}
+
+	if err := requireRole(agentID, roles.RuntimeCodeReviewer); err != nil {
 		return nil, err
 	}
 
@@ -442,6 +474,9 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := requireRole(agentID, roles.RuntimePlanner); err != nil {
+		return nil, err
+	}
 
 	reason, err := requireString(params, "reason")
 	if err != nil {
@@ -508,6 +543,9 @@ func (s *Server) handleWtDelete(params map[string]any) (any, error) {
 func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 	taskID, agentID, err := requireTaskAndAgent(params)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireRole(agentID, roles.RuntimeCodeReviewer); err != nil {
 		return nil, err
 	}
 

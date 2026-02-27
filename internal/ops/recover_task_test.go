@@ -193,7 +193,7 @@ func TestRecoverTask_ReviewingTask(t *testing.T) {
 	baseCommit := "def456"
 	worktreeRef := ".worktrees/task-2"
 	state := testhelpers.CreateValidState()
-	state.Agents["reviewer-1"] = models.Agent{
+	state.Agents["code-reviewer-1"] = models.Agent{
 		Role:         "code-reviewer",
 		Status:       models.AgentStatusReviewing,
 		CurrentTask:  &taskRef,
@@ -204,7 +204,7 @@ func TestRecoverTask_ReviewingTask(t *testing.T) {
 		Description:        "test task",
 		Status:             models.TaskStatusReviewing,
 		Priority:           1,
-		ReviewingBy:        strPtr("reviewer-1"),
+		ReviewingBy:        strPtr("code-reviewer-1"),
 		ReviewLeaseExpires: &leaseExpires,
 		ReviewCommit:       &reviewCommit,
 		BaseCommit:         &baseCommit,
@@ -220,8 +220,8 @@ func TestRecoverTask_ReviewingTask(t *testing.T) {
 		t.Fatalf("RecoverTask() error: %v", err)
 	}
 
-	if result.AgentID != "reviewer-1" {
-		t.Errorf("AgentID = %q, want %q", result.AgentID, "reviewer-1")
+	if result.AgentID != "code-reviewer-1" {
+		t.Errorf("AgentID = %q, want %q", result.AgentID, "code-reviewer-1")
 	}
 	if !result.ClaimReleased {
 		t.Error("Expected ClaimReleased=true")
@@ -234,7 +234,7 @@ func TestRecoverTask_ReviewingTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read state: %v", err)
 	}
-	if _, exists := readState.Agents["reviewer-1"]; exists {
+	if _, exists := readState.Agents["code-reviewer-1"]; exists {
 		t.Error("Agent should be removed from state")
 	}
 	task := readState.FindTask("task-2")
@@ -271,7 +271,7 @@ func TestRecoverTask_DualClaim_ReviewerPIDAlive_NoForce(t *testing.T) {
 		PID:          999999,
 	}
 	// Reviewer: alive PID, active lease
-	state.Agents["reviewer-1"] = models.Agent{
+	state.Agents["code-reviewer-1"] = models.Agent{
 		Role:         "code-reviewer",
 		Status:       models.AgentStatusReviewing,
 		CurrentTask:  &reviewerTask,
@@ -284,7 +284,7 @@ func TestRecoverTask_DualClaim_ReviewerPIDAlive_NoForce(t *testing.T) {
 		Status:             models.TaskStatusReviewing,
 		Priority:           1,
 		AssignedTo:         strPtr("coder-1"),
-		ReviewingBy:        strPtr("reviewer-1"),
+		ReviewingBy:        strPtr("code-reviewer-1"),
 		ReviewLeaseExpires: &activeLease,
 		LeaseExpires:       &expiredLease,
 		Worktree:           &worktreeRef,
@@ -310,7 +310,7 @@ func TestRecoverTask_DualClaim_ReviewerPIDAlive_NoForce(t *testing.T) {
 
 	// Verify nothing was modified
 	readState, _ := db.New(stateFile).Read()
-	if _, exists := readState.Agents["reviewer-1"]; !exists {
+	if _, exists := readState.Agents["code-reviewer-1"]; !exists {
 		t.Error("Reviewer agent should NOT have been deleted")
 	}
 	if _, exists := readState.Agents["coder-1"]; !exists {

@@ -26,7 +26,7 @@ func TestReleaseClaim_Validation(t *testing.T) {
 		},
 		{
 			name: "invalid role", taskID: "t1", role: "invalid",
-			errContains: "role must be reviewer, coder, or both",
+			errContains: "role must be code-reviewer, coder, or both",
 		},
 	}
 
@@ -175,14 +175,14 @@ func TestReleaseClaim_ReviewerClaim(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
 	state.Tasks = []models.Task{task}
-	state.Agents["reviewer-1"] = models.Agent{
-		Role:        "reviewer",
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:        "code-reviewer",
 		Status:      models.AgentStatusWorking,
 		CurrentTask: testhelpers.StringPtr("task-1"),
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := ReleaseClaim(tmpDir, "task-1", "reviewer", true, "timeout", "human")
+	result, err := ReleaseClaim(tmpDir, "task-1", "code-reviewer", true, "timeout", "human")
 	if err != nil {
 		t.Fatalf("ReleaseClaim() error: %v", err)
 	}
@@ -230,8 +230,8 @@ func TestReleaseClaim_BothClaims(t *testing.T) {
 		Status:      models.AgentStatusWorking,
 		CurrentTask: testhelpers.StringPtr("task-1"),
 	}
-	state.Agents["reviewer-1"] = models.Agent{
-		Role:        "reviewer",
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:        "code-reviewer",
 		Status:      models.AgentStatusWorking,
 		CurrentTask: testhelpers.StringPtr("task-1"),
 	}

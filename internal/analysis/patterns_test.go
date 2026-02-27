@@ -49,7 +49,7 @@ func TestDetectPatterns(t *testing.T) {
 				{
 					Timestamp: now,
 					Task:      "task-3",
-					Reporter:  "reviewer-1",
+					Reporter:  "code-reviewer-1",
 					Type:      "retry_loop",
 					Details: map[string]any{
 						"error_pattern": "serialization failure on nested entity",
@@ -86,7 +86,7 @@ func TestDetectPatterns(t *testing.T) {
 				{
 					Timestamp: now,
 					Task:      "task-3",
-					Reporter:  "reviewer-1",
+					Reporter:  "code-reviewer-1",
 					Type:      "retry_loop",
 					Details: map[string]any{
 						"error_pattern": "parse error",
@@ -198,7 +198,7 @@ func TestDetectPatterns(t *testing.T) {
 				{
 					Timestamp: now,
 					Task:      "task-1",
-					Reporter:  "reviewer-1",
+					Reporter:  "code-reviewer-1",
 					Type:      "workaround",
 					Details: map[string]any{
 						"what":       "manual cleanup",

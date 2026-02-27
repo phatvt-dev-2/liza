@@ -122,8 +122,8 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 		return nil, fmt.Errorf("task ID is required")
 	}
 
-	if role != "reviewer" && role != "coder" && role != "both" {
-		return nil, fmt.Errorf("role must be reviewer, coder, or both, got: %s", role)
+	if role != "code-reviewer" && role != "coder" && role != "both" {
+		return nil, fmt.Errorf("role must be code-reviewer, coder, or both, got: %s", role)
 	}
 
 	if agentID == "" {
@@ -148,7 +148,7 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
-		if role == "reviewer" || role == "both" {
+		if role == "code-reviewer" || role == "both" {
 			released, err := releaseOneClaim(state, task, reviewerRelease, force, agentID, reason, now)
 			if err != nil {
 				return err

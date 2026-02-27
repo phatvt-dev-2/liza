@@ -170,8 +170,8 @@ func TestSimpleWorkflow(t *testing.T) {
 
 	// Step 6: Register reviewer and approve
 	t.Log("Step 6: Register reviewer and approve")
-	reviewerID := "reviewer-1"
-	testhelpers.RegisterTestAgent(t, bb, reviewerID, "reviewer")
+	reviewerID := "code-reviewer-1"
+	testhelpers.RegisterTestAgent(t, bb, reviewerID, "code-reviewer")
 
 	// Transition to REVIEWING (simulates supervisor reviewer claim)
 	testhelpers.TransitionToReviewing(t, bb, taskID, reviewerID)

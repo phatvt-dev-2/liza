@@ -40,9 +40,9 @@ func TestSprintMetricsUpdates(t *testing.T) {
 
 	// Register agents and claim tasks
 	agentID := "coder-1"
-	reviewerID := "reviewer-1"
+	reviewerID := "code-reviewer-1"
 	testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
-	testhelpers.RegisterTestAgent(t, bb, reviewerID, "reviewer")
+	testhelpers.RegisterTestAgent(t, bb, reviewerID, "code-reviewer")
 
 	// Claim task-1
 	if err := commands.ClaimTaskCommand(projectDir, "task-1", agentID); err != nil {
@@ -223,9 +223,9 @@ func TestSuccessfulMerge(t *testing.T) {
 
 	// Register agents
 	agentID := "coder-1"
-	reviewerID := "reviewer-1"
+	reviewerID := "code-reviewer-1"
 	testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
-	testhelpers.RegisterTestAgent(t, bb, reviewerID, "reviewer")
+	testhelpers.RegisterTestAgent(t, bb, reviewerID, "code-reviewer")
 
 	// Claim task
 	if err := commands.ClaimTaskCommand(projectDir, taskID, agentID); err != nil {
@@ -338,7 +338,7 @@ func TestMergeWithoutApproval(t *testing.T) {
 	// Attempt to merge (should fail)
 	t.Log("Attempting to merge unapproved task")
 	// Set LIZA_AGENT_ID for merge command
-	os.Setenv("LIZA_AGENT_ID", "reviewer-1")
+	os.Setenv("LIZA_AGENT_ID", "code-reviewer-1")
 	defer os.Unsetenv("LIZA_AGENT_ID")
 
 	err = commands.WtMergeCommand(projectDir, taskID, "code-reviewer-1")

@@ -58,7 +58,7 @@ func TestCheckExpiredLeases(t *testing.T) {
 				Tasks: []models.Task{
 					func() models.Task {
 						task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
-						reviewer := "reviewer-1"
+						reviewer := "code-reviewer-1"
 						task.ReviewingBy = &reviewer
 						// Expired lease (past grace period)
 						expiredTime := now.Add(-3 * time.Minute)

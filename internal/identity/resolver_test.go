@@ -95,9 +95,9 @@ func TestResolve(t *testing.T) {
 				DefaultValue: "",
 				Required:     true,
 			},
-			envValue: "  reviewer-1  ",
+			envValue: "  code-reviewer-1  ",
 			setEnv:   true,
-			want:     "reviewer-1",
+			want:     "code-reviewer-1",
 			wantErr:  false,
 		},
 	}

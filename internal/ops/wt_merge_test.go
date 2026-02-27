@@ -227,7 +227,7 @@ func setupMergeTestRepo(t *testing.T, taskID, agentID string) (string, string) {
 	// Create task in state
 	worktreePath := filepath.Join(".worktrees", taskID)
 	baseCommit := "base123"
-	approvedBy := "reviewer-1"
+	approvedBy := "code-reviewer-1"
 	task := models.Task{
 		ID:           taskID,
 		Description:  "Test task",

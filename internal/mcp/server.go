@@ -396,7 +396,7 @@ func (s *Server) registerMutationTools() {
 	// liza_add_task tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_add_task",
-		Description: "Add a new task to the workspace",
+		Description: "Add a new task to the workspace. Requires planner role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -447,7 +447,7 @@ func (s *Server) registerMutationTools() {
 	// liza_claim_task tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_claim_task",
-		Description: "Claim an unclaimed task for work",
+		Description: "Claim an unclaimed task for work. Requires coder role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -467,7 +467,7 @@ func (s *Server) registerMutationTools() {
 	// liza_submit_for_review tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_for_review",
-		Description: "Submit completed work for review after commit SHA validation",
+		Description: "Submit completed work for review after commit SHA validation. Requires coder role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -491,7 +491,7 @@ func (s *Server) registerMutationTools() {
 	// liza_handoff tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_handoff",
-		Description: "Initiate context-exhaustion handoff for a claimed task",
+		Description: "Initiate context-exhaustion handoff for a claimed task. Requires coder role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -519,7 +519,7 @@ func (s *Server) registerMutationTools() {
 	// liza_submit_verdict tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_verdict",
-		Description: "Submit review verdict (APPROVED or REJECTED)",
+		Description: "Submit review verdict (APPROVED or REJECTED). Requires code-reviewer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -609,7 +609,7 @@ func (s *Server) registerMutationTools() {
 	// liza_supersede_task tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_supersede_task",
-		Description: "Mark a task as superseded by replacement tasks",
+		Description: "Mark a task as superseded by replacement tasks. Requires planner role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -677,7 +677,7 @@ func (s *Server) registerComplexOperations() {
 	// liza_wt_merge tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_wt_merge",
-		Description: "Merge approved task to integration branch",
+		Description: "Merge approved task to integration branch. Requires code-reviewer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{

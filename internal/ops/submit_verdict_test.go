@@ -60,13 +60,13 @@ func TestSubmitVerdict_VerdictNormalization(t *testing.T) {
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now),
 	}
-	state.Agents["reviewer-1"] = models.Agent{
-		Role:   "reviewer",
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
 		Status: models.AgentStatusWorking,
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "approved", "", "reviewer-1")
+	result, err := SubmitVerdict(tmpDir, "task-1", "approved", "", "code-reviewer-1")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -84,13 +84,13 @@ func TestSubmitVerdict_Approved(t *testing.T) {
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now),
 	}
-	state.Agents["reviewer-1"] = models.Agent{
-		Role:   "reviewer",
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
 		Status: models.AgentStatusWorking,
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "reviewer-1")
+	result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -116,8 +116,8 @@ func TestSubmitVerdict_Approved(t *testing.T) {
 	if task.Status != models.TaskStatusApproved {
 		t.Errorf("Status = %v, want APPROVED", task.Status)
 	}
-	if task.ApprovedBy == nil || *task.ApprovedBy != "reviewer-1" {
-		t.Error("ApprovedBy should be reviewer-1")
+	if task.ApprovedBy == nil || *task.ApprovedBy != "code-reviewer-1" {
+		t.Error("ApprovedBy should be code-reviewer-1")
 	}
 	if task.RejectionReason != nil {
 		t.Error("RejectionReason should be nil after approval")
@@ -144,13 +144,13 @@ func TestSubmitVerdict_Rejected(t *testing.T) {
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now),
 	}
-	state.Agents["reviewer-1"] = models.Agent{
-		Role:   "reviewer",
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
 		Status: models.AgentStatusWorking,
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Missing error handling", "reviewer-1")
+	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Missing error handling", "code-reviewer-1")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestSubmitVerdict_TaskNotFound(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SubmitVerdict(tmpDir, "nonexistent", "APPROVED", "", "reviewer-1")
+	_, err := SubmitVerdict(tmpDir, "nonexistent", "APPROVED", "", "code-reviewer-1")
 	if err == nil {
 		t.Fatal("Expected error for nonexistent task")
 	}
@@ -221,7 +221,7 @@ func TestSubmitVerdict_WrongStatus(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "reviewer-1")
+	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
 	testhelpers.RequireErrorContains(t, err, "not REVIEWING")
 }
 
@@ -235,14 +235,14 @@ func TestSubmitVerdict_AgentReleased(t *testing.T) {
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now),
 	}
 	taskRef := "task-1"
-	state.Agents["reviewer-1"] = models.Agent{
-		Role:        "reviewer",
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:        "code-reviewer",
 		Status:      models.AgentStatusWorking,
 		CurrentTask: &taskRef,
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "reviewer-1")
+	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestSubmitVerdict_AgentReleased(t *testing.T) {
 		t.Fatalf("Failed to read state: %v", err)
 	}
 
-	agent := readState.Agents["reviewer-1"]
+	agent := readState.Agents["code-reviewer-1"]
 	if agent.Status != models.AgentStatusIdle {
 		t.Errorf("Agent status = %v, want idle", agent.Status)
 	}
@@ -334,15 +334,15 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 				Status:      models.AgentStatusWaiting,
 				CurrentTask: &taskRef,
 			}
-			state.Agents["reviewer-1"] = models.Agent{
-				Role:        "reviewer",
+			state.Agents["code-reviewer-1"] = models.Agent{
+				Role:        "code-reviewer",
 				Status:      models.AgentStatusReviewing,
 				CurrentTask: &taskRef,
 			}
 
 			testhelpers.WriteInitialState(t, stateFile, state)
 
-			result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", tt.rejectionReason, "reviewer-1")
+			result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", tt.rejectionReason, "code-reviewer-1")
 			if err != nil {
 				t.Fatalf("SubmitVerdict() error: %v", err)
 			}
@@ -386,7 +386,7 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 			}
 
 			assertReleasedAgent(t, readState, "coder-1")
-			assertReleasedAgent(t, readState, "reviewer-1")
+			assertReleasedAgent(t, readState, "code-reviewer-1")
 		})
 	}
 }

@@ -181,7 +181,7 @@ func TestWtMergeCommand(t *testing.T) {
 				}
 
 				if tt.taskStatus == models.TaskStatusApproved {
-					approvedBy := "reviewer-1"
+					approvedBy := "code-reviewer-1"
 					task.ApprovedBy = &approvedBy
 				}
 
@@ -452,7 +452,7 @@ func TestWtMergeCommand_PreventsDuplicateFailedBy(t *testing.T) {
 		AssignedTo:   &agentID,
 		BaseCommit:   &baseCommit,
 		ReviewCommit: &reviewCommit,
-		ApprovedBy:   testhelpers.StringPtr("reviewer-1"),
+		ApprovedBy:   testhelpers.StringPtr("code-reviewer-1"),
 		FailedBy:     []string{"agent-1"}, // Already has agent-1
 		History:      []models.TaskHistoryEntry{},
 	}

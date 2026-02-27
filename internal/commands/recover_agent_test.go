@@ -110,12 +110,12 @@ func TestRecoverAgentCommand(t *testing.T) {
 		},
 		{
 			name:    "recover reviewer with reviewing task",
-			agentID: "reviewer-1",
+			agentID: "code-reviewer-1",
 			force:   false,
 			reason:  "OOM",
 			setupState: func(state *models.State) {
 				expiredTime := time.Now().UTC().Add(-1 * time.Hour)
-				state.Agents["reviewer-1"] = models.Agent{
+				state.Agents["code-reviewer-1"] = models.Agent{
 					Role:         "code-reviewer",
 					Status:       models.AgentStatusReviewing,
 					CurrentTask:  strPtr("task-1"),
@@ -127,7 +127,7 @@ func TestRecoverAgentCommand(t *testing.T) {
 					Description:        "test task",
 					Status:             models.TaskStatusReviewing,
 					Priority:           1,
-					ReviewingBy:        strPtr("reviewer-1"),
+					ReviewingBy:        strPtr("code-reviewer-1"),
 					ReviewLeaseExpires: &expiredTime,
 					SpecRef:            "spec.md",
 					DoneWhen:           "tests pass",
@@ -136,7 +136,7 @@ func TestRecoverAgentCommand(t *testing.T) {
 			},
 			wantErr: false,
 			validateState: func(t *testing.T, state *models.State) {
-				if _, exists := state.Agents["reviewer-1"]; exists {
+				if _, exists := state.Agents["code-reviewer-1"]; exists {
 					t.Error("Agent should have been deleted")
 				}
 				task := state.FindTask("task-1")

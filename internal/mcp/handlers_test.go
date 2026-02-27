@@ -307,7 +307,7 @@ func setupTestWorkspaceWithGit(t *testing.T) (string, func()) {
 			Status:    models.AgentStatusIdle,
 			Heartbeat: time.Now().UTC(),
 		},
-		"reviewer-1": {
+		"code-reviewer-1": {
 			Role:      "code-reviewer",
 			Status:    models.AgentStatusIdle,
 			Heartbeat: time.Now().UTC(),
@@ -721,14 +721,14 @@ func TestHandleSubmitVerdict(t *testing.T) {
 		state.Tasks[0].AssignedTo = &assignedTo
 		reviewCommit := "abc123def456"
 		state.Tasks[0].ReviewCommit = &reviewCommit
-		reviewingBy := "reviewer-1"
+		reviewingBy := "code-reviewer-1"
 		state.Tasks[0].ReviewingBy = &reviewingBy
 		worktree := ".worktrees/task-1"
 		state.Tasks[0].Worktree = &worktree
 		currentTask := "task-1"
 		reviewLease := now.Add(30 * time.Minute)
 		state.Tasks[0].ReviewLeaseExpires = &reviewLease
-		state.Agents["reviewer-1"] = models.Agent{
+		state.Agents["code-reviewer-1"] = models.Agent{
 			Role:         "code-reviewer",
 			Status:       models.AgentStatusReviewing,
 			CurrentTask:  &currentTask,
@@ -746,7 +746,7 @@ func TestHandleSubmitVerdict(t *testing.T) {
 	result, err := server.handleSubmitVerdict(map[string]any{
 		"task_id":  "task-1",
 		"verdict":  "APPROVED",
-		"agent_id": "reviewer-1",
+		"agent_id": "code-reviewer-1",
 	})
 
 	if err != nil {
@@ -774,7 +774,7 @@ func TestHandleSubmitVerdict(t *testing.T) {
 		t.Errorf("Expected status APPROVED, got %s", task.Status)
 	}
 
-	agent := state.Agents["reviewer-1"]
+	agent := state.Agents["code-reviewer-1"]
 	if agent.Status != models.AgentStatusIdle {
 		t.Errorf("Expected reviewer status IDLE, got %s", agent.Status)
 	}
@@ -1206,7 +1206,7 @@ func TestHandleClearStaleReviews(t *testing.T) {
 	bb := db.New(statePath)
 	err := bb.Modify(func(state *models.State) error {
 		state.Tasks[0].Status = models.TaskStatusReviewing
-		reviewingBy := "reviewer-1"
+		reviewingBy := "code-reviewer-1"
 		state.Tasks[0].ReviewingBy = &reviewingBy
 		reviewCommit := "abc123"
 		state.Tasks[0].ReviewCommit = &reviewCommit
@@ -1363,5 +1363,98 @@ func TestHandleCheckpoint(t *testing.T) {
 
 	if state.Sprint.Timeline.CheckpointAt == nil {
 		t.Error("Expected checkpoint_at to be set")
+	}
+}
+
+// ============================================================================
+// Role Enforcement Tests
+// ============================================================================
+
+// TestHandleRoleEnforcement verifies that handlers reject agents with the wrong role.
+func TestHandleRoleEnforcement(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	tests := []struct {
+		name    string
+		handler func(map[string]any) (any, error)
+		params  map[string]any
+		wantErr string
+	}{
+		{
+			name:    "claim_task rejects reviewer",
+			handler: server.handleClaimTask,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
+			wantErr: "requires coder role",
+		},
+		{
+			name:    "submit_for_review rejects reviewer",
+			handler: server.handleSubmitForReview,
+			params:  map[string]any{"task_id": "task-1", "commit_sha": "abc123", "agent_id": "code-reviewer-1"},
+			wantErr: "requires coder role",
+		},
+		{
+			name:    "handoff rejects reviewer",
+			handler: server.handleHandoff,
+			params:  map[string]any{"task_id": "task-1", "summary": "s", "next_action": "n", "agent_id": "code-reviewer-1"},
+			wantErr: "requires coder role",
+		},
+		{
+			name:    "submit_verdict rejects coder",
+			handler: server.handleSubmitVerdict,
+			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "coder-1"},
+			wantErr: "requires code-reviewer role",
+		},
+		{
+			name:    "wt_merge rejects coder",
+			handler: server.handleWtMerge,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "coder-1"},
+			wantErr: "requires code-reviewer role",
+		},
+		{
+			name:    "add_task rejects coder",
+			handler: server.handleAddTask,
+			params:  map[string]any{"id": "t-new", "desc": "d", "spec": "specs/test-spec.md", "done": "d", "scope": "s", "agent_id": "coder-1"},
+			wantErr: "requires planner role",
+		},
+		{
+			name:    "supersede rejects coder",
+			handler: server.handleSupersede,
+			params:  map[string]any{"task_id": "task-1", "reason": "r", "agent_id": "coder-1"},
+			wantErr: "requires planner role",
+		},
+		// Malformed agent ID cases
+		{
+			name:    "claim_task rejects malformed ID (no number)",
+			handler: server.handleClaimTask,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "coder"},
+			wantErr: "invalid agent ID",
+		},
+		{
+			name:    "claim_task rejects malformed ID (non-numeric suffix)",
+			handler: server.handleClaimTask,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "coder-abc"},
+			wantErr: "invalid agent ID",
+		},
+		{
+			name:    "submit_verdict rejects unknown role",
+			handler: server.handleSubmitVerdict,
+			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "foobar-1"},
+			wantErr: "requires code-reviewer role",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.handler(tt.params)
+			if err == nil {
+				t.Fatal("Expected role enforcement error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("Expected error containing %q, got: %v", tt.wantErr, err)
+			}
+		})
 	}
 }

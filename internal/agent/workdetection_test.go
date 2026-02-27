@@ -137,7 +137,7 @@ func TestCountReviewableTasks(t *testing.T) {
 			tasks: []models.Task{
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-					reviewer := "reviewer-1"
+					reviewer := "code-reviewer-1"
 					task.ReviewingBy = &reviewer
 					expiredTime := now.Add(-1 * time.Hour)
 					task.ReviewLeaseExpires = &expiredTime

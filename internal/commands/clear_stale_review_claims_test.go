@@ -71,7 +71,7 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 				}(),
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReviewing, time.Now().UTC())
-					reviewer := "reviewer-2"
+					reviewer := "code-reviewer-2"
 					task.ReviewingBy = &reviewer
 					expiredTime := time.Now().UTC().Add(-2 * time.Hour)
 					task.ReviewLeaseExpires = &expiredTime
@@ -121,7 +121,7 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 				// Stale claim
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusReviewing, time.Now().UTC())
-					reviewer := "reviewer-3"
+					reviewer := "code-reviewer-3"
 					task.ReviewingBy = &reviewer
 					expiredTime := time.Now().UTC().Add(-2 * time.Hour)
 					task.ReviewLeaseExpires = &expiredTime

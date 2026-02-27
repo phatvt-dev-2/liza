@@ -17,7 +17,7 @@ func StartCommand(projectRoot, reason, changedBy string) error {
 	printModeChangeResult("System started", result,
 		"The system mode is now RUNNING. Restart agents to resume work:",
 		"  LIZA_AGENT_ID=coder-1 liza agent coder &",
-		"  LIZA_AGENT_ID=reviewer-1 liza agent code-reviewer &",
+		"  LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer &",
 	)
 	return nil
 }

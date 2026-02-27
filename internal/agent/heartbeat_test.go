@@ -44,7 +44,7 @@ func TestHeartbeat(t *testing.T) {
 		},
 		{
 			name:          "single heartbeat",
-			agentID:       "reviewer-1",
+			agentID:       "code-reviewer-1",
 			interval:      50 * time.Millisecond,
 			leaseDuration: 15 * time.Minute,
 			runDuration:   100 * time.Millisecond,

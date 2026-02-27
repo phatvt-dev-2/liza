@@ -414,13 +414,13 @@ Effects:
 var releaseClaimCmd = &cobra.Command{
 	Use:   "release-claim <task-id>",
 	Short: "Manually release claims on a task",
-	Long: `Manually release claims on a task (reviewer, coder, or both).
+	Long: `Manually release claims on a task (code-reviewer, coder, or both).
 
 Used to release task claims manually when needed, such as when an agent
 crashes or a lease needs to be freed.
 
 Roles:
-  - reviewer: Release review claim (reviewing_by, review_lease_expires)
+  - code-reviewer: Release review claim (reviewing_by, review_lease_expires)
   - coder: Release coder claim (assigned_to, lease_expires) and set IMPLEMENTING → READY
   - both: Release both reviewer and coder claims
 
@@ -675,7 +675,7 @@ Use this for:
 
 After running this command, restart agents manually:
   LIZA_AGENT_ID=coder-1 liza agent coder &
-  LIZA_AGENT_ID=reviewer-1 liza agent code-reviewer &`,
+  LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer &`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reason, _ := cmd.Flags().GetString("reason")
 		changedBy := resolveChangedBy(cmd)
@@ -1294,7 +1294,7 @@ func init() {
 	markBlockedCmd.MarkFlagRequired("questions")
 
 	// Release-claim command flags
-	releaseClaimCmd.Flags().String("role", "reviewer", "role to release (reviewer, coder, both)")
+	releaseClaimCmd.Flags().String("role", "code-reviewer", "role to release (code-reviewer, coder, both)")
 	releaseClaimCmd.Flags().Bool("full", false, "release both reviewer and coder claims (alias for --role both)")
 	releaseClaimCmd.Flags().Bool("force", false, "force release even if lease is still valid")
 	releaseClaimCmd.Flags().String("reason", "manual release", "reason for releasing the claim")

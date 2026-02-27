@@ -45,7 +45,7 @@ func TestInspectAnomalies(t *testing.T) {
 			{
 				Timestamp: now.Add(-15 * time.Minute),
 				Task:      "task-3",
-				Reporter:  "reviewer-1",
+				Reporter:  "code-reviewer-1",
 				Type:      "debt_created",
 				Details: map[string]any{
 					"type": "technical debt",
