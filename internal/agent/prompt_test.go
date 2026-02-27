@@ -210,3 +210,41 @@ func TestSavePromptMultipleCalls(t *testing.T) {
 		t.Error("Second prompt file should exist")
 	}
 }
+
+// TestOutputSaving tests agent output file creation
+func TestOutputSaving(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputsDir := filepath.Join(tmpDir, "agent-outputs")
+
+	output := "Test agent output content"
+	agentID := "claude-1"
+
+	filePath, err := saveOutput(outputsDir, agentID, "txt", output)
+	if err != nil {
+		t.Fatalf("saveOutput() error = %v", err)
+	}
+
+	// Verify directory was created
+	if _, err := os.Stat(outputsDir); os.IsNotExist(err) {
+		t.Error("Outputs directory should be created")
+	}
+
+	// Verify file exists and has correct content
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("Failed to read output file: %v", err)
+	}
+
+	if string(content) != output {
+		t.Errorf("Output content = %q, want %q", string(content), output)
+	}
+
+	// Verify filename format
+	filename := filepath.Base(filePath)
+	if !strings.HasPrefix(filename, agentID+"-") {
+		t.Errorf("Filename should start with agent ID, got %s", filename)
+	}
+	if !strings.HasSuffix(filename, ".txt") {
+		t.Errorf("Filename should end with .txt, got %s", filename)
+	}
+}

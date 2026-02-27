@@ -103,6 +103,9 @@ liza agent code-reviewer --agent-id code-reviewer-1
 
 Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --agent-id coder-1 --cli gemini`.
 
+Pass `--log` to persist the agent's output to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Incompatible with `-i`.
+You may use `jq -c 'select(.item) | .item | {type, text, command, tool, usage} | with_entries(select(.value != null))' .liza/agent-outputs/coder-1-YYYYMMDD-HHMMSS.txt` to inspect the logs.
+
 Note that it is possible to run multiple agents of the same roles in different terminals.
 ```bash
 liza agent coder --agent-id coder-1

@@ -184,6 +184,16 @@ The `--cli` flag on `liza agent` selects which coding agent to invoke:
 | `mistral` | No | Mistral Le Chat CLI |
 | `kimi` | No | Kimi (alias to claude with Kimi-specific env vars) |
 
+## Output Logging
+
+The `--log` flag on `liza agent` saves a copy of the agent's output to `.liza/agent-outputs/`. Stdout is saved as `{agent-id}-{timestamp}.txt` and stderr as `{agent-id}-{timestamp}.err`. The directory is created automatically if it does not exist.
+
+```bash
+liza agent coder --agent-id coder-1 --log
+```
+
+`--log` is incompatible with `-i` (interactive mode).
+
 ## Agent Identity
 
 Agent identity can be provided in two ways:

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -221,35 +223,64 @@ func exit42TaskProgressSignature(task *models.Task) string {
 
 // CLIExecutor interface for testing (mock vs real CLI)
 type CLIExecutor interface {
-	Execute(ctx context.Context, cliName string, prompt string, projectRoot string) (exitCode int, err error)
+	Execute(ctx context.Context, cliName string, agentID string, prompt string, projectRoot string) (exitCode int, err error)
 	// ExecuteInteractive launches the CLI without a prompt arg, with stdin connected,
 	// so the user can paste the prompt manually. Used by -i (interactive) mode.
 	ExecuteInteractive(ctx context.Context, cliName string, projectRoot string) (exitCode int, err error)
 }
 
 // DefaultCLIExecutor implements real CLI execution
-type DefaultCLIExecutor struct{}
+type DefaultCLIExecutor struct {
+	outputsDir string // Directory to save agent outputs (if empty, output goes to stdout)
+}
 
-func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, prompt string, projectRoot string) (int, error) {
+// NewDefaultCLIExecutor creates a new DefaultCLIExecutor with optional output directory
+func NewDefaultCLIExecutor(outputsDir string) *DefaultCLIExecutor {
+	return &DefaultCLIExecutor{outputsDir: outputsDir}
+}
+
+func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentID string, prompt string, projectRoot string) (int, error) {
 	// Map CLI names (mistral -> vibe)
 	actualCLI := cliName
 	if cliName == "mistral" {
 		actualCLI = "vibe"
 	}
 
-	// Build command based on CLI
+	// Build command based on CLI.
+	// Structured output flags (stream-json, --json, etc.) are only added when --log is
+	// active (outputsDir != ""), so normal runs keep human-readable terminal output.
 	var cmd *exec.Cmd
 	switch actualCLI {
 	case "claude":
-		cmd = exec.CommandContext(ctx, "claude", "-p", prompt)
+		args := []string{"-p", prompt}
+		if d.outputsDir != "" {
+			args = append(args, "--verbose", "--output-format", "stream-json")
+		}
+		cmd = exec.CommandContext(ctx, "claude", args...)
 	case "codex":
-		cmd = exec.CommandContext(ctx, "codex", "exec", prompt)
+		args := []string{"exec", prompt}
+		if d.outputsDir != "" {
+			args = append(args, "--json")
+		}
+		cmd = exec.CommandContext(ctx, "codex", args...)
 	case "gemini":
-		cmd = exec.CommandContext(ctx, "gemini", "-p", prompt)
+		args := []string{"-p", prompt}
+		if d.outputsDir != "" {
+			args = append(args, "--output-format", "stream-json")
+		}
+		cmd = exec.CommandContext(ctx, "gemini", args...)
 	case "vibe":
-		cmd = exec.CommandContext(ctx, "vibe", "-p", prompt)
+		args := []string{"-p", prompt}
+		if d.outputsDir != "" {
+			args = append(args, "--output", "streaming")
+		}
+		cmd = exec.CommandContext(ctx, "vibe", args...)
 	case "kimi":
-		cmd = exec.CommandContext(ctx, "kimi", "-p", prompt) // kimi is an alias to claude with Kimi specific env vars
+		args := []string{"-p", prompt}
+		if d.outputsDir != "" {
+			args = append(args, "--verbose", "--output-format", "stream-json")
+		}
+		cmd = exec.CommandContext(ctx, "kimi", args...)
 	default:
 		return 0, fmt.Errorf("unknown CLI: %s", cliName)
 	}
@@ -257,15 +288,39 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, prompt
 	// Set working directory to project root so claude can find .mcp.json and .claude/settings.json
 	cmd.Dir = projectRoot
 
-	// Run command and capture exit code
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 	// Don't inherit stdin - agents are autonomous and don't require input.
 	// Inheriting stdin causes the subprocess to block indefinitely waiting for EOF,
 	// preventing clean exit after work completion.
 	cmd.Stdin = nil
 
+	// Handle output: either save to file or stream to stdout/stderr.
+	// Separate buffers avoid the concurrency issue: exec.Cmd drains each pipe
+	// in its own goroutine, so each buffer is written by exactly one goroutine.
+	var stdoutBuf, stderrBuf strings.Builder
+	if d.outputsDir != "" {
+		cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf)
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+
 	err := cmd.Run()
+
+	// Save stdout and stderr to separate files if logging is enabled.
+	if d.outputsDir != "" {
+		save := func(ext, content string) {
+			if content == "" {
+				return
+			}
+			if _, saveErr := saveOutput(d.outputsDir, agentID, ext, content); saveErr != nil {
+				GetLogger().Warn("Failed to save agent output", "error", saveErr, "agent_id", agentID, "ext", ext)
+			}
+		}
+		save("txt", stdoutBuf.String())
+		save("err", stderrBuf.String())
+	}
+
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode(), nil

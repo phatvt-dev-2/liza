@@ -30,6 +30,7 @@ const (
 
 	// Directories
 	AgentPromptsDirName = "agent-prompts" // Directory for agent prompt files
+	AgentOutputsDirName = "agent-outputs" // Directory for agent output files
 	ArchiveDirName      = "archive"       // Directory for archived files
 	ContractsDirName    = "contracts"     // Directory for contract files
 	SkillsDirName       = "skills"        // Directory for skill files
@@ -110,6 +111,11 @@ func (p LizaPaths) ArchiveDir() string {
 // AgentPromptsDir returns the path to the agent prompts directory.
 func (p LizaPaths) AgentPromptsDir() string {
 	return p.get(AgentPromptsDirName)
+}
+
+// AgentOutputsDir returns the path to the agent outputs directory.
+func (p LizaPaths) AgentOutputsDir() string {
+	return p.get(AgentOutputsDirName)
 }
 
 // ContractsDir returns the path to the contracts directory.

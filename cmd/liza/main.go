@@ -886,6 +886,9 @@ Example:
   liza agent code-reviewer --agent-id code-reviewer-1 --cli claude
   liza agent planner --agent-id planner-1 --interactive
 
+  # Save agent output to .liza/agent-outputs/
+  liza agent coder --agent-id coder-1 --log
+
   # Using LIZA_AGENT_ID environment variable
   LIZA_AGENT_ID=coder-1 liza agent coder
   LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer --cli claude`,
@@ -918,14 +921,27 @@ Example:
 
 		cliName, _ := cmd.Flags().GetString("cli")
 		interactive, _ := cmd.Flags().GetBool("interactive")
+		logOutput, _ := cmd.Flags().GetBool("log")
 
 		if !slices.Contains([]string{"claude", "codex", "gemini", "mistral", "kimi"}, cliName) {
 			return fmt.Errorf("invalid CLI: %s (must be claude, codex, gemini, mistral, or kimi)", cliName)
 		}
 
+		// --log is incompatible with -i (interactive mode)
+		if logOutput && interactive {
+			return fmt.Errorf("--log is incompatible with -i (interactive mode)")
+		}
+
 		specsDir := os.Getenv("LIZA_SPECS")
 		if specsDir == "" {
 			specsDir = filepath.Join(projectRoot, "specs")
+		}
+
+		// Set up paths for agent outputs if --log is enabled
+		var outputsDir string
+		if logOutput {
+			lizaPaths := paths.New(projectRoot)
+			outputsDir = lizaPaths.AgentOutputsDir()
 		}
 
 		config := agent.SupervisorConfig{
@@ -938,7 +954,7 @@ Example:
 			CLIName:     cliName,
 			Interactive: interactive,
 			InitialTask: initialTask,
-			Executor:    &agent.DefaultCLIExecutor{},
+			Executor:    agent.NewDefaultCLIExecutor(outputsDir),
 		}
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -1316,6 +1332,7 @@ func init() {
 	// Agent command flags
 	agentCmd.Flags().String("cli", "claude", "CLI to use (claude, codex, gemini, mistral)")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")
+	agentCmd.Flags().Bool("log", false, "Save agent output to .liza/agent-outputs/ (incompatible with -i)")
 
 	// Recover-task command flags
 	recoverTaskCmd.Flags().Bool("force", false, "clean up git artifacts even if task is not in state")

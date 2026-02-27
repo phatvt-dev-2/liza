@@ -24,12 +24,13 @@ type MockCLIExecutor struct {
 
 type MockCLICall struct {
 	CLIName string
+	AgentID string
 	Prompt  string
 }
 
-func (m *MockCLIExecutor) Execute(ctx context.Context, cliName string, prompt string, projectRoot string) (int, error) {
+func (m *MockCLIExecutor) Execute(ctx context.Context, cliName string, agentID string, prompt string, projectRoot string) (int, error) {
 	m.mu.Lock()
-	m.Calls = append(m.Calls, MockCLICall{CLIName: cliName, Prompt: prompt})
+	m.Calls = append(m.Calls, MockCLICall{CLIName: cliName, AgentID: agentID, Prompt: prompt})
 	m.mu.Unlock()
 	return m.ExitCode, m.ExitError
 }
@@ -66,7 +67,7 @@ func TestMockCLIExecution(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	exitCode, err := mock.Execute(ctx, "claude", "test prompt", "/tmp/test-project")
+	exitCode, err := mock.Execute(ctx, "claude", "claude-1", "test prompt", "/tmp/test-project")
 
 	if err != nil {
 		t.Errorf("Execute() error = %v", err)
@@ -442,4 +443,21 @@ func BenchmarkResumeHandoff(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = ops.ResumeHandoff(input)
 	}
+}
+
+func TestNewDefaultCLIExecutor(t *testing.T) {
+	t.Run("empty outputsDir disables logging", func(t *testing.T) {
+		e := NewDefaultCLIExecutor("")
+		if e.outputsDir != "" {
+			t.Errorf("outputsDir should be empty, got %q", e.outputsDir)
+		}
+	})
+
+	t.Run("non-empty outputsDir enables logging", func(t *testing.T) {
+		dir := t.TempDir()
+		e := NewDefaultCLIExecutor(dir)
+		if e.outputsDir != dir {
+			t.Errorf("outputsDir = %q, want %q", e.outputsDir, dir)
+		}
+	})
 }
