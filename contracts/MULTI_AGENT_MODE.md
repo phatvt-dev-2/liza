@@ -52,38 +52,10 @@ Violating role boundaries is a Tier 1 violation — process integrity, not data/
 
 ## Pre-Execution Checkpoint
 
-In Multi-Agent Mode, approval gates are replaced by **pre-execution checkpoints**.
-
-Before any implementation, the agent MUST write a checkpoint to the task history:
-
-```yaml
-- time: "2026-01-20T15:30:00Z"
-  event: "pre_execution_checkpoint"
-  agent: coder-1
-  checkpoint:
-    intent: "Implement greeting function with --name argument"
-    assumptions:
-      - "argparse is preferred per spec constraint"
-    risks: "None identified - stdlib only, reversible"
-    validation: "python -m hello --name Test outputs 'Hello, Test!'"
-    files_to_modify:
-      - "hello/__main__.py"
-      - "hello/__init__.py"
-```
-
-**Checkpoint Requirements:**
-- Intent must be specific and observable
-- All assumptions must be tagged
-- Validation plan must be concrete (command + expected output)
-- Files to modify must be listed
-
-**Then proceed with implementation.**
-
-The Code Reviewer verifies:
-1. Checkpoint was written before implementation
-2. Implementation matches checkpoint intent
-3. Validation was executed as planned
-4. Assumptions were valid
+Before implementation, write a checkpoint via `liza_write_checkpoint`:
+intent, assumptions, risks, validation plan, files to modify.
+Submission is rejected without a checkpoint. The reviewer verifies
+implementation matches checkpoint intent.
 
 ---
 
@@ -121,17 +93,13 @@ The blackboard (`state.yaml`) is the coordination mechanism.
 
 Coders iterate until approved or blocked.
 
-**Iteration Limits:**
-- `config.max_coder_iterations` (default: 10)
-- `config.max_review_cycles` (default: 5)
+Iteration and review cycle limits are enforced by the blackboard (see `config.max_coder_iterations`, `config.max_review_cycles`).
 
 **On Rejection:**
 1. Read rejection feedback from task
 2. Update checkpoint with new approach
 3. Implement fix
 4. Re-submit for review
-
-**On Max Iterations:** Set task to BLOCKED with reason "Max iterations reached without approval" and questions about whether the spec is clear enough or task should be decomposed.
 
 **Context Exhaustion Handoff (Coder only):**
 At ~90% context (heuristic: many tool calls, re-reading files, difficulty holding state):
@@ -158,12 +126,9 @@ If 2 different Code Reviewers fail to issue a verdict on the same task (exit wit
 Each criterion is a test. All must pass. No more, no less.
 Example: `app greet` prints "Hello, World!", `app greet --name Alice` prints "Hello, Alice!"
 
-**TDD Enforcement (MANDATORY for code tasks):**
-- Each code task MUST include tests — Planner does NOT create separate "add tests" tasks
-- Coder writes tests FIRST that verify `done_when` criteria, then implements until tests pass
-- Code Reviewer REJECTS code submissions without tests covering `done_when`
-- Exempt: documentation-only, config-only, or spec-only tasks (no code = no tests required)
-- Rationale: Coder can't validate their work without tests; separate test tasks break TDD flow
+**TDD Enforcement:** Code tasks must include tests. Submission is rejected without test files
+unless the checkpoint declares `tdd_not_required` with justification (e.g. cosmetic-only change).
+The reviewer verifies the justification.
 
 **scope Defines Boundaries:**
 IN-scope items specify what may be touched. Touching OUT-scope files is a violation.
@@ -186,10 +151,6 @@ Combined with CORE.md universal items (Tier 0-1 rules, state machine, current ta
 ## Circuit Breaker
 
 Automatic halt conditions:
-
-| Condition | Action |
-|-----------|--------|
-| Same task rejected 3× | BLOCKED, escalate |
 
 **Loop Detection Self-Abort:**
 If an agent observes itself running:

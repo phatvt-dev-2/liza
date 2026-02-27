@@ -157,6 +157,7 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 - Coder writes tests FIRST that verify `done_when` criteria, then implements until tests pass
 - Code Reviewer REJECTS code submissions without tests covering `done_when`
 - Exempt: documentation-only, config-only, or spec-only tasks (no code = no tests required)
+- Waiver: code tasks with no behavior change (cosmetic fixes, comment edits) can declare `tdd_not_required` with justification in the checkpoint; Code Reviewer verifies
 - Rationale: Coder can't validate their work without tests; separate test tasks break TDD flow
 
 **`done_when` vs Tests:**

@@ -618,6 +618,54 @@ func (s *Server) handleClearStaleReviews(params map[string]any) (any, error) {
 	return textResult(fmt.Sprintf("Cleared %d stale review claims", count))
 }
 
+// handleWriteCheckpoint implements the liza_write_checkpoint tool
+func (s *Server) handleWriteCheckpoint(params map[string]any) (any, error) {
+	taskID, agentID, err := requireTaskAndAgent(params)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireRole(agentID, roles.RuntimeCoder); err != nil {
+		return nil, err
+	}
+
+	intent, err := requireString(params, "intent")
+	if err != nil {
+		return nil, err
+	}
+
+	validationPlan, err := requireString(params, "validation_plan")
+	if err != nil {
+		return nil, err
+	}
+
+	filesToModify := extractStringSlice(params, "files_to_modify")
+	if len(filesToModify) == 0 {
+		return nil, fmt.Errorf("files_to_modify parameter required (at least one file)")
+	}
+
+	assumptions := extractStringSlice(params, "assumptions")
+
+	risks, _ := params["risks"].(string)
+	tddNotRequired, _ := params["tdd_not_required"].(string)
+
+	input := &ops.WriteCheckpointInput{
+		TaskID:         taskID,
+		AgentID:        agentID,
+		Intent:         intent,
+		ValidationPlan: validationPlan,
+		FilesToModify:  filesToModify,
+		Assumptions:    assumptions,
+		Risks:          risks,
+		TDDNotRequired: tddNotRequired,
+	}
+
+	if err := ops.WriteCheckpoint(s.projectRoot, input); err != nil {
+		return nil, fmt.Errorf("write checkpoint failed: %w", err)
+	}
+
+	return textResult(fmt.Sprintf("Pre-execution checkpoint written for task %s", taskID))
+}
+
 // handleDeleteAgent implements the liza_delete_agent tool
 // Maps to: liza delete agent
 func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {

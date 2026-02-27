@@ -59,6 +59,11 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, fmt.Errorf("task %s has no worktree", taskID)
 	}
 
+	// Pre-execution checkpoint required before submission
+	if !HasCheckpoint(task.History, agentID) {
+		return nil, fmt.Errorf("task %s: pre-execution checkpoint required before submission (use liza_write_checkpoint)", taskID)
+	}
+
 	// Phase 2: Execute git operations outside the lock
 	g := git.New(projectRoot)
 	wtPath := g.GetWorktreePath(taskID)
@@ -86,6 +91,17 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	}
 	if commitSHA != preRebaseCommit {
 		return nil, fmt.Errorf("provided commit SHA %s does not match worktree HEAD %s", commitSHA, preRebaseCommit)
+	}
+
+	// TDD enforcement: code tasks must include test files
+	if task.EffectiveType() == models.TaskTypeCoding && task.BaseCommit != nil {
+		hasTests, err := HasTestFiles(g, taskID, *task.BaseCommit)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check test files: %w", err)
+		}
+		if !hasTests && GetTDDWaiver(task.History, agentID) == "" {
+			return nil, fmt.Errorf("task %s: code tasks must include test files (*_test.go) — TDD is mandatory", taskID)
+		}
 	}
 
 	integrationBranch := state.Config.IntegrationBranch

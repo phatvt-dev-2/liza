@@ -59,6 +59,12 @@ Chose **Option 3**: TDD is mandatory for all code tasks in MAS.
 - Spec-only tasks
 - No code = no tests required
 
+**TDD Waiver (code tasks):**
+Code tasks that don't change behavior (cosmetic fixes, comment edits, formatting)
+can declare `tdd_not_required` with justification in the pre-execution checkpoint.
+The Code Reviewer verifies the justification is legitimate. Submission without
+test files is allowed when this waiver is present.
+
 ### Consequences
 
 **Positive:**

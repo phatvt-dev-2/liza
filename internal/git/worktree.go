@@ -436,6 +436,19 @@ func extractActualSHA(errMsg string) string {
 	return ""
 }
 
+// DiffFiles returns the list of files changed between two commits in a directory.
+// Typically used as DiffFiles(wtPath, baseCommit, "HEAD") to get files changed in a worktree.
+func (g *Git) DiffFiles(dir, commitA, commitB string) ([]string, error) {
+	output, err := g.execInDir(dir, "diff", "--name-only", commitA+".."+commitB)
+	if err != nil {
+		return nil, err
+	}
+	if output == "" {
+		return nil, nil
+	}
+	return strings.Split(output, "\n"), nil
+}
+
 // IsAncestor checks if commitA is an ancestor of commitB
 func (g *Git) IsAncestor(commitA, commitB string) (bool, error) {
 	_, err := g.exec("merge-base", "--is-ancestor", commitA, commitB)

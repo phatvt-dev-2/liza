@@ -200,7 +200,11 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 	if err := os.WriteFile(wtFile, []byte("task work\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	testhelpers.MustGit(t, wtPath, "add", "task-file.txt")
+	wtTestFile := filepath.Join(wtPath, "task_test.go")
+	if err := os.WriteFile(wtTestFile, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "task-file.txt", "task_test.go")
 	testhelpers.MustGit(t, wtPath, "commit", "-m", "Task commit")
 	wtCommit := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
 
@@ -234,7 +238,14 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 				BaseCommit:   &baseCommit,
 				Iteration:    1,
 				Created:      time.Now().UTC(),
-				History:      []models.TaskHistoryEntry{},
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: "pre_execution_checkpoint",
+						Agent: &agentID,
+						Extra: map[string]any{"intent": "test", "validation_plan": "test", "files_to_modify": []string{"task-file.txt"}},
+					},
+				},
 			},
 		},
 		Agents: map[string]models.Agent{
@@ -303,12 +314,16 @@ func TestSubmitForReview_RebaseConflict(t *testing.T) {
 	}
 	wtPath := g.GetWorktreePath(taskID)
 
-	// Modify README in worktree
+	// Modify README in worktree and add test file
 	readmeFile := filepath.Join(wtPath, "README.md")
 	if err := os.WriteFile(readmeFile, []byte("# Task version\nTask content\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	testhelpers.MustGit(t, wtPath, "add", "README.md")
+	conflictTestFile := filepath.Join(wtPath, "task_test.go")
+	if err := os.WriteFile(conflictTestFile, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "README.md", "task_test.go")
 	testhelpers.MustGit(t, wtPath, "commit", "-m", "Task README")
 	wtCommit := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
 
@@ -341,7 +356,14 @@ func TestSubmitForReview_RebaseConflict(t *testing.T) {
 				BaseCommit:   &baseCommit,
 				Iteration:    1,
 				Created:      time.Now().UTC(),
-				History:      []models.TaskHistoryEntry{},
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: "pre_execution_checkpoint",
+						Agent: &agentID,
+						Extra: map[string]any{"intent": "test", "validation_plan": "test", "files_to_modify": []string{"task-file.txt"}},
+					},
+				},
 			},
 		},
 		Agents: make(map[string]models.Agent),
@@ -398,7 +420,11 @@ func TestSubmitForReview_FetchFailure(t *testing.T) {
 	if err := os.WriteFile(wtFile, []byte("task work\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	testhelpers.MustGit(t, wtPath, "add", "task-file.txt")
+	fetchTestFile := filepath.Join(wtPath, "task_test.go")
+	if err := os.WriteFile(fetchTestFile, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "task-file.txt", "task_test.go")
 	testhelpers.MustGit(t, wtPath, "commit", "-m", "Task commit")
 	wtCommit := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
 
@@ -422,7 +448,14 @@ func TestSubmitForReview_FetchFailure(t *testing.T) {
 				BaseCommit:   &baseCommit,
 				Iteration:    1,
 				Created:      time.Now().UTC(),
-				History:      []models.TaskHistoryEntry{},
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: "pre_execution_checkpoint",
+						Agent: &agentID,
+						Extra: map[string]any{"intent": "test", "validation_plan": "test", "files_to_modify": []string{"task-file.txt"}},
+					},
+				},
 			},
 		},
 		Agents: make(map[string]models.Agent),
@@ -491,7 +524,14 @@ func TestSubmitForReview_WorktreeGone(t *testing.T) {
 				BaseCommit:   &baseCommit,
 				Iteration:    1,
 				Created:      time.Now().UTC(),
-				History:      []models.TaskHistoryEntry{},
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: "pre_execution_checkpoint",
+						Agent: &agentID,
+						Extra: map[string]any{"intent": "test", "validation_plan": "test", "files_to_modify": []string{"task-file.txt"}},
+					},
+				},
 			},
 		},
 		Agents: make(map[string]models.Agent),
@@ -567,7 +607,14 @@ func TestSubmitForReview_DetachedHead(t *testing.T) {
 				BaseCommit:   &baseCommit,
 				Iteration:    1,
 				Created:      time.Now().UTC(),
-				History:      []models.TaskHistoryEntry{},
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: "pre_execution_checkpoint",
+						Agent: &agentID,
+						Extra: map[string]any{"intent": "test", "validation_plan": "test", "files_to_modify": []string{"task-file.txt"}},
+					},
+				},
 			},
 		},
 		Agents: make(map[string]models.Agent),

@@ -504,13 +504,17 @@ func TestHandleSubmitForReview(t *testing.T) {
 	}
 	wtPath := g.GetWorktreePath(taskID)
 
-	// Make a commit in the worktree
-	testFile := filepath.Join(wtPath, "test-file.txt")
-	if err := os.WriteFile(testFile, []byte("test content\n"), 0644); err != nil {
+	// Make commits in the worktree (including a test file for TDD enforcement)
+	implFile := filepath.Join(wtPath, "feature.go")
+	if err := os.WriteFile(implFile, []byte("package feature\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	testhelpers.MustGit(t, wtPath, "add", "test-file.txt")
-	testhelpers.MustGit(t, wtPath, "commit", "-m", "Test commit")
+	testFile := filepath.Join(wtPath, "feature_test.go")
+	if err := os.WriteFile(testFile, []byte("package feature\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "feature.go", "feature_test.go")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Add feature with tests")
 
 	// Get the commit SHA using git package
 	commitSHA, err := g.GetWorktreeHEAD(taskID)
@@ -518,7 +522,7 @@ func TestHandleSubmitForReview(t *testing.T) {
 		t.Fatalf("Failed to get commit SHA: %v", err)
 	}
 
-	// Setup: Claim task with the worktree
+	// Setup: Claim task with the worktree and add checkpoint
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err = bb.Modify(func(state *models.State) error {
@@ -528,6 +532,14 @@ func TestHandleSubmitForReview(t *testing.T) {
 		worktree := g.GetWorktreeRelPath(taskID)
 		state.Tasks[0].Worktree = &worktree
 		state.Tasks[0].BaseCommit = &baseCommit
+		// Add pre-execution checkpoint (required for submission)
+		agent := "coder-1"
+		state.Tasks[0].History = append(state.Tasks[0].History, models.TaskHistoryEntry{
+			Time:  time.Now().UTC(),
+			Event: "pre_execution_checkpoint",
+			Agent: &agent,
+			Extra: map[string]any{"intent": "test", "validation_plan": "test", "files_to_modify": []string{"feature.go"}},
+		})
 		return nil
 	})
 	if err != nil {
@@ -586,18 +598,22 @@ func TestHandleSubmitForReviewCommitMismatch(t *testing.T) {
 	}
 	wtPath := g.GetWorktreePath(taskID)
 
-	// Make a commit in the worktree
-	testFile := filepath.Join(wtPath, "test-file.txt")
-	if err := os.WriteFile(testFile, []byte("test content\n"), 0644); err != nil {
+	// Make commits in the worktree (including test file for TDD enforcement)
+	implFile := filepath.Join(wtPath, "feature.go")
+	if err := os.WriteFile(implFile, []byte("package feature\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	testhelpers.MustGit(t, wtPath, "add", "test-file.txt")
-	testhelpers.MustGit(t, wtPath, "commit", "-m", "Test commit")
+	testFile := filepath.Join(wtPath, "feature_test.go")
+	if err := os.WriteFile(testFile, []byte("package feature\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "feature.go", "feature_test.go")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Add feature with tests")
 
 	// Use integration HEAD as an intentionally wrong commit SHA
 	wrongCommit := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration")
 
-	// Setup: Claim task with the worktree
+	// Setup: Claim task with the worktree and add checkpoint
 	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 	bb := db.New(statePath)
 	err = bb.Modify(func(state *models.State) error {
@@ -607,6 +623,14 @@ func TestHandleSubmitForReviewCommitMismatch(t *testing.T) {
 		worktree := g.GetWorktreeRelPath(taskID)
 		state.Tasks[0].Worktree = &worktree
 		state.Tasks[0].BaseCommit = &baseCommit
+		// Add pre-execution checkpoint (required for submission)
+		agent := "coder-1"
+		state.Tasks[0].History = append(state.Tasks[0].History, models.TaskHistoryEntry{
+			Time:  time.Now().UTC(),
+			Event: "pre_execution_checkpoint",
+			Agent: &agent,
+			Extra: map[string]any{"intent": "test", "validation_plan": "test", "files_to_modify": []string{"test-file.txt"}},
+		})
 		return nil
 	})
 	if err != nil {
@@ -1367,6 +1391,174 @@ func TestHandleCheckpoint(t *testing.T) {
 }
 
 // ============================================================================
+// Pre-Execution Checkpoint Tests
+// ============================================================================
+
+// TestHandleWriteCheckpoint verifies liza_write_checkpoint tool
+func TestHandleWriteCheckpoint(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Setup: Claim task first
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Tasks[0].Status = models.TaskStatusImplementing
+		assignedTo := "coder-1"
+		state.Tasks[0].AssignedTo = &assignedTo
+		worktree := ".worktrees/task-1"
+		state.Tasks[0].Worktree = &worktree
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	result, err := server.handleWriteCheckpoint(map[string]any{
+		"task_id":         "task-1",
+		"agent_id":        "coder-1",
+		"intent":          "Implement greeting function",
+		"validation_plan": "go test ./...",
+		"files_to_modify": []any{"main.go", "main_test.go"},
+	})
+
+	if err != nil {
+		t.Fatalf("handleWriteCheckpoint failed: %v", err)
+	}
+
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+
+	// Verify checkpoint was written to task history
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.Tasks[0]
+	found := false
+	for _, entry := range task.History {
+		if entry.Event == "pre_execution_checkpoint" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected pre_execution_checkpoint in task history")
+	}
+}
+
+// TestHandleWriteCheckpointWithTDDWaiver verifies tdd_not_required param is stored
+func TestHandleWriteCheckpointWithTDDWaiver(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Setup: Claim task first
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Tasks[0].Status = models.TaskStatusImplementing
+		assignedTo := "coder-1"
+		state.Tasks[0].AssignedTo = &assignedTo
+		worktree := ".worktrees/task-1"
+		state.Tasks[0].Worktree = &worktree
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	result, err := server.handleWriteCheckpoint(map[string]any{
+		"task_id":          "task-1",
+		"agent_id":         "coder-1",
+		"intent":           "Fix comment typo",
+		"validation_plan":  "go build ./...",
+		"files_to_modify":  []any{"main.go"},
+		"tdd_not_required": "cosmetic-only: comment typo fix",
+	})
+
+	if err != nil {
+		t.Fatalf("handleWriteCheckpoint failed: %v", err)
+	}
+
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+
+	// Verify tdd_not_required was stored in checkpoint Extra
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.Tasks[0]
+	var found bool
+	for _, entry := range task.History {
+		if entry.Event == "pre_execution_checkpoint" {
+			val, ok := entry.Extra["tdd_not_required"].(string)
+			if ok && val == "cosmetic-only: comment typo fix" {
+				found = true
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected tdd_not_required in checkpoint history entry")
+	}
+}
+
+// TestHandleSubmitForReviewWithoutCheckpoint verifies submission is rejected without checkpoint
+func TestHandleSubmitForReviewWithoutCheckpoint(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Setup: Claim task but DON'T write checkpoint
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Tasks[0].Status = models.TaskStatusImplementing
+		assignedTo := "coder-1"
+		state.Tasks[0].AssignedTo = &assignedTo
+		worktree := ".worktrees/task-1"
+		state.Tasks[0].Worktree = &worktree
+		baseCommit := "abc123"
+		state.Tasks[0].BaseCommit = &baseCommit
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	_, err = server.handleSubmitForReview(map[string]any{
+		"task_id":    "task-1",
+		"commit_sha": "abc123",
+		"agent_id":   "coder-1",
+	})
+
+	if err == nil {
+		t.Fatal("Expected error for submission without checkpoint")
+	}
+	if !strings.Contains(err.Error(), "pre-execution checkpoint required") {
+		t.Errorf("Expected checkpoint required error, got: %v", err)
+	}
+}
+
+// ============================================================================
 // Role Enforcement Tests
 // ============================================================================
 
@@ -1424,6 +1616,12 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			handler: server.handleSupersede,
 			params:  map[string]any{"task_id": "task-1", "reason": "r", "agent_id": "coder-1"},
 			wantErr: "requires planner role",
+		},
+		{
+			name:    "write_checkpoint rejects reviewer",
+			handler: server.handleWriteCheckpoint,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
+			wantErr: "requires coder role",
 		},
 		// Malformed agent ID cases
 		{

@@ -730,6 +730,50 @@ func (s *Server) registerComplexOperations() {
 		},
 	}, s.handleClearStaleReviews)
 
+	// liza_write_checkpoint tool
+	s.registerTool(protocol.Tool{
+		Name:        "liza_write_checkpoint",
+		Description: "Write a pre-execution checkpoint before implementing a task. Required before submission for review. Requires coder role.",
+		InputSchema: protocol.InputSchema{
+			Type: "object",
+			Properties: map[string]protocol.Property{
+				"task_id": {
+					Type:        "string",
+					Description: "Task ID to write checkpoint for",
+				},
+				"agent_id": {
+					Type:        "string",
+					Description: "Agent ID writing the checkpoint",
+				},
+				"intent": {
+					Type:        "string",
+					Description: "Specific, observable intent of the implementation",
+				},
+				"validation_plan": {
+					Type:        "string",
+					Description: "Concrete validation command and expected output",
+				},
+				"files_to_modify": {
+					Type:        "array",
+					Description: "List of files that will be modified",
+				},
+				"assumptions": {
+					Type:        "array",
+					Description: "Tagged assumptions (optional)",
+				},
+				"risks": {
+					Type:        "string",
+					Description: "Identified risks (optional)",
+				},
+				"tdd_not_required": {
+					Type:        "string",
+					Description: "Justification for why this task does not require new test files (e.g. cosmetic-only change, existing tests cover behavior). If omitted, TDD enforcement applies normally.",
+				},
+			},
+			Required: []string{"task_id", "agent_id", "intent", "validation_plan", "files_to_modify"},
+		},
+	}, s.handleWriteCheckpoint)
+
 	// liza_delete_agent tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_delete_agent",

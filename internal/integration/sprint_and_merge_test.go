@@ -14,6 +14,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -242,12 +243,25 @@ func TestSuccessfulMerge(t *testing.T) {
 	if err := os.WriteFile(testFile, []byte("package main\n\nfunc Feature() {}\n"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
+	testTestFile := filepath.Join(worktreePath, "feature_test.go")
+	if err := os.WriteFile(testTestFile, []byte("package main\n"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
-	if err := exec.Command("git", "-C", worktreePath, "add", "feature.go").Run(); err != nil {
+	if err := exec.Command("git", "-C", worktreePath, "add", "feature.go", "feature_test.go").Run(); err != nil {
 		t.Fatalf("Failed to git add: %v", err)
 	}
-	if err := exec.Command("git", "-C", worktreePath, "commit", "-m", "Implement feature").Run(); err != nil {
+	if err := exec.Command("git", "-C", worktreePath, "commit", "-m", "Implement feature with tests").Run(); err != nil {
 		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	// Write pre-execution checkpoint (required for submission)
+	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
+		TaskID: taskID, AgentID: agentID,
+		Intent: "Implement feature", ValidationPlan: "go test ./...",
+		FilesToModify: []string{"feature.go"},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint failed: %v", err)
 	}
 
 	// Get commit hash and submit for review

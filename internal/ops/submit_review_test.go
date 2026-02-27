@@ -99,3 +99,60 @@ func TestSubmitForReview_NoWorktree(t *testing.T) {
 	_, err := SubmitForReview(tmpDir, "task-1", "abc123", "coder-1")
 	testhelpers.RequireErrorContains(t, err, "no worktree")
 }
+
+func TestSubmitForReview_TDDWaiverBypassesTestRequirement(t *testing.T) {
+	// Unit test: verify that GetTDDWaiver check in SubmitForReview
+	// allows submission without test files when waiver is declared.
+	// This tests the waiver logic at the data level since the full
+	// SubmitForReview path requires a real git worktree.
+	agent := "coder-1"
+	history := []models.TaskHistoryEntry{
+		{
+			Event: "pre_execution_checkpoint",
+			Agent: &agent,
+			Extra: map[string]any{
+				"intent":           "Fix comment typo",
+				"tdd_not_required": "cosmetic-only: comment fix, no behavior change",
+			},
+		},
+	}
+
+	// With waiver, GetTDDWaiver should return non-empty
+	waiver := GetTDDWaiver(history, "coder-1")
+	if waiver == "" {
+		t.Fatal("Expected non-empty waiver from checkpoint with tdd_not_required")
+	}
+	if waiver != "cosmetic-only: comment fix, no behavior change" {
+		t.Errorf("Unexpected waiver value: %q", waiver)
+	}
+
+	// Without waiver, GetTDDWaiver should return empty
+	historyNoWaiver := []models.TaskHistoryEntry{
+		{
+			Event: "pre_execution_checkpoint",
+			Agent: &agent,
+			Extra: map[string]any{
+				"intent": "Add feature",
+			},
+		},
+	}
+	if GetTDDWaiver(historyNoWaiver, "coder-1") != "" {
+		t.Fatal("Expected empty waiver from checkpoint without tdd_not_required")
+	}
+}
+
+func TestSubmitForReview_NoCheckpoint(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	// Task has worktree but no checkpoint in history
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := SubmitForReview(tmpDir, "task-1", "abc123", "coder-1")
+	testhelpers.RequireErrorContains(t, err, "pre-execution checkpoint required")
+}
