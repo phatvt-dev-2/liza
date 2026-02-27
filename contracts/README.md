@@ -56,7 +56,7 @@ See [Contract Activation](contract-activation.md)
 - Git Protocol
 - Mental Models
 - Anti-Gaming Clause
-- Runtime Kernel
+- Context Management (degraded mode tiers)
 
 ### PAIRING_MODE.md — Human-supervised collaboration
 - Contract Authority (human overrides)

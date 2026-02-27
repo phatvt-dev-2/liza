@@ -2,7 +2,7 @@
 
 Peer-supervised collaboration. Agents approve each other via protocol.
 
-**Prerequisite:** Read [CORE.md](~/.liza/CORE.md) first.
+**Prerequisite:** Read ~/.liza/CORE.md first.
 
 ---
 
@@ -89,7 +89,7 @@ The Code Reviewer verifies:
 
 ## Gate Semantics (Multi-Agent)
 
-The Execution State Machine is defined in [CORE.md](~/.liza/CORE.md). In Multi-Agent mode:
+The Execution State Machine is defined in ~/.liza/CORE.md. In Multi-Agent mode:
 
 - **Gate artifact** = Pre-execution checkpoint written to blackboard (above)
 - **Gate cleared** = Checkpoint written (self-clearing — forces thinking, then proceed)
@@ -179,7 +179,7 @@ When transitioning to Working Set tier (see CORE.md Context Management), re-read
 - Current role's constraints from your role section in the agent prompt
 - Active task from blackboard (re-read `state.yaml`)
 
-Combined with CORE.md universal items (Runtime Kernel, Tier 1 summary, current task intent).
+Combined with CORE.md universal items (Tier 0-1 rules, state machine, current task intent).
 
 ---
 

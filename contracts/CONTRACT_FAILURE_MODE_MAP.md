@@ -51,7 +51,7 @@
 | ID | Failure Mode | Contract Clause | Lines |
 |----|--------------|-----------------|-------|
 | SYC-1 | Excessive agreement / validation-seeking | No Cheerleading Policy | 162-168 |
-| SYC-2 | Opinion mirroring on polarizing topics | Rule 13 (Constructive Contrarian), Mechanical Triggers | 483-498, 493-496 |
+| SYC-2 | Opinion mirroring on polarizing topics | Rule 13 (Constructive Contrarian — PAIRING_MODE.md), Mechanical Triggers | PAIRING_MODE.md:109-122 |
 | SYC-3 | Prioritizing user satisfaction over accuracy | Anti-Gaming Clause, Rule 1 (Integrity) | 781-785, 181-192 |
 | SYC-4 | Softening critical feedback | Direct Response Rule, Challenge assumptions | 165-166 |
 | SYC-5 | Agreeing with incorrect user statements | Rule 5 (Validate Against Reality), Evidence contradicts hypothesis trigger | 342-361, 121 |
@@ -100,7 +100,7 @@
 |----|--------------|-----------------|-------|
 | INS-1 | Condition constraint failures | DoR (multiple interpretations → ask) | 225 |
 | INS-2 | Tool constraint violations | Rule 5 (Validate Against Reality) | 342-361 |
-| INS-3 | Performance degradation with length | Degraded Mode announcement, Runtime Kernel | 69-70, 840-882 |
+| INS-3 | Performance degradation with length | Degraded Mode announcement, Context Tiers | 69-70, 510-515 |
 | INS-4 | Overly long instruction handling | Tier architecture (explicit suspension) | 27-70 |
 | INS-5 | Ignoring explicit constraints | Contract Authority (operational constraints, not suggestions) | 7-20 |
 
