@@ -4,6 +4,15 @@
 WAKE TRIGGER: {{.WakeTrigger}}
 
 SPRINT STATE:
+{{- if gt .SprintNumber 0}}
+- Sprint number: {{.SprintNumber}}
+{{- end}}
+{{- if .SprintHistory}}
+- Previous sprints: {{len .SprintHistory}}
+{{- range .SprintHistory}}
+  - {{.ID}}: {{.Status}} ({{.TasksDone}} tasks done)
+{{- end}}
+{{- end}}
 - Total tasks: {{.TotalTasks}}
 - Merged: {{.Merged}}
 - In progress: {{.InProgress}}

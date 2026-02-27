@@ -1,8 +1,12 @@
 package commands
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -114,5 +118,59 @@ func TestResumeCommand(t *testing.T) {
 				t.Errorf("ModeChangedBy = %v, want %v", *updatedState.Config.ModeChangedBy, tt.changedBy)
 			}
 		})
+	}
+}
+
+// TestResumeCommand_ArchiveWriteFailure verifies that when the archive file
+// cannot be written, resume fails and state remains unchanged (no data loss).
+func TestResumeCommand_ArchiveWriteFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Make archive directory unwritable so writeSprintArchive fails.
+	archiveDir := filepath.Join(tmpDir, ".liza", "archive")
+	if err := os.MkdirAll(archiveDir, 0755); err != nil {
+		t.Fatalf("Failed to create archive dir: %v", err)
+	}
+	if err := os.Chmod(archiveDir, 0444); err != nil {
+		t.Fatalf("Failed to chmod archive dir: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(archiveDir, 0755) })
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeRunning
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.Number = 1
+
+	mergedTask := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+	state.Tasks = []models.Task{mergedTask}
+	state.Sprint.Scope.Planned = []string{"task-1"}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Resume should fail because archive write fails before state mutation.
+	err := ResumeCommand(tmpDir, "human")
+	if err == nil {
+		t.Fatal("ResumeCommand() should fail when archive write fails")
+	}
+
+	// Verify state is unchanged — sprint was NOT advanced.
+	bb := db.New(stateFile)
+	readState, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("Failed to read state: %v", readErr)
+	}
+	if readState.Sprint.ID != "sprint-1" {
+		t.Errorf("Sprint.ID = %q, want %q (should be unchanged)", readState.Sprint.ID, "sprint-1")
+	}
+	if readState.Sprint.Number != 1 {
+		t.Errorf("Sprint.Number = %d, want 1 (should be unchanged)", readState.Sprint.Number)
+	}
+	if readState.Sprint.Status != models.SprintStatusCheckpoint {
+		t.Errorf("Sprint.Status = %v, want CHECKPOINT (should be unchanged)", readState.Sprint.Status)
+	}
+	if len(readState.SprintHistory) != 0 {
+		t.Errorf("SprintHistory length = %d, want 0 (should be unchanged)", len(readState.SprintHistory))
 	}
 }

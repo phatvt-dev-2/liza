@@ -20,6 +20,7 @@ type State struct {
 	SpecChanges    []SpecChange           `yaml:"spec_changes"`
 	Anomalies      []Anomaly              `yaml:"anomalies"`
 	Sprint         Sprint                 `yaml:"sprint"`
+	SprintHistory  []SprintSummary        `yaml:"sprint_history,omitempty"`
 	CircuitBreaker CircuitBreaker         `yaml:"circuit_breaker"`
 	Config         Config                 `yaml:"config"`
 	Extra          map[string]any         `yaml:",inline"`
@@ -386,6 +387,7 @@ func (ss SprintStatus) IsValid() bool {
 // Sprint represents a sprint with scope, timeline, and metrics
 type Sprint struct {
 	ID            string         `yaml:"id"`
+	Number        int            `yaml:"number"`
 	GoalRef       string         `yaml:"goal_ref"`
 	Scope         SprintScope    `yaml:"scope"`
 	Timeline      SprintTimeline `yaml:"timeline"`
@@ -393,6 +395,17 @@ type Sprint struct {
 	Metrics       SprintMetrics  `yaml:"metrics"`
 	Retrospective *string        `yaml:"retrospective,omitempty"`
 	Extra         map[string]any `yaml:",inline"`
+}
+
+// SprintSummary is a lightweight record of a completed sprint kept in state.yaml.
+// Full sprint data (metrics, scope, retrospective) is archived to .liza/archive/sprint-N.yaml.
+type SprintSummary struct {
+	ID        string       `yaml:"id"`
+	Number    int          `yaml:"number"`
+	Status    SprintStatus `yaml:"status"`
+	Started   time.Time    `yaml:"started"`
+	Ended     time.Time    `yaml:"ended"`
+	TasksDone int          `yaml:"tasks_done"`
 }
 
 // SprintScope defines planned and stretch tasks

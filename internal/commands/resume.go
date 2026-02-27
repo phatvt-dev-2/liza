@@ -17,6 +17,15 @@ func ResumeCommand(projectRoot, changedBy string) error {
 	fmt.Println("System resumed")
 	fmt.Printf("  Resumed from: %s\n", result.ResumedFrom)
 	fmt.Printf("  Changed by: %s\n", result.ChangedBy)
+
+	if sa := result.SprintAdvanced; sa != nil {
+		fmt.Println()
+		fmt.Printf("  Sprint advanced: %s → %s\n", sa.ArchivedSprintID, sa.NewSprintID)
+		if len(sa.CarriedTasks) > 0 {
+			fmt.Printf("  Carried tasks: %v\n", sa.CarriedTasks)
+		}
+	}
+
 	fmt.Println()
 	fmt.Println("Agents will resume at their next check.")
 	return nil

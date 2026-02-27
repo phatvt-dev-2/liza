@@ -108,6 +108,13 @@ func (p LizaPaths) ArchiveDir() string {
 	return p.get(ArchiveDirName)
 }
 
+// SprintArchivePath returns the path for archiving a specific sprint.
+// Format: .liza/archive/sprint-N.yaml
+// Takes the numeric sprint number to avoid path traversal via tampered IDs.
+func (p LizaPaths) SprintArchivePath(sprintNumber int) string {
+	return filepath.Join(p.ArchiveDir(), fmt.Sprintf("sprint-%d.yaml", sprintNumber))
+}
+
 // AgentPromptsDir returns the path to the agent prompts directory.
 func (p LizaPaths) AgentPromptsDir() string {
 	return p.get(AgentPromptsDirName)

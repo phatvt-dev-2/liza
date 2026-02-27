@@ -305,11 +305,54 @@ Specs are **living documents** but changes must be controlled and audited.
 
 ---
 
+## Multi-Sprint Lifecycle
+
+Liza supports multiple sprints within a single goal. When a sprint completes and the human resumes, a new sprint is automatically created.
+
+### Sprint Advance Trigger
+
+On `liza resume` from CHECKPOINT, if all planned tasks are terminal:
+1. Current sprint is archived to `.liza/archive/sprint-N.yaml`
+2. A lightweight `SprintSummary` is recorded in `state.sprint_history`
+3. A new sprint is created with `Number = previous + 1`
+4. Non-terminal tasks (e.g., READY, IMPLEMENTING, BLOCKED) are carried into the new sprint's `scope.planned`
+5. The planner then detects work to do (carried tasks or INITIAL_PLANNING if none)
+
+If resumed from CHECKPOINT but planned tasks are NOT all terminal (mid-sprint manual checkpoint), the same sprint continues as IN_PROGRESS.
+
+### Sprint Archive
+
+Full sprint data (scope, metrics, retrospective) is archived to:
+```
+.liza/archive/sprint-N.yaml
+```
+
+State.yaml keeps only `sprint_history[]` — lightweight summaries for quick reference:
+```yaml
+sprint_history:
+  - id: sprint-1
+    number: 1
+    status: COMPLETED
+    started: 2025-01-17T09:00:00Z
+    ended: 2025-01-19T14:00:00Z
+    tasks_done: 4
+```
+
+### Task Carry-Forward
+
+Non-terminal tasks automatically carry into the new sprint's planned scope. This includes:
+- READY, IMPLEMENTING, READY_FOR_REVIEW, REVIEWING, REJECTED, BLOCKED, DRAFT, INTEGRATION_FAILED
+
+Terminal tasks (MERGED, ABANDONED, SUPERSEDED) are NOT carried forward.
+
+---
+
 ## Blackboard Sprint Section
 
 ```yaml
 sprint:
   id: sprint-1
+  number: 1
   goal_ref: goal-1
   scope:
     planned: [task-1, task-2, task-3, task-4, task-5]

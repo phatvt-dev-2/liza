@@ -169,6 +169,7 @@ func InitCommand(description string, specRef string, stdin io.Reader) error {
 		Anomalies:   []models.Anomaly{},
 		Sprint: models.Sprint{
 			ID:      "sprint-1",
+			Number:  1,
 			GoalRef: goalID,
 			Scope: models.SprintScope{
 				Planned: []string{},

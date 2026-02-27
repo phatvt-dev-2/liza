@@ -41,6 +41,7 @@ type goalStatus struct {
 
 type sprintStatus struct {
 	ID         string `json:"id"`
+	Number     int    `json:"number"`
 	Status     string `json:"status"`
 	StartTime  string `json:"start_time"`
 	TasksDone  int    `json:"tasks_done"`
@@ -134,6 +135,7 @@ func buildStatusData(state *models.State, detailed bool) statusData {
 	// Populate sprint information
 	data.Sprint = sprintStatus{
 		ID:         state.Sprint.ID,
+		Number:     state.Sprint.Number,
 		Status:     string(state.Sprint.Status),
 		StartTime:  state.Sprint.Timeline.Started.Format(time.RFC3339),
 		TasksDone:  state.Sprint.Metrics.TasksDone,

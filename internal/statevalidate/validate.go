@@ -407,6 +407,11 @@ func validateSprint(state *models.State, projectRoot string, skipSpecFileCheck b
 		return fmt.Errorf("unknown sprint status '%s'", state.Sprint.Status)
 	}
 
+	// Sprint number must be >= 1 (0 is tolerated for legacy pre-multi-sprint state)
+	if state.Sprint.Number < 0 {
+		return fmt.Errorf("sprint.number must be non-negative (got %d)", state.Sprint.Number)
+	}
+
 	// Sprint goal_ref must match goal.id
 	if state.Sprint.GoalRef != state.Goal.ID {
 		return fmt.Errorf("sprint.goal_ref (%s) does not match goal.id (%s)", state.Sprint.GoalRef, state.Goal.ID)
@@ -433,6 +438,38 @@ func validateSprint(state *models.State, projectRoot string, skipSpecFileCheck b
 		return fmt.Errorf("sprint.timeline.started is required")
 	}
 
+	// Validate sprint history entries
+	if err := validateSprintHistory(state); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateSprintHistory(state *models.State) error {
+	seenIDs := make(map[string]bool)
+	for i, summary := range state.SprintHistory {
+		if summary.ID == "" {
+			return fmt.Errorf("sprint_history[%d]: missing id", i)
+		}
+		if seenIDs[summary.ID] {
+			return fmt.Errorf("sprint_history: duplicate sprint id '%s'", summary.ID)
+		}
+		seenIDs[summary.ID] = true
+
+		if summary.Number < 1 {
+			return fmt.Errorf("sprint_history[%d]: number must be >= 1 (got %d)", i, summary.Number)
+		}
+		if !summary.Status.IsValid() {
+			return fmt.Errorf("sprint_history[%d]: invalid status '%s'", i, summary.Status)
+		}
+		if summary.Started.IsZero() {
+			return fmt.Errorf("sprint_history[%d]: missing started time", i)
+		}
+		if summary.Ended.IsZero() {
+			return fmt.Errorf("sprint_history[%d]: missing ended time", i)
+		}
+	}
 	return nil
 }
 

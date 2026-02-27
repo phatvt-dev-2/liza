@@ -286,7 +286,8 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 | `liza stop` | ABORTED | Manual termination |
 
 **From CHECKPOINT:**
-- `liza resume` → IN_PROGRESS (continue)
+- `liza resume` (planned tasks NOT all terminal) → IN_PROGRESS (continue same sprint)
+- `liza resume` (all planned tasks terminal) → archives sprint, creates new sprint (IN_PROGRESS)
 - `liza stop` → ABORTED (stop)
 
 ---

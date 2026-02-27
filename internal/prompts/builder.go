@@ -43,6 +43,8 @@ func BuildBasePrompt(config BasePromptConfig) (string, error) {
 // plannerContextData is the template data for planner_context.tmpl
 type plannerContextData struct {
 	WakeTrigger          string
+	SprintNumber         int
+	SprintHistory        []models.SprintSummary
 	TotalTasks           int
 	Merged               int
 	InProgress           int
@@ -89,6 +91,8 @@ func BuildPlannerContext(state *models.State, config PlannerContextConfig) (stri
 
 	data := plannerContextData{
 		WakeTrigger:          wakeTrigger,
+		SprintNumber:         state.Sprint.Number,
+		SprintHistory:        state.SprintHistory,
 		TotalTasks:           totalTasks,
 		Merged:               merged,
 		InProgress:           inProgress,

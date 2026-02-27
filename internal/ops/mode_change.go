@@ -74,18 +74,26 @@ func changeMode(projectRoot, reason, changedBy string, target models.SystemMode)
 
 // ResumeResult contains the outcome of a system resume.
 type ResumeResult struct {
-	ResumedFrom string
-	ChangedBy   string
+	ResumedFrom    string
+	ChangedBy      string
+	SprintAdvanced *AdvanceSprintResult // non-nil when sprint was advanced to next
 }
 
 // Resume transitions from PAUSED or CIRCUIT_BREAKER_TRIPPED to RUNNING,
 // and/or resumes sprint from CHECKPOINT to IN_PROGRESS. No terminal I/O.
+//
+// When sprint is at CHECKPOINT and all planned tasks are terminal (sprint is
+// truly done), it advances to a new sprint instead of just flipping status.
+// Mode changes and sprint advance happen in a single Modify to avoid partial
+// mutations on failure.
 func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
-	statePath := paths.New(projectRoot).StatePath()
+	lizaPaths := paths.New(projectRoot)
+	statePath := lizaPaths.StatePath()
 	blackboard := db.For(statePath)
 
 	timestamp := time.Now()
 	var resumedFrom string
+	var advanceResult *AdvanceSprintResult
 
 	err := blackboard.Modify(func(s *models.State) error {
 		currentMode := s.Config.Mode
@@ -120,7 +128,31 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 		}
 
 		if isCheckpoint {
-			s.Sprint.Status = models.SprintStatusInProgress
+			if s.AllPlannedTasksTerminal() {
+				// Sprint is truly done — plan, archive, then mutate.
+				plan, err := planSprintAdvance(s, timestamp.UTC())
+				if err != nil {
+					return fmt.Errorf("sprint advance failed: %w", err)
+				}
+				archivePath := lizaPaths.SprintArchivePath(plan.archivedSprint.Number)
+
+				// Write archive BEFORE mutating state.
+				if err := writeSprintArchive(archivePath, &plan.archivedSprint); err != nil {
+					return fmt.Errorf("archive write failed (state unchanged): %w", err)
+				}
+
+				applySprintAdvance(s, plan)
+				advanceResult = &AdvanceSprintResult{
+					ArchivedSprintID: plan.archivedSprint.ID,
+					NewSprintID:      plan.newSprintID,
+					NewSprintNumber:  plan.newNumber,
+					CarriedTasks:     plan.carriedTasks,
+					ArchivePath:      archivePath,
+				}
+			} else {
+				// Mid-sprint checkpoint — just resume the same sprint.
+				s.Sprint.Status = models.SprintStatusInProgress
+			}
 			if resumedFrom != "" {
 				resumedFrom += " and CHECKPOINT"
 			} else {
@@ -136,7 +168,8 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 	}
 
 	return &ResumeResult{
-		ResumedFrom: resumedFrom,
-		ChangedBy:   changedBy,
+		ResumedFrom:    resumedFrom,
+		ChangedBy:      changedBy,
+		SprintAdvanced: advanceResult,
 	}, nil
 }

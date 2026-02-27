@@ -5,7 +5,7 @@ Status: {{.Goal.Status}}
 Spec: {{.Goal.SpecRef}}
 
 === SPRINT ===
-ID: {{.Sprint.ID}}
+ID: {{.Sprint.ID}}{{if gt .Sprint.Number 0}} (Sprint #{{.Sprint.Number}}){{end}}
 Status: {{.Sprint.Status}}
 Started: {{.Sprint.StartTime}}
 Progress: {{.Sprint.TasksDone}}/{{.Sprint.TasksTotal}} tasks complete
