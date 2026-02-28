@@ -10,7 +10,10 @@ GOAL: {{.GoalDesc}}
 APPROVED: use MCP tools with escalated permissions.
 
 OPERATIONAL RULES:
-- You have FULL read access to .liza/ directory for specs and logs
+- TWO .liza/ directories exist — don't confuse them:
+  ~/.liza/ = installed contracts & skills (e.g. ~/.liza/MULTI_AGENT_MODE.md)
+  {{.ProjectRoot}}/.liza/ = runtime state & blackboard (state.yaml, agent-outputs/)
+- You have FULL read access to both .liza/ directories
 - For READING state: use liza_get MCP tool (preferred) or Read tool
 - For MODIFYING state: use role-specific MCP tools whenever available
   CRITICAL: Prefer MCP tools for atomicity and validation
