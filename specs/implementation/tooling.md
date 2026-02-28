@@ -31,7 +31,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza validate [state]` | Schema validation |
 | `liza watch` | Alarm monitor daemon |
 | `liza analyze` | Circuit breaker analysis (human-triggered) |
-| `liza checkpoint` | Create checkpoint and generate sprint summary |
+| `liza sprint-checkpoint` | Create checkpoint and generate sprint summary |
 | `liza agent <role> --agent-id x [--cli C]` | Agent supervisor (`--cli`: claude, codex, gemini, mistral, kimi) |
 | `liza claim-task <task> <agent>` | Claim task with two-phase commit (called by supervisor) |
 | `liza submit-for-review <task> <sha>` | Validate `<sha>` matches pre-rebase worktree HEAD, then set READY_FOR_REVIEW + post-rebase `review_commit` + history |
@@ -352,9 +352,9 @@ liza analyze
 # Detects systemic patterns, generates report, sets sprint.status: CHECKPOINT if triggered
 ```
 
-**liza checkpoint** — Create checkpoint
+**liza sprint-checkpoint** — Create checkpoint
 ```bash
-liza checkpoint
+liza sprint-checkpoint
 # Sets sprint.status: CHECKPOINT and generates sprint summary
 ```
 

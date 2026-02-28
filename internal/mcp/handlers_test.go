@@ -1350,17 +1350,17 @@ func TestHandleDeleteAgentWithMissingParams(t *testing.T) {
 	}
 }
 
-// TestHandleCheckpoint verifies liza_checkpoint tool
-func TestHandleCheckpoint(t *testing.T) {
+// TestHandleSprintCheckpoint verifies liza_sprint_checkpoint tool
+func TestHandleSprintCheckpoint(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
 	defer cleanup()
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	result, err := server.handleCheckpoint(map[string]any{})
+	result, err := server.handleSprintCheckpoint(map[string]any{})
 
 	if err != nil {
-		t.Fatalf("handleCheckpoint failed: %v", err)
+		t.Fatalf("handleSprintCheckpoint failed: %v", err)
 	}
 
 	// Verify result format

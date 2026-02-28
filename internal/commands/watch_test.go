@@ -824,7 +824,7 @@ func TestWatchCommand(t *testing.T) {
 	}
 }
 
-func TestRunChecks_AutoCheckpointOnCircuitBreakerPattern(t *testing.T) {
+func TestRunChecks_AutoSprintCheckpointOnCircuitBreakerPattern(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	lizaPaths := paths.New(tmpDir)

@@ -111,7 +111,7 @@ Review progress at end of sprint or major milestone.
 
 ```bash
 # 1. Create checkpoint (agents pause, summary generated)
-liza checkpoint --reason "Sprint 1 complete"
+liza sprint-checkpoint
 
 # 2. Review
 cat .liza/sprint_summary.md

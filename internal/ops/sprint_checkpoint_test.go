@@ -12,7 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-func TestCheckpoint_Success(t *testing.T) {
+func TestSprintCheckpoint_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -27,9 +27,9 @@ func TestCheckpoint_Success(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := Checkpoint(tmpDir)
+	result, err := SprintCheckpoint(tmpDir)
 	if err != nil {
-		t.Fatalf("Checkpoint() error: %v", err)
+		t.Fatalf("SprintCheckpoint() error: %v", err)
 	}
 
 	if result.CheckpointAt.IsZero() {
@@ -65,7 +65,7 @@ func TestCheckpoint_Success(t *testing.T) {
 	}
 }
 
-func TestCheckpoint_AlreadyAtCheckpoint(t *testing.T) {
+func TestSprintCheckpoint_AlreadyAtCheckpoint(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -73,7 +73,7 @@ func TestCheckpoint_AlreadyAtCheckpoint(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusCheckpoint
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := Checkpoint(tmpDir)
+	_, err := SprintCheckpoint(tmpDir)
 	if err == nil {
 		t.Fatal("Expected error when already at CHECKPOINT")
 	}
@@ -82,7 +82,7 @@ func TestCheckpoint_AlreadyAtCheckpoint(t *testing.T) {
 	}
 }
 
-func TestCheckpoint_CompletedSprint(t *testing.T) {
+func TestSprintCheckpoint_CompletedSprint(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -90,7 +90,7 @@ func TestCheckpoint_CompletedSprint(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusCompleted
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := Checkpoint(tmpDir)
+	_, err := SprintCheckpoint(tmpDir)
 	if err == nil {
 		t.Fatal("Expected error for COMPLETED sprint")
 	}
@@ -99,7 +99,7 @@ func TestCheckpoint_CompletedSprint(t *testing.T) {
 	}
 }
 
-func TestCheckpoint_AbortedSprint(t *testing.T) {
+func TestSprintCheckpoint_AbortedSprint(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -107,7 +107,7 @@ func TestCheckpoint_AbortedSprint(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusAborted
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := Checkpoint(tmpDir)
+	_, err := SprintCheckpoint(tmpDir)
 	if err == nil {
 		t.Fatal("Expected error for ABORTED sprint")
 	}
@@ -116,7 +116,7 @@ func TestCheckpoint_AbortedSprint(t *testing.T) {
 	}
 }
 
-func TestFormatCheckpointDuration(t *testing.T) {
+func TestFormatDuration(t *testing.T) {
 	tests := []struct {
 		name     string
 		duration time.Duration
@@ -130,9 +130,9 @@ func TestFormatCheckpointDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := formatCheckpointDuration(tt.duration)
+			result := formatDuration(tt.duration)
 			if result != tt.expected {
-				t.Errorf("formatCheckpointDuration(%v) = %q, want %q", tt.duration, result, tt.expected)
+				t.Errorf("formatDuration(%v) = %q, want %q", tt.duration, result, tt.expected)
 			}
 		})
 	}

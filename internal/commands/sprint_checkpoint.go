@@ -7,10 +7,10 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 )
 
-// CheckpointCommand creates a sprint checkpoint and prints the result to stdout.
-// Delegates business logic to ops.Checkpoint.
-func CheckpointCommand(projectRoot string) error {
-	result, err := ops.Checkpoint(projectRoot)
+// SprintCheckpointCommand creates a sprint checkpoint and prints the result to stdout.
+// Delegates business logic to ops.SprintCheckpoint.
+func SprintCheckpointCommand(projectRoot string) error {
+	result, err := ops.SprintCheckpoint(projectRoot)
 	if err != nil {
 		return fmt.Errorf("checkpoint: %w", err)
 	}

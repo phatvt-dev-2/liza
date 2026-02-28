@@ -137,7 +137,7 @@ liza resume
 liza stop
 
 # Checkpoint (halt + generate summary)
-liza checkpoint
+liza sprint-checkpoint
 ```
 
 **Signal handling:** Agents cleanly exit on `Ctrl+C` (SIGINT) or `kill` (SIGTERM). On exit, the agent unregisters and atomically releases any active task claim — the task returns to READY (coder) or READY_FOR_REVIEW (reviewer) — so no orphaned claims are left behind.
@@ -176,7 +176,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza recover-task <task-id>` | Recover by task ID (release claims + remove worktree/branch + recover agent) |
 | `liza recover-agent <agent-id>` | Recover by agent ID (release claim + remove worktree + delete agent) |
 | `liza release-claim <task-id> [--role R]` | Release claim on a task (manual, granular recovery) |
-| `liza checkpoint` | Create a checkpoint (halt + summary) |
+| `liza sprint-checkpoint` | Create a checkpoint (halt + summary) |
 | `liza status` | Show system status |
 | `liza pause` / `liza resume` | Pause/resume system |
 | `liza stop` / `liza start` | Stop/start system |

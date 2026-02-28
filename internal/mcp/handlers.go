@@ -576,10 +576,10 @@ func (s *Server) handleAnalyze(params map[string]any) (any, error) {
 		result.Pattern, result.Severity, result.ReportPath))
 }
 
-// handleCheckpoint implements the liza_checkpoint tool
+// handleSprintCheckpoint implements the liza_sprint_checkpoint tool
 // Maps to: liza checkpoint
-func (s *Server) handleCheckpoint(params map[string]any) (any, error) {
-	result, err := ops.Checkpoint(s.projectRoot)
+func (s *Server) handleSprintCheckpoint(params map[string]any) (any, error) {
+	result, err := ops.SprintCheckpoint(s.projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("checkpoint failed: %w", err)
 	}

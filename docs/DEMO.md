@@ -411,7 +411,7 @@ cat .liza/alerts.log
 
 **Trigger checkpoint (sprint boundary):**
 ```bash
-liza checkpoint
+liza sprint-checkpoint
 ```
 
 **Abort everything:**

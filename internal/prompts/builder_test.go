@@ -284,7 +284,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				"- Total tasks: 2",
 				"- Merged: 2",
 				"All planned sprint tasks have reached terminal state",
-				"liza_checkpoint",
+				"liza_sprint_checkpoint",
 				"liza_update_sprint_metrics",
 			},
 		},

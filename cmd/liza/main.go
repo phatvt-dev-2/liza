@@ -715,9 +715,10 @@ cannot be used to restart stopped agents.`,
 	},
 }
 
-var checkpointCmd = &cobra.Command{
-	Use:   "checkpoint",
-	Short: "Create a checkpoint for the sprint",
+var sprintCheckpointCmd = &cobra.Command{
+	Use:     "sprint-checkpoint",
+	Aliases: []string{"checkpoint"},
+	Short:   "Create a checkpoint for the sprint",
 	Long: `Create a checkpoint by setting sprint.status to CHECKPOINT in state.yaml.
 
 This pauses all agents and generates a sprint summary report with:
@@ -742,7 +743,7 @@ This is useful for:
 			return err
 		}
 
-		return commands.CheckpointCommand(projectRoot)
+		return commands.SprintCheckpointCommand(projectRoot)
 	},
 }
 
@@ -1261,7 +1262,7 @@ func init() {
 	rootCmd.AddCommand(stopCmd)
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(resumeCmd)
-	rootCmd.AddCommand(checkpointCmd)
+	rootCmd.AddCommand(sprintCheckpointCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(recoverTaskCmd)
 	rootCmd.AddCommand(recoverAgentCmd)

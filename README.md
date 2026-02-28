@@ -146,7 +146,7 @@ liza status                                         # Dashboard overview
 liza watch                                          # Monitor for anomalies
 liza pause / liza resume                            # Human intervention
 liza stop / liza start                              # System control
-liza checkpoint                                     # Sprint checkpoint
+liza sprint-checkpoint                              # Sprint checkpoint
 ```
 
 ## Installation

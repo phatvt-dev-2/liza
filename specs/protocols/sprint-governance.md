@@ -70,7 +70,7 @@ Checkpoints are **mandatory human review points**. No work proceeds until human 
 | Sprint tasks complete | Yes | Normal completion |
 | Sprint deadline reached | Yes | Time box enforced |
 | Circuit breaker fired | Yes | Systemic issue detected |
-| `liza checkpoint` | Manual | Human-initiated review |
+| `liza sprint-checkpoint` | Manual | Human-initiated review |
 
 ### Checkpoint Timeout Behavior
 

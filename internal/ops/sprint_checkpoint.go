@@ -14,15 +14,15 @@ import (
 // ErrSprintAlreadyCheckpoint indicates the sprint is already at CHECKPOINT.
 var ErrSprintAlreadyCheckpoint = errors.New("sprint is already at CHECKPOINT")
 
-// CheckpointResult contains the outcome of creating a sprint checkpoint.
-type CheckpointResult struct {
+// SprintCheckpointResult contains the outcome of creating a sprint checkpoint.
+type SprintCheckpointResult struct {
 	CheckpointAt time.Time
 	ReportPath   string
 }
 
-// Checkpoint transitions sprint status to CHECKPOINT, causing agents to pause,
+// SprintCheckpoint transitions sprint status to CHECKPOINT, causing agents to pause,
 // and writes a sprint summary report. No terminal I/O.
-func Checkpoint(projectRoot string) (*CheckpointResult, error) {
+func SprintCheckpoint(projectRoot string) (*SprintCheckpointResult, error) {
 	lizaPaths := paths.New(projectRoot)
 	statePath := lizaPaths.StatePath()
 	reportPath := lizaPaths.SprintSummaryPath()
@@ -63,7 +63,7 @@ func Checkpoint(projectRoot string) (*CheckpointResult, error) {
 		return nil, fmt.Errorf("failed to update sprint status: %w", err)
 	}
 
-	return &CheckpointResult{
+	return &SprintCheckpointResult{
 		CheckpointAt: timestamp,
 		ReportPath:   reportPath,
 	}, nil
@@ -100,13 +100,13 @@ func sprintStatusSection(sprint *models.Sprint, timestamp time.Time) string {
 	s += fmt.Sprintf("- **Deadline:** %s\n", sprint.Timeline.Deadline.Format(time.RFC3339))
 
 	elapsed := timestamp.Sub(sprint.Timeline.Started)
-	s += fmt.Sprintf("- **Elapsed:** %s\n", formatCheckpointDuration(elapsed))
+	s += fmt.Sprintf("- **Elapsed:** %s\n", formatDuration(elapsed))
 
 	remaining := sprint.Timeline.Deadline.Sub(timestamp)
 	if remaining > 0 {
-		s += fmt.Sprintf("- **Remaining:** %s\n", formatCheckpointDuration(remaining))
+		s += fmt.Sprintf("- **Remaining:** %s\n", formatDuration(remaining))
 	} else {
-		s += fmt.Sprintf("- **Overdue by:** %s\n", formatCheckpointDuration(-remaining))
+		s += fmt.Sprintf("- **Overdue by:** %s\n", formatDuration(-remaining))
 	}
 
 	s += "\n"
@@ -211,8 +211,8 @@ func nextStepsSection() string {
 	return s
 }
 
-// formatCheckpointDuration formats a duration in a human-readable format.
-func formatCheckpointDuration(d time.Duration) string {
+// formatDuration formats a duration in a human-readable format.
+func formatDuration(d time.Duration) string {
 	hours := int(d.Hours())
 	minutes := int(d.Minutes()) % 60
 

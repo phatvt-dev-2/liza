@@ -190,7 +190,7 @@ func checkCircuitBreakerEscalation(projectRoot string, state *models.State) ([]a
 		return nil, nil
 	}
 
-	checkpointResult, err := ops.Checkpoint(projectRoot)
+	sprintCheckpointResult, err := ops.SprintCheckpoint(projectRoot)
 	if err != nil {
 		// Another process may checkpoint between read and mutation.
 		if errors.Is(err, ops.ErrSprintAlreadyCheckpoint) {
@@ -219,7 +219,7 @@ func checkCircuitBreakerEscalation(projectRoot string, state *models.State) ([]a
 			Level:     alertLevelCritical,
 			Category:  "AUTO CHECKPOINT",
 			Message: fmt.Sprintf("created at %s report=%s",
-				checkpointResult.CheckpointAt.UTC().Format(time.RFC3339), checkpointResult.ReportPath),
+				sprintCheckpointResult.CheckpointAt.UTC().Format(time.RFC3339), sprintCheckpointResult.ReportPath),
 		},
 	}, nil
 }

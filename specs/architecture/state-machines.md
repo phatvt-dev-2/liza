@@ -281,7 +281,7 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 |---------|--------------|-------|
 | All planned tasks terminal | COMPLETED | Normal completion |
 | Calendar deadline reached | CHECKPOINT | Human decides continue/abort |
-| `liza checkpoint` | CHECKPOINT | Manual review request |
+| `liza sprint-checkpoint` | CHECKPOINT | Manual review request |
 | Circuit breaker triggered | ABORTED | Systemic issue detected |
 | `liza stop` | ABORTED | Manual termination |
 

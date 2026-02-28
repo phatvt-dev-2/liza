@@ -12,7 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-func TestCheckpointCommand(t *testing.T) {
+func TestSprintCheckpointCommand(t *testing.T) {
 	tests := []struct {
 		name             string
 		initialStatus    models.SprintStatus
@@ -100,7 +100,7 @@ func TestCheckpointCommand(t *testing.T) {
 			bb := testhelpers.WriteInitialState(t, stateFile, state)
 
 			// Run checkpoint command
-			err := CheckpointCommand(tmpDir)
+			err := SprintCheckpointCommand(tmpDir)
 
 			// Check error
 			if tt.wantErr {

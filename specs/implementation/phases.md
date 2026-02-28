@@ -123,7 +123,7 @@
 
 1. Update blackboard schema with sprint section
 2. Update `liza init` to initialize sprint
-3. Implement `liza checkpoint`:
+3. Implement `liza sprint-checkpoint`:
    - Sets `sprint.status: CHECKPOINT`
    - Generates sprint summary
    - Waits for human release

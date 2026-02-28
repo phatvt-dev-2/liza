@@ -157,7 +157,7 @@ Review concludes when ANY of:
 - [ ] Checkpoint release resumes agents
 - [ ] Sprint deadline detected by watcher
 - [ ] Sprint metrics collected correctly
-- [ ] `liza checkpoint` creates CHECKPOINT and generates summary
+- [ ] `liza sprint-checkpoint` creates CHECKPOINT and generates summary
 
 ---
 

@@ -47,14 +47,14 @@ Chose **Option 3**: Replace all bash scripts with a single Go binary (`liza`) us
 | `scripts/wt-delete.sh <task>` | `liza wt-delete <task>` |
 | `scripts/wt-merge.sh <task>` | `liza wt-merge <task>` |
 | `LIZA_AGENT_ID=x scripts/liza-agent.sh <role>` | `liza agent <role> --agent-id x` |
-| `scripts/liza-checkpoint.sh` | `liza checkpoint` |
+| `scripts/liza-checkpoint.sh` | `liza sprint-checkpoint` |
 | `scripts/clear-stale-review-claims.sh` | `liza clear-stale-review-claims` |
 | `scripts/release-claim.sh <task> [--role R]` | `liza release-claim <task> [--role R]` |
 | `scripts/update-sprint-metrics.sh` | `liza update-sprint-metrics` |
 
 New commands (no bash equivalent): `liza status`, `liza get`, `liza pause`, `liza stop`, `liza start`, `liza resume`, `liza mark-blocked`, `liza supersede-task`, `liza delete agent|task`, `liza version`.
 
-Signal files → state fields: `.liza/PAUSE` → `config.mode: PAUSED` via `liza pause`, `.liza/ABORT` → `config.mode: STOPPED` via `liza stop`, `.liza/CHECKPOINT` → `sprint.status: CHECKPOINT` via `liza checkpoint`.
+Signal files → state fields: `.liza/PAUSE` → `config.mode: PAUSED` via `liza pause`, `.liza/ABORT` → `config.mode: STOPPED` via `liza stop`, `.liza/CHECKPOINT` → `sprint.status: CHECKPOINT` via `liza sprint-checkpoint`.
 
 ### Impact on ADR-0011
 

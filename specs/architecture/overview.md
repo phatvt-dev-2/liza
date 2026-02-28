@@ -199,7 +199,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza init "goal" --spec spec` | Initialize blackboard |
 | `liza validate [state]` | Schema validation |
 | `liza watch` | Alarm monitor |
-| `liza checkpoint` | Create checkpoint |
+| `liza sprint-checkpoint` | Create checkpoint |
 | `liza analyze` | Circuit breaker analysis |
 | `liza agent <role> --agent-id x` | Agent supervisor |
 | `liza add-task --id X ...` | Add task to backlog |
