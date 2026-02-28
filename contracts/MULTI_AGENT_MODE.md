@@ -87,6 +87,8 @@ The blackboard (`state.yaml`) is the coordination mechanism.
 
 **History is Immutable:** Never delete history entries. Append only.
 
+**Do NOT use TodoWrite.** The blackboard already tracks task state and checkpoints.
+
 ---
 
 ## Iteration Protocol
