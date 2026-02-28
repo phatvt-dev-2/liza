@@ -53,6 +53,18 @@ class TurnUsage:
 
 
 @dataclass
+class TurnAction:
+    """A single tool invocation correlated with its result."""
+
+    turn_num: int = 0
+    tool_name: str = ""
+    detail: str = ""
+    result_chars: int = 0
+    is_error: bool = False
+    result_preview: str = ""
+
+
+@dataclass
 class ContentItem:
     """A single content item from the log."""
 
@@ -77,6 +89,8 @@ class SessionReport:
     items: list[ContentItem] = field(default_factory=list)
     # Tool call frequency (both formats)
     tool_calls: dict[str, int] = field(default_factory=dict)
+    # Turn timeline (rich only)
+    actions: list[TurnAction] = field(default_factory=list)
     # MCP server status (rich only)
     mcp_servers: list[dict[str, str]] = field(default_factory=list)
 
@@ -134,12 +148,46 @@ def _measure_content_block(block: dict) -> ContentItem:
     )
 
 
+def _extract_tool_detail(name: str, input_data: dict) -> str:
+    """Extract a short detail string from a tool_use input."""
+    if name == "Bash":
+        cmd = input_data.get("command", "")
+        # First meaningful token
+        return cmd.split("\n")[0][:80] if cmd else ""
+    if name in ("Read", "Write"):
+        return input_data.get("file_path", "")[:80]
+    if name == "Edit":
+        return input_data.get("file_path", "")[:80]
+    if name in ("Glob", "Grep"):
+        pat = input_data.get("pattern", "")
+        path = input_data.get("path", "")
+        return f"{pat} in {path}" if path else pat
+    if name == "Task":
+        return input_data.get("description", "")[:80]
+    if name == "TaskCreate":
+        return input_data.get("subject", "")[:80]
+    if name == "TaskUpdate":
+        return f"#{input_data.get('taskId', '')} → {input_data.get('status', '')}"
+    if name.startswith("mcp__"):
+        # MCP tool — show first string-valued input
+        for v in input_data.values():
+            if isinstance(v, str) and v:
+                return v[:80]
+    # Fallback: first string value
+    for v in input_data.values():
+        if isinstance(v, str) and v:
+            return v[:60]
+    return ""
+
+
 def parse_rich(lines: list[str]) -> SessionReport:
     """Parse a rich-format (Format A) log file."""
     report = SessionReport()
     report.meta.format = "rich"
 
     seen_message_ids: dict[str, TurnUsage] = {}
+    # For correlating tool_use → tool_result
+    pending_tool_uses: dict[str, tuple[str, str, int]] = {}  # id → (name, detail, turn_num)
 
     for line in lines:
         line = line.strip()
@@ -188,6 +236,12 @@ def parse_rich(lines: list[str]) -> SessionReport:
                 if block.get("type") == "tool_use":
                     name = block.get("name", "unknown")
                     report.tool_calls[name] = report.tool_calls.get(name, 0) + 1
+                    # Track for timeline correlation
+                    tool_id = block.get("id", "")
+                    if tool_id:
+                        detail = _extract_tool_detail(name, block.get("input", {}))
+                        turn_num = len(report.turns)  # current turn index (1-based after append)
+                        pending_tool_uses[tool_id] = (name, detail, turn_num)
 
         elif event_type == "user":
             msg = obj.get("message", {})
@@ -197,21 +251,31 @@ def parse_rich(lines: list[str]) -> SessionReport:
                     if item.chars > 0:
                         item.item_type = "tool_result"
                         report.items.append(item)
-                    # Also check nested content in tool results
+
+                    # Correlate tool_result with pending tool_use for timeline
+                    tool_use_id = content_part.get("tool_use_id", "")
+                    is_error = bool(content_part.get("is_error"))
                     nested = content_part.get("content", "")
-                    if isinstance(nested, str) and nested:
-                        report.items.append(
-                            ContentItem(
-                                item_type="tool_result",
-                                chars=len(nested),
-                                preview=nested[:120].replace("\n", " "),
+                    result_chars = 0
+                    result_preview = ""
+                    if isinstance(nested, str):
+                        result_chars = len(nested)
+                        result_preview = nested[:120].replace("\n", " ")
+                        if nested:
+                            report.items.append(
+                                ContentItem(
+                                    item_type="tool_result",
+                                    chars=result_chars,
+                                    preview=result_preview,
+                                )
                             )
-                        )
                     elif isinstance(nested, list):
+                        parts_text = []
                         for part in nested:
                             if isinstance(part, dict):
                                 text = part.get("text", "")
                                 if text:
+                                    parts_text.append(text)
                                     report.items.append(
                                         ContentItem(
                                             item_type="tool_result",
@@ -219,6 +283,22 @@ def parse_rich(lines: list[str]) -> SessionReport:
                                             preview=text[:120].replace("\n", " "),
                                         )
                                     )
+                        combined = "\n".join(parts_text)
+                        result_chars = len(combined)
+                        result_preview = combined[:120].replace("\n", " ")
+
+                    if tool_use_id and tool_use_id in pending_tool_uses:
+                        name, detail, turn_num = pending_tool_uses.pop(tool_use_id)
+                        report.actions.append(
+                            TurnAction(
+                                turn_num=turn_num,
+                                tool_name=name,
+                                detail=detail,
+                                result_chars=result_chars,
+                                is_error=is_error,
+                                result_preview=result_preview,
+                            )
+                        )
 
         elif event_type == "result":
             report.meta.duration_ms = obj.get("duration_ms", 0)
@@ -331,18 +411,66 @@ def parse_sparse(lines: list[str]) -> SessionReport:
                 ci = _measure_sparse_item(item)
                 if ci.chars > 0:
                     report.items.append(ci)
-                # Track tool calls
+                # Track tool calls and build timeline actions
                 itype = item.get("type", "")
                 if itype == "command_execution":
                     cmd = item.get("command", "")
-                    # Normalize: extract the base command name
                     name = _extract_command_name(cmd)
                     report.tool_calls[name] = report.tool_calls.get(name, 0) + 1
+                    # Strip shell wrapper for detail
+                    detail = cmd
+                    for prefix in ("/usr/bin/zsh -lc ", "/bin/bash -lc ", "/bin/sh -c "):
+                        if cmd.startswith(prefix):
+                            detail = cmd[len(prefix) :].strip().strip("'\"")
+                            break
+                    output = item.get("aggregated_output", "") or ""
+                    report.actions.append(
+                        TurnAction(
+                            turn_num=1,
+                            tool_name=name,
+                            detail=detail[:80],
+                            result_chars=len(output),
+                            is_error=item.get("exit_code", 0) != 0,
+                            result_preview=output[:120].replace("\n", " "),
+                        )
+                    )
                 elif itype == "mcp_tool_call":
                     server = item.get("server", "")
                     tool = item.get("tool", "")
                     name = f"{server}/{tool}" if server else tool
                     report.tool_calls[name] = report.tool_calls.get(name, 0) + 1
+                    args = item.get("arguments", {})
+                    detail = ""
+                    if isinstance(args, dict):
+                        for v in args.values():
+                            if isinstance(v, str) and v:
+                                detail = v[:80]
+                                break
+                    result = item.get("result", {})
+                    result_text = json.dumps(result) if isinstance(result, dict) else str(result)
+                    report.actions.append(
+                        TurnAction(
+                            turn_num=1,
+                            tool_name=name,
+                            detail=detail,
+                            result_chars=len(result_text),
+                            is_error=item.get("status") == "failed",
+                            result_preview=result_text[:120].replace("\n", " "),
+                        )
+                    )
+                elif itype == "file_change":
+                    changes = item.get("changes", [])
+                    paths = [c.get("path", "").rsplit("/", 1)[-1] for c in changes]
+                    report.actions.append(
+                        TurnAction(
+                            turn_num=1,
+                            tool_name="file_change",
+                            detail=", ".join(paths)[:80],
+                            result_chars=0,
+                            is_error=False,
+                            result_preview="",
+                        )
+                    )
 
         elif event_type == "turn.completed":
             usage = obj.get("usage", {})
@@ -396,6 +524,10 @@ def render_header(report: SessionReport) -> str:
         lines.append(f"  Turns:      {report.meta.num_turns}")
     if report.meta.context_window:
         lines.append(f"  Ctx Window: {_fmt_tokens(report.meta.context_window)}")
+    if report.turns and report.meta.context_window:
+        ctx_window = report.meta.context_window
+        max_fill = max(t.total_input / ctx_window * 100 for t in report.turns)
+        lines.append(f"  Peak Fill:  {max_fill:.1f}%")
     return "\n".join(lines) + "\n"
 
 
@@ -519,7 +651,7 @@ def render_per_turn_growth(report: SessionReport) -> str:
 
 
 def render_cost(report: SessionReport) -> str:
-    """Rich format only: cost breakdown."""
+    """Rich format only: cost breakdown with system prompt multiplier."""
     if report.total_cost_usd == 0:
         return ""
 
@@ -534,6 +666,28 @@ def render_cost(report: SessionReport) -> str:
         avg = report.total_cost_usd / len(report.turns)
         lines.append(f"  Per-turn avg:     ${avg:.4f}")
     lines.append(f"  Model:            {report.meta.model}")
+
+    # System prompt cost multiplier
+    if report.turns:
+        first = report.turns[0]
+        sys_prompt_est = first.cache_creation_input_tokens + first.cache_read_input_tokens
+        if sys_prompt_est > 0:
+            num_turns = len(report.turns)
+            # cache_read price is 0.10× of base input price — estimate replay cost
+            # Sonnet: $3/M input, $0.30/M cache-read → $0.30 per M per turn
+            # Count error turns as "wasted"
+            error_turns = sum(1 for a in report.actions if a.is_error)
+            lines.append("")
+            lines.append(f"  System Prompt:    ~{_fmt_tokens(sys_prompt_est)} tokens (from turn 1)")
+            lines.append(
+                f"  Cache-read cost:  {_fmt_tokens(sys_prompt_est)} × {num_turns} turns "
+                f"= {_fmt_tokens(sys_prompt_est * num_turns)} token·turns"
+            )
+            if error_turns:
+                lines.append(
+                    f"  Wasted on errors: ~{error_turns} turn(s) "
+                    f"× {_fmt_tokens(sys_prompt_est)} = {_fmt_tokens(sys_prompt_est * error_turns)} wasted"
+                )
 
     return "\n".join(lines) + "\n"
 
@@ -582,6 +736,247 @@ def render_mcp_status(report: SessionReport) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_turn_timeline(report: SessionReport) -> str:
+    """Turn-by-turn tool invocation timeline (rich format only)."""
+    if not report.actions:
+        return ""
+
+    lines = [
+        "",
+        "-" * 72,
+        "TURN TIMELINE",
+        "-" * 72,
+        f"  {'#':>3s}  {'Tool':<20s} {'Detail':<30s} {'Result':>8s} {'Err':>4s}",
+        f"  {'-' * 3}  {'-' * 20} {'-' * 30} {'-' * 8} {'-' * 4}",
+    ]
+
+    for i, action in enumerate(report.actions, 1):
+        detail = action.detail[:30] if action.detail else ""
+        result_size = f"{action.result_chars / 1024:.1f}K" if action.result_chars >= 1024 else f"{action.result_chars}"
+        err = " ERR" if action.is_error else ""
+        lines.append(f"  {i:>3d}  {action.tool_name:<20s} {detail:<30s} {result_size:>8s} {err:>4s}")
+
+    total_result = sum(a.result_chars for a in report.actions)
+    error_count = sum(1 for a in report.actions if a.is_error)
+    lines.append(f"  {'-' * 3}  {'-' * 20} {'-' * 30} {'-' * 8} {'-' * 4}")
+    lines.append(
+        f"  {'':>3s}  {len(report.actions)} calls{' ' * 32}{total_result / 1024:.0f}K total   {error_count} err"
+    )
+
+    return "\n".join(lines) + "\n"
+
+
+def render_tool_result_breakdown(report: SessionReport) -> str:
+    """Aggregate result sizes by tool name."""
+    if not report.actions:
+        return ""
+
+    # Group by tool name
+    groups: dict[str, list[TurnAction]] = {}
+    for action in report.actions:
+        groups.setdefault(action.tool_name, []).append(action)
+
+    lines = [
+        "",
+        "-" * 72,
+        "TOOL RESULT BREAKDOWN",
+        "-" * 72,
+        f"  {'Tool':<25s} {'Calls':>6s} {'Total':>10s} {'Avg':>8s} {'Max':>8s}",
+        f"  {'-' * 25} {'-' * 6} {'-' * 10} {'-' * 8} {'-' * 8}",
+    ]
+
+    sorted_groups = sorted(groups.items(), key=lambda kv: sum(a.result_chars for a in kv[1]), reverse=True)
+
+    for name, actions in sorted_groups:
+        total = sum(a.result_chars for a in actions)
+        avg = total // len(actions) if actions else 0
+        mx = max(a.result_chars for a in actions) if actions else 0
+        lines.append(
+            f"  {name:<25s} {len(actions):>6d}"
+            f" {_fmt_tokens(total) + 'c':>10s}"
+            f" {_fmt_tokens(avg) + 'c':>8s}"
+            f" {_fmt_tokens(mx) + 'c':>8s}"
+        )
+
+    return "\n".join(lines) + "\n"
+
+
+def render_efficiency_insights(report: SessionReport) -> str:
+    """Detect waste: errors, near-duplicates, repetitive low-value calls."""
+    if not report.actions:
+        return ""
+
+    findings: list[str] = []
+
+    # 1. Error count
+    errors = [a for a in report.actions if a.is_error]
+    if errors:
+        tool_errs: dict[str, int] = {}
+        for e in errors:
+            tool_errs[e.tool_name] = tool_errs.get(e.tool_name, 0) + 1
+        breakdown = ", ".join(f"{n}×{t}" for t, n in sorted(tool_errs.items(), key=lambda x: -x[1]))
+        findings.append(f"  🔴 {len(errors)} error(s): {breakdown}")
+
+    # 2. Near-duplicate results (>1KB with same first 100 chars appearing 2+ times)
+    previews: dict[str, list[TurnAction]] = {}
+    for a in report.actions:
+        if a.result_chars >= 1024 and a.result_preview:
+            key = a.result_preview[:100]
+            previews.setdefault(key, []).append(a)
+    dupes = {k: v for k, v in previews.items() if len(v) >= 2}
+    if dupes:
+        total_waste = sum(sum(a.result_chars for a in group[1:]) for group in dupes.values())
+        findings.append(f"  🟠 {len(dupes)} near-duplicate result(s) (~{total_waste / 1024:.0f}KB wasted)")
+        for preview, group in list(dupes.items())[:3]:
+            findings.append(f"      {len(group)}× {group[0].tool_name}: {preview[:60]}...")
+
+    # 3. Repetitive low-value: same tool called 5+ times with avg result <200 chars
+    groups: dict[str, list[TurnAction]] = {}
+    for a in report.actions:
+        groups.setdefault(a.tool_name, []).append(a)
+    for name, actions in groups.items():
+        if len(actions) >= 5:
+            avg = sum(a.result_chars for a in actions) / len(actions)
+            if avg < 200:
+                findings.append(
+                    f"  🔵 {name} called {len(actions)}× with avg result {avg:.0f} chars (low-value chatter?)"
+                )
+
+    if not findings:
+        return ""
+
+    lines = [
+        "",
+        "-" * 72,
+        "EFFICIENCY INSIGHTS",
+        "-" * 72,
+    ] + findings
+
+    return "\n".join(lines) + "\n"
+
+
+def _find_struggle_sequences(actions: list[TurnAction]) -> list[dict]:
+    """Find clusters of errors indicating the agent was stuck on one problem.
+
+    A struggle sequence starts at an error and extends to include all actions
+    up to 3 positions past the last error (context/diagnostic actions). A new
+    error within that window extends the sequence further. The sequence ends
+    when 4+ consecutive non-error actions follow the last error.
+    """
+    sequences: list[dict] = []
+    i = 0
+    n = len(actions)
+
+    while i < n:
+        if not actions[i].is_error:
+            i += 1
+            continue
+
+        # Start of a potential sequence
+        start = i
+        last_error_idx = i
+        error_count = 1
+        j = i + 1
+
+        while j < n:
+            if actions[j].is_error:
+                last_error_idx = j
+                error_count += 1
+                j += 1
+            elif j - last_error_idx <= 3:
+                # Allow up to 3 non-error actions after last error (diagnostics)
+                j += 1
+            else:
+                break
+
+        end = last_error_idx  # inclusive, last error position
+        # Include up to 1 trailing non-error action for context
+        if end + 1 < n and not actions[end + 1].is_error:
+            end += 1
+
+        span = actions[start : end + 1]
+        total_actions = len(span)
+
+        if error_count >= 2:
+            # Extract distinct turn numbers for turn cost
+            turn_nums = sorted(set(a.turn_num for a in span if a.turn_num > 0))
+            # Summarize what tools were tried
+            tool_attempts: dict[str, int] = {}
+            for a in span:
+                tool_attempts[a.tool_name] = tool_attempts.get(a.tool_name, 0) + 1
+
+            # Try to identify a root cause from the first error's detail/preview
+            first_error = next(a for a in span if a.is_error)
+            root_hint = first_error.result_preview[:80] if first_error.result_preview else first_error.detail[:80]
+
+            sequences.append(
+                {
+                    "start_idx": start,
+                    "end_idx": end,
+                    "start_action": start + 1,  # 1-based
+                    "end_action": end + 1,
+                    "total_actions": total_actions,
+                    "error_count": error_count,
+                    "turn_nums": turn_nums,
+                    "num_turns": len(turn_nums),
+                    "tool_attempts": tool_attempts,
+                    "root_hint": root_hint,
+                    "actions": span,
+                }
+            )
+
+        i = end + 1
+
+    return sequences
+
+
+def render_struggle_sequences(report: SessionReport) -> str:
+    """Detect and render struggle sequences — clusters of errors from one root cause."""
+    if not report.actions:
+        return ""
+
+    sequences = _find_struggle_sequences(report.actions)
+    if not sequences:
+        return ""
+
+    # Estimate system prompt size from first turn (if available)
+    sys_prompt_tokens = 0
+    if report.turns:
+        first = report.turns[0]
+        sys_prompt_tokens = first.cache_creation_input_tokens + first.cache_read_input_tokens
+
+    lines = [
+        "",
+        "-" * 72,
+        "STRUGGLE SEQUENCES",
+        "-" * 72,
+    ]
+
+    for seq in sequences:
+        lines.append(
+            f"  #{seq['start_action']}–#{seq['end_action']} "
+            f"({seq['total_actions']} actions, {seq['error_count']} errors, "
+            f"{seq['num_turns']} turns)"
+        )
+        # Root cause hint
+        if seq["root_hint"]:
+            lines.append(f"    Root:    {seq['root_hint']}")
+        # Tool attempts
+        attempts = ", ".join(f"{n}×{t}" for t, n in sorted(seq["tool_attempts"].items(), key=lambda x: -x[1]))
+        lines.append(f"    Retries: {attempts}")
+        # Replay cost
+        if sys_prompt_tokens > 0:
+            wasted = sys_prompt_tokens * seq["num_turns"]
+            lines.append(
+                f"    Replay cost: {seq['num_turns']} turns × "
+                f"{_fmt_tokens(sys_prompt_tokens)} sys prompt = "
+                f"{_fmt_tokens(wasted)} cache-read tokens"
+            )
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def render_report(report: SessionReport) -> str:
     """Assemble all report sections."""
     sections = [
@@ -594,12 +989,20 @@ def render_report(report: SessionReport) -> str:
 
     if report.meta.format == "rich":
         sections.append(render_per_turn_growth(report))
+        sections.append(render_turn_timeline(report))
+        sections.append(render_tool_result_breakdown(report))
+        sections.append(render_efficiency_insights(report))
+        sections.append(render_struggle_sequences(report))
         sections.append(render_cost(report))
         sections.append(render_mcp_status(report))
     else:
         sections.append("")
-        sections.append("  Note: Per-turn data unavailable in sparse format (aggregate only).")
+        sections.append("  Note: Per-turn growth unavailable in sparse format (single turn).")
         sections.append("")
+        sections.append(render_turn_timeline(report))
+        sections.append(render_tool_result_breakdown(report))
+        sections.append(render_efficiency_insights(report))
+        sections.append(render_struggle_sequences(report))
 
     return "\n".join(s for s in sections if s)
 

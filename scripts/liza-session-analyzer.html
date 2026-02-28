@@ -44,14 +44,19 @@ function parseCoderLog(lines) {
       if (obj.type === "turn.completed" && obj.usage) usage = obj.usage;
       if (obj.type === "item.completed" && obj.item) {
         const it = obj.item;
+        const output = it.aggregated_output || "";
         items.push({
           id: it.id, type: it.type,
           status: it.status || "completed",
           command: it.command || null, text: it.text || null,
-          outputLen: (it.aggregated_output || "").length,
+          outputLen: output.length,
+          outputPreview: output.slice(0, 120).replace(/\n/g, " "),
           chars: measureSparseItem(it),
           exitCode: it.exit_code,
           server: it.server || null, tool: it.tool || null,
+          arguments: it.arguments || null,
+          changes: it.changes || null,
+          result: it.result || null,
         });
       }
     } catch {}
@@ -106,7 +111,8 @@ function parsePlannerLog(lines) {
         // Process ALL content blocks, not just the first
         for (const block of (msg.content || [])) {
           events.push({ type: "assistant", contentType: block.type, toolName: block.name || null,
-            toolInput: block.input || null, text: block.text || block.thinking || null,
+            toolInput: block.input || null, toolUseId: block.id || null,
+            text: block.text || block.thinking || null,
             chars: measureRichBlock(block),
             usage: msg.usage || null, msgId: msg.id });
         }
@@ -118,9 +124,17 @@ function parsePlannerLog(lines) {
             : measureToolResult(obj.tool_use_result);
           events.push({ type: "tool_result", result: obj.tool_use_result, chars: resultChars });
         }
-        // Also measure nested tool_result content
+        // Also measure nested tool_result content with correlation IDs
         for (const part of (obj.message?.content || [])) {
-          if (part?.content) {
+          if (part?.type === "tool_result") {
+            const nested = measureToolResult(part.content);
+            const preview = typeof part.content === "string" ? part.content.slice(0, 120).replace(/\n/g, " ") :
+              Array.isArray(part.content) ? (part.content[0]?.text || "").slice(0, 120).replace(/\n/g, " ") : "";
+            if (nested > 0) events.push({
+              type: "tool_result", result: part.content, chars: nested,
+              toolUseId: part.tool_use_id || null, isError: !!part.is_error, preview
+            });
+          } else if (part?.content) {
             const nested = measureToolResult(part.content);
             if (nested > 0) events.push({ type: "tool_result", result: part.content, chars: nested });
           }
@@ -151,6 +165,86 @@ function detectAndParse(text) {
   return null;
 }
 
+function extractCommandName(cmd) {
+  if (!cmd) return cmd;
+  const prefixes = ["/usr/bin/zsh -lc ", "/bin/bash -lc ", "/bin/sh -c "];
+  for (const prefix of prefixes) {
+    if (cmd.startsWith(prefix)) {
+      const inner = cmd.slice(prefix.length).trim().replace(/^['"]|['"]$/g, "");
+      let first = (inner.split(/\s+/)[0] || cmd);
+      if (["set", "echo", "if", "cd"].includes(first)) {
+        const parts = inner.split("&&");
+        if (parts.length > 1) first = parts[parts.length - 1].trim().split(/\s+/)[0];
+      }
+      return first;
+    }
+  }
+  return cmd.split(/\s+/)[0] || cmd;
+}
+
+function extractCommandDetail(cmd) {
+  if (!cmd) return "";
+  const prefixes = ["/usr/bin/zsh -lc ", "/bin/bash -lc ", "/bin/sh -c "];
+  for (const prefix of prefixes) {
+    if (cmd.startsWith(prefix)) {
+      return cmd.slice(prefix.length).trim().replace(/^['"]|['"]$/g, "").slice(0, 80);
+    }
+  }
+  return cmd.slice(0, 80);
+}
+
+function extractToolDetail(name, input) {
+  if (!input) return "";
+  if (name === "Bash") return (input.command || "").split("\n")[0].slice(0, 80);
+  if (name === "Read" || name === "Write" || name === "Edit") return (input.file_path || "").slice(0, 80);
+  if (name === "Glob" || name === "Grep") {
+    const pat = input.pattern || "";
+    const path = input.path || "";
+    return path ? `${pat} in ${path}` : pat;
+  }
+  if (name === "Task") return (input.description || "").slice(0, 80);
+  if (name === "TaskCreate") return (input.subject || "").slice(0, 80);
+  if (name === "TaskUpdate") return `#${input.taskId || ""} → ${input.status || ""}`;
+  // MCP or fallback: first string value
+  for (const v of Object.values(input)) {
+    if (typeof v === "string" && v) return v.slice(0, 60);
+  }
+  return "";
+}
+
+function findStruggleSequences(timeline) {
+  const sequences = [];
+  let i = 0;
+  const n = timeline.length;
+  while (i < n) {
+    if (!timeline[i].isError) { i++; continue; }
+    let start = i, lastErr = i, errCount = 1, j = i + 1;
+    while (j < n) {
+      if (timeline[j].isError) { lastErr = j; errCount++; j++; }
+      else if (j - lastErr <= 3) { j++; }
+      else { break; }
+    }
+    let end = lastErr;
+    if (end + 1 < n && !timeline[end + 1].isError) end++;
+    const span = timeline.slice(start, end + 1);
+    if (errCount >= 2) {
+      const turnNums = [...new Set(span.map(a => a.turnNum).filter(t => t > 0))].sort((a,b)=>a-b);
+      const toolAttempts = {};
+      for (const a of span) toolAttempts[a.toolName] = (toolAttempts[a.toolName] || 0) + 1;
+      const firstErr = span.find(a => a.isError);
+      sequences.push({
+        startAction: start + 1, endAction: end + 1,
+        totalActions: span.length, errorCount: errCount,
+        numTurns: turnNums.length,
+        toolAttempts,
+        rootHint: (firstErr.preview || firstErr.detail || "").slice(0, 80),
+      });
+    }
+    i = end + 1;
+  }
+  return sequences;
+}
+
 // --- Analysis ---
 
 function analyzeCodex(parsed) {
@@ -173,11 +267,91 @@ function analyzeCodex(parsed) {
       type: i.type, chars: i.chars, estTokens: Math.ceil(i.chars / 4),
       preview: truncate(i.command || i.text || (i.server ? `${i.server}/${i.tool}` : "") || "", 80),
     }));
+  // --- Timeline from actionable items ---
+  const timeline = [];
+  for (const item of items) {
+    if (item.type === "command_execution") {
+      timeline.push({
+        turnNum: 1, toolName: extractCommandName(item.command),
+        detail: extractCommandDetail(item.command),
+        resultChars: item.outputLen || 0,
+        isError: item.exitCode != null && item.exitCode !== 0,
+        preview: item.outputPreview || "",
+      });
+    } else if (item.type === "mcp_tool_call") {
+      const name = item.server ? `${item.server}/${item.tool}` : item.tool || "mcp";
+      let detail = "";
+      if (item.arguments && typeof item.arguments === "object") {
+        for (const v of Object.values(item.arguments)) {
+          if (typeof v === "string" && v) { detail = v.slice(0, 80); break; }
+        }
+      }
+      const resultText = item.result ? JSON.stringify(item.result) : "";
+      timeline.push({
+        turnNum: 1, toolName: name, detail,
+        resultChars: resultText.length,
+        isError: item.status === "failed",
+        preview: resultText.slice(0, 120).replace(/\n/g, " "),
+      });
+    } else if (item.type === "file_change" && item.changes) {
+      const paths = item.changes.map(c => (c.path || "").split("/").pop());
+      timeline.push({
+        turnNum: 1, toolName: "file_change",
+        detail: paths.join(", ").slice(0, 80),
+        resultChars: 0, isError: false, preview: "",
+      });
+    }
+  }
+
+  // --- Tool Result Breakdown ---
+  const toolResultBreakdown = {};
+  for (const t of timeline) {
+    if (!toolResultBreakdown[t.toolName]) toolResultBreakdown[t.toolName] = { calls: 0, totalChars: 0, maxChars: 0 };
+    const b = toolResultBreakdown[t.toolName];
+    b.calls++; b.totalChars += t.resultChars; b.maxChars = Math.max(b.maxChars, t.resultChars);
+  }
+
+  // --- Efficiency Insights ---
+  const efficiencyInsights = [];
+  const errorActions = timeline.filter(t => t.isError);
+  if (errorActions.length > 0) {
+    const toolErrs = {};
+    for (const e of errorActions) toolErrs[e.toolName] = (toolErrs[e.toolName] || 0) + 1;
+    const bd = Object.entries(toolErrs).sort((a,b) => b[1]-a[1]).map(([t,n]) => `${n}×${t}`).join(", ");
+    efficiencyInsights.push({ type: "error", text: `${errorActions.length} error(s): ${bd}` });
+  }
+  const previewMap = {};
+  for (const t of timeline) {
+    if (t.resultChars >= 1024 && t.preview) {
+      const key = t.preview.slice(0, 100);
+      if (!previewMap[key]) previewMap[key] = [];
+      previewMap[key].push(t);
+    }
+  }
+  let dupeWaste = 0;
+  const dupeEntries = [];
+  for (const [key, group] of Object.entries(previewMap)) {
+    if (group.length >= 2) {
+      dupeWaste += group.slice(1).reduce((s, t) => s + t.resultChars, 0);
+      dupeEntries.push({ count: group.length, tool: group[0].toolName, preview: key.slice(0, 60) });
+    }
+  }
+  if (dupeEntries.length > 0) {
+    efficiencyInsights.push({ type: "duplicate", text: `${dupeEntries.length} near-duplicate result(s) (~${(dupeWaste/1024).toFixed(0)}KB wasted)`, details: dupeEntries.slice(0, 3) });
+  }
+  for (const [name, b] of Object.entries(toolResultBreakdown)) {
+    if (b.calls >= 5 && (b.totalChars / b.calls) < 200) {
+      efficiencyInsights.push({ type: "low_value", text: `${name} called ${b.calls}× with avg result ${Math.round(b.totalChars/b.calls)} chars (low-value chatter?)` });
+    }
+  }
+
   return {
     summary: { totalInputTokens: totalInput, cachedInputTokens: cachedInput, freshInputTokens: freshInput,
       outputTokens: output, cacheHitRate: totalInput > 0 ? ((cachedInput / totalInput) * 100).toFixed(1) : "0",
       totalItems: items.length },
     breakdown: itemsByType, totalCharsAll, topItems,
+    timeline, toolResultBreakdown, efficiencyInsights,
+    struggleSequences: findStruggleSequences(timeline),
   };
 }
 
@@ -218,6 +392,104 @@ function analyzeClaudeCode(parsed) {
     totalCharsAll += chars;
   }
 
+  // --- Feature 1: Turn Timeline ---
+  // Build a map of msgId → turn number using perMsgUsage index
+  const msgIdToTurn = {};
+  perMsgUsage.forEach((u, i) => { msgIdToTurn[u.msgId] = i + 1; });
+
+  // Collect pending tool_use events, then match with tool_result events
+  const pendingToolUses = {}; // toolUseId → { name, detail, turnNum }
+  const timeline = [];
+  for (const ev of events) {
+    if (ev.type === "assistant" && ev.contentType === "tool_use" && ev.toolUseId) {
+      pendingToolUses[ev.toolUseId] = {
+        name: ev.toolName || "unknown",
+        detail: extractToolDetail(ev.toolName || "", ev.toolInput),
+        turnNum: msgIdToTurn[ev.msgId] || 0,
+      };
+    }
+    if (ev.type === "tool_result" && ev.toolUseId && pendingToolUses[ev.toolUseId]) {
+      const pending = pendingToolUses[ev.toolUseId];
+      timeline.push({
+        turnNum: pending.turnNum,
+        toolName: pending.name,
+        detail: pending.detail,
+        resultChars: ev.chars || 0,
+        isError: !!ev.isError,
+        preview: ev.preview || "",
+      });
+      delete pendingToolUses[ev.toolUseId];
+    }
+  }
+
+  // --- Feature 2: Tool Result Breakdown ---
+  const toolResultBreakdown = {};
+  for (const t of timeline) {
+    if (!toolResultBreakdown[t.toolName]) {
+      toolResultBreakdown[t.toolName] = { calls: 0, totalChars: 0, maxChars: 0 };
+    }
+    const b = toolResultBreakdown[t.toolName];
+    b.calls++;
+    b.totalChars += t.resultChars;
+    b.maxChars = Math.max(b.maxChars, t.resultChars);
+  }
+
+  // --- Feature 3: Efficiency Insights ---
+  const efficiencyInsights = [];
+  // 3a. Errors
+  const errorActions = timeline.filter(t => t.isError);
+  if (errorActions.length > 0) {
+    const toolErrs = {};
+    for (const e of errorActions) toolErrs[e.toolName] = (toolErrs[e.toolName] || 0) + 1;
+    const breakdown2 = Object.entries(toolErrs).sort((a,b) => b[1]-a[1]).map(([t,n]) => `${n}×${t}`).join(", ");
+    efficiencyInsights.push({ type: "error", text: `${errorActions.length} error(s): ${breakdown2}` });
+  }
+  // 3b. Near-duplicates (>1KB, same first 100 chars of preview)
+  const previewMap = {};
+  for (const t of timeline) {
+    if (t.resultChars >= 1024 && t.preview) {
+      const key = t.preview.slice(0, 100);
+      if (!previewMap[key]) previewMap[key] = [];
+      previewMap[key].push(t);
+    }
+  }
+  let dupeWaste = 0;
+  const dupeEntries = [];
+  for (const [key, group] of Object.entries(previewMap)) {
+    if (group.length >= 2) {
+      const waste = group.slice(1).reduce((s, t) => s + t.resultChars, 0);
+      dupeWaste += waste;
+      dupeEntries.push({ count: group.length, tool: group[0].toolName, preview: key.slice(0, 60) });
+    }
+  }
+  if (dupeEntries.length > 0) {
+    efficiencyInsights.push({ type: "duplicate", text: `${dupeEntries.length} near-duplicate result(s) (~${(dupeWaste/1024).toFixed(0)}KB wasted)`, details: dupeEntries.slice(0, 3) });
+  }
+  // 3c. Repetitive low-value (same tool 5+ times, avg <200 chars)
+  for (const [name, b] of Object.entries(toolResultBreakdown)) {
+    if (b.calls >= 5 && (b.totalChars / b.calls) < 200) {
+      efficiencyInsights.push({ type: "low_value", text: `${name} called ${b.calls}× with avg result ${Math.round(b.totalChars/b.calls)} chars (low-value chatter?)` });
+    }
+  }
+
+  // --- Feature 4: System Prompt Cost Multiplier ---
+  let systemPromptEstimate = null;
+  if (perMsgUsage.length > 0) {
+    const first = perMsgUsage[0];
+    const sysTokens = first.cacheCreation + first.cacheRead;
+    if (sysTokens > 0) {
+      const numTurns = perMsgUsage.length;
+      const wastedTurns = errorActions.length;
+      systemPromptEstimate = {
+        tokensPerTurn: sysTokens,
+        totalTurns: numTurns,
+        totalReplayTokens: sysTokens * numTurns,
+        wastedTurns,
+        wastedTokens: sysTokens * wastedTurns,
+      };
+    }
+  }
+
   return {
     summary: { model: Object.keys(modelUsage)[0] || systemInfo?.model || "unknown",
       totalCostUsd: resultInfo?.totalCostUsd || 0, durationMs: resultInfo?.durationMs || 0,
@@ -227,9 +499,17 @@ function analyzeClaudeCode(parsed) {
       cacheHitRate: totalContextTokens > 0 ? ((cacheRead / totalContextTokens) * 100).toFixed(1) : "0",
       contextWindow: Object.values(modelUsage)[0]?.contextWindow || null,
       contextUtilization: Object.values(modelUsage)[0]?.contextWindow
-        ? ((totalContextTokens / Object.values(modelUsage)[0].contextWindow) * 100).toFixed(1) : null },
+        ? ((totalContextTokens / Object.values(modelUsage)[0].contextWindow) * 100).toFixed(1) : null,
+      peakFillPct: (() => {
+        const cw = Object.values(modelUsage)[0]?.contextWindow;
+        if (!cw || !perMsgUsage?.length) return null;
+        const maxIn = Math.max(...perMsgUsage.map(u => u.inputTokens + u.cacheCreation + u.cacheRead));
+        return ((maxIn / cw) * 100).toFixed(1);
+      })() },
     turns, mcpStatus, toolsAvailable: systemInfo?.tools || 0, skillsAvailable: systemInfo?.skills || 0,
     perMsgUsage: perMsgUsage || [], contentByType, totalCharsAll,
+    timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate,
+    struggleSequences: findStruggleSequences(timeline),
   };
 }
 
@@ -317,7 +597,7 @@ function Table({ columns, rows }) {
 
 function CodexReport({ parsed }) {
   const analysis = useMemo(() => analyzeCodex(parsed), [parsed]);
-  const { summary, breakdown, totalCharsAll, topItems } = analysis;
+  const { summary, breakdown, totalCharsAll, topItems, timeline, toolResultBreakdown, efficiencyInsights, struggleSequences } = analysis;
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
@@ -358,13 +638,94 @@ function CodexReport({ parsed }) {
         { label: "Size", key: "chars", align: "right", render: r => `${(r.chars/1024).toFixed(1)} KB` },
         { label: "Est. Tokens", key: "estTokens", align: "right", render: r => formatTokens(r.estTokens) },
       ]} rows={topItems.map((c,i) => ({ rank: i+1, ...c }))} />
+
+      {timeline.length > 0 && (<>
+        <SectionTitle>Action Timeline</SectionTitle>
+        <Table columns={[
+          { label: "#", key: "idx", align: "right" },
+          { label: "Tool", key: "toolName" },
+          { label: "Detail", key: "detail", maxWidth: 280, wrap: true },
+          { label: "Result", key: "resultSize", align: "right" },
+          { label: "Err", key: "err", align: "center", render: r => r.isError
+            ? React.createElement("span", { style: { color: C.red, fontWeight: 700 } }, "ERR")
+            : "" },
+        ]} rows={timeline.map((t, i) => ({
+          idx: i + 1, toolName: t.toolName,
+          detail: truncate(t.detail, 50),
+          resultSize: t.resultChars >= 1024 ? `${(t.resultChars/1024).toFixed(1)}K` : `${t.resultChars}`,
+          isError: t.isError,
+        }))} />
+      </>)}
+
+      {Object.keys(toolResultBreakdown).length > 0 && (<>
+        <SectionTitle>Tool Result Breakdown</SectionTitle>
+        <Table columns={[
+          { label: "Tool", key: "tool" },
+          { label: "Calls", key: "calls", align: "right" },
+          { label: "Total", key: "total", align: "right" },
+          { label: "Avg", key: "avg", align: "right" },
+          { label: "Max", key: "max", align: "right" },
+        ]} rows={Object.entries(toolResultBreakdown)
+          .sort((a,b) => b[1].totalChars - a[1].totalChars)
+          .map(([tool, b]) => ({
+            tool, calls: b.calls,
+            total: b.totalChars >= 1024 ? `${(b.totalChars/1024).toFixed(1)}KB` : `${b.totalChars}`,
+            avg: `${Math.round(b.totalChars / b.calls)}`,
+            max: b.maxChars >= 1024 ? `${(b.maxChars/1024).toFixed(1)}KB` : `${b.maxChars}`,
+          }))} />
+      </>)}
+
+      {efficiencyInsights.length > 0 && (<>
+        <SectionTitle>Efficiency Insights</SectionTitle>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {efficiencyInsights.map((ins, i) => {
+            const colors = { error: { bg: "#f8514922", border: C.red, icon: "\u{1F534}" },
+              duplicate: { bg: "#d2992222", border: C.orange, icon: "\u{1F7E0}" },
+              low_value: { bg: "#58a6ff22", border: C.accent, icon: "\u{1F535}" } };
+            const c = colors[ins.type] || colors.low_value;
+            return (
+              <div key={i} style={{ background: c.bg, border: `1px solid ${c.border}33`, borderRadius: 6,
+                padding: "10px 14px", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+                <div style={{ color: c.border, fontWeight: 600 }}>{c.icon} {ins.text}</div>
+                {ins.details && ins.details.map((d, j) => (
+                  <div key={j} style={{ color: C.textMuted, fontSize: 11, marginTop: 4, paddingLeft: 20 }}>
+                    {d.count}× {d.tool}: {d.preview}...
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </>)}
+
+      {struggleSequences.length > 0 && (<>
+        <SectionTitle>Struggle Sequences</SectionTitle>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {struggleSequences.map((seq, i) => (
+            <div key={i} style={{ background: "#f8514911", border: `1px solid ${C.red}22`, borderRadius: 8,
+              padding: 16, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
+              <div style={{ color: C.red, fontWeight: 700, marginBottom: 8 }}>
+                #{seq.startAction}–#{seq.endAction} ({seq.totalActions} actions, {seq.errorCount} errors, {seq.numTurns} turns)
+              </div>
+              {seq.rootHint && <div style={{ color: C.textMuted, fontSize: 11, marginBottom: 4 }}>
+                <span style={{ color: C.textDim }}>Root: </span>{truncate(seq.rootHint, 70)}
+              </div>}
+              <div style={{ color: C.textMuted, fontSize: 11, marginBottom: 4 }}>
+                <span style={{ color: C.textDim }}>Retries: </span>
+                {Object.entries(seq.toolAttempts).sort((a,b) => b[1]-a[1]).map(([t,n]) => `${n}×${t}`).join(", ")}
+              </div>
+            </div>
+          ))}
+        </div>
+      </>)}
     </div>
   );
 }
 
 function ClaudeCodeReport({ parsed }) {
   const analysis = useMemo(() => analyzeClaudeCode(parsed), [parsed]);
-  const { summary, turns, mcpStatus, perMsgUsage, contentByType, totalCharsAll } = analysis;
+  const { summary, turns, mcpStatus, perMsgUsage, contentByType, totalCharsAll,
+    timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate, struggleSequences } = analysis;
   const toolCalls = turns.flatMap(t => t.actions.filter(a => a.contentType === "tool_use").map(a => a.toolName)).filter(Boolean);
   const toolFreq = {};
   for (const t of toolCalls) toolFreq[t] = (toolFreq[t] || 0) + 1;
@@ -382,6 +743,9 @@ function ClaudeCodeReport({ parsed }) {
         <StatCard label="Duration" value={formatDuration(summary.durationMs)} sub={`API: ${formatDuration(summary.durationApiMs)}`} color={C.accent} />
         <StatCard label="Turns" value={summary.numTurns} color={C.cyan} />
         <StatCard label="Output" value={formatTokens(summary.outputTokens)} color={C.purple} />
+        {summary.peakFillPct && <StatCard label="Peak Fill" value={`${summary.peakFillPct}%`} color={parseFloat(summary.peakFillPct) > 80 ? C.red : C.textMuted} />}
+        {systemPromptEstimate && <StatCard label="Sys Prompt" value={formatTokens(systemPromptEstimate.tokensPerTurn)}
+          sub={`${formatTokens(systemPromptEstimate.totalReplayTokens)} total replay`} color={C.orange} />}
       </div>
       <SectionTitle>Context Token Breakdown</SectionTitle>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
@@ -454,6 +818,112 @@ function ClaudeCodeReport({ parsed }) {
       <SectionTitle>Tool Usage</SectionTitle>
       <Table columns={[ { label: "Tool", key: "tool" }, { label: "Calls", key: "count", align: "right" } ]}
         rows={Object.entries(toolFreq).sort((a,b) => b[1] - a[1]).map(([tool, count]) => ({ tool, count }))} />
+
+      {timeline.length > 0 && (<>
+        <SectionTitle>Turn Timeline</SectionTitle>
+        <Table columns={[
+          { label: "#", key: "idx", align: "right" },
+          { label: "Turn", key: "turnNum", align: "right" },
+          { label: "Tool", key: "toolName" },
+          { label: "Detail", key: "detail", maxWidth: 280, wrap: true },
+          { label: "Result", key: "resultSize", align: "right" },
+          { label: "Err", key: "err", align: "center", render: r => r.isError
+            ? React.createElement("span", { style: { color: C.red, fontWeight: 700 } }, "ERR")
+            : "" },
+        ]} rows={timeline.map((t, i) => ({
+          idx: i + 1, turnNum: t.turnNum, toolName: t.toolName,
+          detail: truncate(t.detail, 50),
+          resultSize: t.resultChars >= 1024 ? `${(t.resultChars/1024).toFixed(1)}K` : `${t.resultChars}`,
+          isError: t.isError,
+        }))} />
+      </>)}
+
+      {Object.keys(toolResultBreakdown).length > 0 && (<>
+        <SectionTitle>Tool Result Breakdown</SectionTitle>
+        <Table columns={[
+          { label: "Tool", key: "tool" },
+          { label: "Calls", key: "calls", align: "right" },
+          { label: "Total", key: "total", align: "right" },
+          { label: "Avg", key: "avg", align: "right" },
+          { label: "Max", key: "max", align: "right" },
+        ]} rows={Object.entries(toolResultBreakdown)
+          .sort((a,b) => b[1].totalChars - a[1].totalChars)
+          .map(([tool, b]) => ({
+            tool, calls: b.calls,
+            total: b.totalChars >= 1024 ? `${(b.totalChars/1024).toFixed(1)}KB` : `${b.totalChars}`,
+            avg: `${Math.round(b.totalChars / b.calls)}`,
+            max: b.maxChars >= 1024 ? `${(b.maxChars/1024).toFixed(1)}KB` : `${b.maxChars}`,
+          }))} />
+      </>)}
+
+      {efficiencyInsights.length > 0 && (<>
+        <SectionTitle>Efficiency Insights</SectionTitle>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {efficiencyInsights.map((ins, i) => {
+            const colors = { error: { bg: "#f8514922", border: C.red, icon: "\u{1F534}" },
+              duplicate: { bg: "#d2992222", border: C.orange, icon: "\u{1F7E0}" },
+              low_value: { bg: "#58a6ff22", border: C.accent, icon: "\u{1F535}" } };
+            const c = colors[ins.type] || colors.low_value;
+            return (
+              <div key={i} style={{ background: c.bg, border: `1px solid ${c.border}33`, borderRadius: 6,
+                padding: "10px 14px", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+                <div style={{ color: c.border, fontWeight: 600 }}>{c.icon} {ins.text}</div>
+                {ins.details && ins.details.map((d, j) => (
+                  <div key={j} style={{ color: C.textMuted, fontSize: 11, marginTop: 4, paddingLeft: 20 }}>
+                    {d.count}× {d.tool}: {d.preview}...
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </>)}
+
+      {systemPromptEstimate && (<>
+        <SectionTitle>System Prompt Cost Multiplier</SectionTitle>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 12,
+            fontFamily: "'JetBrains Mono', monospace" }}>
+            <div style={{ color: C.textMuted }}>Sys prompt size:</div>
+            <div style={{ color: C.text }}>{formatTokens(systemPromptEstimate.tokensPerTurn)} tokens/turn</div>
+            <div style={{ color: C.textMuted }}>Total replay:</div>
+            <div style={{ color: C.text }}>{formatTokens(systemPromptEstimate.tokensPerTurn)} × {systemPromptEstimate.totalTurns} turns = {formatTokens(systemPromptEstimate.totalReplayTokens)}</div>
+            {systemPromptEstimate.wastedTurns > 0 && <>
+              <div style={{ color: C.textMuted }}>Wasted on errors:</div>
+              <div style={{ color: C.red }}>{systemPromptEstimate.wastedTurns} turn(s) × {formatTokens(systemPromptEstimate.tokensPerTurn)} = {formatTokens(systemPromptEstimate.wastedTokens)} wasted</div>
+            </>}
+          </div>
+        </div>
+      </>)}
+
+      {struggleSequences.length > 0 && (<>
+        <SectionTitle>Struggle Sequences</SectionTitle>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {struggleSequences.map((seq, i) => {
+            const replayCost = systemPromptEstimate ? systemPromptEstimate.tokensPerTurn * seq.numTurns : 0;
+            return (
+              <div key={i} style={{ background: "#f8514911", border: `1px solid ${C.red}22`, borderRadius: 8,
+                padding: 16, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
+                <div style={{ color: C.red, fontWeight: 700, marginBottom: 8 }}>
+                  #{seq.startAction}–#{seq.endAction} ({seq.totalActions} actions, {seq.errorCount} errors, {seq.numTurns} turns)
+                </div>
+                {seq.rootHint && <div style={{ color: C.textMuted, fontSize: 11, marginBottom: 4 }}>
+                  <span style={{ color: C.textDim }}>Root: </span>{truncate(seq.rootHint, 70)}
+                </div>}
+                <div style={{ color: C.textMuted, fontSize: 11, marginBottom: 4 }}>
+                  <span style={{ color: C.textDim }}>Retries: </span>
+                  {Object.entries(seq.toolAttempts).sort((a,b) => b[1]-a[1]).map(([t,n]) => `${n}×${t}`).join(", ")}
+                </div>
+                {replayCost > 0 && <div style={{ color: C.orange, fontSize: 11 }}>
+                  <span style={{ color: C.textDim }}>Replay cost: </span>
+                  {seq.numTurns} turns × {formatTokens(systemPromptEstimate.tokensPerTurn)} = {formatTokens(replayCost)} cache-read tokens
+                </div>}
+              </div>
+            );
+          })}
+        </div>
+      </>)}
+
       {mcpStatus.length > 0 && (<>
         <SectionTitle>MCP Servers</SectionTitle>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
