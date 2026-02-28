@@ -395,16 +395,26 @@ function ClaudeCodeReport({ parsed }) {
         { label: "Cache Created", value: summary.cacheCreationTokens, color: C.orange },
         { label: "Uncached", value: summary.plainInputTokens, color: C.red },
       ]} />
-      {summary.contextWindow && (<>
-        <SectionTitle>Context Window Utilization</SectionTitle>
-        <ContextBar total={summary.contextWindow} segments={[
-          { label: "Used", value: summary.totalContextTokens, color: C.accent },
-          { label: "Available", value: summary.contextWindow - summary.totalContextTokens, color: C.borderAccent },
-        ]} />
-        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>
-          {summary.contextUtilization}% of {formatTokens(summary.contextWindow)} context window
-        </div>
-      </>)}
+      {summary.contextWindow && (() => {
+        const overflow = summary.totalContextTokens > summary.contextWindow;
+        const barTotal = overflow ? summary.totalContextTokens : summary.contextWindow;
+        const segments = overflow
+          ? [
+              { label: "Used", value: summary.contextWindow, color: C.accent },
+              { label: "Overflow", value: summary.totalContextTokens - summary.contextWindow, color: C.red },
+            ]
+          : [
+              { label: "Used", value: summary.totalContextTokens, color: C.accent },
+              { label: "Available", value: summary.contextWindow - summary.totalContextTokens, color: C.borderAccent },
+            ];
+        return <>
+          <SectionTitle>Context Window Utilization</SectionTitle>
+          <ContextBar total={barTotal} segments={segments} />
+          <div style={{ fontSize: 11, color: overflow ? C.red : C.textMuted, marginTop: 6 }}>
+            {summary.contextUtilization}% of {formatTokens(summary.contextWindow)} context window
+          </div>
+        </>;
+      })()}
 
       {perMsgUsage.length > 0 && (<>
         <SectionTitle>Per-Turn Context Growth</SectionTitle>
