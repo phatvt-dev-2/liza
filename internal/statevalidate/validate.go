@@ -483,7 +483,10 @@ func checkSpecFileExists(projectRoot, specRef string) error {
 	if idx := strings.Index(specFile, "#"); idx != -1 {
 		specFile = specFile[:idx]
 	}
-	specPath := filepath.Join(projectRoot, specFile)
+	specPath := specFile
+	if !filepath.IsAbs(specPath) {
+		specPath = filepath.Join(projectRoot, specFile)
+	}
 	if _, err := os.Stat(specPath); os.IsNotExist(err) {
 		return fmt.Errorf("spec_ref file not found: %s", specFile)
 	}

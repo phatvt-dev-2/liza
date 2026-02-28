@@ -38,8 +38,11 @@ func InitCommand(description string, specRef string, stdin io.Reader) error {
 		return fmt.Errorf(".liza already exists at %s, remove or use existing", lizaPaths.LizaDir())
 	}
 
-	// Validate spec file exists
-	specPath := filepath.Join(lizaPaths.ProjectRoot(), specRef)
+	// Resolve spec file relative to cwd (where user ran the command), not project root
+	specPath, err := filepath.Abs(specRef)
+	if err != nil {
+		return fmt.Errorf("failed to resolve spec path: %w", err)
+	}
 	if _, err := os.Stat(specPath); os.IsNotExist(err) {
 		return fmt.Errorf("spec file does not exist: %s\nCreate spec document first. See templates/vision-template.md", specRef)
 	}
@@ -149,7 +152,7 @@ func InitCommand(description string, specRef string, stdin io.Reader) error {
 		Goal: models.Goal{
 			ID:          goalID,
 			Description: description,
-			SpecRef:     specRef,
+			SpecRef:     specPath,
 			Created:     timestamp,
 			Status:      models.GoalStatusInProgress,
 			AlignmentHistory: []models.AlignmentHistory{

@@ -1017,7 +1017,12 @@ Example YAML file format:
 			input.Description, _ = cmd.Flags().GetString("desc")
 		}
 		if cmd.Flags().Changed("spec") {
-			input.SpecRef, _ = cmd.Flags().GetString("spec")
+			specVal, _ := cmd.Flags().GetString("spec")
+			absSpec, err := filepath.Abs(specVal)
+			if err != nil {
+				return fmt.Errorf("failed to resolve spec path: %w", err)
+			}
+			input.SpecRef = absSpec
 		}
 		if cmd.Flags().Changed("done") {
 			input.DoneWhen, _ = cmd.Flags().GetString("done")

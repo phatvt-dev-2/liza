@@ -280,8 +280,9 @@ func verifyInitialization(t *testing.T, tmpDir, description, specRef string) {
 	if state.Goal.Description != description {
 		t.Errorf("state.Goal.Description = %q, want %q", state.Goal.Description, description)
 	}
-	if state.Goal.SpecRef != specRef {
-		t.Errorf("state.Goal.SpecRef = %q, want %q", state.Goal.SpecRef, specRef)
+	wantSpecRef := filepath.Join(tmpDir, specRef)
+	if state.Goal.SpecRef != wantSpecRef {
+		t.Errorf("state.Goal.SpecRef = %q, want %q", state.Goal.SpecRef, wantSpecRef)
 	}
 	if state.Goal.Status != models.GoalStatusInProgress {
 		t.Errorf("state.Goal.Status = %v, want %v", state.Goal.Status, models.GoalStatusInProgress)
