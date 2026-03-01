@@ -319,6 +319,114 @@ clusters:
       rationale: "Shared instance per path and CAS retries provide explicit conflict correctness under contention"
       limitations: "CAS retries are bounded and singleton lifecycle management becomes part of process semantics"
 
+  - id: 23
+    title: "Crash Recovery Commands"
+    commit_shas: ["d769aab", "7f7f130"]
+    date_range: "2026-02-23 to 2026-02-26"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0023-crash-recovery-commands.md"
+    user_context:
+      problem: "Painful manual 5-6 step recovery on agent crash (typically quota exhaustion)"
+      alternatives: "Manual recovery, auto-recovery — needed general human-initiated solution"
+      rationale: "recover-agent implemented first but left task stuck; recover-task filled the gap"
+      limitations: "Human must identify crashed agent/task"
+
+  - id: 24
+    title: "Unified Role Constants Package"
+    commit_shas: ["a60c72e", "e173f71"]
+    date_range: "2026-02-23 to 2026-02-24"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0024-unified-role-constants-package.md"
+    user_context:
+      problem: "Preventive — gaps in systematic role renaming noticed during code review of crash recovery"
+      alternatives: "Homogenize naming convention deferred; constants were the important part"
+      rationale: "Replace string literals with constants for single source of truth"
+      limitations: "Two naming conventions still coexist"
+
+  - id: 25
+    title: "State Validation Extraction"
+    commit_shas: ["6fe5bcc"]
+    date_range: "2026-02-24"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0025-state-validation-extraction.md"
+    user_context:
+      problem: "Centralize validation to avoid maintaining CLI and MCP consistency in multiple locations"
+      alternatives: "None considered"
+      rationale: "Shared statevalidate package accessible from both commands and ops"
+      limitations: "Validation split from original command — thin wrapper remains"
+
+  - id: 26
+    title: "Role-Specific Prompt Templates"
+    commit_shas: ["26e4c8b"]
+    date_range: "2026-02-24"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0026-role-specific-prompt-templates.md"
+    user_context:
+      problem: "Context window pressure — shared_reference.tmpl dumped irrelevant content into every role"
+      alternatives: "Agents interact via MCP tools, don't need raw blackboard knowledge"
+      rationale: "Eliminate shared template, give each role only what it needs — minor duplication acceptable"
+      limitations: "Some content lightly duplicated across role templates"
+    note: "Part 1 of context optimization trilogy (26, 27, 30)"
+
+  - id: 27
+    title: "Contract Compression for MAM Context"
+    commit_shas: ["3553ffb"]
+    date_range: "2026-02-27"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0027-contract-compression-for-mam-context.md"
+    user_context:
+      problem: "Same context pressure — pairing-specific CORE.md instructions wasted MAM agent context"
+      alternatives: "Role-specific CORE splits rejected — maintenance matrix too complex"
+      rationale: "Move pairing-specific content to PAIRING_MODE.md, accept authority downgrade"
+      limitations: "Pairing instructions lose system-prompt-level authority"
+    note: "Part 2 of context optimization trilogy (26, 27, 30)"
+
+  - id: 28
+    title: "Multi-Sprint Support with Archive Safety"
+    commit_shas: ["9765a4e"]
+    date_range: "2026-02-27"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0028-multi-sprint-support.md"
+    user_context:
+      problem: "Pre-requisite for Spec Writer/Reviewer roles — human review gate between spec and coding needs sprints"
+      alternatives: "Manual state reset rejected — planner needs previous sprint context"
+      rationale: "Sprints model distinct work batches; archive freezes state for easy access"
+      limitations: "Sprint history grows in state.yaml; advance tied to liza resume"
+
+  - id: 29
+    title: "Agent Log Analysis Tools"
+    commit_shas: ["81366ec", "52b64d6", "aa991f9", "c59c7f6"]
+    date_range: "2026-02-27 to 2026-02-28"
+    confidence: 0.85
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0029-agent-log-analysis-tools.md"
+    user_context:
+      problem: "Zero observability into agent behavior — some consumed disproportionate tokens with no way to investigate"
+      alternatives: "Python analyzer could be integrated into liza CLI later"
+      rationale: "Quick experimentation that succeeded — refactoring deferred"
+      limitations: "Analysis tools outside Go binary; CLI integration deferred"
+    note: "Prepares future Sprint Analyzer agent role"
+
+  - id: 30
+    title: "Code-Enforced Agent Guardrails"
+    commit_shas: ["bd38032", "3bbe866", "5c44943"]
+    date_range: "2026-02-27 to 2026-02-28"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0030-code-enforced-agent-guardrails.md"
+    user_context:
+      problem: "ADRs 26-27 weakened prompt/contract enforcement — Go code compensates with stronger guarantees"
+      alternatives: "Keep enforcement in prompts — costs context and is softer than code"
+      rationale: "Code enforcement is stronger (can't bypass), cheaper (zero context tokens), enables further compression"
+      limitations: "New requirements must be implemented in Go, not just added to prompts"
+    note: "Part 3 of context optimization trilogy (26, 27, 30)"
+
 processing_cursor:
   step: "ordering"
   substep: "complete"
