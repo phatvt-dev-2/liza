@@ -223,6 +223,13 @@ func setupGitRepo(t *testing.T) string {
 
 	tmpDir := t.TempDir()
 
+	// Resolve symlinks so paths match os.Getwd() on macOS
+	// (macOS: /var -> /private/var, but t.TempDir() returns /var/...)
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Initialize git repo with "main" as default branch
 	cmd := exec.Command("git", "init", "-b", "main")
 	cmd.Dir = tmpDir
