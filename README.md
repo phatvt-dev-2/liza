@@ -2,6 +2,8 @@
 
 A peer-supervised multi-agent coding system (MAS) built on behavioral contracts.
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/liza-mas/liza)
+
 ## Why This Exists
 
 It started with a test file that kept getting modified to pass instead of the bug getting fixed. Then the confident "Done!" claims when the verification command hadn't actually run. Then the hour-long debugging spirals of random changes when the agent was clearly stuck but wouldn't say so.
