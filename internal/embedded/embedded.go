@@ -36,6 +36,9 @@ var claudeSettingsContent []byte
 //go:embed "mcp.json"
 var mcpSettingsContent []byte
 
+//go:embed "guardrails-template.md"
+var guardrailsTemplateContent []byte
+
 // PlanGlobalFiles returns the list of absolute paths that WriteGlobalFiles would create,
 // without actually writing anything. Useful for pre-flight checks and verbose output.
 func PlanGlobalFiles(targetDir string) []string {
@@ -432,6 +435,21 @@ func WriteMCPSettings(projectRoot string, stdin io.Reader) error {
 		return fmt.Errorf("failed to write .mcp.json: %w", err)
 	}
 
+	return nil
+}
+
+// WriteGuardrails writes the embedded guardrails template to GUARDRAILS.md
+// in the project root. Only writes if the file doesn't already exist.
+// Non-fatal: returns nil if the file already exists.
+func WriteGuardrails(projectRoot string) error {
+	guardrailsPath := filepath.Join(projectRoot, "GUARDRAILS.md")
+	if _, err := os.Stat(guardrailsPath); err == nil {
+		// File already exists, don't overwrite
+		return nil
+	}
+	if err := os.WriteFile(guardrailsPath, guardrailsTemplateContent, 0644); err != nil {
+		return fmt.Errorf("failed to write GUARDRAILS.md: %w", err)
+	}
 	return nil
 }
 

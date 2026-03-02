@@ -475,6 +475,13 @@ When both apply, skills execute within contract constraints.
 
 ---
 
+## Project Guardrails
+
+If `GUARDRAILS.md` exists at the project root, read and enforce it as project-specific constraints.
+GUARDRAILS.md uses and extends the same tier system (Tier 0-3) defined in Rule Priority Architecture.
+
+---
+
 ## Protocol References
 
 **Debugging Protocol**

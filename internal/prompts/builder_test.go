@@ -60,6 +60,7 @@ func TestBuildBasePrompt(t *testing.T) {
 				"Read your assigned task's FULL entry",
 				"Read the goal spec: specs/vision.md",
 				"lessons/agents/README.md",
+				"GUARDRAILS.md",
 			},
 			wantNotContain: []string{
 				// Role-specific tools should NOT be in base prompt

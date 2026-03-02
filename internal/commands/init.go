@@ -142,6 +142,11 @@ func InitCommand(description string, specRef string, stdin io.Reader) error {
 		}
 	}
 
+	// Write GUARDRAILS.md template to project root (non-fatal, like claude-settings)
+	if err := embedded.WriteGuardrails(lizaPaths.ProjectRoot()); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write GUARDRAILS.md: %v\n", err)
+	}
+
 	// Generate IDs and timestamps
 	timestamp := time.Now().UTC()
 	goalID := fmt.Sprintf("goal-%d", timestamp.Unix())

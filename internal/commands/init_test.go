@@ -173,6 +173,12 @@ func TestInitCommandDirectoryStructure(t *testing.T) {
 			t.Errorf("file %s was not created", file)
 		}
 	}
+
+	// Verify GUARDRAILS.md template was created at project root
+	guardrailsPath := filepath.Join(tmpDir, "GUARDRAILS.md")
+	if _, err := os.Stat(guardrailsPath); os.IsNotExist(err) {
+		t.Error("GUARDRAILS.md was not created at project root")
+	}
 }
 
 func TestInitCommandIntegrationBranch(t *testing.T) {

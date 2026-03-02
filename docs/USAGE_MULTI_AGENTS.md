@@ -23,6 +23,7 @@ See [DEMO](DEMO.md) for a full example.
     └── ...
 
 <project>/
+├── GUARDRAILS.md                  # Project-specific constraints (optional)
 ├── .liza/
 │   ├── state.yaml                 # Current state
 │   ├── log.yaml                   # Activity history
@@ -30,6 +31,19 @@ See [DEMO](DEMO.md) for a full example.
 └── .worktrees/
     └── task-N/                    # Per-task workspace
 ```
+
+### Project Guardrails
+
+`GUARDRAILS.md` is an optional file at the project root that defines project-specific constraints for Liza agents. It uses the same tier system (Tier 0-3) from the core contract:
+
+- **Tier 0 (Inviolable)** — Triggers mandatory halt (RESET) if violated
+- **Tier 1 (Hard Constraints)** — Suspended only with explicit waiver
+- **Tier 2 (Strong Defaults)** — Best-effort under pressure
+- **Tier 3 (Preferences)** — Degraded gracefully
+
+**How it's created:** `liza init` writes a template with empty tier sections. You can also create it manually.
+
+**How to use it:** Fill in the tier sections with project-specific rules. Agents read and enforce `GUARDRAILS.md` automatically during their initialization sequence. If the file doesn't exist, agents are governed by the core contract only.
 
 ### Quick Start (Target Usage)
 
@@ -77,6 +91,7 @@ cat .liza/state.yaml
 - `.claude/settings.json` — Claude Code project permissions (Liza MCP tools, skills, git/build commands)
 - `.mcp.json` — MCP server configuration (tells Claude Code how to start liza-mcp)
 - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` — Symlinks to `~/.liza/CORE.md`
+- `GUARDRAILS.md` — Project-specific constraints template (if not already present)
 - `integration` branch — For merging completed work
 
 Contracts and skills live in `~/.liza/` (global, from `liza setup`), not in the project.
