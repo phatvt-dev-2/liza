@@ -159,7 +159,7 @@ analogous to the coding pair (IMPLEMENTING → READY_FOR_REVIEW → REVIEWING �
 │CODING_PLAN_APPROVED │  │CODING_PLAN_REJECTED │
 └─────────────────────┘  └─────────┬───────────┘
   Sprint-terminal                  │
-  (→ coding pair                resume (CODE_PLANNING)
+  (→ coding pair                resume (DRAFT_CODING_PLAN)
    via liza proceed)
 ```
 
