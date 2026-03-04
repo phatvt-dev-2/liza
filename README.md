@@ -32,18 +32,34 @@ A peer-supervised multi-agent coding system (MAS) built on behavioral contracts.
 
 ## Architecture
 
+Liza is a hybrid system. The supervisors that wrap every agent, the state machine, and the validation rules are
+deterministic Go code. The agents are LLM-powered. This means critical invariants —
+state transitions, role boundaries, merge authority, TDD gates — are enforced
+mechanically, not by asking an LLM to please follow rules. Most spec-driven
+multi-agent systems are LLM-all-the-way-down: agents coordinating agents, with
+compliance dependent on prompt adherence. Liza's mechanical layer cannot
+fabricate, cannot skip gates, cannot interpret rules flexibly.
+
+The LLM side is equally differentiated. Where other systems give agents role prompts
+and coordination protocols, Liza agents operate under a behavioral contract: 55+ documented
+LLM failure modes each mapped to a specific countermeasure, an explicit state machine
+with forbidden transitions, and tiered rules that define what degrades gracefully
+versus what never bends. Reliability on both sides of the hybrid.
+
 Liza's architecture is made of:
 - A behavioral contract
 - Agent roles and skills
 - A YAML blackboard
-- A supervisor wrapping a coding agent with additional code.
-- A template-based prompt builder for coding agents
+- A supervisor wrapping each agent with additional code.
+- A template-based prompt builder for every agent
 - A Go CLI
 - Go MCP tools for the agents to interact with the Liza system and use worktrees
 - Markdown files following a convention-over-code principle
 
 Roles aren't composable, Skills are: agents aren't constrained regarding their capabilities by a rigid "Act as a..." prompt
 and may use any skill they consider relevant to adapt to the situation.
+
+**Liza has the built-in capability to do things right on the first pass.**
 
 As of today, Liza has only 3 roles. More to come: Spec Writer / Spec Reviewer, etc.
 
