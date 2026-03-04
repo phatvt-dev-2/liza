@@ -82,9 +82,15 @@ If a required tool or dependency is missing (e.g., pip, npm, cargo):
 - If still unavailable: mark BLOCKED immediately via liza_mark_blocked
 - NEVER attempt to install, bootstrap, or fix system-level tooling
 
+BASH CONSTRAINTS (CLI sandboxes may block these patterns):
+- NEVER combine cd and git in one command. Use: git -C <path> <cmd>
+- NEVER use sed/awk for file editing. Use your IDE's file-edit tools instead.
+- NEVER use $() command substitution, backticks, or ANSI-C quoting ($'...') in Bash commands.
+- For file content: use file-edit tools. For git ops: use git -C {{.WorktreePath}}.
+
 --- IMPLEMENTATION PHASE ---
 1. The task is already IMPLEMENTING for you. Do NOT run liza claim-task.
-2. Work ONLY in the worktree directory: cd {{.WorktreePath}}
+2. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
 3. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
 4. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.
 5. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
