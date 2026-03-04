@@ -17,8 +17,8 @@ type BasePromptConfig struct {
 	GoalSpecRef string
 }
 
-// PlannerContextConfig contains configuration for building planner context
-type PlannerContextConfig struct {
+// OrchestratorContextConfig contains configuration for building orchestrator context
+type OrchestratorContextConfig struct {
 }
 
 // SiblingTaskSummary provides minimal context about sibling tasks in the same sprint
@@ -55,8 +55,8 @@ func BuildBasePrompt(config BasePromptConfig) (string, error) {
 	return executeTemplate("base_prompt", config)
 }
 
-// plannerContextData is the template data for planner_context.tmpl
-type plannerContextData struct {
+// orchestratorContextData is the template data for orchestrator_context.tmpl
+type orchestratorContextData struct {
 	WakeTrigger          string
 	SprintNumber         int
 	SprintHistory        []models.SprintSummary
@@ -71,8 +71,8 @@ type plannerContextData struct {
 	WakeInstructions     string
 }
 
-// BuildPlannerContext creates planner-specific context with sprint state
-func BuildPlannerContext(state *models.State, config PlannerContextConfig) (string, error) {
+// BuildOrchestratorContext creates orchestrator-specific context with sprint state
+func BuildOrchestratorContext(state *models.State, config OrchestratorContextConfig) (string, error) {
 	totalTasks := len(state.Tasks)
 	merged := countTasksByStatus(state.Tasks, models.TaskStatusMerged)
 	blocked := countTasksByStatus(state.Tasks, models.TaskStatusBlocked)
@@ -104,7 +104,7 @@ func BuildPlannerContext(state *models.State, config PlannerContextConfig) (stri
 		return "", fmt.Errorf("building wake instructions: %w", err)
 	}
 
-	data := plannerContextData{
+	data := orchestratorContextData{
 		WakeTrigger:          wakeTrigger,
 		SprintNumber:         state.Sprint.Number,
 		SprintHistory:        state.SprintHistory,
@@ -118,7 +118,7 @@ func BuildPlannerContext(state *models.State, config PlannerContextConfig) (stri
 		ImmediateDiscoveries: immediateDiscoveries,
 		WakeInstructions:     wakeInstructions,
 	}
-	return executeTemplate("planner_context", data)
+	return executeTemplate("orchestrator_context", data)
 }
 
 // coderContextData is the template data for coder_context.tmpl
@@ -199,7 +199,7 @@ func countTasksByStatus(tasks []models.Task, status models.TaskStatus) int {
 	return count
 }
 
-// determineWakeTrigger determines what triggered the planner to wake
+// determineWakeTrigger determines what triggered the orchestrator to wake
 func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries int, sprintComplete bool) string {
 	if totalTasks == 0 {
 		return "INITIAL_PLANNING"

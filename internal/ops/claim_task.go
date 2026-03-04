@@ -97,7 +97,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	maxCoderIterations = effectiveCoderIterationLimit(task, state.Config)
 
 	// Enforce coder iteration limits before doing any filesystem work.
-	// A REJECTED task at/over the limit is escalated to BLOCKED for planner action.
+	// A REJECTED task at/over the limit is escalated to BLOCKED for orchestrator action.
 	if taskStatus == models.TaskStatusRejected && task.Iteration >= maxCoderIterations {
 		blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus)
 		if err != nil {

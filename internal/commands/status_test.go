@@ -140,7 +140,7 @@ func TestBuildStatusData(t *testing.T) {
 			},
 		},
 		{
-			name: "planner wake trigger detected",
+			name: "orchestrator wake trigger detected",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{
@@ -151,11 +151,11 @@ func TestBuildStatusData(t *testing.T) {
 			}(),
 			detailed: false,
 			validate: func(t *testing.T, data statusData) {
-				if data.PlannerState.Trigger != "BLOCKED_TASKS" {
-					t.Errorf("expected BLOCKED_TASKS trigger, got %s", data.PlannerState.Trigger)
+				if data.OrchestratorState.Trigger != "BLOCKED_TASKS" {
+					t.Errorf("expected BLOCKED_TASKS trigger, got %s", data.OrchestratorState.Trigger)
 				}
-				if data.PlannerState.TriggerCount != 2 {
-					t.Errorf("expected trigger count 2, got %d", data.PlannerState.TriggerCount)
+				if data.OrchestratorState.TriggerCount != 2 {
+					t.Errorf("expected trigger count 2, got %d", data.OrchestratorState.TriggerCount)
 				}
 			},
 		},
@@ -172,14 +172,14 @@ func TestBuildStatusData(t *testing.T) {
 			}(),
 			detailed: false,
 			validate: func(t *testing.T, data statusData) {
-				if data.PlannerState.Trigger != "SPRINT_COMPLETE" {
-					t.Errorf("expected SPRINT_COMPLETE trigger, got %s", data.PlannerState.Trigger)
+				if data.OrchestratorState.Trigger != "SPRINT_COMPLETE" {
+					t.Errorf("expected SPRINT_COMPLETE trigger, got %s", data.OrchestratorState.Trigger)
 				}
-				if data.PlannerState.TriggerCount != 2 {
-					t.Errorf("expected trigger count 2, got %d", data.PlannerState.TriggerCount)
+				if data.OrchestratorState.TriggerCount != 2 {
+					t.Errorf("expected trigger count 2, got %d", data.OrchestratorState.TriggerCount)
 				}
-				if data.PlannerState.Reason != "All 2 planned task(s) reached terminal state; sprint complete" {
-					t.Errorf("unexpected reason: %s", data.PlannerState.Reason)
+				if data.OrchestratorState.Reason != "All 2 planned task(s) reached terminal state; sprint complete" {
+					t.Errorf("unexpected reason: %s", data.OrchestratorState.Reason)
 				}
 			},
 		},
@@ -195,11 +195,11 @@ func TestBuildStatusData(t *testing.T) {
 			}(),
 			detailed: false,
 			validate: func(t *testing.T, data statusData) {
-				if data.PlannerState.Trigger == "HYPOTHESIS_EXHAUSTED" {
+				if data.OrchestratorState.Trigger == "HYPOTHESIS_EXHAUSTED" {
 					t.Error("terminal task with 2+ failures should not trigger HYPOTHESIS_EXHAUSTED")
 				}
-				if data.PlannerState.Trigger != "NONE" {
-					t.Errorf("expected NONE trigger, got %s", data.PlannerState.Trigger)
+				if data.OrchestratorState.Trigger != "NONE" {
+					t.Errorf("expected NONE trigger, got %s", data.OrchestratorState.Trigger)
 				}
 			},
 		},
@@ -546,10 +546,10 @@ func TestFormatStatusDashboard(t *testing.T) {
 						ProcessStatus:      "running",
 					},
 				},
-				PlannerState: plannerStatus{
+				OrchestratorState: orchestratorStatus{
 					Trigger:      "NONE",
 					TriggerCount: 0,
-					Reason:       "No triggers; planner is idle",
+					Reason:       "No triggers; orchestrator is idle",
 				},
 				WorkQueues: workQueuesStatus{
 					Coder: queueStatus{
@@ -582,9 +582,9 @@ func TestFormatStatusDashboard(t *testing.T) {
 				"coder-1",
 				"WORKING",
 				"12345",
-				"=== PLANNER ===",
+				"=== ORCHESTRATOR ===",
 				"Wake Trigger: NONE",
-				"Explanation: No triggers; planner is idle",
+				"Explanation: No triggers; orchestrator is idle",
 				"=== WORK QUEUES ===",
 				"Coder: 2 available",
 				"Reviewer: 2 available",
@@ -617,8 +617,8 @@ func TestFormatStatusDashboard(t *testing.T) {
 					Total:    0,
 					ByStatus: map[string]int{},
 				},
-				Agents:       []agentStatus{},
-				PlannerState: plannerStatus{Trigger: "NONE", Reason: "No triggers"},
+				Agents:            []agentStatus{},
+				OrchestratorState: orchestratorStatus{Trigger: "NONE", Reason: "No triggers"},
 				WorkQueues: workQueuesStatus{
 					Coder:    queueStatus{Available: 0, Reason: "No claimable tasks"},
 					Reviewer: queueStatus{Available: 0, Reason: "No reviewable tasks"},
@@ -649,8 +649,8 @@ func TestFormatStatusDashboard(t *testing.T) {
 					Total:    0,
 					ByStatus: map[string]int{},
 				},
-				Agents:       []agentStatus{},
-				PlannerState: plannerStatus{Trigger: "NONE", Reason: "No triggers"},
+				Agents:            []agentStatus{},
+				OrchestratorState: orchestratorStatus{Trigger: "NONE", Reason: "No triggers"},
 				WorkQueues: workQueuesStatus{
 					Coder:    queueStatus{Available: 0, Reason: "No claimable tasks"},
 					Reviewer: queueStatus{Available: 0, Reason: "No reviewable tasks"},
@@ -681,8 +681,8 @@ func TestFormatStatusDashboard(t *testing.T) {
 					Total:    0,
 					ByStatus: map[string]int{},
 				},
-				Agents:       []agentStatus{},
-				PlannerState: plannerStatus{Trigger: "NONE", Reason: "No triggers"},
+				Agents:            []agentStatus{},
+				OrchestratorState: orchestratorStatus{Trigger: "NONE", Reason: "No triggers"},
 				WorkQueues: workQueuesStatus{
 					Coder:    queueStatus{Available: 0, Reason: "No claimable tasks"},
 					Reviewer: queueStatus{Available: 0, Reason: "No reviewable tasks"},
@@ -731,8 +731,8 @@ func TestFormatStatusDashboard(t *testing.T) {
 					Reviewable:    0,
 					BlockedByDeps: 3,
 				},
-				Agents:       []agentStatus{},
-				PlannerState: plannerStatus{Trigger: "NONE", Reason: "No triggers"},
+				Agents:            []agentStatus{},
+				OrchestratorState: orchestratorStatus{Trigger: "NONE", Reason: "No triggers"},
 				WorkQueues: workQueuesStatus{
 					Coder:    queueStatus{Available: 0, Reason: "No claimable tasks; 3 blocked by dependencies"},
 					Reviewer: queueStatus{Available: 0, Reason: "No reviewable tasks"},

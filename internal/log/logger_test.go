@@ -103,7 +103,7 @@ func TestLoggerAppendMultiple(t *testing.T) {
 	// Append multiple entries
 	entries := []Entry{
 		{Agent: "system", Action: "initialized", Detail: "System started"},
-		{Agent: "planner-1", Action: "task_added", Detail: "Added new task"},
+		{Agent: "orchestrator-1", Action: "task_added", Detail: "Added new task"},
 		{Agent: "coder-1", Action: "task_claimed", Detail: "Claimed task"},
 	}
 
@@ -158,7 +158,7 @@ func TestLoggerAppendToExistingFile(t *testing.T) {
 	// Append new entry
 	logger := New(logPath)
 	newEntry := Entry{
-		Agent:  "planner-1",
+		Agent:  "orchestrator-1",
 		Action: "task_added",
 		Detail: "New task",
 	}
@@ -181,8 +181,8 @@ func TestLoggerAppendToExistingFile(t *testing.T) {
 	if entries[0].Agent != "system" {
 		t.Errorf("First entry Agent = %q, want %q", entries[0].Agent, "system")
 	}
-	if entries[1].Agent != "planner-1" {
-		t.Errorf("Second entry Agent = %q, want %q", entries[1].Agent, "planner-1")
+	if entries[1].Agent != "orchestrator-1" {
+		t.Errorf("Second entry Agent = %q, want %q", entries[1].Agent, "orchestrator-1")
 	}
 }
 

@@ -19,10 +19,10 @@ Reason: {{deref .Config.PauseReason}}
 {{- end}}
 {{- end}}
 
-{{.TasksSection}}{{.AgentsSection}}=== PLANNER ===
-Wake Trigger: {{.PlannerState.Trigger}}
-{{- if gt .PlannerState.TriggerCount 0}} (count: {{.PlannerState.TriggerCount}}){{end}}
-Explanation: {{.PlannerState.Reason}}
+{{.TasksSection}}{{.AgentsSection}}=== ORCHESTRATOR ===
+Wake Trigger: {{.OrchestratorState.Trigger}}
+{{- if gt .OrchestratorState.TriggerCount 0}} (count: {{.OrchestratorState.TriggerCount}}){{end}}
+Explanation: {{.OrchestratorState.Reason}}
 
 === WORK QUEUES ===
 Coder: {{.WorkQueues.Coder.Available}} available - {{.WorkQueues.Coder.Reason}}

@@ -80,7 +80,7 @@ function measureToolResult(content) {
   return 0;
 }
 
-function parsePlannerLog(lines) {
+function parseOrchestratorLog(lines) {
   const events = [];
   let systemInfo = null;
   let resultInfo = null;
@@ -156,12 +156,12 @@ function detectAndParse(text) {
   try {
     const first = JSON.parse(lines[0]);
     if (first.type === "thread.started" || first.type === "turn.started") return parseCoderLog(lines);
-    if (first.type === "system" || first.type === "assistant") return parsePlannerLog(lines);
+    if (first.type === "system" || first.type === "assistant") return parseOrchestratorLog(lines);
   } catch {}
   const coder = parseCoderLog(lines);
   if (coder.items.length > 0) return coder;
-  const planner = parsePlannerLog(lines);
-  if (planner.events.length > 0) return planner;
+  const orchestrator = parseOrchestratorLog(lines);
+  if (orchestrator.events.length > 0) return orchestrator;
   return null;
 }
 
@@ -976,7 +976,7 @@ function App() {
           style={{ border: `2px dashed ${dragOver ? C.accent : C.border}`, borderRadius: 10, padding: "28px 20px", textAlign: "center",
             cursor: "pointer", background: dragOver ? C.accentDim : "transparent", transition: "all 0.2s ease", marginBottom: 24 }}>
           <div style={{ fontSize: 14, color: dragOver ? C.accent : C.textMuted }}>{dragOver ? "Drop files here" : "Drop session logs here or click to browse"}</div>
-          <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>Supports Codex (coder) and Claude Code (planner/reviewer) formats</div>
+          <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>Supports Codex (coder) and Claude Code (orchestrator/reviewer) formats</div>
         </div>
 
         {files.length > 0 && (

@@ -251,10 +251,10 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 
 	agentID, _ := params["agent_id"].(string)
 	if agentID == "" {
-		agentID = "planner-1"
+		agentID = "orchestrator-1"
 	}
 
-	if err := requireRole(agentID, roles.RuntimePlanner); err != nil {
+	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
 		return nil, err
 	}
 
@@ -474,7 +474,7 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireRole(agentID, roles.RuntimePlanner); err != nil {
+	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
 		return nil, err
 	}
 

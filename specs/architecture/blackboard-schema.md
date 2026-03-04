@@ -119,12 +119,12 @@ tasks:
 
   - id: task-3
     description: "Add retry decorator to PaymentAPI.charge()"
-    status: DRAFT  # Planner still defining — missing done_when keeps it DRAFT
+    status: DRAFT  # Orchestrator still defining — missing done_when keeps it DRAFT
     priority: 3
     worktree: null
     spec_ref: specs/retry-logic.md#payments
     # done_when: TBD — intentionally incomplete to show DRAFT state requirement
-    # Planner must define done_when before finalizing to READY
+    # Orchestrator must define done_when before finalizing to READY
     created: 2025-01-17T15:00:00Z
 
   - id: task-4
@@ -313,7 +313,7 @@ The `depends_on` field declares explicit dependencies between tasks:
 - `depends_on` is an array of task IDs that must reach MERGED status before this task can be claimed
 - Empty array or missing field means no dependencies — task is immediately claimable
 - Coders can only claim tasks where ALL dependencies are satisfied
-- Planner sets dependencies during task creation based on logical ordering
+- Orchestrator sets dependencies during task creation based on logical ordering
 
 **Claimability Rule:**
 ```
@@ -326,13 +326,13 @@ claimable = (status in [READY, REJECTED, INTEGRATION_FAILED]) AND (depends_on is
 
 **Why explicit dependencies?**
 - Without explicit dependencies, Coders discover blockers at runtime → scattered BLOCKED tasks
-- Planner has context to identify dependencies during decomposition
+- Orchestrator has context to identify dependencies during decomposition
 - Explicit dependencies enable parallel work on independent tasks
 - Dependencies surface the critical path for human visibility
 
 **Dependency vs BLOCKED:**
 - `depends_on`: Known at planning time — task waits automatically
-- `BLOCKED`: Discovered at runtime — requires Planner intervention
+- `BLOCKED`: Discovered at runtime — requires Orchestrator intervention
 
 ```yaml
 agents:
@@ -354,8 +354,8 @@ agents:
     heartbeat: 2025-01-17T14:50:00Z
     terminal: /dev/pts/3
 
-  planner-1:
-    role: planner
+  orchestrator-1:
+    role: orchestrator
     status: WAITING
     task: null
     lease_expires: null
@@ -369,7 +369,7 @@ discovered:
     source: null  # null or omitted = implementation discovery (default)
     description: "OrderAPI.create_order() has no idempotency key support"
     severity: high
-    urgency: deferred  # deferred (default), immediate — immediate wakes Planner
+    urgency: deferred  # deferred (default), immediate — immediate wakes Orchestrator
     recommendation: "Add idempotency key parameter before retry logic"
     created: 2025-01-17T14:46:00Z
     converted_to_task: null  # null, task-id, "deferred", or "dismissed"
@@ -380,7 +380,7 @@ discovered:
     source: null
     description: "Auth token refresh needed before retry can succeed"
     severity: critical
-    urgency: immediate  # Wakes Planner immediately — blocks current work
+    urgency: immediate  # Wakes Orchestrator immediately — blocks current work
     recommendation: "Must add auth refresh to unblock task-3"
     created: 2025-01-17T15:30:00Z
     converted_to_task: task-3a
@@ -394,7 +394,7 @@ discovered:
     urgency: deferred
     recommendation: "Rate limiting strategy will fail under horizontal scaling pressure"
     created: 2025-01-17T17:00:00Z
-    converted_to_task: null  # Planner evaluates: task, "deferred" (→ ISSUES_FILE), or "dismissed"
+    converted_to_task: null  # Orchestrator evaluates: task, "deferred" (→ ISSUES_FILE), or "dismissed"
 
 **Discovery Fields:**
 
@@ -406,12 +406,12 @@ discovered:
 | | `high` | Significant issue; should address soon |
 | | `medium` | Notable finding; address when convenient |
 | | `low` | Nice-to-have; log for future consideration |
-| `urgency` | `immediate` | Wakes Planner now (for critical blockers) |
-| | `deferred` | Planner reviews at next planning cycle (default) |
-| `converted_to_task` | `null` | Not yet evaluated by Planner |
-| | `task-N` | Planner created task to address |
-| | `deferred` | Planner wrote to ISSUES_FILE — acknowledged, not actionable now |
-| | `dismissed` | Planner evaluated and dismissed — no action warranted |
+| `urgency` | `immediate` | Wakes Orchestrator now (for critical blockers) |
+| | `deferred` | Orchestrator reviews at next planning cycle (default) |
+| `converted_to_task` | `null` | Not yet evaluated by Orchestrator |
+| | `task-N` | Orchestrator created task to address |
+| | `deferred` | Orchestrator wrote to ISSUES_FILE — acknowledged, not actionable now |
+| | `dismissed` | Orchestrator evaluated and dismissed — no action warranted |
 
 **Usage:** Coders encountering nice-to-haves during implementation log them with `severity: low, urgency: deferred` rather than blocking or scope-creeping. Code Reviewers invoking the systemic-thinking skill log findings with `source: systemic-thinking` (see skill for severity mapping).
 
@@ -540,12 +540,12 @@ config:
 # Append-only activity log
 
 - timestamp: 2025-01-17T14:00:00Z
-  agent: planner-1
+  agent: orchestrator-1
   action: goal_created
   detail: "Implement retry logic for all API calls with exponential backoff"
 
 - timestamp: 2025-01-17T14:05:00Z
-  agent: planner-1
+  agent: orchestrator-1
   action: tasks_finalized
   detail: "5 tasks moved from DRAFT to READY"
 
@@ -580,7 +580,7 @@ config:
   detail: "Fast-forward merge to integration"
 
 - timestamp: 2025-01-17T14:50:00Z
-  agent: planner-1
+  agent: orchestrator-1
   action: rescoped
   task: task-4
   detail: "SUPERSEDED → task-4a, task-4b (wrong granularity)"
@@ -679,8 +679,8 @@ Reads do not require lock (eventual consistency acceptable for reads).
 | Submit verdict | Code Reviewer | Lock → verify REVIEWING + commit SHA matches + reviewing_by matches self → set APPROVED/REJECTED + reason + set approved_by on approval + clear review lease → unlock |
 | Execute merge | Supervisor | After Code Reviewer sets APPROVED → supervisor runs `liza wt-merge` → update state to MERGED |
 | Mark blocked | Any | Lock → set state BLOCKED + diagnosis → unlock |
-| Rescope task | Planner | Lock → set original SUPERSEDED → create new task(s) with reference → unlock |
-| Finalize draft | Planner | Lock → change DRAFT to READY → unlock |
+| Rescope task | Orchestrator | Lock → set original SUPERSEDED → create new task(s) with reference → unlock |
+| Finalize draft | Orchestrator | Lock → change DRAFT to READY → unlock |
 | Log activity | Any | Append to log.yaml (no lock needed, append-only) |
 
 ---
@@ -715,12 +715,12 @@ For detailed definition including edge cases (submodules, untracked files), see 
 | `workaround` | Code Reviewer | Shortcut taken instead of proper fix |
 | `debt_created` | Code Reviewer | Technical debt introduced |
 | `spec_changed` | Code Reviewer | Spec changed since task creation |
-| `hypothesis_exhaustion` | Planner | Two coders failed same task, rescope required |
-| `spec_gap` | Planner | Missing spec discovered during planning/rescope |
-| `review_deadlock` | Planner | Coder-Code Reviewer reached max cycles without approval |
-| `review_exhaustion` | Planner | Two reviewers failed to issue verdict on same task |
+| `hypothesis_exhaustion` | Orchestrator | Two coders failed same task, rescope required |
+| `spec_gap` | Orchestrator | Missing spec discovered during planning/rescope |
+| `review_deadlock` | Orchestrator | Coder-Code Reviewer reached max cycles without approval |
+| `review_exhaustion` | Orchestrator | Two reviewers failed to issue verdict on same task |
 | `reviewer_loop` | Code Reviewer | Reviewer stuck in command loop, self-aborted |
-| `system_ambiguity` | Any role | Liza protocol or role definition unclear, escalated to Planner |
+| `system_ambiguity` | Any role | Liza protocol or role definition unclear, escalated to Orchestrator |
 
 **Required Details Fields (validated by `liza validate`):**
 

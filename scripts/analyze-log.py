@@ -9,7 +9,7 @@ Two log formats are supported:
   - Sparse (Format B): first event type is "thread.started". Aggregate usage only.
 
 Usage:
-    python3 scripts/analyze-log.py .liza/agent-outputs/planner-*.txt
+    python3 scripts/analyze-log.py .liza/agent-outputs/orchestrator-*.txt
     python3 scripts/analyze-log.py .liza/agent-outputs/*.txt
 """
 

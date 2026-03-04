@@ -92,10 +92,10 @@ func TestBuildBasePrompt(t *testing.T) {
 			},
 		},
 		{
-			name: "planner role formatting",
+			name: "orchestrator role formatting",
 			config: BasePromptConfig{
-				Role:        "planner",
-				AgentID:     "planner-1",
+				Role:        "orchestrator",
+				AgentID:     "orchestrator-1",
 				SpecsDir:    "/specs",
 				ProjectRoot: "/project",
 				StatePath:   "/project/.liza/state.yaml",
@@ -103,7 +103,7 @@ func TestBuildBasePrompt(t *testing.T) {
 				GoalSpecRef: "specs/vision.md",
 			},
 			wantContains: []string{
-				"You are a Liza planner agent",
+				"You are a Liza orchestrator agent",
 				"QUERY TOOLS",
 			},
 		},
@@ -131,13 +131,13 @@ func TestBuildBasePrompt(t *testing.T) {
 	}
 }
 
-func TestBuildPlannerContext(t *testing.T) {
+func TestBuildOrchestratorContext(t *testing.T) {
 	now := time.Now().UTC()
 
 	tests := []struct {
 		name         string
 		state        *models.State
-		config       PlannerContextConfig
+		config       OrchestratorContextConfig
 		wantContains []string
 	}{
 		{
@@ -147,9 +147,9 @@ func TestBuildPlannerContext(t *testing.T) {
 				state.Tasks = []models.Task{}
 				return state
 			}(),
-			config: PlannerContextConfig{},
+			config: OrchestratorContextConfig{},
 			wantContains: []string{
-				"=== PLANNING CONTEXT ===",
+				"=== ORCHESTRATOR CONTEXT ===",
 				"WAKE TRIGGER: INITIAL_PLANNING",
 				"SPRINT STATE:",
 				"- Total tasks: 0",
@@ -160,7 +160,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				"- Integration failed: 0",
 				"- Hypothesis exhausted: 0",
 				"- Immediate discoveries: 0",
-				"PLANNER COMMANDS:",
+				"ORCHESTRATOR COMMANDS:",
 				"liza_add_task",
 				"liza_supersede_task",
 				"liza_wt_delete",
@@ -180,7 +180,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: PlannerContextConfig{},
+			config: OrchestratorContextConfig{},
 			wantContains: []string{
 				"WAKE TRIGGER: BLOCKED_TASKS",
 				"- Total tasks: 2",
@@ -198,7 +198,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: PlannerContextConfig{},
+			config: OrchestratorContextConfig{},
 			wantContains: []string{
 				"WAKE TRIGGER: INTEGRATION_FAILED",
 				"- Integration failed: 1",
@@ -214,7 +214,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				state.Tasks = []models.Task{task}
 				return state
 			}(),
-			config: PlannerContextConfig{},
+			config: OrchestratorContextConfig{},
 			wantContains: []string{
 				"WAKE TRIGGER: HYPOTHESIS_EXHAUSTED",
 				"- Hypothesis exhausted: 1",
@@ -243,7 +243,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: PlannerContextConfig{},
+			config: OrchestratorContextConfig{},
 			wantContains: []string{
 				"WAKE TRIGGER: IMMEDIATE_DISCOVERY",
 				"- Immediate discoveries: 1",
@@ -263,7 +263,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: PlannerContextConfig{},
+			config: OrchestratorContextConfig{},
 			wantContains: []string{
 				"- Total tasks: 5",
 				"- Merged: 1",
@@ -282,7 +282,7 @@ func TestBuildPlannerContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: PlannerContextConfig{},
+			config: OrchestratorContextConfig{},
 			wantContains: []string{
 				"WAKE TRIGGER: SPRINT_COMPLETE",
 				"- Total tasks: 2",
@@ -296,14 +296,14 @@ func TestBuildPlannerContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := BuildPlannerContext(tt.state, tt.config)
+			result, err := BuildOrchestratorContext(tt.state, tt.config)
 			if err != nil {
-				t.Fatalf("BuildPlannerContext() error: %v", err)
+				t.Fatalf("BuildOrchestratorContext() error: %v", err)
 			}
 
 			for _, want := range tt.wantContains {
 				if !strings.Contains(result, want) {
-					t.Errorf("BuildPlannerContext() missing expected content:\n%q", want)
+					t.Errorf("BuildOrchestratorContext() missing expected content:\n%q", want)
 				}
 			}
 		})
@@ -752,16 +752,16 @@ func TestBuildReviewerContext(t *testing.T) {
 	}
 }
 
-func TestPlannerPromptHasAutonomyGuidance(t *testing.T) {
+func TestOrchestratorPromptHasAutonomyGuidance(t *testing.T) {
 	state := &models.State{
 		Tasks: []models.Task{},
 		Goal:  models.Goal{SpecRef: ".liza/specs/goal.md", Description: "Test goal"},
 	}
 
-	config := PlannerContextConfig{}
-	prompt, err := BuildPlannerContext(state, config)
+	config := OrchestratorContextConfig{}
+	prompt, err := BuildOrchestratorContext(state, config)
 	if err != nil {
-		t.Fatalf("BuildPlannerContext() error: %v", err)
+		t.Fatalf("BuildOrchestratorContext() error: %v", err)
 	}
 
 	// Verify autonomy banner present
@@ -813,7 +813,7 @@ func TestPlannerPromptHasAutonomyGuidance(t *testing.T) {
 
 func TestBasePromptHasStrongAutonomy(t *testing.T) {
 	config := BasePromptConfig{
-		Role:        "planner",
+		Role:        "orchestrator",
 		AgentID:     "test-agent",
 		SpecsDir:    ".liza/specs",
 		ProjectRoot: "/tmp/test",
@@ -1123,7 +1123,7 @@ func TestReviewerContext_CollectiveScopingNonFirstTask(t *testing.T) {
 	}
 }
 
-func TestPlannerPromptAutonomyForAllWakeTriggers(t *testing.T) {
+func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 	now := time.Now().UTC()
 
 	tests := []struct {
@@ -1222,10 +1222,10 @@ func TestPlannerPromptAutonomyForAllWakeTriggers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := PlannerContextConfig{}
-			prompt, err := BuildPlannerContext(tt.state, config)
+			config := OrchestratorContextConfig{}
+			prompt, err := BuildOrchestratorContext(tt.state, config)
 			if err != nil {
-				t.Fatalf("BuildPlannerContext() error: %v", err)
+				t.Fatalf("BuildOrchestratorContext() error: %v", err)
 			}
 
 			// Verify correct trigger

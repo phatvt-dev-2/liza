@@ -232,8 +232,8 @@ func TestCountReviewableTasks(t *testing.T) {
 	}
 }
 
-func TestPlannerWakeTriggerSpecs(t *testing.T) {
-	wantOrder := []PlannerWakeTrigger{
+func TestOrchestratorWakeTriggerSpecs(t *testing.T) {
+	wantOrder := []OrchestratorWakeTrigger{
 		WakeTriggerInitialPlanning,
 		WakeTriggerBlocked,
 		WakeTriggerIntegrationFailed,
@@ -242,31 +242,31 @@ func TestPlannerWakeTriggerSpecs(t *testing.T) {
 		WakeTriggerSprintComplete,
 	}
 
-	if len(plannerWakeTriggerSpecs) != len(wantOrder) {
-		t.Fatalf("plannerWakeTriggerSpecs has %d entries, want %d", len(plannerWakeTriggerSpecs), len(wantOrder))
+	if len(orchestratorWakeTriggerSpecs) != len(wantOrder) {
+		t.Fatalf("orchestratorWakeTriggerSpecs has %d entries, want %d", len(orchestratorWakeTriggerSpecs), len(wantOrder))
 	}
 
 	for i, wantTrigger := range wantOrder {
-		spec := plannerWakeTriggerSpecs[i]
+		spec := orchestratorWakeTriggerSpecs[i]
 		if spec.Trigger != wantTrigger {
-			t.Errorf("plannerWakeTriggerSpecs[%d].Trigger = %q, want %q", i, spec.Trigger, wantTrigger)
+			t.Errorf("orchestratorWakeTriggerSpecs[%d].Trigger = %q, want %q", i, spec.Trigger, wantTrigger)
 		}
 		if spec.Description == "" {
-			t.Errorf("plannerWakeTriggerSpecs[%d].Description must not be empty", i)
+			t.Errorf("orchestratorWakeTriggerSpecs[%d].Description must not be empty", i)
 		}
 		if spec.Count == nil {
-			t.Errorf("plannerWakeTriggerSpecs[%d].Count must not be nil", i)
+			t.Errorf("orchestratorWakeTriggerSpecs[%d].Count must not be nil", i)
 		}
 	}
 }
 
-func TestDetectPlannerWakeTriggers(t *testing.T) {
+func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 	now := time.Now().UTC()
 
 	tests := []struct {
 		name        string
 		state       *models.State
-		wantTrigger PlannerWakeTrigger
+		wantTrigger OrchestratorWakeTrigger
 		wantCount   int
 	}{
 		{
@@ -488,12 +488,12 @@ func TestDetectPlannerWakeTriggers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectPlannerWakeTriggers(tt.state)
+			result := DetectOrchestratorWakeTriggers(tt.state)
 			if result.Trigger != tt.wantTrigger {
-				t.Errorf("DetectPlannerWakeTriggers() trigger = %v, want %v", result.Trigger, tt.wantTrigger)
+				t.Errorf("DetectOrchestratorWakeTriggers() trigger = %v, want %v", result.Trigger, tt.wantTrigger)
 			}
 			if result.Count != tt.wantCount {
-				t.Errorf("DetectPlannerWakeTriggers() count = %d, want %d", result.Count, tt.wantCount)
+				t.Errorf("DetectOrchestratorWakeTriggers() count = %d, want %d", result.Count, tt.wantCount)
 			}
 		})
 	}
@@ -601,7 +601,7 @@ func TestHasReviewerWork(t *testing.T) {
 	}
 }
 
-func TestHasPlannerWork(t *testing.T) {
+func TestHasOrchestratorWork(t *testing.T) {
 	now := time.Now().UTC()
 
 	tests := []struct {
@@ -641,7 +641,7 @@ func TestHasPlannerWork(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "sprint complete triggers planner work",
+			name: "sprint complete triggers orchestrator work",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
@@ -657,10 +657,10 @@ func TestHasPlannerWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectPlannerWakeTriggers(tt.state)
+			result := DetectOrchestratorWakeTriggers(tt.state)
 			got := result.Trigger != WakeTriggerNone
 			if got != tt.want {
-				t.Errorf("HasPlannerWork() = %v, want %v", got, tt.want)
+				t.Errorf("HasOrchestratorWork() = %v, want %v", got, tt.want)
 			}
 		})
 	}

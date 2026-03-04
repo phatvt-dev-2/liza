@@ -63,11 +63,11 @@ func TestBuildPrompt(t *testing.T) {
 			contains: []string{"reviewer", "Test goal", "task-1"},
 		},
 		{
-			name:     "planner prompt",
-			role:     "planner",
+			name:     "orchestrator prompt",
+			role:     "orchestrator",
 			taskID:   "",
 			wantErr:  false,
-			contains: []string{"planner", "Test goal"},
+			contains: []string{"orchestrator", "Test goal"},
 		},
 		{
 			name:     "coder with non-existent task",

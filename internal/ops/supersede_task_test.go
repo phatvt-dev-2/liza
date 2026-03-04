@@ -34,7 +34,7 @@ func TestSupersedeTask_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := SupersedeTask("/nonexistent", tt.taskID, tt.replacementIDs, tt.reason, "planner-1")
+			_, err := SupersedeTask("/nonexistent", tt.taskID, tt.replacementIDs, tt.reason, "orchestrator-1")
 			testhelpers.RequireErrorContains(t, err, tt.wantErr)
 		})
 	}
@@ -51,7 +51,7 @@ func TestSupersedeTask_FromBlocked(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2", "task-3"}, "Split into smaller tasks", "planner-1")
+	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2", "task-3"}, "Split into smaller tasks", "orchestrator-1")
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestSupersedeTask_FromRejected(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "Rewrite needed", "planner-1")
+	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "Rewrite needed", "orchestrator-1")
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestSupersedeTask_FromReady(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "No longer needed", "planner-1")
+	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "No longer needed", "orchestrator-1")
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestSupersedeTask_WrongStatus(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "reason", "planner-1")
+	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "reason", "orchestrator-1")
 	testhelpers.RequireErrorContains(t, err, "cannot supersede")
 }
 
@@ -155,7 +155,7 @@ func TestSupersedeTask_TaskNotFound(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, "nonexistent", []string{"task-2"}, "reason", "planner-1")
+	_, err := SupersedeTask(tmpDir, "nonexistent", []string{"task-2"}, "reason", "orchestrator-1")
 	if err == nil {
 		t.Fatal("Expected error for nonexistent task")
 	}
@@ -164,7 +164,7 @@ func TestSupersedeTask_TaskNotFound(t *testing.T) {
 	}
 }
 
-func TestSupersedeTask_DefaultPlannerID(t *testing.T) {
+func TestSupersedeTask_DefaultOrchestratorID(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -175,7 +175,7 @@ func TestSupersedeTask_DefaultPlannerID(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	// Empty agentID should default to "planner-1"
+	// Empty agentID should default to "orchestrator-1"
 	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "reason", "")
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)

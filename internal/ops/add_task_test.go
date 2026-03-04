@@ -62,7 +62,7 @@ func TestAddTask_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := AddTask("/nonexistent", "/dev/null", &tt.input, "planner-1")
+			_, err := AddTask("/nonexistent", "/dev/null", &tt.input, "orchestrator-1")
 			if err == nil {
 				t.Fatal("Expected error, got nil")
 			}
@@ -118,7 +118,7 @@ func TestAddTask_Success(t *testing.T) {
 		DependsOn:   []string{"dep-1", " dep-2 ", ""},
 	}
 
-	result, err := AddTask(stateFile, logFile, input, "planner-1")
+	result, err := AddTask(stateFile, logFile, input, "orchestrator-1")
 	if err != nil {
 		t.Fatalf("AddTask() error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestAddTask_Success(t *testing.T) {
 	}
 }
 
-func TestAddTask_DefaultPlannerID(t *testing.T) {
+func TestAddTask_DefaultOrchestratorID(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, ".liza", "log.jsonl")
@@ -188,7 +188,7 @@ func TestAddTask_DefaultPlannerID(t *testing.T) {
 		DoneWhen: "w", Scope: "sc", Priority: 1,
 	}
 
-	// Empty plannerID should default to "planner-1"
+	// Empty orchestratorID should default to "orchestrator-1"
 	result, err := AddTask(stateFile, logFile, input, "")
 	if err != nil {
 		t.Fatalf("AddTask() error: %v", err)
@@ -214,7 +214,7 @@ func TestAddTask_DuplicateID(t *testing.T) {
 		DoneWhen: "w", Scope: "sc", Priority: 1,
 	}
 
-	_, err := AddTask(stateFile, logFile, input, "planner-1")
+	_, err := AddTask(stateFile, logFile, input, "orchestrator-1")
 	if err == nil {
 		t.Fatal("Expected error for duplicate task ID")
 	}
@@ -253,7 +253,7 @@ func TestAddTask_PostWriteValidationFailure(t *testing.T) {
 		Priority:    1,
 	}
 
-	_, err := AddTask(stateFile, logFile, input, "planner-1")
+	_, err := AddTask(stateFile, logFile, input, "orchestrator-1")
 	if err == nil {
 		t.Fatal("expected post-write validation error")
 	}

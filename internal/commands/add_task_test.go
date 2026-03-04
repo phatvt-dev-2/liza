@@ -241,7 +241,7 @@ func TestAddTaskCommand(t *testing.T) {
 			}
 
 			// Run command
-			err := AddTaskCommand(stateFile, logFile, input, "planner-1")
+			err := AddTaskCommand(stateFile, logFile, input, "orchestrator-1")
 
 			// Check error
 			if tt.wantErr {
@@ -575,7 +575,7 @@ depends_on:
 	}
 
 	// Run command
-	if err := AddTaskCommand(stateFile, logFile, input, "planner-1"); err != nil {
+	if err := AddTaskCommand(stateFile, logFile, input, "orchestrator-1"); err != nil {
 		t.Fatalf("AddTaskCommand failed: %v", err)
 	}
 
@@ -672,7 +672,7 @@ func TestAddTaskCommandTaskType(t *testing.T) {
 				Priority:    1,
 			}
 
-			err := AddTaskCommand(stateFile, logFile, input, "planner-1")
+			err := AddTaskCommand(stateFile, logFile, input, "orchestrator-1")
 
 			if tt.wantErr {
 				if err == nil {
@@ -775,7 +775,7 @@ func TestAddTaskCommandValidation(t *testing.T) {
 	}
 
 	// Try to add a task - should fail validation
-	err := AddTaskCommand(stateFile, logFile, input, "planner-1")
+	err := AddTaskCommand(stateFile, logFile, input, "orchestrator-1")
 
 	// Should fail because goal spec_ref doesn't exist
 	if err == nil {

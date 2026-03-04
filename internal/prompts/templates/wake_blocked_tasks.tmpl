@@ -12,7 +12,7 @@ Tasks are BLOCKED. Analyze and resolve immediately:
    - To supersede: First create replacement tasks, then use liza_supersede_task tool
    Example supersede workflow:
    - Execute tool: liza_add_task with {"id": "task-4", ...} (create replacement tasks)
-   - Execute tool: liza_supersede_task with {"task_id": "task-3", "replacement_ids": ["task-4", "task-5"], "reason": "Split due to complexity", "agent_id": "planner-1"}
+   - Execute tool: liza_supersede_task with {"task_id": "task-3", "replacement_ids": ["task-4", "task-5"], "reason": "Split due to complexity", "agent_id": "orchestrator-1"}
    - Execute tool: liza_wt_delete with {"task_id": "task-3"} (if worktree exists)
 4. Log decisions in task history
 5. Execute all state-modifying tools in this session. Do NOT defer.

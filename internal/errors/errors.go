@@ -26,7 +26,7 @@ func ExitWithCode(code int, format string, args ...any) {
 // NotFoundError represents an error where an entity or field was not found
 type NotFoundError struct {
 	Entity string // "task", "agent", "config"
-	ID     string // optional: "task-42", "planner-1"
+	ID     string // optional: "task-42", "orchestrator-1"
 	Field  string // optional: field name
 }
 

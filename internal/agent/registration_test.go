@@ -34,9 +34,9 @@ func TestValidateIdentity(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "valid planner ID",
-			agentID: "planner-1",
-			role:    "planner",
+			name:    "valid orchestrator ID",
+			agentID: "orchestrator-1",
+			role:    "orchestrator",
 			wantErr: false,
 		},
 		{
@@ -69,7 +69,7 @@ func TestValidateIdentity(t *testing.T) {
 		{
 			name:    "role mismatch",
 			agentID: "coder-1",
-			role:    "planner",
+			role:    "orchestrator",
 			wantErr: true,
 			errMsg:  "mismatch",
 		},
@@ -335,21 +335,21 @@ func TestRegisterAgentStoresPID(t *testing.T) {
 	}
 }
 
-// TestPlannerStatusTransitions tests planner agent status lifecycle
-func TestPlannerStatusTransitions(t *testing.T) {
+// TestOrchestratorStatusTransitions tests orchestrator agent status lifecycle
+func TestOrchestratorStatusTransitions(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
-	// No tasks - triggers INITIAL_PLANNING work for planner
+	// No tasks - triggers INITIAL_PLANNING work for orchestrator
 	state.Tasks = []models.Task{}
 	testhelpers.WriteInitialState(t, statePath, state)
 
 	bb := db.New(statePath)
 
-	// Register planner agent
-	agentID := "planner-1"
-	err := registerAgent(bb, tmpDir, agentID, "planner", "terminal-1", 1800)
+	// Register orchestrator agent
+	agentID := "orchestrator-1"
+	err := registerAgent(bb, tmpDir, agentID, "orchestrator", "terminal-1", 1800)
 	if err != nil {
 		t.Fatalf("registerAgent() error = %v", err)
 	}
@@ -365,10 +365,10 @@ func TestPlannerStatusTransitions(t *testing.T) {
 		t.Errorf("Initial status = %s, want IDLE", agent.Status)
 	}
 
-	// Simulate planner starting work - set PLANNING status
-	err = setAgentToPlanningStatus(bb, agentID)
+	// Simulate orchestrator starting work - set PLANNING status
+	err = setAgentToOrchestratingStatus(bb, agentID)
 	if err != nil {
-		t.Fatalf("setAgentToPlanningStatus() error = %v", err)
+		t.Fatalf("setAgentToOrchestratingStatus() error = %v", err)
 	}
 
 	// Verify status is now PLANNING
@@ -379,7 +379,7 @@ func TestPlannerStatusTransitions(t *testing.T) {
 
 	agent = state.Agents[agentID]
 	if agent.Status != models.AgentStatusPlanning {
-		t.Errorf("Status after setAgentToPlanningStatus = %s, want PLANNING", agent.Status)
+		t.Errorf("Status after setAgentToOrchestratingStatus = %s, want PLANNING", agent.Status)
 	}
 
 	// Verify heartbeat was updated
@@ -387,7 +387,7 @@ func TestPlannerStatusTransitions(t *testing.T) {
 		t.Error("Heartbeat should be updated when status changes to PLANNING")
 	}
 
-	// Simulate planner completing work - reset to IDLE
+	// Simulate orchestrator completing work - reset to IDLE
 	err = resetAgentToIdle(bb, agentID)
 	if err != nil {
 		t.Fatalf("resetAgentToIdle() error = %v", err)
@@ -416,9 +416,9 @@ func TestSetAgentToPlanningStatusNonExistent(t *testing.T) {
 	bb := db.New(statePath)
 
 	// Try to set status for non-existent agent
-	err := setAgentToPlanningStatus(bb, "planner-999")
+	err := setAgentToOrchestratingStatus(bb, "orchestrator-999")
 	if err == nil {
-		t.Error("setAgentToPlanningStatus() should return error for non-existent agent")
+		t.Error("setAgentToOrchestratingStatus() should return error for non-existent agent")
 	}
 
 	if !errors.IsNotFound(err) {

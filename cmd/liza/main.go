@@ -389,7 +389,7 @@ Effects:
   - Clear assigned_to
   - Clear lease_expires
   - Add history entry with event "blocked"
-  - Triggers planner wake`,
+  - Triggers orchestrator wake`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		taskID := args[0]
@@ -769,7 +769,7 @@ Query Types:
 
   ID shorthand:
     <task-id>                      - Show specific task (any ID format, e.g., task-1, fix-auth-bug)
-    <agent-id>                     - Show specific agent (e.g., coder-1, code-reviewer-1, planner-1)
+    <agent-id>                     - Show specific agent (e.g., coder-1, code-reviewer-1, orchestrator-1)
 
 Formats:
   --format json       - JSON output
@@ -821,7 +821,7 @@ var statusCmd = &cobra.Command{
 - System mode (running, paused, stopped)
 - Task distribution and availability
 - Active agents and their health
-- Planner wake triggers
+- Orchestrator wake triggers
 - Work queue status for each role
 
 Formats:
@@ -869,7 +869,7 @@ var agentCmd = &cobra.Command{
 
 The supervisor:
 - Registers the agent with collision detection
-- Polls for role-specific work (coder/reviewer/planner)
+- Polls for role-specific work (coder/reviewer/orchestrator)
 - Claims tasks (coder/reviewer only)
 - Builds and executes prompts with the specified CLI
 - Manages heartbeats to keep lease alive
@@ -879,13 +879,13 @@ The supervisor:
 Roles:
   coder          - Claims and implements tasks
   code-reviewer  - Reviews and approves/rejects tasks
-  planner        - Creates and manages task breakdown
+  orchestrator     - Creates and manages task breakdown
 
 Example:
   # Using --agent-id flag (recommended)
   liza agent coder --agent-id coder-1
   liza agent code-reviewer --agent-id code-reviewer-1 --cli claude
-  liza agent planner --agent-id planner-1 --interactive
+  liza agent orchestrator --agent-id orchestrator-1 --interactive
 
   # Save agent output to .liza/agent-outputs/
   liza agent coder --agent-id coder-1 --log
@@ -917,7 +917,7 @@ Example:
 		}
 
 		if !slices.Contains(roles.AllRuntime(), role) {
-			return fmt.Errorf("invalid role: %s (must be coder, code-reviewer, or planner)", role)
+			return fmt.Errorf("invalid role: %s (must be coder, code-reviewer, or orchestrator)", role)
 		}
 
 		cliName, _ := cmd.Flags().GetString("cli")
@@ -1050,13 +1050,13 @@ Example YAML file format:
 		}
 
 		flagValue, _ := cmd.Flags().GetString("agent-id")
-		plannerID, _ := identity.Resolve(identity.Config{
+		orchestratorID, _ := identity.Resolve(identity.Config{
 			FlagValue:    flagValue,
-			DefaultValue: "planner-1",
+			DefaultValue: "orchestrator-1",
 			Required:     false,
 		})
 
-		return commands.AddTaskCommand(statePath, logPath, input, plannerID)
+		return commands.AddTaskCommand(statePath, logPath, input, orchestratorID)
 	},
 }
 
@@ -1065,7 +1065,7 @@ var supersedeTaskCmd = &cobra.Command{
 	Short: "Mark a task as SUPERSEDED by replacement tasks",
 	Long: `Mark a task as SUPERSEDED when it needs to be replaced by new task(s).
 
-Used by planner when rescoping blocked, rejected, or problematic tasks.
+Used by orchestrator when rescoping blocked, rejected, or problematic tasks.
 
 Requirements:
   - Task must be in BLOCKED, REJECTED, or READY status
@@ -1090,7 +1090,7 @@ Example:
 		flagValue, _ := cmd.Flags().GetString("agent-id")
 		agentID, _ := identity.Resolve(identity.Config{
 			FlagValue:    flagValue,
-			DefaultValue: "planner-1",
+			DefaultValue: "orchestrator-1",
 			Required:     false,
 		})
 

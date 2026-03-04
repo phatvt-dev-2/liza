@@ -43,12 +43,12 @@ func TestResolve(t *testing.T) {
 			name: "default used when flag and env empty",
 			config: Config{
 				FlagValue:    "",
-				DefaultValue: "planner-1",
+				DefaultValue: "orchestrator-1",
 				Required:     false,
 			},
 			envValue: "",
 			setEnv:   false,
-			want:     "planner-1",
+			want:     "orchestrator-1",
 			wantErr:  false,
 		},
 		{
@@ -156,8 +156,8 @@ func TestValidateFormat(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "valid format planner-100",
-			agentID: "planner-100",
+			name:    "valid format orchestrator-100",
+			agentID: "orchestrator-100",
 			wantErr: false,
 		},
 		{
@@ -229,9 +229,9 @@ func TestValidateRole(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name:         "matching role planner",
-			agentID:      "planner-1",
-			expectedRole: "planner",
+			name:         "matching role orchestrator",
+			agentID:      "orchestrator-1",
+			expectedRole: "orchestrator",
 			wantErr:      false,
 		},
 		{
@@ -294,9 +294,9 @@ func TestExtractRole(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "planner-100",
-			agentID: "planner-100",
-			want:    "planner",
+			name:    "orchestrator-100",
+			agentID: "orchestrator-100",
+			want:    "orchestrator",
 			wantErr: false,
 		},
 		{
@@ -355,8 +355,8 @@ func TestExtractNumber(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "planner-100",
-			agentID: "planner-100",
+			name:    "orchestrator-100",
+			agentID: "orchestrator-100",
 			want:    100,
 			wantErr: false,
 		},

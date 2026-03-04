@@ -15,10 +15,10 @@ func TestConstants(t *testing.T) {
 	}{
 		{"RuntimeCoder", RuntimeCoder, "coder"},
 		{"RuntimeCodeReviewer", RuntimeCodeReviewer, "code-reviewer"},
-		{"RuntimePlanner", RuntimePlanner, "planner"},
+		{"RuntimeOrchestrator", RuntimeOrchestrator, "orchestrator"},
 		{"WorkflowCoder", WorkflowCoder, "coder"},
 		{"WorkflowCodeReviewer", WorkflowCodeReviewer, "code_reviewer"},
-		{"WorkflowPlanner", WorkflowPlanner, "planner"},
+		{"WorkflowOrchestrator", WorkflowOrchestrator, "orchestrator"},
 	}
 
 	for _, tt := range tests {
@@ -52,9 +52,9 @@ func TestToWorkflow(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name:        "planner maps to planner",
-			runtimeRole: RuntimePlanner,
-			want:        WorkflowPlanner,
+			name:        "orchestrator maps to orchestrator",
+			runtimeRole: RuntimeOrchestrator,
+			want:        WorkflowOrchestrator,
 			wantErr:     false,
 		},
 		{
@@ -107,9 +107,9 @@ func TestToRuntime(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name:         "planner maps to planner",
-			workflowRole: WorkflowPlanner,
-			want:         RuntimePlanner,
+			name:         "orchestrator maps to orchestrator",
+			workflowRole: WorkflowOrchestrator,
+			want:         RuntimeOrchestrator,
 			wantErr:      false,
 		},
 		{
@@ -150,7 +150,7 @@ func TestIsValidRuntime(t *testing.T) {
 	}{
 		{RuntimeCoder, RuntimeCoder, true},
 		{RuntimeCodeReviewer, RuntimeCodeReviewer, true},
-		{RuntimePlanner, RuntimePlanner, true},
+		{RuntimeOrchestrator, RuntimeOrchestrator, true},
 		{"code_reviewer", "code_reviewer", false},
 		{"unknown", "unknown", false},
 		{"", "", false},
@@ -175,7 +175,7 @@ func TestIsValidWorkflow(t *testing.T) {
 	}{
 		{WorkflowCoder, WorkflowCoder, true},
 		{WorkflowCodeReviewer, WorkflowCodeReviewer, true},
-		{WorkflowPlanner, WorkflowPlanner, true},
+		{WorkflowOrchestrator, WorkflowOrchestrator, true},
 		{"code-reviewer", "code-reviewer", false},
 		{"unknown", "unknown", false},
 		{"", "", false},
@@ -194,7 +194,7 @@ func TestAllRuntime(t *testing.T) {
 	t.Parallel()
 
 	got := AllRuntime()
-	want := []string{RuntimeCoder, RuntimeCodeReviewer, RuntimePlanner}
+	want := []string{RuntimeCoder, RuntimeCodeReviewer, RuntimeOrchestrator}
 
 	if len(got) != len(want) {
 		t.Errorf("AllRuntime() returned %d roles, want %d", len(got), len(want))
@@ -211,7 +211,7 @@ func TestAllWorkflow(t *testing.T) {
 	t.Parallel()
 
 	got := AllWorkflow()
-	want := []string{WorkflowCoder, WorkflowCodeReviewer, WorkflowPlanner}
+	want := []string{WorkflowCoder, WorkflowCodeReviewer, WorkflowOrchestrator}
 
 	if len(got) != len(want) {
 		t.Errorf("AllWorkflow() returned %d roles, want %d", len(got), len(want))

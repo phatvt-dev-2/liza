@@ -300,7 +300,7 @@ func TestHandleRequest_ToolCall_AddTaskPostWriteValidationFailure(t *testing.T) 
 				"done":     "done",
 				"scope":    "scope",
 				"priority": 1,
-				"agent_id": "planner-1",
+				"agent_id": "orchestrator-1",
 			},
 		},
 	}

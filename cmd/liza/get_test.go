@@ -39,7 +39,7 @@ func TestGetCommand(t *testing.T) {
 	now := time.Now()
 	coder1 := "coder-1"
 	reviewer1 := "code-reviewer-1"
-	planner1 := "planner-1"
+	orchestrator1 := "orchestrator-1"
 	task1 := "task-1"
 	task2 := "fix-auth-bug"    // Non-standard task ID
 	task3 := "feature-xyz-123" // Another non-standard task ID
@@ -121,8 +121,8 @@ func TestGetCommand(t *testing.T) {
 				IterationsTotal: 2,
 				ContextPercent:  20,
 			},
-			planner1: {
-				Role:      "planner",
+			orchestrator1: {
+				Role:      "orchestrator",
 				Status:    models.AgentStatusIdle,
 				Heartbeat: now,
 				Terminal:  "terminal3",
@@ -257,9 +257,9 @@ func TestGetCommand(t *testing.T) {
 			wantContains: []string{"ID: code-reviewer-1", "Role: code-reviewer", "Status: IDLE"},
 		},
 		{
-			name:         "get planner by ID shorthand",
-			args:         []string{"get", "planner-1", "--format", "value"},
-			wantContains: []string{"ID: planner-1", "Role: planner", "Status: IDLE"},
+			name:         "get orchestrator by ID shorthand",
+			args:         []string{"get", "orchestrator-1", "--format", "value"},
+			wantContains: []string{"ID: orchestrator-1", "Role: orchestrator", "Status: IDLE"},
 		},
 		{
 			name:         "get task with non-standard ID",

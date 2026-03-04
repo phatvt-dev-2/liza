@@ -19,7 +19,7 @@ import (
 // SupervisorConfig contains all configuration for the agent supervisor
 type SupervisorConfig struct {
 	AgentID          string
-	Role             string // roles.RuntimeCoder, roles.RuntimeCodeReviewer, roles.RuntimePlanner
+	Role             string // roles.RuntimeCoder, roles.RuntimeCodeReviewer, roles.RuntimeOrchestrator
 	ProjectRoot      string
 	StatePath        string
 	LogPath          string
@@ -395,7 +395,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			config.ExecutionTimeout = 30 * time.Minute
 		case roles.RuntimeCoder:
 			config.ExecutionTimeout = 2 * time.Hour
-		case roles.RuntimePlanner:
+		case roles.RuntimeOrchestrator:
 			config.ExecutionTimeout = 4 * time.Hour
 		default:
 			config.ExecutionTimeout = 2 * time.Hour
@@ -489,10 +489,10 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				"review_commit", reviewCommit)
 		}
 
-		// Set planner status to PLANNING
-		if config.Role == roles.RuntimePlanner {
-			if err := setAgentToPlanningStatus(bb, config.AgentID); err != nil {
-				GetLogger().Warn("Failed to set planner status", "error", err, "agent_id", config.AgentID)
+		// Set orchestrator status to PLANNING
+		if config.Role == roles.RuntimeOrchestrator {
+			if err := setAgentToOrchestratingStatus(bb, config.AgentID); err != nil {
+				GetLogger().Warn("Failed to set orchestrator status", "error", err, "agent_id", config.AgentID)
 			}
 		}
 
@@ -537,10 +537,10 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				}
 			}
 
-			// Verify expected state changes for planner
-			if config.Role == roles.RuntimePlanner {
-				if err := verifyPlannerStateChanges(bb, state); err != nil {
-					GetLogger().Warn("Planner state verification failed",
+			// Verify expected state changes for orchestrator
+			if config.Role == roles.RuntimeOrchestrator {
+				if err := verifyOrchestratorStateChanges(bb, state); err != nil {
+					GetLogger().Warn("Orchestrator state verification failed",
 						"error", err,
 						"hint", "Agent may not have executed required commands - check prompt file")
 				}

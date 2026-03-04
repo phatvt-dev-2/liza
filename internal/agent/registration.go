@@ -212,8 +212,8 @@ func resetAgentAfterExit(bb *db.Blackboard, agentID string) error {
 	})
 }
 
-// setAgentToPlanningStatus sets a planner agent's status to PLANNING
-func setAgentToPlanningStatus(bb *db.Blackboard, agentID string) error {
+// setAgentToOrchestratingStatus sets a orchestrator agent's status to PLANNING
+func setAgentToOrchestratingStatus(bb *db.Blackboard, agentID string) error {
 	now := time.Now().UTC()
 
 	return bb.Modify(func(state *models.State) error {

@@ -91,7 +91,7 @@ func isAgentIDPattern(query string) bool {
 	// Agent ID patterns based on role types
 	return strings.HasPrefix(query, "coder-") ||
 		strings.HasPrefix(query, "code-reviewer-") ||
-		strings.HasPrefix(query, "planner-")
+		strings.HasPrefix(query, "orchestrator-")
 }
 
 // handleFieldQuery handles queries for specific fields (direct or computed)

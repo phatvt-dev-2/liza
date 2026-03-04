@@ -3,13 +3,13 @@
 ## Terminology
 
 **Implementation:** Role constants are defined in `internal/roles/roles.go`, which provides:
-- Runtime names (hyphenated: `coder`, `code-reviewer`, `planner`) — used in agent IDs and CLI
+- Runtime names (hyphenated: `coder`, `code-reviewer`, `orchestrator`) — used in agent IDs and CLI
 - Workflow names (underscore: `coder`, `code_reviewer`) — used in YAML state
 - Bidirectional mapping: `ToWorkflow()` and `ToRuntime()` convert between the two forms
 
 | Canonical Name | YAML Identifier | Agent ID Prefix | Agent Name Pattern |
 |----------------|-----------------|-----------------|-------------------|
-| Planner | `planner` | `planner-` | `planner-1`, `planner-2` |
+| Orchestrator | `orchestrator` | `orchestrator-` | `orchestrator-1`, `orchestrator-2` |
 | Coder | `coder` | `coder-` | `coder-1`, `coder-2` |
 | Code Reviewer | `code_reviewer` | `code-reviewer-` | `code-reviewer-1`, `code-reviewer-2` |
 
@@ -19,7 +19,7 @@
 - **Agent IDs:** Use prefix form (`code-reviewer-1`, `coder-2`)
 - **Role → ID mapping:** `code_reviewer` maps to `code-reviewer-` prefix
 
-**ID Validation Regex:** `^(coder|code-reviewer|planner)-[0-9]+$`
+**ID Validation Regex:** `^(coder|code-reviewer|orchestrator)-[0-9]+$`
 
 ## Multiple Agents Per Role
 
@@ -29,7 +29,7 @@ Running multiple agents of the same role is fully supported:
 |------|--------------------------|-------|
 | Coder | Yes | Each coder claims independent tasks; no coordination needed |
 | Code Reviewer | Yes | Reviewers claim independent review tasks; merge safety via working-tree-less `liza wt-merge` |
-| Planner | Yes | Multiple planners can process blocked tasks concurrently |
+| Orchestrator | Yes | Multiple orchestrators can process blocked tasks concurrently |
 
 **Concurrency Safety:**
 - Task claiming: File locking on `state.yaml` ensures atomic claim operations
@@ -63,11 +63,11 @@ All roles have:
 ## Shared Constraints
 
 All roles must:
-- Raise ambiguity in Liza protocols or role definitions — log as `system_ambiguity` anomaly, escalate to Planner
+- Raise ambiguity in Liza protocols or role definitions — log as `system_ambiguity` anomaly, escalate to Orchestrator
 - Never silently interpret unclear system instructions — ask before proceeding
 - Treat protocol gaps the same as spec gaps: explicit escalation, not creative interpretation
 
-**Rationale:** Specs are complex and imperfect. Silent workarounds compound into systemic drift. Planner escalates to human via CHECKPOINT if system-level clarification needed.
+**Rationale:** Specs are complex and imperfect. Silent workarounds compound into systemic drift. Orchestrator escalates to human via CHECKPOINT if system-level clarification needed.
 
 ### Loop Detection Self-Abort
 
@@ -78,12 +78,12 @@ If you observe yourself running:
 WITHOUT meaningful progress toward your goal, STOP IMMEDIATELY:
 
 1. Log anomaly to blackboard:
-   - Coder/Planner: `retry_loop` with command pattern
+   - Coder/Orchestrator: `retry_loop` with command pattern
    - Code Reviewer: `reviewer_loop` with command pattern
 2. Take role-appropriate action:
    - Coder: Mark task BLOCKED with diagnosis of what's not working
    - Code Reviewer: Issue REJECTED verdict with `"insufficient information to complete review"` and specific blocker
-   - Planner: Log `spec_gap` and pause for human input
+   - Orchestrator: Log `spec_gap` and pause for human input
 3. Exit with code 42
 
 **"Meaningful progress" means:** New information that changes your next action.
@@ -96,7 +96,7 @@ Piping the same output through different tools hoping for different results is N
 
 ---
 
-## Planner
+## Orchestrator
 
 **Purpose:** Decompose goal into tasks. Monitor for blocked states. Rescope when needed.
 
@@ -153,7 +153,7 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 - Bad: `"Rate limiting is handled appropriately"`
 
 **TDD Enforcement (code tasks only):**
-- Each code task MUST include tests — Planner does NOT create separate "add tests" tasks
+- Each code task MUST include tests — Orchestrator does NOT create separate "add tests" tasks
 - Coder writes tests FIRST that verify `done_when` criteria, then implements until tests pass
 - Code Reviewer REJECTS code submissions without tests covering `done_when`
 - Exempt: documentation-only, config-only, or spec-only tasks (no code = no tests required)
@@ -194,9 +194,9 @@ When multiple tasks are BLOCKED simultaneously:
 3. May rescope multiple tasks in single session if related
 4. Each rescope is a separate logged action (no batch rescoping without audit trail)
 
-### Planner Logging Duties
+### Orchestrator Logging Duties
 
-Planner MUST log to anomalies section:
+Orchestrator MUST log to anomalies section:
 
 | Event | Log As |
 |-------|--------|
@@ -338,7 +338,7 @@ If 2 different Code Reviewers fail to issue a verdict on the same task (exit wit
 
 1. Log `review_exhaustion` anomaly with details of what blocked both reviewers
 2. Set task BLOCKED with `blocked_reason: "review_exhaustion: 2 reviewers unable to complete review"`
-3. Planner evaluates: task spec unclear? done_when untestable? missing context?
+3. Orchestrator evaluates: task spec unclear? done_when untestable? missing context?
 
 **"Failed to issue verdict" means:** Agent exited (crash, timeout, loop detection) without calling `liza submit-verdict`.
 
@@ -377,7 +377,7 @@ Review covers **all changes in the worktree** (`base_commit` → `review_commit`
 **Spec Currency:** Code Reviewer always validates against the **current** spec version (at review time), not the version when task was created. If spec changed materially since task creation:
 - Reject if implementation no longer matches current spec
 - Log `spec_changed` anomaly with details
-- Planner may need to rescope task based on spec delta
+- Orchestrator may need to rescope task based on spec delta
 
 **v1 Limitation:** No automated spec_hash tracking. Code Reviewer must manually verify spec currency by checking `spec_changes` section in blackboard.
 
@@ -437,7 +437,7 @@ Prior Feedback Status:  # Required for iteration 2+
 |-------|---------------|
 | Coder | Task worktree branch only |
 | Code Reviewer | None (read-only; approves for merge) |
-| Planner | Neither (no code changes) |
+| Orchestrator | Neither (no code changes) |
 | Supervisor | Integration branch (executes merge after APPROVED) |
 
 **Merge Execution:** The supervisor (`liza agent`) executes `liza wt-merge` after Code Reviewer sets status to APPROVED. This keeps agents permission-free in non-interactive mode while preserving the Code Reviewer approval gate.
@@ -455,7 +455,7 @@ liza agent coder --agent-id coder-1
 
 | Env Variable | Required | Format | Example |
 |--------------|----------|--------|---------|
-| `LIZA_AGENT_ID` | Yes | `{role}-{number}` | `coder-1`, `code-reviewer-2`, `planner-1` |
+| `LIZA_AGENT_ID` | Yes | `{role}-{number}` | `coder-1`, `code-reviewer-2`, `orchestrator-1` |
 
 **Rationale:** Prevents identity collision when multiple agents spawn simultaneously. Agent cannot choose its own name — supervisor controls the namespace.
 

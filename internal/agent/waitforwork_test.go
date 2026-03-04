@@ -180,8 +180,8 @@ func TestWaitForReviewerWork(t *testing.T) {
 	}
 }
 
-// TestWaitForPlannerWork tests planner work detection
-func TestWaitForPlannerWork(t *testing.T) {
+// TestWaitForOrchestratorWork tests orchestrator work detection
+func TestWaitForOrchestratorWork(t *testing.T) {
 	now := time.Now().UTC()
 
 	tests := []struct {
@@ -209,7 +209,7 @@ func TestWaitForPlannerWork(t *testing.T) {
 			wantWork: true,
 		},
 		{
-			name: "no planner work needed",
+			name: "no orchestrator work needed",
 			tasks: []models.Task{
 				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 			},
@@ -235,8 +235,8 @@ func TestWaitForPlannerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			// Planner now respects maxWait parameter (uses 100ms timeout for test)
-			hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "planner", config, 10*time.Millisecond, 100*time.Millisecond)
+			// Orchestrator now respects maxWait parameter (uses 100ms timeout for test)
+			hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "orchestrator", config, 10*time.Millisecond, 100*time.Millisecond)
 
 			if err != nil {
 				t.Fatalf("waitForWork() error = %v", err)
@@ -249,9 +249,9 @@ func TestWaitForPlannerWork(t *testing.T) {
 	}
 }
 
-// TestPlannerRespectsMaxWaitConfig verifies that planner wait loop respects
+// TestOrchestratorRespectsMaxWaitConfig verifies that orchestrator wait loop respects
 // the configured max_wait value (does not override with hardcoded value)
-func TestPlannerRespectsMaxWaitConfig(t *testing.T) {
+func TestOrchestratorRespectsMaxWaitConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	lizaDir := filepath.Dir(statePath)
@@ -267,10 +267,10 @@ func TestPlannerRespectsMaxWaitConfig(t *testing.T) {
 		StatePath: statePath,
 	}
 
-	// Test with a short maxWait - planner should timeout when maxWait is reached
+	// Test with a short maxWait - orchestrator should timeout when maxWait is reached
 	ctx := context.Background()
 	startTime := time.Now()
-	hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "planner", config, 10*time.Millisecond, 150*time.Millisecond)
+	hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "orchestrator", config, 10*time.Millisecond, 150*time.Millisecond)
 	elapsed := time.Since(startTime)
 
 	if err != nil {
@@ -326,15 +326,15 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 			wantWork: true,
 		},
 		{
-			name: "planner wakes on wake trigger",
-			role: "planner",
+			name: "orchestrator wakes on wake trigger",
+			role: "orchestrator",
 			setupState: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Tasks = []models.Task{}
 				return state
 			},
 			modifyState: func(s *models.State) {
-				// Add 5 unclaimed tasks to trigger planner wake
+				// Add 5 unclaimed tasks to trigger orchestrator wake
 				for i := 1; i <= 5; i++ {
 					taskID := "task-" + string(rune('0'+i))
 					s.Tasks = append(s.Tasks, testhelpers.BuildTaskByStatus(taskID, models.TaskStatusReady, time.Now().UTC()))

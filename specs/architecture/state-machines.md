@@ -4,7 +4,7 @@
 
 | State | Description | Valid Transitions |
 |-------|-------------|-------------------|
-| DRAFT | Task being defined by planner | → READY |
+| DRAFT | Task being defined by orchestrator | → READY |
 | READY | Task ready, no agent assigned | → IMPLEMENTING |
 | IMPLEMENTING | Coder assigned, work in progress | → READY_FOR_REVIEW, BLOCKED |
 | READY_FOR_REVIEW | Coder done, awaiting Code Reviewer | → REVIEWING |
@@ -14,7 +14,7 @@
 | MERGED | Successfully merged to integration | Terminal |
 | BLOCKED | Cannot proceed, awaiting escalation | → SUPERSEDED, ABANDONED |
 | SUPERSEDED | Replaced by rescoped task(s) | Terminal |
-| ABANDONED | Planner killed task | Terminal |
+| ABANDONED | Orchestrator killed task | Terminal |
 | INTEGRATION_FAILED | Merge conflict or integration test failure | → IMPLEMENTING (integration-fix scope) |
 
 ### Task State Diagram
@@ -22,7 +22,7 @@
 ```
      ┌──────────────────────────────────────────┐
      │              DRAFT                       │
-     │  (Planner writing, coders must ignore)   │
+     │  (Orchestrator writing, coders must ignore)   │
      └──────────────────┬───────────────────────┘
                         │ finalize
                         ▼
@@ -133,8 +133,8 @@ When new task types are added (e.g., `specification`, `architecture`), they defi
 | REJECTED → IMPLEMENTING (same coder) | `lease_expires` (new) | `worktree`, `review_cycles_current`, `review_cycles_total` | Supervisor reclaims for same coder to address feedback |
 | REJECTED → IMPLEMENTING (different coder) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `review_cycles_total` | Worktree reset: delete old, create fresh |
 | INTEGRATION_FAILED → IMPLEMENTING | `lease_expires`, `integration_fix: true` | `worktree` | Any coder may claim; keeps worktree for conflict resolution |
-| BLOCKED → SUPERSEDED | `superseded_by`, `rescope_reason`, status=SUPERSEDED | `failed_by` | Planner links blocked task to replacement task(s) |
-| BLOCKED → ABANDONED | status=ABANDONED | `failed_by` | Planner abandons blocked task when no viable continuation exists |
+| BLOCKED → SUPERSEDED | `superseded_by`, `rescope_reason`, status=SUPERSEDED | `failed_by` | Orchestrator links blocked task to replacement task(s) |
+| BLOCKED → ABANDONED | status=ABANDONED | `failed_by` | Orchestrator abandons blocked task when no viable continuation exists |
 | READY → IMPLEMENTING (reassignment) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `failed_by`, `review_cycles_total` | Fresh worktree created |
 | Any → MERGED | — | — | Must clear `worktree` (cleanup) |
 
@@ -211,7 +211,7 @@ See [Blackboard Schema — Lease Model](blackboard-schema.md#lease-model) for fi
 | HANDOFF | Context exhaustion, preparing handoff notes | → (agent terminates, supervisor restarts fresh) |
 
 **Role-specific states:**
-- WORKING and WAITING: Doer roles — current: Coder; planned ([Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md)): Code Planner, Epic Planner, US Writer
+- WORKING and WAITING: Doer roles — current: Coder; planned ([Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md)): Code Orchestrator, Epic Orchestrator, US Writer
 - WORKING (no WAITING): Dispatcher roles — planned: Orchestrator (pipeline dispatch only — no reviewer, no output[], no sprint-terminal state; creates initial task then exits)
 - REVIEWING: Reviewer roles — current: Code Reviewer; planned: Code Plan Reviewer, Epic Plan Reviewer, US Reviewer
 - STARTING, IDLE, HANDOFF: All roles
@@ -318,7 +318,7 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 
 ## Exit Codes
 
-> **Note:** The exit semantics below are role-specific to the current system (Planner, Coder, Code Reviewer).
+> **Note:** The exit semantics below are role-specific to the current system (Orchestrator, Coder, Code Reviewer).
 > The [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md) generalizes these: "no work" detection
 > will be derived from the configured role-pair states (e.g., doer exits 0 when no tasks at
 > `role-pair.initial` or `role-pair.rejected`; reviewer exits 0 when no tasks at `role-pair.submitted`).
@@ -336,7 +336,7 @@ Exit 0 signals "this agent type has no more work to do." Supervisor should stop 
 
 | Role | Exit 0 When |
 |------|-------------|
-| Planner | All tasks in terminal state, no blocked tasks, goal complete |
+| Orchestrator | All tasks in terminal state, no blocked tasks, goal complete |
 | Coder | No READY tasks AND no REJECTED tasks assigned to this agent |
 | Code Reviewer | No READY_FOR_REVIEW tasks |
 
@@ -348,17 +348,17 @@ When a Coder or Code Reviewer finds no work and would exit 0, the supervisor fir
 
 ```
 if agent_exit_code == 0 and count(DRAFT tasks) > 0:
-    log("Agent found no work, but N DRAFT task(s) exist. Waiting for Planner...")
+    log("Agent found no work, but N DRAFT task(s) exist. Waiting for Orchestrator...")
     sleep(coder_poll_interval)  # Configurable, default 30s
-    restart_agent()  # Re-check after Planner may have finalized
+    restart_agent()  # Re-check after Orchestrator may have finalized
 ```
 
-**Rationale:** DRAFT tasks will become READY when the Planner finalizes them. Rather than stopping the supervisor (exit 0 behavior), we wait briefly and re-check. This avoids a race where:
+**Rationale:** DRAFT tasks will become READY when the Orchestrator finalizes them. Rather than stopping the supervisor (exit 0 behavior), we wait briefly and re-check. This avoids a race where:
 1. Coder sees no READY tasks → exit 0
-2. Planner finalizes DRAFT → READY
+2. Orchestrator finalizes DRAFT → READY
 3. No Coder running to claim the newly-available task
 
-The delay is configurable via `config.coder_poll_interval` (default 30s) — long enough for Planner to finalize without busy-waiting, short enough for reasonable responsiveness.
+The delay is configurable via `config.coder_poll_interval` (default 30s) — long enough for Orchestrator to finalize without busy-waiting, short enough for reasonable responsiveness.
 
 ### Supervisor Backoff Timing
 
@@ -366,7 +366,7 @@ The delay is configurable via `config.coder_poll_interval` (default 30s) — lon
 |----------|-------|-----------|
 | Exit 42 (graceful abort) | 2s | Brief pause before restart |
 | Crash (any exit code except 0, 42) | 5s | Recovery delay for unexpected failures |
-| Exit 0 with DRAFT tasks | `coder_poll_interval` (30s) | Wait for Planner to finalize, then re-check |
+| Exit 0 with DRAFT tasks | `coder_poll_interval` (30s) | Wait for Orchestrator to finalize, then re-check |
 
 **v1 Implementation (`f15cd61`):** Per-task `exit42RestartTracker` applies capped exponential backoff (2s, 4s, 8s, ... up to `exit42_max_backoff_seconds`, default 60s). Progress detection via task-state signature comparison resets the counter when meaningful state changes occur between restarts. After `exit42_restart_threshold` (default 5) consecutive restarts without progress, the task transitions to BLOCKED with diagnostic reason and questions. Configurable via `config.exit42_restart_threshold` and `config.exit42_max_backoff_seconds`.
 

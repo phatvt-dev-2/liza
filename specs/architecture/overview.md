@@ -12,7 +12,7 @@
           ┌───────────────────┼───────────────────┐
           ▼                   ▼                   ▼
     ┌───────────┐        ┌──────────┐        ┌────────────┐
-    │ Planner   │        │  Coder   │        │    Code    │
+    │ Orchestrator   │        │  Coder   │        │    Code    │
     │           │        │          │        │  Reviewer  │
     │ Decomposes│        │ Claims   │        │            │
     │ goal into │        │ tasks,   │        │ Examines   │
@@ -55,7 +55,7 @@ Human writes/approves specs (with support from spec-review and systemic-thinking
          ├──────────────────┬──────────────────┐
          ▼                  ▼                  ▼
     ┌─────────┐        ┌─────────┐        ┌─────────┐
-    │ Planner │        │  Coder  │        │  Code   │
+    │ Orchestrator │        │  Coder  │        │  Code   │
     │         │        │         │        │Reviewer │
     │ Reads   │        │ Reads   │        │ Reads   │
     │ specs → │        │ specs → │        │ specs → │
@@ -117,7 +117,7 @@ Agents hold time-bounded leases on tasks. A stale agent's task becomes reclaimab
 
 ### DRAFT Tasks
 
-Planner writes tasks as DRAFT, finalizes to READY. Coders cannot claim half-written tasks.
+Orchestrator writes tasks as DRAFT, finalizes to READY. Coders cannot claim half-written tasks.
 
 ### Commit SHA Verification
 
@@ -129,7 +129,7 @@ Coders commit to their worktree. Only the supervisor can merge to the integratio
 
 ### Hypothesis Exhaustion
 
-If two different coders fail the same task, the task framing is presumed wrong. Planner must rescope—cannot just reassign unchanged.
+If two different coders fail the same task, the task framing is presumed wrong. Orchestrator must rescope—cannot just reassign unchanged.
 
 ### Rescoping Audit Trail
 

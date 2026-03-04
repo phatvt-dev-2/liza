@@ -38,7 +38,7 @@ const (
 const (
 	RoleCoder        = roles.WorkflowCoder
 	RoleCodeReviewer = roles.WorkflowCodeReviewer
-	RolePlanner      = roles.WorkflowPlanner
+	RoleOrchestrator = roles.WorkflowOrchestrator
 )
 
 // taskWorkflows maps each TaskType to its ordered role sequence.
@@ -207,8 +207,8 @@ func (t *Task) IsClaimable(role string, allTasks []Task) bool {
 		if !t.Status.CanTransition(TaskStatusReviewing) {
 			return false
 		}
-	case RolePlanner:
-		// Planner does not participate in task claiming workflows.
+	case RoleOrchestrator:
+		// Orchestrator does not participate in task claiming workflows.
 		return false
 	default:
 		return false
@@ -340,7 +340,7 @@ func (s *State) SprintStalled() bool {
 	return hasBlocked
 }
 
-// Agent represents an agent (coder, reviewer, planner) in the system
+// Agent represents an agent (coder, reviewer, orchestrator) in the system
 type Agent struct {
 	Role            string         `yaml:"role"`
 	Status          AgentStatus    `yaml:"status"`
@@ -643,17 +643,17 @@ func (sm SystemMode) ValidateTransition(to SystemMode) error {
 
 // Default configuration values (seconds) used as fallbacks when config fields are unset.
 const (
-	DefaultMaxCoderIterations   = 10
-	DefaultMaxReviewCycles      = 5
-	DefaultLeaseDurationSeconds = 1800 // 30 minutes
-	DefaultCoderPollInterval    = 30
-	DefaultCoderMaxWait         = 1800 // 30 minutes
-	DefaultPlannerPollInterval  = 60
-	DefaultPlannerMaxWait       = 1800 // 30 minutes
-	DefaultReviewerPollInterval = 30
-	DefaultReviewerMaxWait      = 1800 // 30 minutes
-	DefaultExit42MaxBackoffSec  = 60
-	DefaultExit42RestartLimit   = 5
+	DefaultMaxCoderIterations       = 10
+	DefaultMaxReviewCycles          = 5
+	DefaultLeaseDurationSeconds     = 1800 // 30 minutes
+	DefaultCoderPollInterval        = 30
+	DefaultCoderMaxWait             = 1800 // 30 minutes
+	DefaultOrchestratorPollInterval = 60
+	DefaultOrchestratorMaxWait      = 1800 // 30 minutes
+	DefaultReviewerPollInterval     = 30
+	DefaultReviewerMaxWait          = 1800 // 30 minutes
+	DefaultExit42MaxBackoffSec      = 60
+	DefaultExit42RestartLimit       = 5
 )
 
 // Bounds for heartbeat interval validation.
@@ -675,17 +675,17 @@ func NormalizeHeartbeatInterval(interval int) time.Duration {
 
 // Config holds system configuration parameters
 type Config struct {
-	MaxCoderIterations  int `yaml:"max_coder_iterations"`
-	MaxReviewCycles     int `yaml:"max_review_cycles"`
-	HeartbeatInterval   int `yaml:"heartbeat_interval"`
-	LeaseDuration       int `yaml:"lease_duration"`
-	CoderPollInterval   int `yaml:"coder_poll_interval"`
-	CoderMaxWait        int `yaml:"coder_max_wait"`
-	PlannerPollInterval int `yaml:"planner_poll_interval"`
-	// PlannerMaxWait is the maximum time a planner agent will wait for work
-	// before exiting. When 0, defaults to DefaultPlannerMaxWait (30 minutes).
-	// The planner will exit earlier if STOPPED mode is detected or context is cancelled.
-	PlannerMaxWait          int            `yaml:"planner_max_wait"`
+	MaxCoderIterations       int `yaml:"max_coder_iterations"`
+	MaxReviewCycles          int `yaml:"max_review_cycles"`
+	HeartbeatInterval        int `yaml:"heartbeat_interval"`
+	LeaseDuration            int `yaml:"lease_duration"`
+	CoderPollInterval        int `yaml:"coder_poll_interval"`
+	CoderMaxWait             int `yaml:"coder_max_wait"`
+	OrchestratorPollInterval int `yaml:"orchestrator_poll_interval"`
+	// OrchestratorMaxWait is the maximum time a orchestrator agent will wait for work
+	// before exiting. When 0, defaults to DefaultOrchestratorMaxWait (30 minutes).
+	// The orchestrator will exit earlier if STOPPED mode is detected or context is cancelled.
+	OrchestratorMaxWait     int            `yaml:"orchestrator_max_wait"`
 	ReviewerPollInterval    int            `yaml:"reviewer_poll_interval"`
 	ReviewerMaxWait         int            `yaml:"reviewer_max_wait"`
 	Exit42RestartThreshold  int            `yaml:"exit42_restart_threshold,omitempty"`

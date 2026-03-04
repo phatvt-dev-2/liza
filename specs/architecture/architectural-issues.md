@@ -32,11 +32,11 @@ Persistent record of issues identified by architectural analysis skills.
   - [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure)
   - [Issue Registry Resolution Drift](#issue-registry-resolution-drift)
 - [Assumptions](#assumptions)
-  - [Implicit Planner Provenance Default](#implicit-planner-provenance-default)
+  - [Implicit Orchestrator Provenance Default](#implicit-orchestrator-provenance-default)
   - [Spec Maturity Dependency](#spec-maturity-dependency)
   - [Well-Formed Blackboard State](#well-formed-blackboard-state)
   - [Single-Goal Data Model Constrains Applicability](#single-goal-data-model-constrains-applicability)
-  - [Planner State Change Verification is Non-Binding](#planner-state-change-verification-is-non-binding)
+  - [Orchestrator State Change Verification is Non-Binding](#orchestrator-state-change-verification-is-non-binding)
 - [Stress Points](#stress-points)
   - [Validation Integrity Split by Ingress](#validation-integrity-split-by-ingress)
   - [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
@@ -53,7 +53,7 @@ Persistent record of issues identified by architectural analysis skills.
 - [Blind Spots](#blind-spots)
   - [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification)
   - [Initialization Completion Unverifiable](#initialization-completion-unverifiable)
-  - [Planner Role Invisible in Type System](#planner-role-invisible-in-type-system)
+  - [Orchestrator Role Invisible in Type System](#orchestrator-role-invisible-in-type-system)
   - [No Source Type for Pre-Implementation Spec Findings](#no-source-type-for-pre-implementation-spec-findings)
   - [Prompt-Build-to-Execution State Drift](#prompt-build-to-execution-state-drift)
 - [Trajectory](#trajectory)
@@ -67,7 +67,7 @@ Persistent record of issues identified by architectural analysis skills.
 - [Code-Level Architectural Smells](#code-level-architectural-smells)
   - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
 - [Accepted v1 Limitations](#accepted-v1-limitations)
-  - [Planner as Single Semantic Interpreter](#planner-as-single-semantic-interpreter)
+  - [Orchestrator as Single Semantic Interpreter](#orchestrator-as-single-semantic-interpreter)
   - [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate)
   - [Spec Completeness vs Reality](#spec-completeness-vs-reality)
   - [Code Reviewer Structural Accountability Gap](#code-reviewer-structural-accountability-gap)
@@ -192,7 +192,7 @@ Design contradictions that create structural friction.
 **Issue:** Internal role semantics for the reviewer were encoded as three incompatible namespace forms across internal boundaries: `code_reviewer` in task workflow typing, `code-reviewer` in runtime supervisor/agent role handling, and `reviewer` in claim-release mutation interfaces. These were bridged by implicit string translation rather than a declared canonical mapping.
 
 **Fix:** Created `internal/roles` package with unified constants and explicit mapping:
-- Runtime constants: `RuntimeCoder`, `RuntimeCodeReviewer`, `RuntimePlanner`
+- Runtime constants: `RuntimeCoder`, `RuntimeCodeReviewer`, `RuntimeOrchestrator`
 - Workflow constants: `WorkflowCoder`, `WorkflowCodeReviewer`
 - Mapping functions: `ToWorkflow()`, `ToRuntime()`, validation helpers `IsValidRuntime()`, `IsValidWorkflow()`
 - All agent/, cmd/, and ops/ production code migrated to use role constants
@@ -304,21 +304,21 @@ Self-reinforcing patterns that can amplify failures.
 
 Implicit dependencies that constrain system behavior.
 
-### Implicit Planner Provenance Default
+### Implicit Orchestrator Provenance Default
 
 **Skill:** systemic-thinking
 **Category:** ASSUMPTION
 
-**Issue:** Task-creation provenance assumes a synthetic planner identity when none is provided. Both MCP `handleAddTask` and `ops.AddTask` default missing agent identity to `planner-1`, so write attribution can be generated without proving who initiated the mutation.
+**Issue:** Task-creation provenance assumes a synthetic orchestrator identity when none is provided. Both MCP `handleAddTask` and `ops.AddTask` default missing agent identity to `orchestrator-1`, so write attribution can be generated without proving who initiated the mutation.
 
-**Implication:** Multi-planner operation collapses to a synthetic single actor in audit trails, reducing accountability and weakening post-incident reconstruction of planning decisions.
+**Implication:** Multi-orchestrator operation collapses to a synthetic single actor in audit trails, reducing accountability and weakening post-incident reconstruction of planning decisions.
 
 **Current mitigation:** CLI and MCP can provide explicit `agent_id`, but omission silently falls back to the default identity.
 
 **Future options:**
-- Make planner identity mandatory for task-creation mutations
+- Make orchestrator identity mandatory for task-creation mutations
 - Distinguish system-authored vs agent-authored mutations with explicit provenance fields
-- Add validation rejecting task-creation events with defaulted identity in multi-planner mode
+- Add validation rejecting task-creation events with defaulted identity in multi-orchestrator mode
 
 ### Spec Maturity Dependency
 
@@ -362,21 +362,21 @@ Implicit dependencies that constrain system behavior.
 - Goal array with per-goal task filtering
 - Backlog section separate from active sprint scope
 
-### Planner State Change Verification is Non-Binding
+### Orchestrator State Change Verification is Non-Binding
 
 **Skill:** systemic-thinking
 **Category:** ASSUMPTION
 
-**Issue:** After planner execution completes, `verifyPlannerStateChanges()` (`agent/systemctl.go`) logs a warning if expected state changes weren't made, but takes no corrective action. The supervisor continues the loop. However, the planner re-invocation depends on `waitForWork` → `DetectPlannerWakeTriggers()`, which checks actual state conditions (unassigned tasks, anomalies, blocked tasks, etc.). If no wake triggers exist, the planner waits indefinitely rather than looping. The infinite loop scenario requires persistent wake triggers that the planner fails to resolve — e.g., a blocked task the planner cannot unblock, or an anomaly it cannot interpret.
+**Issue:** After orchestrator execution completes, `verifyOrchestratorStateChanges()` (`agent/systemctl.go`) logs a warning if expected state changes weren't made, but takes no corrective action. The supervisor continues the loop. However, the orchestrator re-invocation depends on `waitForWork` → `DetectOrchestratorWakeTriggers()`, which checks actual state conditions (unassigned tasks, anomalies, blocked tasks, etc.). If no wake triggers exist, the orchestrator waits indefinitely rather than looping. The infinite loop scenario requires persistent wake triggers that the orchestrator fails to resolve — e.g., a blocked task the orchestrator cannot unblock, or an anomaly it cannot interpret.
 
-**Implication:** The system assumes planners will eventually resolve wake triggers. A planner stuck on an unresolvable trigger (spec ambiguity it cannot bypass, anomaly pattern it cannot interpret) will repeatedly execute without triggering escalation, consuming API tokens and time without progress signals. The failure mode is narrower than "any stuck planner" but still lacks detection.
+**Implication:** The system assumes orchestrators will eventually resolve wake triggers. An orchestrator stuck on an unresolvable trigger (spec ambiguity it cannot bypass, anomaly pattern it cannot interpret) will repeatedly execute without triggering escalation, consuming API tokens and time without progress signals. The failure mode is narrower than "any stuck orchestrator" but still lacks detection.
 
-**Current mitigation:** None explicit. Circuit breaker anomaly patterns may eventually detect the planner loop, but only if anomalies are logged.
+**Current mitigation:** None explicit. Circuit breaker anomaly patterns may eventually detect the orchestrator loop, but only if anomalies are logged.
 
 **Future options:**
-- Escalate to human after N consecutive planner executions without state change
-- Require planner to document progress or blocking reason on each wake
-- Add planner-specific circuit breaker for no-op execution patterns
+- Escalate to human after N consecutive orchestrator executions without state change
+- Require orchestrator to document progress or blocking reason on each wake
+- Add orchestrator-specific circuit breaker for no-op execution patterns
 
 ---
 
@@ -525,7 +525,7 @@ Partial failure modes with unclear recovery.
 
 **Issue:** The `spec_ref` field in tasks and goal uses file paths (e.g., `specs/retry-logic.md`, optionally with `#section` anchors). The anchors refer to headings within the file, not to versions of the file. Git tracks file history, but `spec_ref` contains no commit SHA, no version identifier, and no content hash. When a task cites `specs/api.md#pagination`, it references whatever content currently exists at that heading.
 
-**Implication:** Spec drift during task execution is undetectable. A PRD produced by a spec-authoring agent and consumed by the Planner can change between when the Planner decomposes it and when the Coder implements the resulting tasks. The blackboard's `spec_changes` log tracks that changes occurred, not which tasks were affected by which changes.
+**Implication:** Spec drift during task execution is undetectable. A PRD produced by a spec-authoring agent and consumed by the Orchestrator can change between when the Orchestrator decomposes it and when the Coder implements the resulting tasks. The blackboard's `spec_changes` log tracks that changes occurred, not which tasks were affected by which changes.
 
 **Current mitigation:** Code Reviewer validates against "current spec version" and logs `spec_changed` anomaly if material changes detected.
 
@@ -584,18 +584,18 @@ Unacknowledged forces or gaps the system doesn't model.
 - Canary questions: supervisor tests agent's knowledge of key contract clauses before allowing work
 - Reduce initialization surface by embedding more rules in supervisor-enforced structural mechanisms
 
-### ~~Planner Role Invisible in Type System~~
+### ~~Orchestrator Role Invisible in Type System~~
 
 **Skill:** systemic-thinking
 **Category:** BLIND SPOT
 **Status:** RESOLVED (`e173f71`)
 
-**Issue:** The planner was the only role absent from the type system. `models.RoleCoder` and `models.RoleCodeReviewer` existed but there was no `models.RolePlanner`. Wake trigger detection used imperative branching rather than declarative definitions.
+**Issue:** The orchestrator was the only role absent from the type system. `models.RoleCoder` and `models.RoleCodeReviewer` existed but there was no `models.RoleOrchestrator`. Wake trigger detection used imperative branching rather than declarative definitions.
 
 **Fix:** All three "future options" addressed:
-- `models.RolePlanner` constant added as alias for `roles.WorkflowPlanner`; `IsClaimable()` now has explicit planner case (returns false — planners don't participate in task claiming)
-- `roles.WorkflowPlanner` added with bidirectional `ToWorkflow()`/`ToRuntime()` mapping; `AllWorkflow()` and `AllRuntime()` include planner; `IsValidRuntime()` no longer special-cases planner
-- `plannerWakeTriggerSpecs` in `workdetection.go` declares wake triggers as data (trigger type → description → state predicate), replacing imperative if-else branching; tests verify trigger order, descriptions, and count functions
+- `models.RoleOrchestrator` constant added as alias for `roles.WorkflowOrchestrator`; `IsClaimable()` now has explicit orchestrator case (returns false — orchestrators don't participate in task claiming)
+- `roles.WorkflowOrchestrator` added with bidirectional `ToWorkflow()`/`ToRuntime()` mapping; `AllWorkflow()` and `AllRuntime()` include orchestrator; `IsValidRuntime()` no longer special-cases orchestrator
+- `orchestratorWakeTriggerSpecs` in `workdetection.go` declares wake triggers as data (trigger type → description → state predicate), replacing imperative if-else branching; tests verify trigger order, descriptions, and count functions
 - Remaining implicit behaviors: infinite wait time override in `waitforwork.go`, pseudo-task `"planning"` in `supervisor.go`, post-execution verification in `systemctl.go` — these are supervisor-specific and appropriate for the agent package
 
 ### No Source Type for Pre-Implementation Spec Findings
@@ -733,7 +733,7 @@ Long-term concerns about system evolution.
 **Category:** TRAJECTORY
 **Coupled with:** [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency)
 
-**Issue:** The system has a clear mutation layer (`ops`) but no query layer. Complex read operations are implemented wherever first needed: `models` has `FindTask`, `IsClaimable`, `CountClaimableTasks`, `AllPlannedTasksTerminal`; `agent/workdetection.go` has `DetectPlannerWakeTriggers`; `commands` has `InspectCommand` (parametric query with format control), `StatusCommand` (dashboard aggregation), `ValidateCommand` (invariant checking); `db` has `Read`, `ReadCached`, `ReadRaw`, `GetTask`, `GetAgent`. The pattern: each package implements the queries it needs, and cross-package query reuse happens through the wrong seam (`mcp` → `commands`). The `models/diagnostics.go` file represents a partial move toward a query layer (work detection functions extracted from agent), but the extraction stopped there. The three consumers (CLI, MCP, agent supervisor) each need overlapping but different views of state — formatted text, structured JSON, and in-memory assessment — but share no query infrastructure.
+**Issue:** The system has a clear mutation layer (`ops`) but no query layer. Complex read operations are implemented wherever first needed: `models` has `FindTask`, `IsClaimable`, `CountClaimableTasks`, `AllPlannedTasksTerminal`; `agent/workdetection.go` has `DetectOrchestratorWakeTriggers`; `commands` has `InspectCommand` (parametric query with format control), `StatusCommand` (dashboard aggregation), `ValidateCommand` (invariant checking); `db` has `Read`, `ReadCached`, `ReadRaw`, `GetTask`, `GetAgent`. The pattern: each package implements the queries it needs, and cross-package query reuse happens through the wrong seam (`mcp` → `commands`). The `models/diagnostics.go` file represents a partial move toward a query layer (work detection functions extracted from agent), but the extraction stopped there. The three consumers (CLI, MCP, agent supervisor) each need overlapping but different views of state — formatted text, structured JSON, and in-memory assessment — but share no query infrastructure.
 
 **Implication:** As the system's query surface grows (new MCP resources, dashboard enhancements, diagnostic tools), either the `mcp` → `commands` dependency deepens or query logic gets duplicated across consumers.
 
@@ -784,20 +784,20 @@ Issues identified through code-level architectural analysis (patterns, structure
 
 **Future option:** Per-task pause via `liza pause --task task-{id}`.
 
-### Planner as Single Semantic Interpreter
+### Orchestrator as Single Semantic Interpreter
 
 **Skill:** systemic-thinking
 **Category:** LOAD-BEARING
 
-**Issue:** Planner carries the entire semantic burden. It decomposes goals, interprets failure signals, resolves blocked reviews, converts discoveries to tasks, and maintains goal alignment. All other roles execute mechanical functions (implement spec, validate against spec) while Planner alone interprets intent. No second opinion, no validation mechanism, no structural redundancy.
+**Issue:** Orchestrator carries the entire semantic burden. It decomposes goals, interprets failure signals, resolves blocked reviews, converts discoveries to tasks, and maintains goal alignment. All other roles execute mechanical functions (implement spec, validate against spec) while Orchestrator alone interprets intent. No second opinion, no validation mechanism, no structural redundancy.
 
-**Implication:** Planner drift compounds silently across all tasks until human checkpoint reveals accumulated misalignment. Correction costs scale with drift duration.
+**Implication:** Orchestrator drift compounds silently across all tasks until human checkpoint reveals accumulated misalignment. Correction costs scale with drift duration.
 
 **Current mitigation:** Human checkpoints provide periodic correction opportunities.
 
 **Future options:**
-- Planner self-review before finalizing task decomposition
-- Second Planner instance for cross-validation on critical decisions
+- Orchestrator self-review before finalizing task decomposition
+- Second Orchestrator instance for cross-validation on critical decisions
 - Automated coherence checks against vision.md
 
 ### Supervisor as Single Correctness Gate
@@ -823,15 +823,15 @@ Issues identified through code-level architectural analysis (patterns, structure
 
 **Issue:** The vision positions specs as the mechanism for context survival ("if it's not written down, it doesn't exist") while stating "Liza v1 assumes specs substantially complete before work" and excluding "domains where requirements emerge through implementation."
 
-Incomplete specs—normal in real projects—trigger a reinforcing loop: coders block on spec gaps, Planner logs spec_gap anomalies, human must update specs, system pauses. The spec-first design shifts work from agents to humans while promising to reduce human workload.
+Incomplete specs—normal in real projects—trigger a reinforcing loop: coders block on spec gaps, Orchestrator logs spec_gap anomalies, human must update specs, system pauses. The spec-first design shifts work from agents to humans while promising to reduce human workload.
 
 **Implication:** System selects for a narrow project profile (complete specs, solo developers) rather than adapting to common project conditions.
 
-**Current mitigation:** BLOCKED resolution via `human_notes`. Planner reads human_notes on wake.
+**Current mitigation:** BLOCKED resolution via `human_notes`. Orchestrator reads human_notes on wake.
 
 **Future options:**
 - Spike mode for spec discovery
-- Planner-assisted spec drafting from coder discoveries
+- Orchestrator-assisted spec drafting from coder discoveries
 - Graceful degradation when specs incomplete (proceed with explicit assumptions)
 
 ### Code Reviewer Structural Accountability Gap
@@ -839,13 +839,13 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 **Skill:** systemic-thinking
 **Category:** TENSION
 
-**Issue:** The Code Reviewer has binding approval/rejection authority but no structural accountability for verdict quality. The contract specifies detection of reviewer dysfunction in two modes: rubber-stamping (>95% approval rate metric, `MULTI_AGENT_MODE.md`) and abandonment (review exhaustion — 2 reviewers exit without verdict). However, these are contract-specified behaviors, not structurally enforced in the supervisor flow — the supervisor does not compute approval rates or detect review exhaustion patterns at runtime. The system cannot detect a third, more damaging mode: incorrect verdicts with plausible reasoning. A reviewer that rejects valid work forces full implement-review cycles before the Planner evaluates (governed by `effectiveCoderIterationLimit` and `effectiveReviewCycleLimit` in `iteration_limits.go`), and the Planner's assessment is itself the unvalidated judgment of the single semantic interpreter. A reviewer that approves flawed work is invisible unless integration tests catch it — but the system doesn't mandate integration tests on the integration branch. The power asymmetry is structural: Coders must address every rejection point-by-point, but there's no mechanism for Coders to challenge a rejection except by re-implementing and re-submitting. Note: with current LLM-based reviewers, over-rejection (spurious rejections with plausible reasoning) is the empirically dominant failure mode, making the iteration limit the most exercised circuit breaker in practice.
+**Issue:** The Code Reviewer has binding approval/rejection authority but no structural accountability for verdict quality. The contract specifies detection of reviewer dysfunction in two modes: rubber-stamping (>95% approval rate metric, `MULTI_AGENT_MODE.md`) and abandonment (review exhaustion — 2 reviewers exit without verdict). However, these are contract-specified behaviors, not structurally enforced in the supervisor flow — the supervisor does not compute approval rates or detect review exhaustion patterns at runtime. The system cannot detect a third, more damaging mode: incorrect verdicts with plausible reasoning. A reviewer that rejects valid work forces full implement-review cycles before the Orchestrator evaluates (governed by `effectiveCoderIterationLimit` and `effectiveReviewCycleLimit` in `iteration_limits.go`), and the Orchestrator's assessment is itself the unvalidated judgment of the single semantic interpreter. A reviewer that approves flawed work is invisible unless integration tests catch it — but the system doesn't mandate integration tests on the integration branch. The power asymmetry is structural: Coders must address every rejection point-by-point, but there's no mechanism for Coders to challenge a rejection except by re-implementing and re-submitting. Note: with current LLM-based reviewers, over-rejection (spurious rejections with plausible reasoning) is the empirically dominant failure mode, making the iteration limit the most exercised circuit breaker in practice.
 
 **Implication:** Code review quality is the least observable dimension of system health, yet it gates all task completion — the system optimizes for reviewer throughput signals while reviewer accuracy remains unmeasured.
 
 **Future options:**
 - Reviewer accuracy metric (compare rejected items against final merged state)
-- Coder appeal mechanism (structured objection triggers Planner evaluation before 5 cycles)
+- Coder appeal mechanism (structured objection triggers Orchestrator evaluation before 5 cycles)
 - Post-merge validation on integration branch (automated tests catch reviewer misses)
 
 **Decision:** Integration Reviewer role. Would also catch incompatible changes made within the various merged worktrees.
@@ -855,7 +855,7 @@ Incomplete specs—normal in real projects—trigger a reinforcing loop: coders 
 **Skill:** systemic-thinking
 **Category:** FEEDBACK
 
-**Issue:** Hypothesis exhaustion rule (two coders fail = must rescope) forces Planner intervention but doesn't require root cause identification. Planner may split task-3 into task-3a/task-3b without diagnosing why two coders failed. If underlying cause is spec ambiguity or architecture flaw, new tasks encounter same obstacle.
+**Issue:** Hypothesis exhaustion rule (two coders fail = must rescope) forces Orchestrator intervention but doesn't require root cause identification. Orchestrator may split task-3 into task-3a/task-3b without diagnosing why two coders failed. If underlying cause is spec ambiguity or architecture flaw, new tasks encounter same obstacle.
 
 Circuit breaker theoretically catches this via spec_gap_cluster, but pattern detection uses exact string matching—different coders may describe same issue differently.
 
@@ -995,13 +995,13 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 - [x] Watch stall detection parses YAML text directly — uses `log.GetLastTimestamp()` typed parser *(software-architecture-review)*
 - [x] Watch/log O(n) growth paths — append-only writes + bounded tail-window reads *(software-architecture-review)*
 - [x] `heartbeat_interval` config ignored — `NormalizeHeartbeatInterval()` with bounds validation *(software-architecture-review)*
-- [x] Planner max-wait config ignored — planners respect configured value *(software-architecture-review)*
+- [x] Orchestrator max-wait config ignored — orchestrators respect configured value *(software-architecture-review)*
 - [x] Stale-lock cleanup error discarded — propagated as `LockErrorFilesystem` *(software-architecture-review)*
 - [x] `DeleteTask` side effects outpace state commit — git cleanup deferred to after state mutation *(software-architecture-review)*
 - [x] `get config.*` projection drift — reflect-based walker discovers all YAML-tagged fields *(software-architecture-review)*
 - [x] `ReleaseClaim` orphans worktree/branch on coder release — cleanup added post-state-mutation; `handleReadyClaimWorktree` made resilient to stale resources *(bug-fix)*
 - [x] Exit code 42 restart loop — per-task restart tracking with exponential backoff and circuit breaker to BLOCKED *(systemic-thinking)*
-- [x] Planner role invisible in type system — `models.RolePlanner`, `roles.WorkflowPlanner`, declarative `plannerWakeTriggerSpecs` *(systemic-thinking)*
+- [x] Orchestrator role invisible in type system — `models.RoleOrchestrator`, `roles.WorkflowOrchestrator`, declarative `orchestratorWakeTriggerSpecs` *(systemic-thinking)*
 - [x] Two-Track State Mutation (partial) — `ops.ClaimReviewerTask` and `ops.ResumeHandoff` extracted with structured input/result types; agent lifecycle still inline *(systemic-thinking)*
 - [x] Validation Integrity Split by Ingress — `internal/statevalidate` package extracted; `ops.AddTask` runs post-write validation with typed `PostWriteValidationError`; both CLI and MCP share identical validation pressure *(systemic-thinking)*
 - [x] Integration Test Script Silent Absence — `NoTestScriptFound` field, log WARNING on missing script, `tests_ran` persisted in merge history `Extra`, tri-state stat handling *(systemic-thinking)*
@@ -1059,13 +1059,13 @@ Commit SHA where issue details were first marked as fixed (proxy for actual fix 
 | Watch stall detection YAML text parsing | `61b16d5` |
 | Watch/log O(n) growth paths | `fe8de6b` |
 | `heartbeat_interval` config ignored | `9e59acf` |
-| Planner max-wait config ignored | `1d4f4f4` |
+| Orchestrator max-wait config ignored | `1d4f4f4` |
 | Stale-lock cleanup error discarded | `729da05` |
 | `DeleteTask` side effects outpace state commit | `7dd05ce` |
 | `get config.*` projection drift | `c4bd748` |
 | `ReleaseClaim` orphans worktree/branch on coder release | (pending commit) |
 | Exit Code 42 Restart Loop Without Progress Detection | `f15cd61`, `5f05403` |
-| Planner Role Invisible in Type System | `e173f71` |
+| Orchestrator Role Invisible in Type System | `e173f71` |
 | Two-Track State Mutation (partial — reviewer claiming + handoff) | `ac4ce6f` |
 | Validation Integrity Split by Ingress | `6fe5bcc` |
 | Integration Test Script Silent Absence | `bce626d`, `52ceac5` |
@@ -1109,9 +1109,9 @@ Remaining `yq` references are historical only (ADRs, release notes, benchmark tr
 
 **Skill:** systemic-thinking
 
-**Original issue:** Circuit breaker patterns (retry_cluster, spec_gap_cluster, hypothesis_exhaustion) were logged but Planner had no mechanism to read them, making escalation triggers invisible.
+**Original issue:** Circuit breaker patterns (retry_cluster, spec_gap_cluster, hypothesis_exhaustion) were logged but Orchestrator had no mechanism to read them, making escalation triggers invisible.
 
-**Fix:** Planner reads `.liza/anomalies.log` on wake to detect patterns and take corrective action.
+**Fix:** Orchestrator reads `.liza/anomalies.log` on wake to detect patterns and take corrective action.
 
 ### Human Role Clarification
 
@@ -1127,7 +1127,7 @@ Remaining `yq` references are historical only (ADRs, release notes, benchmark tr
 
 **Original issue:** No mechanism to express or enforce task ordering. Coders could claim tasks whose prerequisites weren't complete.
 
-**Fix:** Added `depends_on` field to task schema. `liza claim-task` validates all dependencies are MERGED before allowing claim. Planner instructions updated to specify dependencies when decomposing tasks.
+**Fix:** Added `depends_on` field to task schema. `liza claim-task` validates all dependencies are MERGED before allowing claim. Orchestrator instructions updated to specify dependencies when decomposing tasks.
 
 ### Supervisor Clarification
 
@@ -1185,7 +1185,7 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 
 **Original issue:** Hypothesis exhaustion forced rescope without diagnosing cause, leading to task churn.
 
-**Fix:** Planner must document root cause before rescoping and include it in `rescope_reason` and the rescope log entry (task lifecycle + roles).
+**Fix:** Orchestrator must document root cause before rescoping and include it in `rescope_reason` and the rescope log entry (task lifecycle + roles).
 
 ### Iteration-Limit Config Drift
 
@@ -1232,14 +1232,14 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 **Skill:** software-architecture-review
 **Category:** Hardcoded configuration
 
-**Fix:** Defined `DefaultLeaseDurationSeconds`, `Default{Coder,Planner,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside the `Config` struct. All 3 lease-duration fallback sites and 6 poll/wait fallbacks in `getRoleWaitConfig` now reference the named constants. `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds` (single source of truth).
+**Fix:** Defined `DefaultLeaseDurationSeconds`, `Default{Coder,Orchestrator,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside the `Config` struct. All 3 lease-duration fallback sites and 6 poll/wait fallbacks in `getRoleWaitConfig` now reference the named constants. `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds` (single source of truth).
 
 ### executeTemplate Panics on Error
 
 **Skill:** software-architecture-review
 **Category:** Leaky abstraction / Non-idempotent operations
 
-**Fix:** Changed `executeTemplate` in `internal/prompts/templates.go` and `executeCommandTemplate` in `internal/commands/templates.go` to return `(string, error)` instead of panicking. Propagated error returns through all callers: `Build{BasePrompt,PlannerContext,CoderContext,ReviewerContext}` in `prompts/builder.go`, `buildInstructionsForWakeTrigger`, `format{AgentValue,MetricsValue}` in `commands/`, and `buildPrompt` in `agent/prompt.go`. All callers already returned `(string, error)` or were internal — propagation was straightforward.
+**Fix:** Changed `executeTemplate` in `internal/prompts/templates.go` and `executeCommandTemplate` in `internal/commands/templates.go` to return `(string, error)` instead of panicking. Propagated error returns through all callers: `Build{BasePrompt,OrchestratorContext,CoderContext,ReviewerContext}` in `prompts/builder.go`, `buildInstructionsForWakeTrigger`, `format{AgentValue,MetricsValue}` in `commands/`, and `buildPrompt` in `agent/prompt.go`. All callers already returned `(string, error)` or were internal — propagation was straightforward.
 
 ### Inconsistent NotFoundError Usage
 
@@ -1260,7 +1260,7 @@ Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics st
 - `waitforwork.go` (~300 LOC) — work detection with event-driven + polling
 - `claiming.go` (~230 LOC) — task claiming and merge handling
 - `prompt.go` (~95 LOC) — prompt assembly
-- `systemctl.go` (~160 LOC) — system control, execution, planner verification
+- `systemctl.go` (~160 LOC) — system control, execution, orchestrator verification
 
 Test files split correspondingly. `supervisor_priority_test.go` renamed to `claiming_priority_test.go`. No signature changes, no behavior changes.
 

@@ -48,9 +48,9 @@ func (e *PostWriteValidationError) Unwrap() error {
 // AddTask atomically persists a new task after validating inputs and checking
 // for duplicates. Also updates sprint.scope.planned, goal.alignment_history,
 // and appends to the activity log. No terminal I/O.
-func AddTask(statePath, logPath string, input *AddTaskInput, plannerID string) (*AddTaskResult, error) {
-	if plannerID == "" {
-		plannerID = "planner-1"
+func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID string) (*AddTaskResult, error) {
+	if orchestratorID == "" {
+		orchestratorID = "orchestrator-1"
 	}
 	if input.ID == "" {
 		return nil, fmt.Errorf("task ID is required")
@@ -89,7 +89,7 @@ func AddTask(statePath, logPath string, input *AddTaskInput, plannerID string) (
 	}
 
 	now := time.Now().UTC()
-	agentID := plannerID
+	agentID := orchestratorID
 
 	bb := db.For(statePath)
 

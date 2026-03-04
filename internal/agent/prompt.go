@@ -17,7 +17,7 @@ import (
 // Returns nil, 0, 0 if no planned tasks or if currentTaskID is not in the planned list
 // (e.g. mid-sprint replacement tasks created outside the original plan).
 //
-// Note: tasks not found by FindTask are silently skipped. This assumes the planner keeps
+// Note: tasks not found by FindTask are silently skipped. This assumes the orchestrator keeps
 // Sprint.Scope.Planned in sync with the task list (archived/removed tasks are pruned from planned[]).
 func collectSiblingTasks(state *models.State, currentTaskID string) ([]prompts.SiblingTaskSummary, int, int) {
 	planned := state.Sprint.Scope.Planned
@@ -123,11 +123,11 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 		}
 		prompt += context
 
-	case roles.RuntimePlanner:
-		plannerConfig := prompts.PlannerContextConfig{}
-		context, err := prompts.BuildPlannerContext(state, plannerConfig)
+	case roles.RuntimeOrchestrator:
+		orchestratorConfig := prompts.OrchestratorContextConfig{}
+		context, err := prompts.BuildOrchestratorContext(state, orchestratorConfig)
 		if err != nil {
-			return "", fmt.Errorf("building planner context: %w", err)
+			return "", fmt.Errorf("building orchestrator context: %w", err)
 		}
 		prompt += context
 	}

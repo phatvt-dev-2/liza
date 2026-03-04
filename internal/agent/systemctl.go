@@ -140,8 +140,8 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string) (
 	return exitCode, err
 }
 
-// verifyPlannerStateChanges checks if planner made expected state changes after completion
-func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) error {
+// verifyOrchestratorStateChanges checks if orchestrator made expected state changes after completion
+func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State) error {
 	logger := GetLogger()
 	// Read state after agent execution
 	stateAfter, err := bb.ReadCached()
@@ -149,17 +149,17 @@ func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) err
 		return fmt.Errorf("failed to read state after agent execution: %w", err)
 	}
 
-	// Detect the wake trigger that caused this planner run
-	result := DetectPlannerWakeTriggers(stateBefore)
+	// Detect the wake trigger that caused this orchestrator run
+	result := DetectOrchestratorWakeTriggers(stateBefore)
 
 	// Verify expected changes based on trigger
 	switch result.Trigger {
 	case WakeTriggerInitialPlanning:
 		// INITIAL_PLANNING: expect tasks to be created
 		if len(stateAfter.Tasks) == 0 {
-			return fmt.Errorf("planner completed with INITIAL_PLANNING trigger but no tasks were created")
+			return fmt.Errorf("orchestrator completed with INITIAL_PLANNING trigger but no tasks were created")
 		}
-		logger.Info("Planner created tasks", "task_count", len(stateAfter.Tasks))
+		logger.Info("Orchestrator created tasks", "task_count", len(stateAfter.Tasks))
 
 	case WakeTriggerBlocked:
 		// BLOCKED_TASKS: expect blocked tasks to be unblocked or superseded
@@ -176,13 +176,13 @@ func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) err
 			}
 		}
 		if blockedAfter >= blockedBefore {
-			return fmt.Errorf("planner completed with BLOCKED_TASKS trigger but blocked count didn't decrease (before: %d, after: %d)", blockedBefore, blockedAfter)
+			return fmt.Errorf("orchestrator completed with BLOCKED_TASKS trigger but blocked count didn't decrease (before: %d, after: %d)", blockedBefore, blockedAfter)
 		}
-		logger.Info("Planner resolved blocked tasks", "before", blockedBefore, "after", blockedAfter)
+		logger.Info("Orchestrator resolved blocked tasks", "before", blockedBefore, "after", blockedAfter)
 
 	case WakeTriggerIntegrationFailed:
-		// INTEGRATION_FAILED: expect failed tasks to be claimed by coders or handled by planner
-		// Count tasks that were INTEGRATION_FAILED before planner ran
+		// INTEGRATION_FAILED: expect failed tasks to be claimed by coders or handled by orchestrator
+		// Count tasks that were INTEGRATION_FAILED before orchestrator ran
 		failedBefore := 0
 		failedTaskIDs := make([]string, 0)
 		for _, task := range stateBefore.Tasks {
@@ -192,7 +192,7 @@ func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) err
 			}
 		}
 
-		// Check what happened to those tasks after planner ran
+		// Check what happened to those tasks after orchestrator ran
 		stillFailed := 0
 		claimed := 0
 		superseded := 0
@@ -212,14 +212,14 @@ func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) err
 
 		// Success conditions:
 		// 1. Tasks were claimed by coders (expected case)
-		// 2. Tasks were superseded by planner (structural issue)
+		// 2. Tasks were superseded by orchestrator (structural issue)
 		// 3. Combination of both
 		handled := claimed + superseded
 		if handled == 0 && stillFailed == failedBefore {
-			return fmt.Errorf("planner completed with INTEGRATION_FAILED trigger but no tasks were handled (still %d INTEGRATION_FAILED)", stillFailed)
+			return fmt.Errorf("orchestrator completed with INTEGRATION_FAILED trigger but no tasks were handled (still %d INTEGRATION_FAILED)", stillFailed)
 		}
 
-		logger.Info("Planner checked integration failures", "claimed", claimed, "superseded", superseded, "still_failed", stillFailed)
+		logger.Info("Orchestrator checked integration failures", "claimed", claimed, "superseded", superseded, "still_failed", stillFailed)
 
 	case WakeTriggerHypothesisExhausted:
 		// HYPOTHESIS_EXHAUSTED: expect exhausted tasks to be updated or superseded
@@ -236,9 +236,9 @@ func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) err
 			}
 		}
 		if exhaustedAfter >= exhaustedBefore {
-			return fmt.Errorf("planner completed with HYPOTHESIS_EXHAUSTED trigger but exhausted count didn't decrease (before: %d, after: %d)", exhaustedBefore, exhaustedAfter)
+			return fmt.Errorf("orchestrator completed with HYPOTHESIS_EXHAUSTED trigger but exhausted count didn't decrease (before: %d, after: %d)", exhaustedBefore, exhaustedAfter)
 		}
-		logger.Info("Planner handled exhausted hypotheses", "before", exhaustedBefore, "after", exhaustedAfter)
+		logger.Info("Orchestrator handled exhausted hypotheses", "before", exhaustedBefore, "after", exhaustedAfter)
 
 	case WakeTriggerImmediateDiscovery:
 		// IMMEDIATE_DISCOVERY: expect discoveries to be converted to tasks
@@ -255,19 +255,19 @@ func verifyPlannerStateChanges(bb *db.Blackboard, stateBefore *models.State) err
 			}
 		}
 		if immediateAfter >= immediateBefore {
-			return fmt.Errorf("planner completed with IMMEDIATE_DISCOVERY trigger but unconverted count didn't decrease (before: %d, after: %d)", immediateBefore, immediateAfter)
+			return fmt.Errorf("orchestrator completed with IMMEDIATE_DISCOVERY trigger but unconverted count didn't decrease (before: %d, after: %d)", immediateBefore, immediateAfter)
 		}
-		logger.Info("Planner handled immediate discoveries", "before", immediateBefore, "after", immediateAfter)
+		logger.Info("Orchestrator handled immediate discoveries", "before", immediateBefore, "after", immediateAfter)
 
 	case WakeTriggerSprintComplete:
 		// SPRINT_COMPLETE: expect sprint status to be CHECKPOINT (or COMPLETED)
 		if stateAfter.Sprint.Status != models.SprintStatusCheckpoint && stateAfter.Sprint.Status != models.SprintStatusCompleted {
-			return fmt.Errorf("planner completed with SPRINT_COMPLETE trigger but sprint status is %s (expected CHECKPOINT or COMPLETED)", stateAfter.Sprint.Status)
+			return fmt.Errorf("orchestrator completed with SPRINT_COMPLETE trigger but sprint status is %s (expected CHECKPOINT or COMPLETED)", stateAfter.Sprint.Status)
 		}
 		if stateAfter.Sprint.Timeline.CheckpointAt == nil {
-			return fmt.Errorf("planner completed with SPRINT_COMPLETE trigger but checkpoint_at is not set")
+			return fmt.Errorf("orchestrator completed with SPRINT_COMPLETE trigger but checkpoint_at is not set")
 		}
-		logger.Info("Planner completed sprint", "status", stateAfter.Sprint.Status)
+		logger.Info("Orchestrator completed sprint", "status", stateAfter.Sprint.Status)
 	}
 
 	return nil

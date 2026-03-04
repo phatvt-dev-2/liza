@@ -4,32 +4,32 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
-// PlannerWakeTrigger represents what triggered the planner to wake
-type PlannerWakeTrigger string
+// OrchestratorWakeTrigger represents what triggered the orchestrator to wake
+type OrchestratorWakeTrigger string
 
 const (
-	WakeTriggerInitialPlanning     PlannerWakeTrigger = "INITIAL_PLANNING"
-	WakeTriggerBlocked             PlannerWakeTrigger = "BLOCKED_TASKS"
-	WakeTriggerIntegrationFailed   PlannerWakeTrigger = "INTEGRATION_FAILED"
-	WakeTriggerHypothesisExhausted PlannerWakeTrigger = "HYPOTHESIS_EXHAUSTED"
-	WakeTriggerImmediateDiscovery  PlannerWakeTrigger = "IMMEDIATE_DISCOVERY"
-	WakeTriggerSprintComplete      PlannerWakeTrigger = "SPRINT_COMPLETE"
-	WakeTriggerNone                PlannerWakeTrigger = "NONE"
+	WakeTriggerInitialPlanning     OrchestratorWakeTrigger = "INITIAL_PLANNING"
+	WakeTriggerBlocked             OrchestratorWakeTrigger = "BLOCKED_TASKS"
+	WakeTriggerIntegrationFailed   OrchestratorWakeTrigger = "INTEGRATION_FAILED"
+	WakeTriggerHypothesisExhausted OrchestratorWakeTrigger = "HYPOTHESIS_EXHAUSTED"
+	WakeTriggerImmediateDiscovery  OrchestratorWakeTrigger = "IMMEDIATE_DISCOVERY"
+	WakeTriggerSprintComplete      OrchestratorWakeTrigger = "SPRINT_COMPLETE"
+	WakeTriggerNone                OrchestratorWakeTrigger = "NONE"
 )
 
-// PlannerWakeResult contains the wake trigger and count
-type PlannerWakeResult struct {
-	Trigger PlannerWakeTrigger
+// OrchestratorWakeResult contains the wake trigger and count
+type OrchestratorWakeResult struct {
+	Trigger OrchestratorWakeTrigger
 	Count   int
 }
 
-type plannerWakeTriggerSpec struct {
-	Trigger     PlannerWakeTrigger
+type orchestratorWakeTriggerSpec struct {
+	Trigger     OrchestratorWakeTrigger
 	Description string
 	Count       func(state *models.State) int
 }
 
-var plannerWakeTriggerSpecs = []plannerWakeTriggerSpec{
+var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 	{
 		Trigger:     WakeTriggerInitialPlanning,
 		Description: "No tasks exist yet, so initial planning is required.",
@@ -42,26 +42,26 @@ var plannerWakeTriggerSpecs = []plannerWakeTriggerSpec{
 	},
 	{
 		Trigger:     WakeTriggerBlocked,
-		Description: "Blocked tasks need planner intervention.",
+		Description: "Blocked tasks need orchestrator intervention.",
 		Count: func(state *models.State) int {
 			return countTasksByStatus(state, models.TaskStatusBlocked)
 		},
 	},
 	{
 		Trigger:     WakeTriggerIntegrationFailed,
-		Description: "Integration failures need planner intervention.",
+		Description: "Integration failures need orchestrator intervention.",
 		Count: func(state *models.State) int {
 			return countTasksByStatus(state, models.TaskStatusIntegrationFailed)
 		},
 	},
 	{
 		Trigger:     WakeTriggerHypothesisExhausted,
-		Description: "Tasks with repeated coder failures need planner intervention.",
+		Description: "Tasks with repeated coder failures need orchestrator intervention.",
 		Count:       countHypothesisExhaustedTasks,
 	},
 	{
 		Trigger:     WakeTriggerImmediateDiscovery,
-		Description: "Immediate discoveries need planner triage.",
+		Description: "Immediate discoveries need orchestrator triage.",
 		Count:       countImmediateDiscoveries,
 	},
 	{
@@ -76,7 +76,7 @@ var plannerWakeTriggerSpecs = []plannerWakeTriggerSpec{
 	},
 }
 
-// DetectPlannerWakeTriggers detects conditions that should wake the planner
+// DetectOrchestratorWakeTriggers detects conditions that should wake the orchestrator
 // Returns the highest-priority trigger and count of items for that trigger
 // Priority order:
 // 1. No tasks (initial planning)
@@ -85,17 +85,17 @@ var plannerWakeTriggerSpecs = []plannerWakeTriggerSpec{
 // 4. Hypothesis exhausted (2+ failed_by)
 // 5. Immediate discoveries (not yet converted to tasks)
 // 6. Sprint complete (all planned tasks terminal)
-func DetectPlannerWakeTriggers(state *models.State) PlannerWakeResult {
-	for _, triggerSpec := range plannerWakeTriggerSpecs {
+func DetectOrchestratorWakeTriggers(state *models.State) OrchestratorWakeResult {
+	for _, triggerSpec := range orchestratorWakeTriggerSpecs {
 		if count := triggerSpec.Count(state); count > 0 {
-			return PlannerWakeResult{
+			return OrchestratorWakeResult{
 				Trigger: triggerSpec.Trigger,
 				Count:   count,
 			}
 		}
 	}
 
-	return PlannerWakeResult{
+	return OrchestratorWakeResult{
 		Trigger: WakeTriggerNone,
 		Count:   0,
 	}

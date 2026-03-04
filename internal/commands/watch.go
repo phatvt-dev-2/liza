@@ -607,7 +607,7 @@ func checkStaleDrafts(state *models.State) []alert {
 				Timestamp: now,
 				Level:     alertLevelWarning,
 				Category:  "STALE DRAFT",
-				Message: fmt.Sprintf("%s — created %dmin ago, never finalized (Planner crash?)",
+				Message: fmt.Sprintf("%s — created %dmin ago, never finalized (Orchestrator crash?)",
 					task.ID, int(age.Minutes())),
 			})
 		}
@@ -626,7 +626,7 @@ func checkImmediateDiscoveries(state *models.State) []alert {
 				Timestamp: now,
 				Level:     alertLevelCritical,
 				Category:  "IMMEDIATE DISCOVERY",
-				Message:   fmt.Sprintf("%s — %s (Planner should wake)", disc.ID, disc.Description),
+				Message:   fmt.Sprintf("%s — %s (Orchestrator should wake)", disc.ID, disc.Description),
 			})
 		}
 	}

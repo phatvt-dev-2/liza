@@ -109,7 +109,7 @@ func TestConcurrentAddTask(t *testing.T) {
 				"done":     "Task is complete",
 				"scope":    "Test concurrent adds",
 				"priority": 1,
-				"agent_id": "planner-1",
+				"agent_id": "orchestrator-1",
 			})
 		}()
 	}
@@ -165,7 +165,7 @@ func TestConcurrentAddTaskSameID(t *testing.T) {
 			"done":     "Task is complete",
 			"scope":    "Test duplicate",
 			"priority": 1,
-			"agent_id": "planner-1",
+			"agent_id": "orchestrator-1",
 		})
 	}()
 
@@ -178,7 +178,7 @@ func TestConcurrentAddTaskSameID(t *testing.T) {
 			"done":     "Task is complete",
 			"scope":    "Test duplicate",
 			"priority": 1,
-			"agent_id": "planner-1",
+			"agent_id": "orchestrator-1",
 		})
 	}()
 

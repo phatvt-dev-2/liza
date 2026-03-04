@@ -94,7 +94,7 @@ func TestStatusCommand_Integration(t *testing.T) {
 				"Total: 4",
 				"=== AGENTS ===",
 				"coder-1",
-				"=== PLANNER ===",
+				"=== ORCHESTRATOR ===",
 				"=== WORK QUEUES ===",
 			},
 		},
@@ -111,7 +111,7 @@ func TestStatusCommand_Integration(t *testing.T) {
 				`"config"`,
 				`"tasks"`,
 				`"agents"`,
-				`"planner_state"`,
+				`"orchestrator_state"`,
 				`"work_queues"`,
 				`"Test goal for status command"`,
 				`"sprint-1"`,
@@ -130,8 +130,8 @@ func TestStatusCommand_Integration(t *testing.T) {
 				"config:",
 				"tasks:",
 				"agents:",
-				"plannerstate:", // YAML uses lowercase
-				"workqueues:",   // YAML uses lowercase
+				"orchestratorstate:", // YAML uses lowercase
+				"workqueues:",        // YAML uses lowercase
 				"Test goal for status command",
 				"sprint-1",
 			},

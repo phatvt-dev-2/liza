@@ -53,9 +53,9 @@ func TestIsSystemStopped(t *testing.T) {
 	}
 }
 
-// TestVerifyPlannerStateChanges_IntegrationFailedClaimedByCoder verifies that
-// the planner validation accepts when a coder claims an INTEGRATION_FAILED task
-func TestVerifyPlannerStateChanges_IntegrationFailedClaimedByCoder(t *testing.T) {
+// TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder verifies that
+// the orchestrator validation accepts when a coder claims an INTEGRATION_FAILED task
+func TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -71,7 +71,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedClaimedByCoder(t *testing.T)
 			Created:     now,
 		},
 		Agents: map[string]models.Agent{
-			"planner-1": {Role: "planner", Status: models.AgentStatusPlanning, Heartbeat: now},
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
 		},
 		Tasks: []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
@@ -89,7 +89,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedClaimedByCoder(t *testing.T)
 			Created:     now,
 		},
 		Agents: map[string]models.Agent{
-			"planner-1": {Role: "planner", Status: models.AgentStatusIdle, Heartbeat: now},
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
 		},
 		Tasks: []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
@@ -101,15 +101,15 @@ func TestVerifyPlannerStateChanges_IntegrationFailedClaimedByCoder(t *testing.T)
 
 	bb := db.New(statePath)
 
-	err := verifyPlannerStateChanges(bb, stateBefore)
+	err := verifyOrchestratorStateChanges(bb, stateBefore)
 	if err != nil {
 		t.Errorf("Expected validation to pass when coder claims INTEGRATION_FAILED task, got error: %v", err)
 	}
 }
 
-// TestVerifyPlannerStateChanges_IntegrationFailedSuperseded verifies that
-// the planner validation accepts when planner supersedes an INTEGRATION_FAILED task
-func TestVerifyPlannerStateChanges_IntegrationFailedSuperseded(t *testing.T) {
+// TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded verifies that
+// the orchestrator validation accepts when orchestrator supersedes an INTEGRATION_FAILED task
+func TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -125,7 +125,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedSuperseded(t *testing.T) {
 			Created:     now,
 		},
 		Agents: map[string]models.Agent{
-			"planner-1": {Role: "planner", Status: models.AgentStatusPlanning, Heartbeat: now},
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
 		},
 		Tasks: []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
@@ -143,7 +143,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedSuperseded(t *testing.T) {
 			Created:     now,
 		},
 		Agents: map[string]models.Agent{
-			"planner-1": {Role: "planner", Status: models.AgentStatusIdle, Heartbeat: now},
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
 		},
 		Tasks: []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, now),
@@ -156,15 +156,15 @@ func TestVerifyPlannerStateChanges_IntegrationFailedSuperseded(t *testing.T) {
 
 	bb := db.New(statePath)
 
-	err := verifyPlannerStateChanges(bb, stateBefore)
+	err := verifyOrchestratorStateChanges(bb, stateBefore)
 	if err != nil {
-		t.Errorf("Expected validation to pass when planner supersedes INTEGRATION_FAILED task, got error: %v", err)
+		t.Errorf("Expected validation to pass when orchestrator supersedes INTEGRATION_FAILED task, got error: %v", err)
 	}
 }
 
-// TestVerifyPlannerStateChanges_IntegrationFailedNotHandled verifies that
-// the planner validation fails when INTEGRATION_FAILED task remains unchanged
-func TestVerifyPlannerStateChanges_IntegrationFailedNotHandled(t *testing.T) {
+// TestVerifyOrchestratorStateChanges_IntegrationFailedNotHandled verifies that
+// the orchestrator validation fails when INTEGRATION_FAILED task remains unchanged
+func TestVerifyOrchestratorStateChanges_IntegrationFailedNotHandled(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -180,7 +180,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedNotHandled(t *testing.T) {
 			Created:     now,
 		},
 		Agents: map[string]models.Agent{
-			"planner-1": {Role: "planner", Status: models.AgentStatusPlanning, Heartbeat: now},
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
 		},
 		Tasks: []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
@@ -198,7 +198,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedNotHandled(t *testing.T) {
 			Created:     now,
 		},
 		Agents: map[string]models.Agent{
-			"planner-1": {Role: "planner", Status: models.AgentStatusIdle, Heartbeat: now},
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
 		},
 		Tasks: []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
@@ -210,7 +210,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedNotHandled(t *testing.T) {
 
 	bb := db.New(statePath)
 
-	err := verifyPlannerStateChanges(bb, stateBefore)
+	err := verifyOrchestratorStateChanges(bb, stateBefore)
 	if err == nil {
 		t.Error("Expected validation to fail when INTEGRATION_FAILED task remains unchanged")
 	}
@@ -220,9 +220,9 @@ func TestVerifyPlannerStateChanges_IntegrationFailedNotHandled(t *testing.T) {
 	}
 }
 
-// TestVerifyPlannerStateChanges_IntegrationFailedMixedOutcomes verifies that
-// the planner validation accepts when some tasks are handled (claimed/superseded) and others remain
-func TestVerifyPlannerStateChanges_IntegrationFailedMixedOutcomes(t *testing.T) {
+// TestVerifyOrchestratorStateChanges_IntegrationFailedMixedOutcomes verifies that
+// the orchestrator validation accepts when some tasks are handled (claimed/superseded) and others remain
+func TestVerifyOrchestratorStateChanges_IntegrationFailedMixedOutcomes(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -238,7 +238,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedMixedOutcomes(t *testing.T) 
 			Created:     now,
 		},
 		Agents: map[string]models.Agent{
-			"planner-1": {Role: "planner", Status: models.AgentStatusPlanning, Heartbeat: now},
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
 		},
 		Tasks: []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
@@ -258,7 +258,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedMixedOutcomes(t *testing.T) 
 			Created:     now,
 		},
 		Agents: map[string]models.Agent{
-			"planner-1": {Role: "planner", Status: models.AgentStatusIdle, Heartbeat: now},
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
 		},
 		Tasks: []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
@@ -273,7 +273,7 @@ func TestVerifyPlannerStateChanges_IntegrationFailedMixedOutcomes(t *testing.T) 
 
 	bb := db.New(statePath)
 
-	err := verifyPlannerStateChanges(bb, stateBefore)
+	err := verifyOrchestratorStateChanges(bb, stateBefore)
 	if err != nil {
 		t.Errorf("Expected validation to pass when some INTEGRATION_FAILED tasks are handled, got error: %v", err)
 	}

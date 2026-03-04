@@ -77,12 +77,12 @@ func defaultIterationLimitBlockedQuestions() []string {
 
 func defaultReviewDeadlockBlockedQuestions() []string {
 	return []string{
-		"Should planner rescope this task or clarify acceptance criteria to break the review deadlock?",
+		"Should orchestrator rescope this task or clarify acceptance criteria to break the review deadlock?",
 	}
 }
 
 func defaultCombinedLimitBlockedQuestions() []string {
 	return []string{
-		"Should planner rescope this task now that both review cycles and iterations are exhausted?",
+		"Should orchestrator rescope this task now that both review cycles and iterations are exhausted?",
 	}
 }

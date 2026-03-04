@@ -36,11 +36,11 @@ func TestBuildRespawnArgs(t *testing.T) {
 			want:    []string{"liza", "agent", "code-reviewer", "--agent-id", "code-reviewer-1", "--cli", "claude"},
 		},
 		{
-			name:    "planner respawn",
-			role:    "planner",
-			agentID: "planner-1",
+			name:    "orchestrator respawn",
+			role:    "orchestrator",
+			agentID: "orchestrator-1",
 			cli:     "codex",
-			want:    []string{"liza", "agent", "planner", "--agent-id", "planner-1", "--cli", "codex"},
+			want:    []string{"liza", "agent", "orchestrator", "--agent-id", "orchestrator-1", "--cli", "codex"},
 		},
 	}
 

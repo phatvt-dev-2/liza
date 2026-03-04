@@ -38,7 +38,7 @@ func LoadTaskInputFromFile(path string) (*TaskInput, error) {
 
 // AddTaskCommand adds a new task.
 // Delegates business logic (including post-write validation) to ops.AddTask.
-func AddTaskCommand(statePath, logPath string, input *TaskInput, plannerID string) error {
+func AddTaskCommand(statePath, logPath string, input *TaskInput, orchestratorID string) error {
 	opsInput := &ops.AddTaskInput{
 		ID:          input.ID,
 		Type:        input.Type,
@@ -50,7 +50,7 @@ func AddTaskCommand(statePath, logPath string, input *TaskInput, plannerID strin
 		DependsOn:   input.DependsOn,
 	}
 
-	result, err := ops.AddTask(statePath, logPath, opsInput, plannerID)
+	result, err := ops.AddTask(statePath, logPath, opsInput, orchestratorID)
 	if err != nil {
 		return fmt.Errorf("add task: %w", err)
 	}

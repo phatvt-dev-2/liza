@@ -119,7 +119,7 @@ func TestGetField(t *testing.T) {
 func TestGetField_DiscoversAllTaggedConfigAndSprintFields(t *testing.T) {
 	now := time.Now().UTC().Round(time.Second)
 	modeChangedAt := now.Add(-30 * time.Minute)
-	modeChangedBy := "planner-1"
+	modeChangedBy := "orchestrator-1"
 	escalationWebhook := "https://example.com/hook"
 	checkpointAt := now.Add(2 * time.Hour)
 	ended := now.Add(10 * time.Hour)
@@ -128,22 +128,22 @@ func TestGetField_DiscoversAllTaggedConfigAndSprintFields(t *testing.T) {
 	state := &models.State{
 		Version: 7,
 		Config: models.Config{
-			MaxCoderIterations:   11,
-			MaxReviewCycles:      6,
-			HeartbeatInterval:    60,
-			LeaseDuration:        1800,
-			CoderPollInterval:    15,
-			CoderMaxWait:         900,
-			PlannerPollInterval:  45,
-			PlannerMaxWait:       1200,
-			ReviewerPollInterval: 20,
-			ReviewerMaxWait:      1000,
-			IntegrationBranch:    "integration",
-			EscalationWebhook:    &escalationWebhook,
-			Mode:                 models.SystemModePaused,
-			ModeChangedAt:        &modeChangedAt,
-			ModeChangedBy:        &modeChangedBy,
-			DiagnosticLogging:    true,
+			MaxCoderIterations:       11,
+			MaxReviewCycles:          6,
+			HeartbeatInterval:        60,
+			LeaseDuration:            1800,
+			CoderPollInterval:        15,
+			CoderMaxWait:             900,
+			OrchestratorPollInterval: 45,
+			OrchestratorMaxWait:      1200,
+			ReviewerPollInterval:     20,
+			ReviewerMaxWait:          1000,
+			IntegrationBranch:        "integration",
+			EscalationWebhook:        &escalationWebhook,
+			Mode:                     models.SystemModePaused,
+			ModeChangedAt:            &modeChangedAt,
+			ModeChangedBy:            &modeChangedBy,
+			DiagnosticLogging:        true,
 		},
 		Sprint: models.Sprint{
 			ID:      "sprint-42",

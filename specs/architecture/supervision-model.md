@@ -43,7 +43,7 @@ This continues the principle from [ADR-0006](ADR/0006-supervisor-assigns-work.md
 | Agent unregistration | Exit (deferred) | Cleanup must happen even on crash |
 | Heartbeat | Background goroutine | Agent can't maintain its own liveness signal |
 | Post-exit reset to IDLE | After CLI exits | Agent is gone — can't update own status |
-| Planner status setup | Before planner launch | Sets WORKING atomically before agent sees blackboard |
+| Orchestrator status setup | Before orchestrator launch | Sets WORKING atomically before agent sees blackboard |
 | Handoff resume detection | Before fresh claim | Supervisor checks for `handoff_pending` tasks to resume |
 
 ### Supervisor-Guaranteed + MCP Fallback
@@ -57,7 +57,7 @@ These actions are **automatically triggered by the supervisor loop**. The MCP to
 | Worktree merge | Reviewer loop (`handleApprovedMerges`) | `liza_wt_merge` | `commands.WtMergeCommand` |
 | Stale review clearing | Reviewer startup (`registerAgent`) | `liza_clear_stale_review_claims` | `commands.ClearStaleReviewClaimsCommand` |
 
-**Why MCP fallback exists:** Planners or humans may need to trigger these manually (e.g., merge a task approved outside the normal reviewer flow, or clear a stale claim without restarting).
+**Why MCP fallback exists:** Orchestrators or humans may need to trigger these manually (e.g., merge a task approved outside the normal reviewer flow, or clear a stale claim without restarting).
 
 ### Agent-Initiated (via MCP tools)
 
@@ -69,8 +69,8 @@ These are workflow actions that only the agent can trigger — they represent th
 | Submit review verdict | `liza_submit_verdict` | task: -> APPROVED or -> IMPLEMENTING (rejection), agent: REVIEWING -> IDLE |
 | Initiate handoff | `liza_handoff` | task: sets `handoff_pending`, agent: WORKING -> HANDOFF |
 | Mark task blocked | `liza_mark_blocked` | task: -> BLOCKED |
-| Add task | `liza_add_task` | Creates new task (planner) |
-| Supersede task | `liza_supersede_task` | task: -> SUPERSEDED (planner) |
+| Add task | `liza_add_task` | Creates new task (orchestrator) |
+| Supersede task | `liza_supersede_task` | task: -> SUPERSEDED (orchestrator) |
 | Release claim | `liza_release_claim` | task: -> READY, agent: -> IDLE |
 
 ### Administrative (MCP tools, not part of normal flow)

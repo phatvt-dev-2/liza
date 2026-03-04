@@ -137,7 +137,7 @@ func TestCountReviewableTasks(t *testing.T) {
 					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
 				},
 			},
-			role: "planner",
+			role: "orchestrator",
 			want: 0,
 		},
 		{

@@ -22,15 +22,15 @@ type StatusOptions struct {
 
 // statusData contains all status information
 type statusData struct {
-	Goal           goalStatus            `json:"goal"`
-	Sprint         sprintStatus          `json:"sprint"`
-	Config         configStatus          `json:"config"`
-	Tasks          taskStatus            `json:"tasks"`
-	Agents         []agentStatus         `json:"agents"`
-	PlannerState   plannerStatus         `json:"planner_state"`
-	WorkQueues     workQueuesStatus      `json:"work_queues"`
-	Anomalies      *[]string             `json:"anomalies,omitempty"`
-	CircuitBreaker *circuitBreakerStatus `json:"circuit_breaker,omitempty"`
+	Goal              goalStatus            `json:"goal"`
+	Sprint            sprintStatus          `json:"sprint"`
+	Config            configStatus          `json:"config"`
+	Tasks             taskStatus            `json:"tasks"`
+	Agents            []agentStatus         `json:"agents"`
+	OrchestratorState orchestratorStatus    `json:"orchestrator_state"`
+	WorkQueues        workQueuesStatus      `json:"work_queues"`
+	Anomalies         *[]string             `json:"anomalies,omitempty"`
+	CircuitBreaker    *circuitBreakerStatus `json:"circuit_breaker,omitempty"`
 }
 
 type goalStatus struct {
@@ -74,7 +74,7 @@ type agentStatus struct {
 	ProcessStatus      string `json:"process_status"`
 }
 
-type plannerStatus struct {
+type orchestratorStatus struct {
 	Trigger      string `json:"trigger"`
 	TriggerCount int    `json:"trigger_count"`
 	Reason       string `json:"reason"`
@@ -156,8 +156,8 @@ func buildStatusData(state *models.State, detailed bool) statusData {
 	// Populate agent information
 	data.Agents = buildAgentStatuses(state)
 
-	// Populate planner state
-	data.PlannerState = buildPlannerStatus(state)
+	// Populate orchestrator state
+	data.OrchestratorState = buildOrchestratorStatus(state)
 
 	// Populate work queues
 	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable)
@@ -276,11 +276,11 @@ func buildAgentStatuses(state *models.State) []agentStatus {
 	return agents
 }
 
-// buildPlannerStatus determines planner state
-func buildPlannerStatus(state *models.State) plannerStatus {
-	trigger, count := detectPlannerWakeTriggers(state)
+// buildOrchestratorStatus determines orchestrator state
+func buildOrchestratorStatus(state *models.State) orchestratorStatus {
+	trigger, count := detectOrchestratorWakeTriggers(state)
 
-	ps := plannerStatus{
+	ps := orchestratorStatus{
 		Trigger:      trigger,
 		TriggerCount: count,
 	}
@@ -303,7 +303,7 @@ func buildPlannerStatus(state *models.State) plannerStatus {
 	case "SPRINT_COMPLETE":
 		ps.Reason = fmt.Sprintf("All %d planned task(s) reached terminal state; sprint complete", count)
 	case "NONE":
-		ps.Reason = "No triggers; planner is idle"
+		ps.Reason = "No triggers; orchestrator is idle"
 	default:
 		ps.Reason = "Unknown trigger"
 	}
@@ -311,8 +311,8 @@ func buildPlannerStatus(state *models.State) plannerStatus {
 	return ps
 }
 
-// detectPlannerWakeTriggers detects conditions that should wake the planner
-func detectPlannerWakeTriggers(state *models.State) (trigger string, count int) {
+// detectOrchestratorWakeTriggers detects conditions that should wake the orchestrator
+func detectOrchestratorWakeTriggers(state *models.State) (trigger string, count int) {
 	if len(state.Tasks) == 0 {
 		return "INITIAL_PLANNING", 1
 	}

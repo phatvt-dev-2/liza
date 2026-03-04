@@ -401,7 +401,7 @@ func (s *Server) registerMutationTools() {
 	// liza_add_task tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_add_task",
-		Description: "Add a new task to the workspace. Requires planner role.",
+		Description: "Add a new task to the workspace. Requires orchestrator role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -441,8 +441,8 @@ func (s *Server) registerMutationTools() {
 				},
 				"agent_id": {
 					Type:        "string",
-					Description: "Agent ID performing the action (default: planner-1)",
-					Default:     "planner-1",
+					Description: "Agent ID performing the action (default: orchestrator-1)",
+					Default:     "orchestrator-1",
 				},
 			},
 			Required: []string{"id", "desc", "spec", "done", "scope"},
@@ -614,7 +614,7 @@ func (s *Server) registerMutationTools() {
 	// liza_supersede_task tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_supersede_task",
-		Description: "Mark a task as superseded by replacement tasks. Requires planner role.",
+		Description: "Mark a task as superseded by replacement tasks. Requires orchestrator role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{

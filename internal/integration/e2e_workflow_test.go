@@ -70,7 +70,7 @@ func setupIntegrationTest(t *testing.T, projectDir string, taskIDs []string) (*d
 			SpecRef:     "specs/feature.md",
 			DependsOn:   []string{},
 		}
-		if err := commands.AddTaskCommand(statePath, logPath, taskInput, "planner-1"); err != nil {
+		if err := commands.AddTaskCommand(statePath, logPath, taskInput, "orchestrator-1"); err != nil {
 			t.Fatalf("AddTask %s failed: %v", taskID, err)
 		}
 	}
@@ -248,7 +248,7 @@ func TestTaskDependencyWorkflow(t *testing.T) {
 		SpecRef:     "specs/feature.md",
 		DependsOn:   []string{"task-1"},
 	}
-	if err := commands.AddTaskCommand(statePath, logPath, task2Input, "planner-1"); err != nil {
+	if err := commands.AddTaskCommand(statePath, logPath, task2Input, "orchestrator-1"); err != nil {
 		t.Fatalf("AddTask task-2 failed: %v", err)
 	}
 

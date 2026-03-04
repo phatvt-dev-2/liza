@@ -312,8 +312,8 @@ func setupTestWorkspaceWithGit(t *testing.T) (string, func()) {
 			Status:    models.AgentStatusIdle,
 			Heartbeat: time.Now().UTC(),
 		},
-		"planner-1": {
-			Role:      "planner",
+		"orchestrator-1": {
+			Role:      "orchestrator",
 			Status:    models.AgentStatusIdle,
 			Heartbeat: time.Now().UTC(),
 		},
@@ -353,7 +353,7 @@ func TestHandleAddTask(t *testing.T) {
 		"done":     "Task is complete",
 		"scope":    "Add new feature",
 		"priority": 1,
-		"agent_id": "planner-1",
+		"agent_id": "orchestrator-1",
 	})
 
 	if err != nil {
@@ -888,7 +888,7 @@ func TestHandleSupersede(t *testing.T) {
 		"task_id":         "task-1",
 		"replacement_ids": []any{"task-replacement"},
 		"reason":          "Task scope changed",
-		"agent_id":        "planner-1",
+		"agent_id":        "orchestrator-1",
 	})
 
 	if err != nil {
@@ -932,7 +932,7 @@ func TestMutationsLoggedCorrectly(t *testing.T) {
 		"done":     "Task is complete",
 		"scope":    "Test logging",
 		"priority": 1,
-		"agent_id": "planner-1",
+		"agent_id": "orchestrator-1",
 	})
 
 	if err != nil {
@@ -1609,13 +1609,13 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "add_task rejects coder",
 			handler: server.handleAddTask,
 			params:  map[string]any{"id": "t-new", "desc": "d", "spec": "specs/test-spec.md", "done": "d", "scope": "s", "agent_id": "coder-1"},
-			wantErr: "requires planner role",
+			wantErr: "requires orchestrator role",
 		},
 		{
 			name:    "supersede rejects coder",
 			handler: server.handleSupersede,
 			params:  map[string]any{"task_id": "task-1", "reason": "r", "agent_id": "coder-1"},
-			wantErr: "requires planner role",
+			wantErr: "requires orchestrator role",
 		},
 		{
 			name:    "write_checkpoint rejects reviewer",

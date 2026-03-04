@@ -1,6 +1,6 @@
-{{- define "planner_context" -}}
+{{- define "orchestrator_context" -}}
 
-=== PLANNING CONTEXT ===
+=== ORCHESTRATOR CONTEXT ===
 WAKE TRIGGER: {{.WakeTrigger}}
 
 SPRINT STATE:
@@ -22,11 +22,11 @@ SPRINT STATE:
 - Hypothesis exhausted: {{.HypothesisExhausted}}
 - Immediate discoveries: {{.ImmediateDiscoveries}}
 
-PLANNER COMMANDS:
+ORCHESTRATOR COMMANDS:
 - liza_add_task — Add task to blackboard (atomic, with validation)
-  Tool parameters: {"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...], "agent_id": "planner-1"}
+  Tool parameters: {"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...], "agent_id": "orchestrator-1"}
 - liza_supersede_task — Supersede task
-  Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "planner-1"}
+  Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "orchestrator-1"}
 - liza_wt_delete — Delete worktree for abandoned/superseded/blocked tasks
   Tool parameters: {"task_id": "..."}
 - liza_sprint_checkpoint — Create sprint checkpoint for human review (pauses all agents)

@@ -25,9 +25,9 @@ func getRoleWaitConfig(state *models.State, role string) (pollInterval, maxWait 
 	var pollSeconds, maxWaitSeconds int
 
 	switch role {
-	case roles.RuntimePlanner:
-		pollSeconds = nonZeroOr(state.Config.PlannerPollInterval, models.DefaultPlannerPollInterval)
-		maxWaitSeconds = nonZeroOr(state.Config.PlannerMaxWait, models.DefaultPlannerMaxWait)
+	case roles.RuntimeOrchestrator:
+		pollSeconds = nonZeroOr(state.Config.OrchestratorPollInterval, models.DefaultOrchestratorPollInterval)
+		maxWaitSeconds = nonZeroOr(state.Config.OrchestratorMaxWait, models.DefaultOrchestratorMaxWait)
 	case roles.RuntimeCodeReviewer:
 		pollSeconds = nonZeroOr(state.Config.ReviewerPollInterval, models.DefaultReviewerPollInterval)
 		maxWaitSeconds = nonZeroOr(state.Config.ReviewerMaxWait, models.DefaultReviewerMaxWait)
@@ -43,8 +43,8 @@ func getRoleWaitConfig(state *models.State, role string) (pollInterval, maxWait 
 func waitForWork(ctx context.Context, bb *db.Blackboard, projectRoot string, role string, config SupervisorConfig, pollInterval, maxWait time.Duration) (bool, error) {
 	logger := GetLogger()
 
-	// Planners use the configured maxWait from getRoleWaitConfig, which provides
-	// a default if PlannerMaxWait is not set. The planner wait loop will exit
+	// Orchestrators use the configured maxWait from getRoleWaitConfig, which provides
+	// a default if OrchestratorMaxWait is not set. The orchestrator wait loop will exit
 	// on ABORT/state change or when maxWait is reached.
 	logger.Debug("agent waiting for work", "maxWait", maxWait, "role", role)
 
@@ -53,8 +53,8 @@ func waitForWork(ctx context.Context, bb *db.Blackboard, projectRoot string, rol
 		return waitForCoderWork(ctx, bb, projectRoot, config.AgentID, pollInterval, maxWait)
 	case roles.RuntimeCodeReviewer:
 		return waitForReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
-	case roles.RuntimePlanner:
-		return waitForPlannerWork(ctx, bb, projectRoot, pollInterval, maxWait)
+	case roles.RuntimeOrchestrator:
+		return waitForOrchestratorWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	default:
 		return false, fmt.Errorf("unknown role: %s", role)
 	}
@@ -284,13 +284,13 @@ func waitForReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot str
 		})
 }
 
-// waitForPlannerWork waits for planner wake triggers using event-driven detection
-func waitForPlannerWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
+// waitForOrchestratorWork waits for orchestrator wake triggers using event-driven detection
+func waitForOrchestratorWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			result := DetectPlannerWakeTriggers(s)
+			result := DetectOrchestratorWakeTriggers(s)
 			if result.Trigger != WakeTriggerNone {
-				return true, fmt.Sprintf("Planner wake trigger: %s (count: %d)", result.Trigger, result.Count)
+				return true, fmt.Sprintf("Orchestrator wake trigger: %s (count: %d)", result.Trigger, result.Count)
 			}
 			return false, ""
 		})
