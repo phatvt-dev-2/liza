@@ -352,7 +352,7 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 |-------|-------------|-------------------|
 | IN_PROGRESS | Sprint active, work ongoing | → CHECKPOINT, COMPLETED, ABORTED |
 | CHECKPOINT | Mandatory human review | → IN_PROGRESS (continue), ABORTED |
-| COMPLETED | All planned tasks terminal | Terminal (see note below) |
+| COMPLETED | All planned tasks terminal | → IN_PROGRESS (via `liza resume`: archive + new sprint) |
 | ABORTED | Human or circuit breaker stopped | Terminal |
 
 ### Sprint Transition Triggers

@@ -470,6 +470,68 @@ func TestResume_FromStopped(t *testing.T) {
 	}
 }
 
+func TestResume_StoppedWithCheckpoint_RejectsBeforeSprintMutation(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeStopped
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Resume(tmpDir, "human")
+	if err == nil {
+		t.Fatal("Expected error when STOPPED+CHECKPOINT")
+	}
+	if !strings.Contains(err.Error(), "STOPPED") {
+		t.Errorf("Error = %q, want to contain 'STOPPED'", err.Error())
+	}
+
+	// Verify sprint status was NOT mutated
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.Status != models.SprintStatusCheckpoint {
+		t.Errorf("Sprint status mutated to %v, want CHECKPOINT (unchanged)", readState.Sprint.Status)
+	}
+	if readState.Config.Mode != models.SystemModeStopped {
+		t.Errorf("Mode mutated to %v, want STOPPED (unchanged)", readState.Config.Mode)
+	}
+}
+
+func TestResume_StoppedWithCompleted_RejectsBeforeSprintMutation(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeStopped
+	state.Sprint.Status = models.SprintStatusCompleted
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Resume(tmpDir, "human")
+	if err == nil {
+		t.Fatal("Expected error when STOPPED+COMPLETED")
+	}
+	if !strings.Contains(err.Error(), "STOPPED") {
+		t.Errorf("Error = %q, want to contain 'STOPPED'", err.Error())
+	}
+
+	// Verify sprint status was NOT mutated
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.Status != models.SprintStatusCompleted {
+		t.Errorf("Sprint status mutated to %v, want COMPLETED (unchanged)", readState.Sprint.Status)
+	}
+	if readState.Config.Mode != models.SystemModeStopped {
+		t.Errorf("Mode mutated to %v, want STOPPED (unchanged)", readState.Config.Mode)
+	}
+}
+
 func TestResume_NothingToResume(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

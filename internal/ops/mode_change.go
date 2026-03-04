@@ -105,15 +105,17 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 			currentMode = models.SystemModeRunning
 		}
 
+		// Fail fast on STOPPED — no sprint mutations allowed while system is stopped.
+		if currentMode == models.SystemModeStopped {
+			return fmt.Errorf("cannot resume from STOPPED state (system must be restarted)")
+		}
+
 		isPaused := currentMode == models.SystemModePaused
 		isCircuitBreakerTripped := currentMode == models.SystemModeCircuitBreakerTripped
 		isCheckpoint := s.Sprint.Status == models.SprintStatusCheckpoint
 		isCompleted := s.Sprint.Status == models.SprintStatusCompleted
 
 		if !isPaused && !isCircuitBreakerTripped && !isCheckpoint && !isCompleted {
-			if currentMode == models.SystemModeStopped {
-				return fmt.Errorf("cannot resume from STOPPED state (system must be restarted)")
-			}
 			return fmt.Errorf("system is not PAUSED, circuit breaker not tripped, and sprint is not at CHECKPOINT or COMPLETED (current mode: %s, sprint status: %s)", currentMode, s.Sprint.Status)
 		}
 
