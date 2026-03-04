@@ -96,7 +96,20 @@ claimable(task, role) =
     AND (depends_on is empty OR all depends_on are MERGED)
 ```
 
+> **Note:** The `depends_on` terminal condition (`all depends_on are MERGED`) applies to the current
+> hardcoded system. The [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md) generalizes this:
+> a dependency is satisfied when it reaches its role-pair's **successful** sprint-terminal state
+> (e.g., CODING_PLAN_APPROVED for code-planning-pair, US_APPROVED for us-writing-pair, MERGED for
+> coding-pair). The `role_pair` field on each dependency task determines which terminal applies.
+> ABANDONED and SUPERSEDED do **not** satisfy dependencies — they indicate the upstream work was
+> dropped or replaced. When a dependency is SUPERSEDED, the dependent task should be re-evaluated
+> against the replacement task(s) referenced in `superseded_by`.
+
 When new task types are added (e.g., `specification`, `architecture`), they define their own role workflow in the registry. The supervisor and work detection derive behavior from the registry rather than hardcoding role checks.
+
+> **Note:** The `task.type` field and type registry are superseded by the `role_pair` field
+> for claimability and state resolution — see [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md)
+> §Task model extension. The `type` field may remain as a human-readable category.
 
 ### Forbidden Transitions
 
@@ -141,6 +154,10 @@ When new task types are added (e.g., `specification`, `architecture`), they defi
 ---
 
 ## Review Lease Lifecycle
+
+> **Note:** The review lease below references READY_FOR_REVIEW and Code Reviewer specifically.
+> The [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md) generalizes this: tasks at any
+> role-pair `submitted` state are reviewable by that pair's reviewer role.
 
 Tasks in READY_FOR_REVIEW state have an independent lease for the Code Reviewer:
 
@@ -187,15 +204,16 @@ See [Blackboard Schema — Lease Model](blackboard-schema.md#lease-model) for fi
 | State | Description | Valid Transitions |
 |-------|-------------|-------------------|
 | STARTING | Agent registered, initializing | → IDLE |
-| IDLE | No task assigned | → WORKING (Coder), REVIEWING (Code Reviewer) |
-| WORKING | Coder actively implementing task | → WAITING, IDLE, HANDOFF |
-| REVIEWING | Code Reviewer actively reviewing task | → IDLE (verdict done), HANDOFF |
-| WAITING | Coder waiting for review result or escalation | → WORKING (continue after feedback), IDLE (task done) |
+| IDLE | No task assigned | → WORKING (doer), REVIEWING (reviewer) |
+| WORKING | Doer actively executing task | → WAITING, IDLE, HANDOFF |
+| REVIEWING | Reviewer actively reviewing task | → IDLE (verdict done), HANDOFF |
+| WAITING | Doer waiting for review result or escalation | → WORKING (continue after feedback), IDLE (task done) |
 | HANDOFF | Context exhaustion, preparing handoff notes | → (agent terminates, supervisor restarts fresh) |
 
 **Role-specific states:**
-- WORKING and WAITING: Coder only
-- REVIEWING: Code Reviewer only
+- WORKING and WAITING: Doer roles — current: Coder; planned ([Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md)): Code Planner, Epic Planner, US Writer
+- WORKING (no WAITING): Dispatcher roles — planned: Orchestrator (pipeline dispatch only — no reviewer, no output[], no sprint-terminal state; creates initial task then exits)
+- REVIEWING: Reviewer roles — current: Code Reviewer; planned: Code Plan Reviewer, Epic Plan Reviewer, US Reviewer
 - STARTING, IDLE, HANDOFF: All roles
 
 ### Agent State Diagram
@@ -272,7 +290,7 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 |-------|-------------|-------------------|
 | IN_PROGRESS | Sprint active, work ongoing | → CHECKPOINT, COMPLETED, ABORTED |
 | CHECKPOINT | Mandatory human review | → IN_PROGRESS (continue), ABORTED |
-| COMPLETED | All planned tasks terminal | Terminal |
+| COMPLETED | All planned tasks terminal | Terminal (see note below) |
 | ABORTED | Human or circuit breaker stopped | Terminal |
 
 ### Sprint Transition Triggers
@@ -291,9 +309,20 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 - `liza resume` (all planned tasks terminal) → archives sprint, creates new sprint (IN_PROGRESS)
 - `liza stop` → ABORTED (stop)
 
+> **Note:** The [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md) extends COMPLETED to allow
+> `liza resume` — same semantics as from CHECKPOINT when all tasks are terminal (archives sprint,
+> creates new sprint). The completed sprint itself is not reopened. This is needed for inter-pair
+> transitions: sprint completes → `liza proceed` → `liza resume` → new sprint.
+
 ---
 
 ## Exit Codes
+
+> **Note:** The exit semantics below are role-specific to the current system (Planner, Coder, Code Reviewer).
+> The [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md) generalizes these: "no work" detection
+> will be derived from the configured role-pair states (e.g., doer exits 0 when no tasks at
+> `role-pair.initial` or `role-pair.rejected`; reviewer exits 0 when no tasks at `role-pair.submitted`).
+> The DRAFT Task Waiting logic generalizes to: any doer waiting for upstream pairs to produce work.
 
 | Code | Meaning | Supervisor Action |
 |------|---------|-------------------|
@@ -368,6 +397,10 @@ When exit 42 is triggered by context exhaustion:
 ---
 
 ## Validation Rules
+
+> **Note:** The task states below reflect the current hardcoded state machine.
+> The [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md) makes these config-driven —
+> valid states, terminals, and transitions will be derived from the pipeline YAML.
 
 ```yaml
 task_states:

@@ -8,6 +8,12 @@ For state diagrams and valid transitions, see [State Machines](../architecture/s
 
 ## Task Type and Role Workflow
 
+> **Note:** The `task.type` field and static type registry described below reflect the current
+> hardcoded system. The [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md) replaces this
+> mechanism with the `role_pair` field, which links tasks to their role-pair in the pipeline
+> config for claimability and state resolution. The `type` field may remain as a human-readable
+> category but will no longer drive role dispatch.
+
 Each task has a `type` field that determines which roles participate in its lifecycle. The type maps to an ordered role workflow via a static registry:
 
 | Type | Workflow | Description |

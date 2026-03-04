@@ -413,7 +413,7 @@ The contract covers 55 documented failure modes from academic research (MAST tax
 
 Liza is not a general-purpose orchestration framework. It makes specific trade-offs:
 
-**No dynamic agent spawning.** Roles are fixed: Planner, Coder, Code Reviewer. You don't spin up new agent types mid-project.
+**No dynamic agent spawning.** Roles are statically declared in pipeline configuration — you don't spin up new agent types at runtime. See [Sub-pipelines spec](2%20-%20Sub-pipelines and spec writing.md) for the planned expanded role set.
 
 **No conversational coordination.** Agents don't discuss, negotiate, or explain to each other. They read state, do work, write state.
 

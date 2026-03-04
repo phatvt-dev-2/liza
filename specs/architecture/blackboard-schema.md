@@ -64,7 +64,7 @@ goal:
 
 tasks:
   - id: task-1
-    type: coding  # Task type → role workflow mapping (default: "coding" → coder, code_reviewer)
+    type: coding  # Task type → role workflow mapping (default: "coding" → coder, code_reviewer). Note: superseded by role_pair field — see Sub-pipelines spec
     description: "Add retry decorator to UserAPI.get_user()"
     status: MERGED
     priority: 1
