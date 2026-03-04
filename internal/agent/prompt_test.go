@@ -127,6 +127,324 @@ func TestBuildPrompt(t *testing.T) {
 	}
 }
 
+// TestBuildPrompt_CollectiveScoping verifies that sibling task info flows through
+// from state to the rendered coder/reviewer prompts.
+func TestBuildPrompt_CollectiveScoping(t *testing.T) {
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "specs/vision.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Add auth",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				SpecRef:     "spec.md",
+				DoneWhen:    "Auth works",
+				Scope:       "Auth module",
+				Iteration:   1,
+				Created:     now,
+			},
+			{
+				ID:          "task-2",
+				Description: "Add user API",
+				Status:      models.TaskStatusReady,
+				Priority:    2,
+				SpecRef:     "spec.md",
+				DoneWhen:    "API works",
+				Scope:       "API module",
+				Created:     now,
+			},
+			{
+				ID:          "task-3",
+				Description: "Add tests",
+				Status:      models.TaskStatusMerged,
+				Priority:    3,
+				SpecRef:     "spec.md",
+				DoneWhen:    "Tests pass",
+				Scope:       "Test module",
+				Created:     now,
+			},
+		},
+		Sprint: models.Sprint{
+			Scope: models.SprintScope{
+				Planned: []string{"task-1", "task-2", "task-3"},
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{
+			IntegrationBranch: "main",
+		},
+	}
+
+	tmpDir := t.TempDir()
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := buildPrompt(state, config, "task-1")
+	if err != nil {
+		t.Fatalf("buildPrompt() error: %v", err)
+	}
+
+	// Should contain scoping section with correct ordinal and sibling tasks
+	wantContains := []string{
+		"COLLECTIVE PLAN SCOPING",
+		"1 of 3 in the current sprint",
+		"specs/vision.md",
+		"task-2: Add user API [READY]",
+		"task-3: Add tests [MERGED]",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("buildPrompt() missing expected scoping content: %q", want)
+		}
+	}
+
+	// Current task should NOT appear in siblings list
+	if strings.Contains(prompt, "task-1: Add auth") {
+		t.Error("buildPrompt() should not include current task in sibling list")
+	}
+}
+
+// TestBuildPrompt_NoScopingForSinglePlannedTask verifies no scoping section
+// when the sprint has only one planned task.
+func TestBuildPrompt_NoScopingForSinglePlannedTask(t *testing.T) {
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "specs/vision.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Solo task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				SpecRef:     "spec.md",
+				DoneWhen:    "Done",
+				Scope:       "Everything",
+				Iteration:   1,
+				Created:     now,
+			},
+		},
+		Sprint: models.Sprint{
+			Scope: models.SprintScope{
+				Planned: []string{"task-1"},
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{
+			IntegrationBranch: "main",
+		},
+	}
+
+	tmpDir := t.TempDir()
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := buildPrompt(state, config, "task-1")
+	if err != nil {
+		t.Fatalf("buildPrompt() error: %v", err)
+	}
+
+	if strings.Contains(prompt, "COLLECTIVE PLAN SCOPING") {
+		t.Error("buildPrompt() should NOT contain scoping for single-task sprint")
+	}
+}
+
+// TestBuildPrompt_CollectiveScopingOrdinal verifies the ordinal is computed
+// correctly for non-first tasks in the sprint plan.
+func TestBuildPrompt_CollectiveScopingOrdinal(t *testing.T) {
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "specs/vision.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Add auth",
+				Status:      models.TaskStatusMerged,
+				Priority:    1,
+				SpecRef:     "spec.md",
+				DoneWhen:    "Auth works",
+				Scope:       "Auth module",
+				Created:     now,
+			},
+			{
+				ID:          "task-2",
+				Description: "Add user API",
+				Status:      models.TaskStatusImplementing,
+				Priority:    2,
+				SpecRef:     "spec.md",
+				DoneWhen:    "API works",
+				Scope:       "API module",
+				Iteration:   1,
+				Created:     now,
+			},
+			{
+				ID:          "task-3",
+				Description: "Add tests",
+				Status:      models.TaskStatusReady,
+				Priority:    3,
+				SpecRef:     "spec.md",
+				DoneWhen:    "Tests pass",
+				Scope:       "Test module",
+				Created:     now,
+			},
+		},
+		Sprint: models.Sprint{
+			Scope: models.SprintScope{
+				Planned: []string{"task-1", "task-2", "task-3"},
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{
+			IntegrationBranch: "main",
+		},
+	}
+
+	tmpDir := t.TempDir()
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	// Build prompt for task-2 (second in plan)
+	prompt, err := buildPrompt(state, config, "task-2")
+	if err != nil {
+		t.Fatalf("buildPrompt() error: %v", err)
+	}
+
+	if !strings.Contains(prompt, "2 of 3 in the current sprint") {
+		t.Error("buildPrompt() should show correct ordinal (2 of 3) for second task")
+	}
+	if strings.Contains(prompt, "1 of 3") {
+		t.Error("buildPrompt() should NOT hardcode ordinal to 1")
+	}
+	// task-2 (current) should not appear in siblings
+	if strings.Contains(prompt, "task-2: Add user API") {
+		t.Error("buildPrompt() should not include current task in sibling list")
+	}
+	// task-1 and task-3 should appear as siblings
+	if !strings.Contains(prompt, "task-1: Add auth [MERGED]") {
+		t.Error("buildPrompt() should include task-1 as sibling")
+	}
+	if !strings.Contains(prompt, "task-3: Add tests [READY]") {
+		t.Error("buildPrompt() should include task-3 as sibling")
+	}
+}
+
+// TestBuildPrompt_NoScopingForUnplannedTask verifies that mid-sprint replacement
+// tasks not in Sprint.Scope.Planned do not get the scoping section.
+func TestBuildPrompt_NoScopingForUnplannedTask(t *testing.T) {
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "specs/vision.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Original task",
+				Status:      models.TaskStatusMerged,
+				Priority:    1,
+				SpecRef:     "spec.md",
+				DoneWhen:    "Done",
+				Scope:       "Module A",
+				Created:     now,
+			},
+			{
+				ID:          "task-2",
+				Description: "Another planned task",
+				Status:      models.TaskStatusReady,
+				Priority:    2,
+				SpecRef:     "spec.md",
+				DoneWhen:    "Done",
+				Scope:       "Module B",
+				Created:     now,
+			},
+			{
+				// Mid-sprint replacement — not in planned[]
+				ID:          "task-3-replacement",
+				Description: "Replacement for blocked task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				SpecRef:     "spec.md",
+				DoneWhen:    "Replacement done",
+				Scope:       "Module C",
+				Iteration:   1,
+				Created:     now,
+			},
+		},
+		Sprint: models.Sprint{
+			Scope: models.SprintScope{
+				Planned: []string{"task-1", "task-2"}, // task-3-replacement not here
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{
+			IntegrationBranch: "main",
+		},
+	}
+
+	tmpDir := t.TempDir()
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := buildPrompt(state, config, "task-3-replacement")
+	if err != nil {
+		t.Fatalf("buildPrompt() error: %v", err)
+	}
+
+	if strings.Contains(prompt, "COLLECTIVE PLAN SCOPING") {
+		t.Error("buildPrompt() should NOT show scoping for unplanned replacement task")
+	}
+	if strings.Contains(prompt, "0 of") {
+		t.Error("buildPrompt() should NOT render '0 of N' for unplanned task")
+	}
+}
+
 // TestPromptSaving tests prompt file creation
 func TestPromptSaving(t *testing.T) {
 	tmpDir := t.TempDir()

@@ -11,6 +11,20 @@ DONE WHEN:
 
 SCOPE:
 {{.Task.Scope}}
+{{- if gt .Config.TotalPlanTasks 1}}
+
+=== COLLECTIVE PLAN SCOPING ===
+This task is {{.Config.TaskOrdinal}} of {{.Config.TotalPlanTasks}} in the current sprint plan.
+Read the full goal spec ({{.Config.GoalSpecRef}}) to understand how your work integrates.
+Your scope is LIMITED to what is described in SCOPE above.
+Do NOT implement work outside your scope boundary — other agents handle those parts.
+If you discover work needed outside your scope, log it as a spec_gap anomaly.
+
+SIBLING TASKS (for context only — do NOT implement):
+{{- range .Config.SiblingTasks}}
+- {{.ID}}: {{.Description}} [{{.Status}}]
+{{- end}}
+{{- end}}
 {{- if .Config.HandoffNote}}
 
 === HANDOFF RESUME CONTEXT ===

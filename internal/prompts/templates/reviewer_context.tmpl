@@ -18,6 +18,18 @@ DESCRIPTION: {{.Task.Description}}
 
 DONE WHEN:
 {{.Task.DoneWhen}}
+{{- if gt .Config.TotalPlanTasks 1}}
+
+=== COLLECTIVE PLAN SCOPING ===
+This task is {{.Config.TaskOrdinal}} of {{.Config.TotalPlanTasks}} in the current sprint plan.
+Read the full goal spec ({{.Config.GoalSpecRef}}) to understand the complete picture.
+Verify the implementation stays within scope — flag scope creep as a blocker.
+
+SIBLING TASKS (for scope boundary awareness):
+{{- range .Config.SiblingTasks}}
+- {{.ID}}: {{.Description}} [{{.Status}}]
+{{- end}}
+{{- end}}
 {{- if .HasPriorRejection}}
 
 === PRIOR REJECTION (iteration {{sub .Task.Iteration 1}}) ===

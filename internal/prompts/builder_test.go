@@ -897,6 +897,227 @@ func TestReviewerPromptHasAutonomyGuidance(t *testing.T) {
 	}
 }
 
+func TestCoderContext_CollectiveScopingRendered(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	task.Description = "Add auth module"
+	task.DoneWhen = "Auth works"
+	task.Scope = "Auth module only"
+	task.Iteration = 1
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+
+	config := CoderContextConfig{
+		ProjectRoot:    "/project",
+		AgentID:        "coder-1",
+		GoalSpecRef:    "specs/vision.md",
+		TotalPlanTasks: 3,
+		TaskOrdinal:    1,
+		SiblingTasks: []SiblingTaskSummary{
+			{ID: "task-2", Description: "Add user API", Status: "READY"},
+			{ID: "task-3", Description: "Add tests", Status: "IMPLEMENTING"},
+		},
+	}
+
+	result, err := BuildCoderContext(&task, config)
+	if err != nil {
+		t.Fatalf("BuildCoderContext() error: %v", err)
+	}
+
+	wantContains := []string{
+		"=== COLLECTIVE PLAN SCOPING ===",
+		"1 of 3 in the current sprint",
+		"specs/vision.md",
+		"Your scope is LIMITED",
+		"Do NOT implement work outside your scope",
+		"spec_gap anomaly",
+		"SIBLING TASKS (for context only",
+		"task-2: Add user API [READY]",
+		"task-3: Add tests [IMPLEMENTING]",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(result, want) {
+			t.Errorf("BuildCoderContext() missing expected content: %q", want)
+		}
+	}
+}
+
+func TestCoderContext_NoScopingForSingleTask(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	task.Iteration = 1
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+
+	config := CoderContextConfig{
+		ProjectRoot:    "/project",
+		AgentID:        "coder-1",
+		GoalSpecRef:    "specs/vision.md",
+		TotalPlanTasks: 1,
+	}
+
+	result, err := BuildCoderContext(&task, config)
+	if err != nil {
+		t.Fatalf("BuildCoderContext() error: %v", err)
+	}
+
+	if strings.Contains(result, "COLLECTIVE PLAN SCOPING") {
+		t.Error("BuildCoderContext() should NOT contain scoping section for single task")
+	}
+}
+
+func TestReviewerContext_CollectiveScopingRendered(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.Description = "Add auth module"
+	task.DoneWhen = "Auth works"
+	task.Iteration = 1
+	assignedTo := "coder-1"
+	task.AssignedTo = &assignedTo
+	baseCommit := "abc123"
+	task.BaseCommit = &baseCommit
+	reviewCommit := "def456"
+	task.ReviewCommit = &reviewCommit
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+
+	config := ReviewerContextConfig{
+		ProjectRoot:    "/project",
+		AgentID:        "code-reviewer-1",
+		GoalSpecRef:    "specs/vision.md",
+		TotalPlanTasks: 2,
+		TaskOrdinal:    1,
+		SiblingTasks: []SiblingTaskSummary{
+			{ID: "task-2", Description: "Add user API", Status: "MERGED"},
+		},
+	}
+
+	result, err := BuildReviewerContext(&task, config)
+	if err != nil {
+		t.Fatalf("BuildReviewerContext() error: %v", err)
+	}
+
+	wantContains := []string{
+		"=== COLLECTIVE PLAN SCOPING ===",
+		"1 of 2 in the current sprint",
+		"specs/vision.md",
+		"Verify the implementation stays within scope",
+		"flag scope creep as a blocker",
+		"SIBLING TASKS (for scope boundary awareness)",
+		"task-2: Add user API [MERGED]",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(result, want) {
+			t.Errorf("BuildReviewerContext() missing expected content: %q", want)
+		}
+	}
+}
+
+func TestReviewerContext_NoScopingForSingleTask(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.Iteration = 1
+	assignedTo := "coder-1"
+	task.AssignedTo = &assignedTo
+	baseCommit := "abc123"
+	task.BaseCommit = &baseCommit
+	reviewCommit := "def456"
+	task.ReviewCommit = &reviewCommit
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+
+	config := ReviewerContextConfig{
+		ProjectRoot:    "/project",
+		AgentID:        "code-reviewer-1",
+		GoalSpecRef:    "specs/vision.md",
+		TotalPlanTasks: 1,
+	}
+
+	result, err := BuildReviewerContext(&task, config)
+	if err != nil {
+		t.Fatalf("BuildReviewerContext() error: %v", err)
+	}
+
+	if strings.Contains(result, "COLLECTIVE PLAN SCOPING") {
+		t.Error("BuildReviewerContext() should NOT contain scoping section for single task")
+	}
+}
+
+func TestCoderContext_CollectiveScopingNonFirstTask(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusImplementing, now)
+	task.Description = "Add tests"
+	task.DoneWhen = "Tests pass"
+	task.Scope = "Test module"
+	task.Iteration = 1
+	worktree := ".worktrees/task-3"
+	task.Worktree = &worktree
+
+	config := CoderContextConfig{
+		ProjectRoot:    "/project",
+		AgentID:        "coder-1",
+		GoalSpecRef:    "specs/vision.md",
+		TotalPlanTasks: 3,
+		TaskOrdinal:    3,
+		SiblingTasks: []SiblingTaskSummary{
+			{ID: "task-1", Description: "Add auth", Status: "MERGED"},
+			{ID: "task-2", Description: "Add user API", Status: "IMPLEMENTING"},
+		},
+	}
+
+	result, err := BuildCoderContext(&task, config)
+	if err != nil {
+		t.Fatalf("BuildCoderContext() error: %v", err)
+	}
+
+	if !strings.Contains(result, "3 of 3 in the current sprint") {
+		t.Error("BuildCoderContext() should show correct ordinal for non-first task")
+	}
+	if strings.Contains(result, "1 of 3") {
+		t.Error("BuildCoderContext() should NOT hardcode ordinal to 1")
+	}
+}
+
+func TestReviewerContext_CollectiveScopingNonFirstTask(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now)
+	task.Description = "Add user API"
+	task.DoneWhen = "API works"
+	task.Iteration = 1
+	assignedTo := "coder-1"
+	task.AssignedTo = &assignedTo
+	baseCommit := "abc123"
+	task.BaseCommit = &baseCommit
+	reviewCommit := "def456"
+	task.ReviewCommit = &reviewCommit
+	worktree := ".worktrees/task-2"
+	task.Worktree = &worktree
+
+	config := ReviewerContextConfig{
+		ProjectRoot:    "/project",
+		AgentID:        "code-reviewer-1",
+		GoalSpecRef:    "specs/vision.md",
+		TotalPlanTasks: 3,
+		TaskOrdinal:    2,
+		SiblingTasks: []SiblingTaskSummary{
+			{ID: "task-1", Description: "Add auth", Status: "MERGED"},
+			{ID: "task-3", Description: "Add tests", Status: "READY"},
+		},
+	}
+
+	result, err := BuildReviewerContext(&task, config)
+	if err != nil {
+		t.Fatalf("BuildReviewerContext() error: %v", err)
+	}
+
+	if !strings.Contains(result, "2 of 3 in the current sprint") {
+		t.Error("BuildReviewerContext() should show correct ordinal for non-first task")
+	}
+	if strings.Contains(result, "1 of 3") {
+		t.Error("BuildReviewerContext() should NOT hardcode ordinal to 1")
+	}
+}
+
 func TestPlannerPromptAutonomyForAllWakeTriggers(t *testing.T) {
 	now := time.Now().UTC()
 

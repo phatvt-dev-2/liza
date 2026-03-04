@@ -21,18 +21,33 @@ type BasePromptConfig struct {
 type PlannerContextConfig struct {
 }
 
+// SiblingTaskSummary provides minimal context about sibling tasks in the same sprint
+type SiblingTaskSummary struct {
+	ID          string
+	Description string
+	Status      string
+}
+
 // CoderContextConfig contains configuration for building coder context
 type CoderContextConfig struct {
 	ProjectRoot       string
 	AgentID           string
 	IntegrationBranch string
 	HandoffNote       *models.HandoffNote
+	GoalSpecRef       string
+	SiblingTasks      []SiblingTaskSummary
+	TotalPlanTasks    int
+	TaskOrdinal       int // 1-based position in sprint plan
 }
 
 // ReviewerContextConfig contains configuration for building reviewer context
 type ReviewerContextConfig struct {
-	ProjectRoot string
-	AgentID     string
+	ProjectRoot    string
+	AgentID        string
+	GoalSpecRef    string
+	SiblingTasks   []SiblingTaskSummary
+	TotalPlanTasks int
+	TaskOrdinal    int // 1-based position in sprint plan
 }
 
 // BuildBasePrompt creates the base bootstrap prompt for all agents
