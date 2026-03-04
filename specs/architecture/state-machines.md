@@ -211,7 +211,7 @@ See [Blackboard Schema — Lease Model](blackboard-schema.md#lease-model) for fi
 | HANDOFF | Context exhaustion, preparing handoff notes | → (agent terminates, supervisor restarts fresh) |
 
 **Role-specific states:**
-- WORKING and WAITING: Doer roles — current: Coder; planned ([Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md)): Code Orchestrator, Epic Orchestrator, US Writer
+- WORKING and WAITING: Doer roles — current: Coder; planned ([Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md)): Code Planner, Epic Planner, US Writer
 - WORKING (no WAITING): Dispatcher roles — planned: Orchestrator (pipeline dispatch only — no reviewer, no output[], no sprint-terminal state; creates initial task then exits)
 - REVIEWING: Reviewer roles — current: Code Reviewer; planned: Code Plan Reviewer, Epic Plan Reviewer, US Reviewer
 - STARTING, IDLE, HANDOFF: All roles
