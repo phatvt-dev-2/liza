@@ -26,9 +26,15 @@ CODE PLANNER TOOLS:
 - liza_mark_blocked — Cannot proceed
   {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
 
+BASH CONSTRAINTS (CLI sandboxes may block these patterns):
+- NEVER combine cd and git in one command. Use: git -C <path> <cmd>
+- NEVER use sed/awk for file editing. Use your IDE's file-edit tools instead.
+- NEVER use $() command substitution, backticks, or ANSI-C quoting ($'...') in Bash commands.
+- For file content: use file-edit tools. For git ops: use git -C {{.WorktreePath}}.
+
 IMPLEMENTATION PHASE:
 1. The task is already CODE_PLANNING for you. Do NOT run liza claim-task.
-2. Work ONLY in the worktree directory: cd {{.WorktreePath}}
+2. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
 3. Update task output and artifacts required by DONE WHEN.
 4. Validate done_when criteria with concrete checks.
 5. Submit using liza_submit_for_review when complete.

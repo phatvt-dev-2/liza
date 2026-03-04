@@ -96,7 +96,7 @@ func TestClaimTaskCommand(t *testing.T) {
 			taskStatus:  models.TaskStatusImplementing,
 			hasWorktree: true,
 			wantErr:     true,
-			errContains: "not READY",
+			errContains: "not claimable by",
 		},
 		{
 			name:        "cannot claim BLOCKED task",
@@ -105,7 +105,7 @@ func TestClaimTaskCommand(t *testing.T) {
 			taskStatus:  models.TaskStatusBlocked,
 			hasWorktree: false,
 			wantErr:     true,
-			errContains: "not READY",
+			errContains: "not claimable by",
 		},
 		{
 			name:        "agent already busy",

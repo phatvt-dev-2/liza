@@ -82,56 +82,32 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	}
 
 	switch task.Status {
-	case models.TaskStatusReady:
-		if workflowRole == models.RoleCoder {
-			targetStatus = models.TaskStatusImplementing
+	case models.TaskStatusReady, models.TaskStatusRejected, models.TaskStatusIntegrationFailed:
+		if workflowRole != models.RoleCoder {
+			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
+		}
+		targetStatus = models.TaskStatusImplementing
+		if task.Status == models.TaskStatusReady {
 			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
 				return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
 			}
-			break
+		} else if task.AssignedTo != nil {
+			previousAssignee = *task.AssignedTo
 		}
-		return nil, fmt.Errorf("task %s is %s (not DRAFT_CODING_PLAN or CODING_PLAN_REJECTED)", taskID, task.Status)
-	case models.TaskStatusRejected:
-		if workflowRole == models.RoleCoder {
-			targetStatus = models.TaskStatusImplementing
-			if task.AssignedTo != nil {
-				previousAssignee = *task.AssignedTo
-			}
-			break
+	case models.TaskStatusDraftCodingPlan, models.TaskStatusCodingPlanRejected:
+		if workflowRole != models.RoleCodePlanner {
+			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
 		}
-		return nil, fmt.Errorf("task %s is %s (not DRAFT_CODING_PLAN or CODING_PLAN_REJECTED)", taskID, task.Status)
-	case models.TaskStatusIntegrationFailed:
-		if workflowRole == models.RoleCoder {
-			targetStatus = models.TaskStatusImplementing
-			if task.AssignedTo != nil {
-				previousAssignee = *task.AssignedTo
-			}
-			break
-		}
-		return nil, fmt.Errorf("task %s is %s (not DRAFT_CODING_PLAN or CODING_PLAN_REJECTED)", taskID, task.Status)
-	case models.TaskStatusDraftCodingPlan:
-		if workflowRole == models.RoleCodePlanner {
-			targetStatus = models.TaskStatusCodePlanning
+		targetStatus = models.TaskStatusCodePlanning
+		if task.Status == models.TaskStatusDraftCodingPlan {
 			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
 				return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
 			}
-			break
+		} else if task.AssignedTo != nil {
+			previousAssignee = *task.AssignedTo
 		}
-		return nil, fmt.Errorf("task %s is %s (not READY, REJECTED, or INTEGRATION_FAILED)", taskID, task.Status)
-	case models.TaskStatusCodingPlanRejected:
-		if workflowRole == models.RoleCodePlanner {
-			targetStatus = models.TaskStatusCodePlanning
-			if task.AssignedTo != nil {
-				previousAssignee = *task.AssignedTo
-			}
-			break
-		}
-		return nil, fmt.Errorf("task %s is %s (not READY, REJECTED, or INTEGRATION_FAILED)", taskID, task.Status)
 	default:
-		if workflowRole == models.RoleCoder {
-			return nil, fmt.Errorf("task %s is %s (not READY, REJECTED, or INTEGRATION_FAILED)", taskID, task.Status)
-		}
-		return nil, fmt.Errorf("task %s is %s (not DRAFT_CODING_PLAN or CODING_PLAN_REJECTED)", taskID, task.Status)
+		return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
 	}
 
 	agent, exists := state.Agents[agentID]

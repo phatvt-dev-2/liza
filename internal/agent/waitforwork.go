@@ -52,7 +52,7 @@ func waitForWork(ctx context.Context, bb *db.Blackboard, projectRoot string, rol
 	case roles.RuntimeCoder:
 		return waitForCoderWork(ctx, bb, projectRoot, config.AgentID, pollInterval, maxWait)
 	case roles.RuntimeCodePlanner:
-		return waitForCodePlannerWork(ctx, bb, projectRoot, pollInterval, maxWait)
+		return waitForCodePlannerWork(ctx, bb, projectRoot, config.AgentID, pollInterval, maxWait)
 	case roles.RuntimeCodeReviewer:
 		return waitForReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	case roles.RuntimeCodePlanReviewer:
@@ -255,14 +255,14 @@ func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot, agent
 		})
 }
 
-func waitForCodePlannerWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
+func waitForCodePlannerWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			claimable := models.CountClaimableTasks(s, models.RoleCodePlanner)
-			if claimable > 0 {
-				return true, fmt.Sprintf("Found %d code-planner claimable task(s)", claimable)
-			}
-			return false, "No code-planner claimable tasks"
+			resumableHandoffs := countResumableHandoffTasks(s, agentID)
+			logMsg := fmt.Sprintf("code-planner: %d claimable, %d resumable handoffs", claimable, resumableHandoffs)
+
+			return claimable > 0 || resumableHandoffs > 0, logMsg
 		})
 }
 

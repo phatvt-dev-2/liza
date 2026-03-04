@@ -202,6 +202,17 @@ func TestWaitForCodePlannerWork(t *testing.T) {
 			},
 			wantWork: false,
 		},
+		{
+			name: "resumable handoff wakes code-planner",
+			tasks: func() []models.Task {
+				agentID := "code-planner-1"
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusCodePlanning, now)
+				task.HandoffPending = true
+				task.AssignedTo = &agentID
+				return []models.Task{task}
+			}(),
+			wantWork: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -215,7 +226,7 @@ func TestWaitForCodePlannerWork(t *testing.T) {
 
 			testhelpers.WriteInitialState(t, statePath, state)
 
-			config := SupervisorConfig{StatePath: statePath}
+			config := SupervisorConfig{StatePath: statePath, AgentID: "code-planner-1"}
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 

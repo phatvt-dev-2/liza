@@ -90,26 +90,7 @@ func planSprintAdvance(s *models.State, now time.Time) (*sprintAdvancePlan, erro
 		return nil, fmt.Errorf("cannot advance sprint: not all planned tasks are terminal")
 	}
 
-	// Snapshot current sprint for archive. Normalize legacy Number=0 to 1
-	// so the archive and history entry pass validation (Number >= 1).
-	archivedSprint := s.Sprint
-	if archivedSprint.Number == 0 {
-		archivedSprint.Number = 1
-	}
-	archivedSprint.Status = models.SprintStatusCompleted
-	ended := now
-	archivedSprint.Timeline.Ended = &ended
-
-	newNumber := archivedSprint.Number + 1
-	newSprintID := fmt.Sprintf("sprint-%d", newNumber)
-	carriedTasks := collectNonTerminalTaskIDs(s)
-
-	return &sprintAdvancePlan{
-		archivedSprint: archivedSprint,
-		newSprintID:    newSprintID,
-		newNumber:      newNumber,
-		carriedTasks:   carriedTasks,
-	}, nil
+	return buildSprintAdvancePlan(s, now)
 }
 
 // applySprintAdvance mutates state to record the completed sprint in history
@@ -168,10 +149,18 @@ func planSprintAdvanceFromCompleted(s *models.State, now time.Time) (*sprintAdva
 		return nil, fmt.Errorf("cannot advance sprint: status is %s, expected COMPLETED", s.Sprint.Status)
 	}
 
+	return buildSprintAdvancePlan(s, now)
+}
+
+// buildSprintAdvancePlan is the shared implementation for sprint advance planning.
+// It snapshots the current sprint for archive, normalizes legacy numbering, and
+// computes carried tasks. Callers validate preconditions before calling this.
+func buildSprintAdvancePlan(s *models.State, now time.Time) (*sprintAdvancePlan, error) {
 	archivedSprint := s.Sprint
 	if archivedSprint.Number == 0 {
 		archivedSprint.Number = 1
 	}
+	archivedSprint.Status = models.SprintStatusCompleted
 	ended := now
 	archivedSprint.Timeline.Ended = &ended
 

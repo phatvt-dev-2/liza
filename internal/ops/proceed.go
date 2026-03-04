@@ -105,6 +105,15 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 					s.Tasks = append(s.Tasks, child)
 					result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 				}
+				// Record crash recovery in history
+				task.History = append(task.History, models.TaskHistoryEntry{
+					Time:  now,
+					Event: "transition_crash_recovery",
+					Extra: map[string]any{
+						"transition":         transitionName,
+						"recovered_children": len(missingChildren),
+					},
+				})
 				return nil
 			}
 			return fmt.Errorf("transition %q already executed on task %q", transitionName, taskID)

@@ -155,8 +155,8 @@ func TestClaimTask_WrongStatus(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for IMPLEMENTING task")
 	}
-	if !strings.Contains(err.Error(), "not READY") {
-		t.Errorf("Error = %q, want to contain 'not READY'", err.Error())
+	if !strings.Contains(err.Error(), "not claimable by") {
+		t.Errorf("Error = %q, want to contain 'not claimable by'", err.Error())
 	}
 }
 
