@@ -5,13 +5,13 @@ description: Transform requirements into precise specifications for coding tasks
 
 # Objective
 
-Transform fuzzy requirements into precise, SMARC specifications a Planner can decompose into coding tasks.
+Transform fuzzy requirements into precise, SMARC specifications an Orchestrator can decompose into coding tasks.
 
 Output: a git-tracked markdown document. One spec per task; one cohesive capability per spec.
 
 # Trigger
 
-- Planner creates a spec-writing task (Liza mode)
+- Orchestrator creates a spec-writing task (Liza mode)
 - User asks to spec a feature or requirement (Pairing mode)
 
 # Inputs
@@ -35,7 +35,7 @@ Your task provides:
 
 Read source material. Distinguish what is **said**, **implied**, and **missing** before writing any requirements.
 
-Multiple independent capabilities → flag to Planner for split. Do not silently produce a mega-spec.
+Multiple independent capabilities → flag to Orchestrator for split. Do not silently produce a mega-spec.
 
 ## 2. Write
 

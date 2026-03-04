@@ -66,7 +66,7 @@ specs/
 │   └── 1.1.md - 1.6.md                 # Domain-specific specs
 ├── architecture/
 │   ├── overview.md                     # Components, data flow, directory structure
-│   ├── roles.md                        # Planner, Coder, Code Reviewer responsibilities
+│   ├── roles.md                        # Orchestrator, Coder, Code Reviewer responsibilities
 │   ├── state-machines.md               # Task states, agent states, exit codes
 │   ├── blackboard-schema.md            # YAML state structure, locking, operations
 │   ├── supervision-model.md            # Supervision architecture

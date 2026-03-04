@@ -5,7 +5,7 @@ description: Transform requirements into user stories for coding tasks
 
 # Objective
 
-Transform high-level, fuzzy requirements into precise, well-structured user stories that a Planner can decompose into coding tasks.
+Transform high-level, fuzzy requirements into precise, well-structured user stories that an Orchestrator can decompose into coding tasks.
 
 The output is a user story artifact — a markdown document, git-tracked, treated with the same rigor as code.
 One story document per task; one cohesive capability per document. A capability is the document's scope.
@@ -14,14 +14,14 @@ Individual user stories are its constituent parts — each story maps to one Cod
 # Trigger
 
 Use this skill when:
-- Planner creates a story-writing task (Liza mode)
+- Orchestrator creates a story-writing task (Liza mode)
 - User asks to write user stories for a feature, capability, or requirement (Pairing mode)
 - The team's workflow uses user stories rather than formal PRD requirements
 
 # Inputs
 
 Your task provides:
-- An **output file path** assigned by the Planner on the blackboard
+- An **output file path** assigned by the Orchestrator on the blackboard
 - **References** to one or more sections of source material (vision doc, prior specs, existing code)
 
 **Scope discipline (two-tier):**
@@ -54,7 +54,7 @@ Include environment and skill level when they affect how the feature should beha
 from the command line and expects standard CLI conventions (flags, non-zero exit codes, concise output)." The second
 persona tells the Coder that `--help` should exist and errors should go to stderr.
 
-If the source material contains multiple independent capabilities, flag this to the Planner — it may need to split the task.
+If the source material contains multiple independent capabilities, flag this to the Orchestrator — it may need to split the task.
 Do not silently produce a mega-document.
 
 ## 2. Write
@@ -173,7 +173,7 @@ Do not invent new prefixes. If something doesn't fit these categories, it likely
 
 | Pairing Prompt | Liza Behavior |
 |----------------|---------------|
-| "Source material contains multiple capabilities — split?" | Flag to Planner via BLOCKED with split recommendation |
+| "Source material contains multiple capabilities — split?" | Flag to Orchestrator via BLOCKED with split recommendation |
 | "This assumption is LOW confidence — resolve?" | Surface in Assumptions section; Human resolves at the end of the sprint, before coding starts in the next sprint. |
 | "Adjacent story doc may conflict — check?" | Read adjacent document, declare in References, note in Context |
 | "Cannot identify a clear persona for this requirement" | Surface as Open Question — a requirement without a persona may not be a user story |

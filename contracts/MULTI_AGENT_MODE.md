@@ -26,7 +26,7 @@ Human is not "in the loop" for normal flow, but IS the exception handler:
 - BLOCKED states with unresolvable questions → human resolves via `human_notes`
 - Kill switches (`PAUSE`, `ABORT`, `CHECKPOINT`) for system-wide intervention
 - Merge conflicts requiring judgment → human resolves in integration branch
-- Spec ambiguities that Planner cannot resolve → human clarifies via `human_notes`
+- Spec ambiguities that Orchestrator cannot resolve → human clarifies via `human_notes`
 
 ---
 
@@ -36,7 +36,7 @@ Each agent has a defined role with specific capabilities and constraints.
 
 | Role | Primary Function | Approval Authority |
 |------|------------------|-------------------|
-| **Planner** | Decompose goals into tasks | None (creates work, doesn't approve) |
+| **Orchestrator** | Decompose goals into tasks | None (creates work, doesn't approve) |
 | **Coder** | Implement tasks | None (submits for review) |
 | **Code Reviewer** | Review and merge | Approves/rejects Coder work |
 
@@ -44,7 +44,7 @@ Each agent has a defined role with specific capabilities and constraints.
 - Coders cannot self-approve
 - Coders cannot merge to integration branch
 - Code Reviewers cannot implement (only review and write new adversarial tests, not modify existing tests)
-- Planners cannot claim implementation tasks
+- Orchestrators cannot claim implementation tasks
 
 Violating role boundaries is a Tier 1 violation — process integrity, not data/code integrity.
 
@@ -113,7 +113,7 @@ At ~90% context (heuristic: many tool calls, re-reading files, difficulty holdin
 **Review Exhaustion:**
 If 2 different Code Reviewers fail to issue a verdict on the same task (exit without APPROVED/REJECTED):
 - Task is marked BLOCKED with `blocked_reason: "review_exhaustion"`
-- Planner evaluates: spec unclear? done_when untestable?
+- Orchestrator evaluates: spec unclear? done_when untestable?
 
 ---
 
@@ -167,6 +167,6 @@ WITHOUT meaningful progress → **STOP IMMEDIATELY**
 |------|--------|------|
 | Coder | `retry_loop` | Mark task BLOCKED with diagnosis |
 | Code Reviewer | `reviewer_loop` | Issue REJECTED with `"insufficient information to complete review"` |
-| Planner | `spec_gap` | Pause for human input |
+| Orchestrator | `spec_gap` | Pause for human input |
 
 Exit with code 42 after logging.

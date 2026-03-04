@@ -33,4 +33,4 @@ What could go wrong? What are we assuming?
 
 ---
 
-**Rule:** Planner cannot decompose goal without vision document. Missing vision → BLOCKED at planning stage.
+**Rule:** Orchestrator cannot decompose goal without vision document. Missing vision → BLOCKED at planning stage.

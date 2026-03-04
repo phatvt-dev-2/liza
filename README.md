@@ -72,16 +72,16 @@ As of today, Liza has only 3 roles. More to come: Spec Writer / Spec Reviewer, e
                               │
           ┌───────────────────┼───────────────────┐
           ▼                   ▼                   ▼
-    ┌───────────┐        ┌──────────┐        ┌──────────┐
-    │ Planner   │        │  Coder   │        │ Reviewer │
-    │           │        │          │        │          │
-    │ Decomposes|        │ Claims   │        │ Examines │
-    │ goal into │        │ tasks,   │        │ work,    │
-    │ tasks,    │        │ iterates │        │ approves │
-    │ rescopes  │        │ until    │        │ or       │
-    │ on failure│        │ approved │        │ rejects, │
-    │           │        │  review  │        │ merges   │
-    └─────┬─────┘        └────┬─────┘        └────┬─────┘
+    ┌────────────┐       ┌──────────┐        ┌──────────┐
+    │Orchestrator│       │  Coder   │        │ Reviewer │
+    │            │       │          │        │          │
+    │ Decomposes │       │ Claims   │        │ Examines │
+    │ goal into  │       │ tasks,   │        │ work,    │
+    │ tasks,     │       │ iterates │        │ approves │
+    │ rescopes   │       │ until    │        │ or       │
+    │ on failure │       │ approved │        │ rejects, │
+    │            │       │  review  │        │ merges   │
+    └─────┬──────┘       └────┬─────┘        └────┬─────┘
           │                   │                   │
           └───────────────────┴───────────────────┘
                               │
@@ -278,14 +278,14 @@ the lack of additional role pairs.
 - Spec Writer / Spec Reviewer
 - Architect / Architecture Reviewer
 - Tech Writer / Doc Reviewer
-- [Planner] / Plan Reviewer
+- [Orchestrator] / Plan Reviewer
 
 **Roadmap:**
-- Specification phase pipeline (Requirement Planner → Spec Writer → Spec Reviewer) before coding sprints
+- Specification phase pipeline (Requirement Orchestrator → Spec Writer → Spec Reviewer) before coding sprints
 - Context handoff as blackboard event — structured positive/negative findings on every task completion
 - Sprint Analyzer role — steering interface for the human at sprint boundaries
 - Deterministic pre/post hooks at role transitions — mechanical checks before spawning agents and before their handoff
-- Planner-routed model selection — assign tasks to models based on estimated complexity
+- Orchestrator-routed model selection — assign tasks to models based on estimated complexity
 
 ### Provider Compatibility
 

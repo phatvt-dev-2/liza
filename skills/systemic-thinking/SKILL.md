@@ -168,7 +168,7 @@ Save to docs/architectural-issues.md? (y/n/select specific)
 
 Wait for user confirmation before writing.
 
-**Liza mode (multi-agent):** Write findings to the blackboard `discovered` section — not to ISSUES_FILE. The blackboard is the coordination mechanism; the Planner consumes discoveries and decides disposition.
+**Liza mode (multi-agent):** Write findings to the blackboard `discovered` section — not to ISSUES_FILE. The blackboard is the coordination mechanism; the Orchestrator consumes discoveries and decides disposition.
 
 For each finding, write a discovery entry:
 ```yaml
@@ -198,9 +198,9 @@ Override severity based on judgment when the finding's actual impact warrants it
 
 **Urgency mapping:**
 - `immediate` — Finding blocks current task or introduces risk that compounds with in-progress work
-- `deferred` (default) — Finding is structural; Planner evaluates at next planning cycle
+- `deferred` (default) — Finding is structural; Orchestrator evaluates at next planning cycle
 
-**ISSUES_FILE in Liza mode:** Only the Planner writes to ISSUES_FILE, when it evaluates a finding and decides to defer rather than create a task. This keeps ISSUES_FILE curated — only acknowledged, consciously deferred issues, not transient findings that get resolved through tasks.
+**ISSUES_FILE in Liza mode:** Only the Orchestrator writes to ISSUES_FILE, when it evaluates a finding and decides to defer rather than create a task. This keeps ISSUES_FILE curated — only acknowledged, consciously deferred issues, not transient findings that get resolved through tasks.
 
 ## Integration with Workflow
 
@@ -214,7 +214,7 @@ Override severity based on judgment when the finding's actual impact warrants it
 **Liza mode:**
 1. Complete systemic analysis as normal
 2. Write findings to blackboard `discovered` section (see severity/urgency mapping above)
-3. Planner evaluates discoveries at next wake cycle:
+3. Orchestrator evaluates discoveries at next wake cycle:
    - **Actionable:** Creates task → Coder addresses → finding resolved
-   - **Deferred:** Planner writes to ISSUES_FILE with rationale
+   - **Deferred:** Orchestrator writes to ISSUES_FILE with rationale
    - **Dismissed:** No action (finding doesn't warrant tracking)

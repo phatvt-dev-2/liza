@@ -19,12 +19,12 @@ Templates for documents used in Liza-managed projects.
 
 ### Vision Document
 - Required before goal decomposition
-- Missing vision → Planner BLOCKED
+- Missing vision → Orchestrator BLOCKED
 
 ### ADR
 Create when:
 - Circuit breaker fires with ARCHITECTURE_FLAW
 - Reviewer rejects for architectural reason
-- Planner rescopes due to technical constraint
+- Orchestrator rescopes due to technical constraint
 - New external dependency added
 - Performance approach chosen
