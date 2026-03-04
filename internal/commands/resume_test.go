@@ -123,6 +123,10 @@ func TestResumeCommand(t *testing.T) {
 
 // TestResumeCommand_ArchiveWriteFailure verifies that when the archive file
 // cannot be written, resume fails and state remains unchanged (no data loss).
+// Uses COMPLETED sprint status because the two-step flow is:
+//
+//	CHECKPOINT + all terminal → COMPLETED (no archive), then
+//	COMPLETED → archive + new sprint (archive write happens here).
 func TestResumeCommand_ArchiveWriteFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -140,7 +144,7 @@ func TestResumeCommand_ArchiveWriteFailure(t *testing.T) {
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
 	state.Config.Mode = models.SystemModeRunning
-	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.Status = models.SprintStatusCompleted
 	state.Sprint.Number = 1
 
 	mergedTask := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
@@ -167,8 +171,8 @@ func TestResumeCommand_ArchiveWriteFailure(t *testing.T) {
 	if readState.Sprint.Number != 1 {
 		t.Errorf("Sprint.Number = %d, want 1 (should be unchanged)", readState.Sprint.Number)
 	}
-	if readState.Sprint.Status != models.SprintStatusCheckpoint {
-		t.Errorf("Sprint.Status = %v, want CHECKPOINT (should be unchanged)", readState.Sprint.Status)
+	if readState.Sprint.Status != models.SprintStatusCompleted {
+		t.Errorf("Sprint.Status = %v, want COMPLETED (should be unchanged)", readState.Sprint.Status)
 	}
 	if len(readState.SprintHistory) != 0 {
 		t.Errorf("SprintHistory length = %d, want 0 (should be unchanged)", len(readState.SprintHistory))

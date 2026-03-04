@@ -258,7 +258,7 @@ Tasks support inter-pair transitions via `liza proceed`:
 |------|-------------|--------|
 | `code-plan-to-coding` | `CODING_PLAN_APPROVED` | Creates child tasks at DRAFT from `output[]` |
 
-**Child task ID format:** `{parent-id}-sub-{index}` (deterministic for crash recovery).
+**Child task ID format:** `{parent-id}-{transition-name}-{index}` (deterministic, namespaced by transition for crash recovery). Example: `task-1-code-plan-to-coding-0`.
 
 **Crash recovery:** Re-running `liza proceed` creates only missing children. If all children already exist, returns error.
 
