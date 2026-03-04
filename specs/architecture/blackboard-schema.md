@@ -219,6 +219,49 @@ tasks:
     created: 2025-01-17T16:45:00Z
 ```
 
+### Sub-pipeline Fields
+
+Tasks support inter-pair transitions via `liza proceed`:
+
+```yaml
+- id: plan-task-1
+  status: CODING_PLAN_APPROVED
+  output:                          # Structured subtask definitions from doer role
+    - desc: "Implement auth middleware"
+      done_when: "Auth middleware rejects invalid tokens"
+      scope: "src/middleware/auth.go"
+      spec_ref: specs/auth.md
+    - desc: "Add token refresh logic"
+      done_when: "Expired tokens trigger refresh flow"
+      scope: "src/auth/refresh.go"
+      spec_ref: specs/auth.md#refresh
+  parent_task: null                # Set on child tasks, references parent task ID
+  transitions_executed:            # Tracks which transitions have been applied
+    code-plan-to-coding: true
+```
+
+| Field | Type | Set By | Purpose |
+|-------|------|--------|---------|
+| `output` | `[]OutputEntry` | Doer agent | Structured subtask definitions for next role pair |
+| `parent_task` | `*string` | `liza proceed` | Back-reference from child to parent task |
+| `transitions_executed` | `map[string]bool` | `liza proceed` | Idempotency — prevents duplicate transitions |
+
+**OutputEntry fields** (all required):
+- `desc`: Task description for the child task
+- `done_when`: Completion criteria
+- `scope`: Files/areas affected
+- `spec_ref`: Specification reference
+
+**Available transitions:**
+
+| Name | Source Status | Effect |
+|------|-------------|--------|
+| `code-plan-to-coding` | `CODING_PLAN_APPROVED` | Creates child tasks at DRAFT from `output[]` |
+
+**Child task ID format:** `{parent-id}-sub-{index}` (deterministic for crash recovery).
+
+**Crash recovery:** Re-running `liza proceed` creates only missing children. If all children already exist, returns error.
+
 ### Iteration Field Lifecycle
 
 The `iteration` field tracks coder work cycles on a task:
@@ -772,6 +815,8 @@ invariants:
   - "No two agents assigned to same task"
   - "Task with integration_fix:true must have prior INTEGRATION_FAILED in history"
   - "Task failed_by list must contain unique agent IDs"
+  - "Task parent_task must reference an existing task ID"
+  - "Task output entries must have all required fields (desc, done_when, scope, spec_ref)"
   - "Anomaly type must be one of: retry_loop, trade_off, spec_ambiguity, external_blocker, assumption_violated, scope_deviation, workaround, debt_created, spec_changed, hypothesis_exhaustion, spec_gap, review_deadlock, review_exhaustion, reviewer_loop, system_ambiguity"
   # Transition invariants (runtime-enforced, not statically validated)
   # These are enforced by agent behavior and atomic operations during state transitions.

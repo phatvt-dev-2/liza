@@ -1,0 +1,531 @@
+package ops
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+// --- Proceed: happy path ---
+
+func TestProceed_CreatesChildTasks(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-task-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan the auth module",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Implement login", DoneWhen: "POST /login works", Scope: "auth", SpecRef: "specs/auth.md#login"},
+			{Desc: "Implement refresh", DoneWhen: "POST /refresh works", Scope: "auth", SpecRef: "specs/auth.md#refresh"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	if result.SourceTaskID != parentID {
+		t.Errorf("SourceTaskID = %q, want %q", result.SourceTaskID, parentID)
+	}
+	if result.TransitionName != "code-plan-to-coding" {
+		t.Errorf("TransitionName = %q, want %q", result.TransitionName, "code-plan-to-coding")
+	}
+	if len(result.ChildTaskIDs) != 2 {
+		t.Fatalf("ChildTaskIDs count = %d, want 2", len(result.ChildTaskIDs))
+	}
+
+	expectedID0 := "plan-task-1-code-plan-to-coding-0"
+	expectedID1 := "plan-task-1-code-plan-to-coding-1"
+	if result.ChildTaskIDs[0] != expectedID0 {
+		t.Errorf("ChildTaskIDs[0] = %q, want %q", result.ChildTaskIDs[0], expectedID0)
+	}
+	if result.ChildTaskIDs[1] != expectedID1 {
+		t.Errorf("ChildTaskIDs[1] = %q, want %q", result.ChildTaskIDs[1], expectedID1)
+	}
+
+	// Verify persisted state
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	// Source task unchanged status, transitions_executed set
+	srcTask := readState.FindTask(parentID)
+	if srcTask == nil {
+		t.Fatal("Source task not found")
+	}
+	if srcTask.Status != models.TaskStatusCodingPlanApproved {
+		t.Errorf("Source status = %v, want CODING_PLAN_APPROVED", srcTask.Status)
+	}
+	if !srcTask.TransitionsExecuted["code-plan-to-coding"] {
+		t.Error("transitions_executed should contain code-plan-to-coding")
+	}
+
+	// Child task 0
+	child0 := readState.FindTask(expectedID0)
+	if child0 == nil {
+		t.Fatal("Child task 0 not found")
+	}
+	if child0.Status != models.TaskStatusDraft {
+		t.Errorf("Child 0 status = %v, want DRAFT", child0.Status)
+	}
+	if child0.ParentTask == nil || *child0.ParentTask != parentID {
+		t.Errorf("Child 0 parent_task = %v, want %q", child0.ParentTask, parentID)
+	}
+	if child0.Description != "Implement login" {
+		t.Errorf("Child 0 desc = %q, want %q", child0.Description, "Implement login")
+	}
+	if child0.DoneWhen != "POST /login works" {
+		t.Errorf("Child 0 done_when = %q", child0.DoneWhen)
+	}
+	if child0.Scope != "auth" {
+		t.Errorf("Child 0 scope = %q", child0.Scope)
+	}
+	if child0.SpecRef != "specs/auth.md#login" {
+		t.Errorf("Child 0 spec_ref = %q", child0.SpecRef)
+	}
+
+	// Child task 1
+	child1 := readState.FindTask(expectedID1)
+	if child1 == nil {
+		t.Fatal("Child task 1 not found")
+	}
+	if child1.Status != models.TaskStatusDraft {
+		t.Errorf("Child 1 status = %v, want DRAFT", child1.Status)
+	}
+	if child1.ParentTask == nil || *child1.ParentTask != parentID {
+		t.Errorf("Child 1 parent_task = %v, want %q", child1.ParentTask, parentID)
+	}
+}
+
+// --- Proceed: idempotency rejection ---
+
+func TestProceed_RejectsRepeatedTransition(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Child", DoneWhen: "Done", Scope: "s", SpecRef: "README.md"},
+		},
+		TransitionsExecuted: map[string]bool{"code-plan-to-coding": true},
+		History:             []models.TaskHistoryEntry{},
+	}
+	// Child already exists — transition was fully completed
+	child := models.Task{
+		ID:          "plan-1-code-plan-to-coding-0",
+		Type:        models.TaskTypeCoding,
+		Description: "Child",
+		Status:      models.TaskStatusDraft,
+		Priority:    1,
+		Created:     now,
+		ParentTask:  &parentID,
+		SpecRef:     "README.md",
+		DoneWhen:    "Done",
+		Scope:       "s",
+		History:     []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task, child)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for repeated transition")
+	}
+	if !strings.Contains(err.Error(), "already executed") {
+		t.Errorf("Error = %q, want to contain 'already executed'", err.Error())
+	}
+}
+
+// --- Proceed: sprint not COMPLETED ---
+
+func TestProceed_RejectsIfSprintNotCompleted(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           "plan-1",
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Child", DoneWhen: "Done", Scope: "s", SpecRef: "README.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{"plan-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, "plan-1", "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for non-COMPLETED sprint")
+	}
+	if !strings.Contains(err.Error(), "COMPLETED") {
+		t.Errorf("Error = %q, want to contain 'COMPLETED'", err.Error())
+	}
+}
+
+// --- Proceed: unknown transition ---
+
+func TestProceed_RejectsUnknownTransition(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           "plan-1",
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Child", DoneWhen: "Done", Scope: "s", SpecRef: "README.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{"plan-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, "plan-1", "unknown-transition")
+	if err == nil {
+		t.Fatal("Expected error for unknown transition")
+	}
+	if !strings.Contains(err.Error(), "unknown transition") {
+		t.Errorf("Error = %q, want to contain 'unknown transition'", err.Error())
+	}
+}
+
+// --- Proceed: task not found ---
+
+func TestProceed_RejectsNonexistentTask(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, "nonexistent", "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for nonexistent task")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("Error = %q, want to contain 'not found'", err.Error())
+	}
+}
+
+// --- Proceed: wrong status ---
+
+func TestProceed_RejectsWrongStatus(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	task := models.Task{
+		ID:           "plan-1",
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusImplementing,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Done",
+		Scope:        "scope",
+		AssignedTo:   testhelpers.StringPtr("coder-1"),
+		Worktree:     testhelpers.StringPtr(".worktrees/plan-1"),
+		BaseCommit:   testhelpers.StringPtr("abc123"),
+		LeaseExpires: testhelpers.TimePtr(now.Add(30 * time.Minute)),
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{"plan-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, "plan-1", "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for wrong status")
+	}
+	if !strings.Contains(err.Error(), "CODING_PLAN_APPROVED") {
+		t.Errorf("Error = %q, want to contain 'CODING_PLAN_APPROVED'", err.Error())
+	}
+}
+
+// --- Proceed: empty output ---
+
+func TestProceed_RejectsEmptyOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           "plan-1",
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		Output:       []models.OutputEntry{},
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{"plan-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, "plan-1", "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for empty output")
+	}
+	if !strings.Contains(err.Error(), "output") {
+		t.Errorf("Error = %q, want to contain 'output'", err.Error())
+	}
+}
+
+// --- Proceed: crash recovery ---
+
+func TestProceed_CrashRecovery_CreatesMissingChildren(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-1"
+	reviewCommit := "abc123"
+	parentTask := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Child 0", DoneWhen: "Done 0", Scope: "s0", SpecRef: "README.md"},
+			{Desc: "Child 1", DoneWhen: "Done 1", Scope: "s1", SpecRef: "README.md"},
+		},
+		TransitionsExecuted: map[string]bool{"code-plan-to-coding": true},
+		History:             []models.TaskHistoryEntry{},
+	}
+
+	// Simulate crash: transition marked but only first child created
+	child0 := models.Task{
+		ID:          "plan-1-code-plan-to-coding-0",
+		Type:        models.TaskTypeCoding,
+		Description: "Child 0",
+		Status:      models.TaskStatusDraft,
+		Priority:    1,
+		Created:     now,
+		ParentTask:  &parentID,
+		SpecRef:     "README.md",
+		DoneWhen:    "Done 0",
+		Scope:       "s0",
+		History:     []models.TaskHistoryEntry{},
+	}
+
+	state.Tasks = append(state.Tasks, parentTask, child0)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error (crash recovery): %v", err)
+	}
+
+	// Should only create the missing child
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1 (only missing)", len(result.ChildTaskIDs))
+	}
+	if result.ChildTaskIDs[0] != "plan-1-code-plan-to-coding-1" {
+		t.Errorf("ChildTaskIDs[0] = %q, want %q", result.ChildTaskIDs[0], "plan-1-code-plan-to-coding-1")
+	}
+
+	// Verify child 1 now exists
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	child1 := readState.FindTask("plan-1-code-plan-to-coding-1")
+	if child1 == nil {
+		t.Fatal("Child task 1 not found after crash recovery")
+	}
+	if child1.Description != "Child 1" {
+		t.Errorf("Child 1 desc = %q, want %q", child1.Description, "Child 1")
+	}
+}
+
+// --- Proceed: crash recovery with all children present ---
+
+func TestProceed_CrashRecovery_AllChildrenExist(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-1"
+	reviewCommit := "abc123"
+	parentTask := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Child 0", DoneWhen: "Done 0", Scope: "s0", SpecRef: "README.md"},
+		},
+		TransitionsExecuted: map[string]bool{"code-plan-to-coding": true},
+		History:             []models.TaskHistoryEntry{},
+	}
+
+	child0 := models.Task{
+		ID:          "plan-1-code-plan-to-coding-0",
+		Type:        models.TaskTypeCoding,
+		Description: "Child 0",
+		Status:      models.TaskStatusDraft,
+		Priority:    1,
+		Created:     now,
+		ParentTask:  &parentID,
+		SpecRef:     "README.md",
+		DoneWhen:    "Done 0",
+		Scope:       "s0",
+		History:     []models.TaskHistoryEntry{},
+	}
+
+	state.Tasks = append(state.Tasks, parentTask, child0)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error when all children already exist")
+	}
+	if !strings.Contains(err.Error(), "already executed") {
+		t.Errorf("Error = %q, want to contain 'already executed'", err.Error())
+	}
+}
+
+// --- Proceed: output entry validation ---
+
+func TestProceed_RejectsOutputMissingFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           "plan-1",
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "", DoneWhen: "Done", Scope: "s", SpecRef: "README.md"}, // missing desc
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{"plan-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, "plan-1", "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for output entry missing desc")
+	}
+	if !strings.Contains(err.Error(), "output") {
+		t.Errorf("Error = %q, want to contain 'output'", err.Error())
+	}
+}

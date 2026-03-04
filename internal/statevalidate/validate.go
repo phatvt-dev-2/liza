@@ -113,6 +113,7 @@ func validateTaskStates(state *models.State, projectRoot string, skipSpecFileChe
 func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 	// Track agent assignments to prevent duplicates
 	assignments := make(map[string][]string) // agent ID -> task IDs
+	taskIDs := buildTaskIDSet(state.Tasks)
 
 	for _, task := range state.Tasks {
 		// DRAFT cannot have assigned_to
@@ -297,6 +298,27 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 					return fmt.Errorf("task %s has duplicate agent IDs in failed_by (manually edit .liza/state.yaml to remove duplicates)", task.ID)
 				}
 				seen[agent] = true
+			}
+		}
+
+		// parent_task must reference an existing task
+		if task.ParentTask != nil && !taskIDs[*task.ParentTask] {
+			return fmt.Errorf("task %s has parent_task referencing non-existent task '%s'", task.ID, *task.ParentTask)
+		}
+
+		// output entries must have required fields
+		for i, entry := range task.Output {
+			if entry.Desc == "" {
+				return fmt.Errorf("task %s output[%d] missing desc", task.ID, i)
+			}
+			if entry.DoneWhen == "" {
+				return fmt.Errorf("task %s output[%d] missing done_when", task.ID, i)
+			}
+			if entry.Scope == "" {
+				return fmt.Errorf("task %s output[%d] missing scope", task.ID, i)
+			}
+			if entry.SpecRef == "" {
+				return fmt.Errorf("task %s output[%d] missing spec_ref", task.ID, i)
 			}
 		}
 	}

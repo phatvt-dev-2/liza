@@ -277,20 +277,42 @@ func TestResumeWithSprintAdvance(t *testing.T) {
 
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := Resume(tmpDir, "human")
+	// Step 1: Resume from CHECKPOINT with all terminal → marks COMPLETED
+	result1, err := Resume(tmpDir, "human")
 	if err != nil {
-		t.Fatalf("Resume() error: %v", err)
+		t.Fatalf("Resume() step 1 error: %v", err)
+	}
+	if result1.SprintAdvanced != nil {
+		t.Error("Step 1: Expected SprintAdvanced to be nil (should mark COMPLETED, not advance)")
 	}
 
-	if result.SprintAdvanced == nil {
-		t.Fatal("Expected SprintAdvanced to be non-nil")
-	}
-	if result.SprintAdvanced.NewSprintID != "sprint-2" {
-		t.Errorf("SprintAdvanced.NewSprintID = %q, want %q", result.SprintAdvanced.NewSprintID, "sprint-2")
-	}
-
-	// Verify persisted state — both mode and sprint changed atomically
+	// Verify intermediate COMPLETED state
 	bb := db.New(stateFile)
+	midState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read mid-state: %v", err)
+	}
+	if midState.Sprint.Status != models.SprintStatusCompleted {
+		t.Errorf("After step 1: Sprint.Status = %v, want COMPLETED", midState.Sprint.Status)
+	}
+	if midState.Sprint.ID != "sprint-1" {
+		t.Errorf("After step 1: Sprint.ID = %q, want %q (should not advance yet)", midState.Sprint.ID, "sprint-1")
+	}
+
+	// Step 2: Resume from COMPLETED → advances to new sprint
+	result2, err := Resume(tmpDir, "human")
+	if err != nil {
+		t.Fatalf("Resume() step 2 error: %v", err)
+	}
+
+	if result2.SprintAdvanced == nil {
+		t.Fatal("Step 2: Expected SprintAdvanced to be non-nil")
+	}
+	if result2.SprintAdvanced.NewSprintID != "sprint-2" {
+		t.Errorf("SprintAdvanced.NewSprintID = %q, want %q", result2.SprintAdvanced.NewSprintID, "sprint-2")
+	}
+
+	// Verify final persisted state
 	readState, err := bb.Read()
 	if err != nil {
 		t.Fatalf("Failed to read state: %v", err)

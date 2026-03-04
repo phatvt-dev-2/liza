@@ -28,6 +28,8 @@ Explanation: {{.OrchestratorState.Reason}}
 Coder: {{.WorkQueues.Coder.Available}} available - {{.WorkQueues.Coder.Reason}}
 Reviewer: {{.WorkQueues.Reviewer.Available}} available - {{.WorkQueues.Reviewer.Reason}}
 
+{{- if .TransitionsSection}}
+{{.TransitionsSection}}{{- end}}
 {{- if and .Anomalies (gt (len .AnomalyList) 0)}}
 
 === ANOMALIES ===

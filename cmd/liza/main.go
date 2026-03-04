@@ -689,9 +689,42 @@ After running this command, restart agents manually:
 	},
 }
 
+var proceedCmd = &cobra.Command{
+	Use:   "proceed <task-id> <transition-name>",
+	Short: "Execute a manual inter-pair transition on a task",
+	Long: `Execute a manual transition between role pairs.
+
+This command creates child tasks from a source task's output[] entries.
+The source task must be at the transition's required status and the
+preceding sprint must be COMPLETED.
+
+Available transitions:
+  code-plan-to-coding  CODING_PLAN_APPROVED → DRAFT (per-subtask)
+
+Child task IDs follow the pattern: <parent-id>-<transition-name>-<index>.
+After running proceed, use 'liza resume' to start a new sprint with
+the child tasks.
+
+Idempotent: repeated calls for the same transition are rejected.
+Crash-safe: if interrupted mid-creation, re-running creates only
+missing children.`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+		transitionName := args[1]
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		return commands.ProceedCommand(projectRoot, taskID, transitionName)
+	},
+}
+
 var resumeCmd = &cobra.Command{
 	Use:   "resume",
-	Short: "Resume the Liza system from PAUSED mode or CHECKPOINT",
+	Short: "Resume the Liza system from PAUSED mode, CHECKPOINT, or COMPLETED sprint",
 	Long: `Resume the Liza system by setting config.mode to RUNNING and sprint.status to IN_PROGRESS.
 
 This command can be used when:
@@ -1266,6 +1299,7 @@ func init() {
 	rootCmd.AddCommand(pauseCmd)
 	rootCmd.AddCommand(stopCmd)
 	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(proceedCmd)
 	rootCmd.AddCommand(resumeCmd)
 	rootCmd.AddCommand(sprintCheckpointCmd)
 	rootCmd.AddCommand(agentCmd)

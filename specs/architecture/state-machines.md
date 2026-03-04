@@ -368,13 +368,17 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 
 **From CHECKPOINT:**
 - `liza resume` (planned tasks NOT all terminal) → IN_PROGRESS (continue same sprint)
-- `liza resume` (all planned tasks terminal) → archives sprint, creates new sprint (IN_PROGRESS)
+- `liza resume` (all planned tasks terminal) → COMPLETED (marks sprint done for human review)
 - `liza stop` → ABORTED (stop)
 
-> **Note:** The [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md) extends COMPLETED to allow
-> `liza resume` — same semantics as from CHECKPOINT when all tasks are terminal (archives sprint,
-> creates new sprint). The completed sprint itself is not reopened. This is needed for inter-pair
-> transitions: sprint completes → `liza proceed` → `liza resume` → new sprint.
+**From COMPLETED:**
+- `liza proceed <task-id> <transition>` → creates child tasks from parent task's `output[]`
+- `liza resume` → archives sprint, creates new sprint (IN_PROGRESS) with child tasks
+
+**Two-step sprint advance flow:**
+1. CHECKPOINT + all terminal → `liza resume` → COMPLETED (human review gate)
+2. Human runs `liza proceed` to create child tasks from approved plans
+3. Human runs `liza resume` → archives sprint, creates new sprint with child tasks
 
 ---
 

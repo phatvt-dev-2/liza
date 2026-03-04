@@ -163,6 +163,15 @@ func (t *Task) Transition(to TaskStatus) error {
 	return nil
 }
 
+// OutputEntry represents a structured subtask definition produced by a doer role.
+// When a task completes with output[], each entry defines a downstream child task.
+type OutputEntry struct {
+	Desc     string `yaml:"desc"`
+	DoneWhen string `yaml:"done_when"`
+	Scope    string `yaml:"scope"`
+	SpecRef  string `yaml:"spec_ref"`
+}
+
 // Task represents a single task in the Liza system
 type Task struct {
 	ID                  string             `yaml:"id"`
@@ -175,6 +184,9 @@ type Task struct {
 	Worktree            *string            `yaml:"worktree,omitempty"`
 	BaseCommit          *string            `yaml:"base_commit,omitempty"`
 	Iteration           int                `yaml:"iteration,omitempty"`
+	Output              []OutputEntry      `yaml:"output,omitempty"`
+	ParentTask          *string            `yaml:"parent_task,omitempty"`
+	TransitionsExecuted map[string]bool    `yaml:"transitions_executed,omitempty"`
 	Exit42RestartCount  int                `yaml:"exit42_restart_count,omitempty"`
 	ReviewCyclesCurrent int                `yaml:"review_cycles_current,omitempty"`
 	ReviewCyclesTotal   int                `yaml:"review_cycles_total,omitempty"`

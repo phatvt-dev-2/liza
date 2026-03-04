@@ -10,6 +10,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -22,15 +23,21 @@ type StatusOptions struct {
 
 // statusData contains all status information
 type statusData struct {
-	Goal              goalStatus            `json:"goal"`
-	Sprint            sprintStatus          `json:"sprint"`
-	Config            configStatus          `json:"config"`
-	Tasks             taskStatus            `json:"tasks"`
-	Agents            []agentStatus         `json:"agents"`
-	OrchestratorState orchestratorStatus    `json:"orchestrator_state"`
-	WorkQueues        workQueuesStatus      `json:"work_queues"`
-	Anomalies         *[]string             `json:"anomalies,omitempty"`
-	CircuitBreaker    *circuitBreakerStatus `json:"circuit_breaker,omitempty"`
+	Goal               goalStatus            `json:"goal"`
+	Sprint             sprintStatus          `json:"sprint"`
+	Config             configStatus          `json:"config"`
+	Tasks              taskStatus            `json:"tasks"`
+	Agents             []agentStatus         `json:"agents"`
+	OrchestratorState  orchestratorStatus    `json:"orchestrator_state"`
+	WorkQueues         workQueuesStatus      `json:"work_queues"`
+	PendingTransitions []pendingTransition   `json:"pending_transitions,omitempty"`
+	Anomalies          *[]string             `json:"anomalies,omitempty"`
+	CircuitBreaker     *circuitBreakerStatus `json:"circuit_breaker,omitempty"`
+}
+
+type pendingTransition struct {
+	TaskID      string   `json:"task_id"`
+	Transitions []string `json:"transitions"`
 }
 
 type goalStatus struct {
@@ -161,6 +168,17 @@ func buildStatusData(state *models.State, detailed bool) statusData {
 
 	// Populate work queues
 	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable)
+
+	// Collect pending transitions for tasks
+	for i := range state.Tasks {
+		avail := ops.AvailableTransitions(&state.Tasks[i])
+		if len(avail) > 0 {
+			data.PendingTransitions = append(data.PendingTransitions, pendingTransition{
+				TaskID:      state.Tasks[i].ID,
+				Transitions: avail,
+			})
+		}
+	}
 
 	// Optionally include detailed information
 	if detailed {
@@ -447,9 +465,10 @@ func writeAgentsSection(b *strings.Builder, agents []agentStatus) {
 // statusDashboardData is the template data for status_dashboard.tmpl
 type statusDashboardData struct {
 	statusData
-	TasksSection  string
-	AgentsSection string
-	AnomalyList   []string
+	TasksSection       string
+	AgentsSection      string
+	AnomalyList        []string
+	TransitionsSection string
 }
 
 // formatStatusDashboard renders the status as a dashboard
@@ -464,11 +483,23 @@ func formatStatusDashboard(data statusData) (string, error) {
 		anomalyList = *data.Anomalies
 	}
 
+	var transitionsBuf strings.Builder
+	if len(data.PendingTransitions) > 0 {
+		transitionsBuf.WriteString("=== PENDING TRANSITIONS ===\n")
+		for _, pt := range data.PendingTransitions {
+			for _, tr := range pt.Transitions {
+				fmt.Fprintf(&transitionsBuf, "  %s: liza proceed %s %s\n", pt.TaskID, pt.TaskID, tr)
+			}
+		}
+		transitionsBuf.WriteString("\n")
+	}
+
 	tmplData := statusDashboardData{
-		statusData:    data,
-		TasksSection:  tasksBuf.String(),
-		AgentsSection: agentsBuf.String(),
-		AnomalyList:   anomalyList,
+		statusData:         data,
+		TasksSection:       tasksBuf.String(),
+		AgentsSection:      agentsBuf.String(),
+		AnomalyList:        anomalyList,
+		TransitionsSection: transitionsBuf.String(),
 	}
 	return executeCommandTemplate("status_dashboard", tmplData)
 }

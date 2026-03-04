@@ -3,6 +3,7 @@ package ops
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -318,6 +319,137 @@ func TestResume_PausedAndCheckpoint(t *testing.T) {
 	}
 	if readState.Sprint.Status != models.SprintStatusInProgress {
 		t.Errorf("Sprint status = %v, want IN_PROGRESS", readState.Sprint.Status)
+	}
+}
+
+func TestResume_CheckpointAllTerminal_MarksCompleted(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeRunning
+	state.Sprint.Status = models.SprintStatusCheckpoint
+
+	// Add a sprint-terminal task
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           "plan-1",
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{"plan-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Resume(tmpDir, "human")
+	if err != nil {
+		t.Fatalf("Resume() error: %v", err)
+	}
+
+	if result.ResumedFrom != "CHECKPOINT" {
+		t.Errorf("ResumedFrom = %q, want %q", result.ResumedFrom, "CHECKPOINT")
+	}
+	// Should NOT advance (no SprintAdvanced)
+	if result.SprintAdvanced != nil {
+		t.Error("Expected no sprint advance when transitioning to COMPLETED")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.Status != models.SprintStatusCompleted {
+		t.Errorf("Sprint status = %v, want COMPLETED", readState.Sprint.Status)
+	}
+}
+
+func TestResume_FromCompleted_AdvancesSprint(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeRunning
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	// Parent task at sprint-terminal, plus child at DRAFT
+	now := time.Now().UTC()
+	parentID := "plan-1"
+	reviewCommit := "abc123"
+	parentTask := models.Task{
+		ID:                  parentID,
+		Type:                models.TaskTypeCoding,
+		Description:         "Plan task",
+		Status:              models.TaskStatusCodingPlanApproved,
+		Priority:            1,
+		Created:             now,
+		SpecRef:             "README.md",
+		DoneWhen:            "Approved",
+		Scope:               "scope",
+		ReviewCommit:        &reviewCommit,
+		TransitionsExecuted: map[string]bool{"code-plan-to-coding": true},
+		History:             []models.TaskHistoryEntry{},
+	}
+	childTask := models.Task{
+		ID:          "plan-1-code-plan-to-coding-0",
+		Type:        models.TaskTypeCoding,
+		Description: "Child task",
+		Status:      models.TaskStatusDraft,
+		Priority:    1,
+		Created:     now,
+		ParentTask:  &parentID,
+		History:     []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, parentTask, childTask)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Resume(tmpDir, "human")
+	if err != nil {
+		t.Fatalf("Resume() error: %v", err)
+	}
+
+	if result.ResumedFrom != "COMPLETED sprint" {
+		t.Errorf("ResumedFrom = %q, want %q", result.ResumedFrom, "COMPLETED sprint")
+	}
+	if result.SprintAdvanced == nil {
+		t.Fatal("Expected sprint advance")
+	}
+	if result.SprintAdvanced.NewSprintNumber != 2 {
+		t.Errorf("NewSprintNumber = %d, want 2", result.SprintAdvanced.NewSprintNumber)
+	}
+
+	// Child task should be in new sprint's planned scope
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.Status != models.SprintStatusInProgress {
+		t.Errorf("Sprint status = %v, want IN_PROGRESS", readState.Sprint.Status)
+	}
+	if readState.Sprint.Number != 2 {
+		t.Errorf("Sprint number = %d, want 2", readState.Sprint.Number)
+	}
+	// The child task (DRAFT, non-terminal) should be carried forward
+	found := false
+	for _, id := range readState.Sprint.Scope.Planned {
+		if id == "plan-1-code-plan-to-coding-0" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Child task not in new sprint planned scope: %v", readState.Sprint.Scope.Planned)
 	}
 }
 

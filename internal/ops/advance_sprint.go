@@ -159,6 +159,34 @@ func writeSprintArchive(archivePath string, sprint *models.Sprint) error {
 	return nil
 }
 
+// planSprintAdvanceFromCompleted validates preconditions and computes all
+// derived values for advancing from a COMPLETED sprint. Unlike planSprintAdvance
+// (which requires CHECKPOINT), this handles the sub-pipeline flow where the
+// sprint was marked COMPLETED after all tasks reached sprint-terminal state.
+func planSprintAdvanceFromCompleted(s *models.State, now time.Time) (*sprintAdvancePlan, error) {
+	if s.Sprint.Status != models.SprintStatusCompleted {
+		return nil, fmt.Errorf("cannot advance sprint: status is %s, expected COMPLETED", s.Sprint.Status)
+	}
+
+	archivedSprint := s.Sprint
+	if archivedSprint.Number == 0 {
+		archivedSprint.Number = 1
+	}
+	ended := now
+	archivedSprint.Timeline.Ended = &ended
+
+	newNumber := archivedSprint.Number + 1
+	newSprintID := fmt.Sprintf("sprint-%d", newNumber)
+	carriedTasks := collectNonTerminalTaskIDs(s)
+
+	return &sprintAdvancePlan{
+		archivedSprint: archivedSprint,
+		newSprintID:    newSprintID,
+		newNumber:      newNumber,
+		carriedTasks:   carriedTasks,
+	}, nil
+}
+
 // collectNonTerminalTaskIDs returns IDs of tasks not in a terminal state.
 func collectNonTerminalTaskIDs(state *models.State) []string {
 	var carried []string
