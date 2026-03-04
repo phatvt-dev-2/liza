@@ -21,6 +21,12 @@ func TestTaskStatusConstants(t *testing.T) {
 		TaskStatusAbandoned,
 		TaskStatusSuperseded,
 		TaskStatusIntegrationFailed,
+		TaskStatusDraftCodingPlan,
+		TaskStatusCodePlanning,
+		TaskStatusCodingPlanToReview,
+		TaskStatusReviewingCodingPlan,
+		TaskStatusCodingPlanApproved,
+		TaskStatusCodingPlanRejected,
 	}
 
 	for _, status := range validStatuses {
@@ -74,6 +80,9 @@ func TestTaskTransitionMapCompleteness(t *testing.T) {
 		TaskStatusReadyForReview, TaskStatusReviewing, TaskStatusRejected,
 		TaskStatusApproved, TaskStatusMerged, TaskStatusBlocked,
 		TaskStatusAbandoned, TaskStatusSuperseded, TaskStatusIntegrationFailed,
+		TaskStatusDraftCodingPlan, TaskStatusCodePlanning,
+		TaskStatusCodingPlanToReview, TaskStatusReviewingCodingPlan,
+		TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected,
 	}
 	for _, s := range allStatuses {
 		if _, ok := taskTransitions[s]; !ok {
@@ -1141,6 +1150,220 @@ func TestFindTaskIndex(t *testing.T) {
 			t.Errorf("FindTaskIndex on empty state = %d, want -1", got)
 		}
 	})
+}
+
+func TestCodePlanningTransitions(t *testing.T) {
+	tests := []struct {
+		from TaskStatus
+		to   TaskStatus
+		want bool
+	}{
+		// Valid code-planning pair transitions
+		{TaskStatusDraftCodingPlan, TaskStatusCodePlanning, true},
+		{TaskStatusDraftCodingPlan, TaskStatusAbandoned, true},
+		{TaskStatusCodePlanning, TaskStatusCodingPlanToReview, true},
+		{TaskStatusCodePlanning, TaskStatusBlocked, true},
+		{TaskStatusCodePlanning, TaskStatusDraftCodingPlan, true},
+		{TaskStatusCodingPlanToReview, TaskStatusReviewingCodingPlan, true},
+		{TaskStatusReviewingCodingPlan, TaskStatusCodingPlanApproved, true},
+		{TaskStatusReviewingCodingPlan, TaskStatusCodingPlanRejected, true},
+		{TaskStatusReviewingCodingPlan, TaskStatusCodingPlanToReview, true},
+		{TaskStatusCodingPlanRejected, TaskStatusCodePlanning, true},
+		{TaskStatusCodingPlanRejected, TaskStatusBlocked, true},
+		{TaskStatusCodingPlanRejected, TaskStatusSuperseded, true},
+		{TaskStatusCodingPlanRejected, TaskStatusAbandoned, true},
+
+		// Terminal — no transitions out
+		{TaskStatusCodingPlanApproved, TaskStatusDraftCodingPlan, false},
+
+		// Invalid cross-pair transitions
+		{TaskStatusDraftCodingPlan, TaskStatusImplementing, false},
+		{TaskStatusCodePlanning, TaskStatusReadyForReview, false},
+		{TaskStatusCodingPlanApproved, TaskStatusMerged, false},
+	}
+
+	for _, tt := range tests {
+		name := string(tt.from) + "→" + string(tt.to)
+		t.Run(name, func(t *testing.T) {
+			got := tt.from.CanTransition(tt.to)
+			if got != tt.want {
+				t.Errorf("CanTransition(%s, %s) = %v, want %v", tt.from, tt.to, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCodingPlanApprovedIsSprintTerminal(t *testing.T) {
+	// CODING_PLAN_APPROVED is sprint-terminal but NOT globally terminal
+	// (it's terminal for the code-planning pair, not for the whole task lifecycle)
+	if TaskStatusCodingPlanApproved.IsTerminal() {
+		t.Error("CODING_PLAN_APPROVED should NOT be globally terminal (it's sprint-terminal)")
+	}
+}
+
+func TestRolePairField(t *testing.T) {
+	task := Task{
+		ID:       "task-1",
+		Status:   TaskStatusDraftCodingPlan,
+		RolePair: "code-planning-pair",
+	}
+
+	data, err := yaml.Marshal(&task)
+	if err != nil {
+		t.Fatalf("Failed to marshal task with role_pair: %v", err)
+	}
+
+	yamlStr := string(data)
+	if !containsField(yamlStr, "role_pair:") {
+		t.Error("YAML output should contain role_pair field")
+	}
+
+	var unmarshaled Task
+	err = yaml.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal task with role_pair: %v", err)
+	}
+	if unmarshaled.RolePair != "code-planning-pair" {
+		t.Errorf("RolePair = %q, want %q", unmarshaled.RolePair, "code-planning-pair")
+	}
+}
+
+func TestRolePairFieldOmittedWhenEmpty(t *testing.T) {
+	task := Task{
+		ID:     "task-1",
+		Status: TaskStatusDraft,
+	}
+
+	data, err := yaml.Marshal(&task)
+	if err != nil {
+		t.Fatalf("Failed to marshal task: %v", err)
+	}
+
+	if containsField(string(data), "role_pair:") {
+		t.Error("role_pair should be omitted when empty")
+	}
+}
+
+func TestRoleConstants_CodePlanning(t *testing.T) {
+	if RoleCodePlanner != "code_planner" {
+		t.Errorf("RoleCodePlanner = %q, want %q", RoleCodePlanner, "code_planner")
+	}
+	if RoleCodePlanReviewer != "code_plan_reviewer" {
+		t.Errorf("RoleCodePlanReviewer = %q, want %q", RoleCodePlanReviewer, "code_plan_reviewer")
+	}
+}
+
+func TestIsClaimable_CodePlanningRoles(t *testing.T) {
+	tests := []struct {
+		name      string
+		task      Task
+		role      string
+		claimable bool
+	}{
+		{
+			name:      "code_planner can claim DRAFT_CODING_PLAN",
+			task:      Task{Status: TaskStatusDraftCodingPlan, RolePair: "code-planning-pair"},
+			role:      RoleCodePlanner,
+			claimable: true,
+		},
+		{
+			name:      "code_planner can claim CODING_PLAN_REJECTED",
+			task:      Task{Status: TaskStatusCodingPlanRejected, RolePair: "code-planning-pair"},
+			role:      RoleCodePlanner,
+			claimable: true,
+		},
+		{
+			name:      "code_plan_reviewer can claim CODING_PLAN_TO_REVIEW",
+			task:      Task{Status: TaskStatusCodingPlanToReview, RolePair: "code-planning-pair"},
+			role:      RoleCodePlanReviewer,
+			claimable: true,
+		},
+		{
+			name:      "code_plan_reviewer cannot claim DRAFT_CODING_PLAN",
+			task:      Task{Status: TaskStatusDraftCodingPlan, RolePair: "code-planning-pair"},
+			role:      RoleCodePlanReviewer,
+			claimable: false,
+		},
+		{
+			name:      "code_planner cannot claim CODING_PLAN_TO_REVIEW",
+			task:      Task{Status: TaskStatusCodingPlanToReview, RolePair: "code-planning-pair"},
+			role:      RoleCodePlanner,
+			claimable: false,
+		},
+		{
+			name:      "coder cannot claim DRAFT_CODING_PLAN",
+			task:      Task{Status: TaskStatusDraftCodingPlan, RolePair: "code-planning-pair"},
+			role:      RoleCoder,
+			claimable: false,
+		},
+		{
+			name:      "code_reviewer cannot claim CODING_PLAN_TO_REVIEW",
+			task:      Task{Status: TaskStatusCodingPlanToReview, RolePair: "code-planning-pair"},
+			role:      RoleCodeReviewer,
+			claimable: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.task.IsClaimable(tt.role, nil)
+			if result != tt.claimable {
+				t.Errorf("IsClaimable(%q) = %v, want %v", tt.role, result, tt.claimable)
+			}
+		})
+	}
+}
+
+func TestAllPlannedTasksTerminal_WithCodingPlanApproved(t *testing.T) {
+	now := time.Now().UTC()
+	mkTask := func(id string, status TaskStatus) Task {
+		return Task{ID: id, Status: status, Created: now, Priority: 1, Iteration: 1}
+	}
+
+	tests := []struct {
+		name    string
+		planned []string
+		tasks   []Task
+		want    bool
+	}{
+		{
+			name:    "all CODING_PLAN_APPROVED",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusCodingPlanApproved), mkTask("task-2", TaskStatusCodingPlanApproved)},
+			want:    true,
+		},
+		{
+			name:    "mix CODING_PLAN_APPROVED and MERGED",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusCodingPlanApproved), mkTask("task-2", TaskStatusMerged)},
+			want:    true,
+		},
+		{
+			name:    "mix CODING_PLAN_APPROVED and ABANDONED",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusCodingPlanApproved), mkTask("task-2", TaskStatusAbandoned)},
+			want:    true,
+		},
+		{
+			name:    "CODING_PLAN_APPROVED with non-terminal",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusCodingPlanApproved), mkTask("task-2", TaskStatusCodePlanning)},
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &State{
+				Sprint: Sprint{Scope: SprintScope{Planned: tt.planned}},
+				Tasks:  tt.tasks,
+			}
+			got := state.AllPlannedTasksTerminal()
+			if got != tt.want {
+				t.Errorf("AllPlannedTasksTerminal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestAllPlannedTasksTerminal(t *testing.T) {

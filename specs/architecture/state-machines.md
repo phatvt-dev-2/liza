@@ -111,6 +111,68 @@ When new task types are added (e.g., `specification`, `architecture`), they defi
 > for claimability and state resolution — see [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md)
 > §Task model extension. The `type` field may remain as a human-readable category.
 
+### Code-Planning Pair State Machine
+
+The code-planning pair introduces a parallel state cycle for plan creation and review,
+analogous to the coding pair (IMPLEMENTING → READY_FOR_REVIEW → REVIEWING → APPROVED/REJECTED).
+
+| State | Description | Valid Transitions |
+|-------|-------------|-------------------|
+| DRAFT_CODING_PLAN | Task created, awaiting Code Planner claim | → CODE_PLANNING |
+| CODE_PLANNING | Code Planner working | → CODING_PLAN_TO_REVIEW, BLOCKED, DRAFT_CODING_PLAN |
+| CODING_PLAN_TO_REVIEW | Code Planner done, awaiting Code Plan Reviewer | → REVIEWING_CODING_PLAN |
+| REVIEWING_CODING_PLAN | Code Plan Reviewer active | → CODING_PLAN_APPROVED, CODING_PLAN_REJECTED, CODING_PLAN_TO_REVIEW (stale lease) |
+| CODING_PLAN_REJECTED | Code Plan Reviewer rejected, feedback provided | → CODE_PLANNING (supervisor reclaims for planner) |
+| CODING_PLAN_APPROVED | Code Plan Reviewer approved | Sprint-terminal (transition to coding pair via `liza proceed`) |
+
+```
+     ┌────────────────────────────────────────────┐
+     │          DRAFT_CODING_PLAN                  │
+     │  (Orchestrator created, planners claim)     │
+     └──────────────────┬─────────────────────────┘
+                        │ claim
+                        ▼
+     ┌────────────────────────────────────────────┐
+     │           CODE_PLANNING                     │
+     │       (Code Planner working)                │
+     └─────────┬────────────────────┬─────────────┘
+               │                    │
+     submit_plan              blocked
+               │                    │
+               ▼                    ▼
+     ┌─────────────────────┐ ┌──────────────┐
+     │CODING_PLAN_TO_REVIEW│ │   BLOCKED    │
+     └────────┬────────────┘ └──────────────┘
+              │
+       assign_reviewer
+              │
+              ▼
+     ┌────────────────────────┐
+     │ REVIEWING_CODING_PLAN  │
+     └────────┬───────────────┘
+       ┌──────┴──────┐
+       │             │
+    approve       reject
+       │             │
+       ▼             ▼
+┌─────────────────────┐  ┌─────────────────────┐
+│CODING_PLAN_APPROVED │  │CODING_PLAN_REJECTED │
+└─────────────────────┘  └─────────┬───────────┘
+  Sprint-terminal                  │
+  (→ coding pair                resume (CODE_PLANNING)
+   via liza proceed)
+```
+
+**Sprint-terminal:** CODING_PLAN_APPROVED is terminal for sprint completion (alongside MERGED, ABANDONED, SUPERSEDED).
+The transition CODING_PLAN_APPROVED → DRAFT (coding pair) is a human privilege via `liza proceed`.
+
+**Claimability:**
+
+| Role | Claims | States |
+|------|--------|--------|
+| Code Planner (`code_planner`) | DRAFT_CODING_PLAN, CODING_PLAN_REJECTED | Doer role |
+| Code Plan Reviewer (`code_plan_reviewer`) | CODING_PLAN_TO_REVIEW | Reviewer role |
+
 ### Forbidden Transitions
 
 - DRAFT → IMPLEMENTING (coders cannot claim drafts)
@@ -417,10 +479,22 @@ task_states:
     - ABANDONED
     - SUPERSEDED
     - INTEGRATION_FAILED
+    # Code-planning pair states
+    - DRAFT_CODING_PLAN
+    - CODE_PLANNING
+    - CODING_PLAN_TO_REVIEW
+    - REVIEWING_CODING_PLAN
+    - CODING_PLAN_APPROVED
+    - CODING_PLAN_REJECTED
   terminal:
     - MERGED
     - ABANDONED
     - SUPERSEDED
+  sprint_terminal:
+    - MERGED
+    - ABANDONED
+    - SUPERSEDED
+    - CODING_PLAN_APPROVED
 
 agent_states:
   - STARTING
@@ -443,6 +517,18 @@ invariants:
   - "BLOCKED task must have blocked_reason"
   - "SUPERSEDED task must have superseded_by and rescope_reason"
   - "MERGED task must not have worktree"
+  # Code-planning pair invariants
+  - "DRAFT_CODING_PLAN task cannot have assigned_to"
+  - "CODE_PLANNING task must have assigned_to"
+  - "CODE_PLANNING task must have worktree"
+  - "CODE_PLANNING task must have base_commit"
+  - "CODE_PLANNING task must have lease_expires"
+  - "CODING_PLAN_TO_REVIEW task must have review_commit"
+  - "REVIEWING_CODING_PLAN task must have reviewing_by"
+  - "REVIEWING_CODING_PLAN task must have review_lease_expires"
+  - "REVIEWING_CODING_PLAN task must have review_commit"
+  - "CODING_PLAN_APPROVED task must have review_commit"
+  - "CODING_PLAN_REJECTED task must have rejection_reason"
   - "Agent WORKING must have task"
   - "Agent WORKING should have lease_expires in future (warning if expired beyond grace period of 60s — may indicate long-running operation)"
   - "No two agents assigned to same task"

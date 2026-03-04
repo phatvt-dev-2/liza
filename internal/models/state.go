@@ -36,9 +36,11 @@ const (
 // Role name constants used in task workflow definitions.
 // These are aliases for the canonical definitions in the roles package.
 const (
-	RoleCoder        = roles.WorkflowCoder
-	RoleCodeReviewer = roles.WorkflowCodeReviewer
-	RoleOrchestrator = roles.WorkflowOrchestrator
+	RoleCoder            = roles.WorkflowCoder
+	RoleCodeReviewer     = roles.WorkflowCodeReviewer
+	RoleOrchestrator     = roles.WorkflowOrchestrator
+	RoleCodePlanner      = roles.WorkflowCodePlanner
+	RoleCodePlanReviewer = roles.WorkflowCodePlanReviewer
 )
 
 // taskWorkflows maps each TaskType to its ordered role sequence.
@@ -91,6 +93,14 @@ const (
 	TaskStatusAbandoned         TaskStatus = "ABANDONED"
 	TaskStatusSuperseded        TaskStatus = "SUPERSEDED"
 	TaskStatusIntegrationFailed TaskStatus = "INTEGRATION_FAILED"
+
+	// Code-planning pair states
+	TaskStatusDraftCodingPlan     TaskStatus = "DRAFT_CODING_PLAN"
+	TaskStatusCodePlanning        TaskStatus = "CODE_PLANNING"
+	TaskStatusCodingPlanToReview  TaskStatus = "CODING_PLAN_TO_REVIEW"
+	TaskStatusReviewingCodingPlan TaskStatus = "REVIEWING_CODING_PLAN"
+	TaskStatusCodingPlanApproved  TaskStatus = "CODING_PLAN_APPROVED"
+	TaskStatusCodingPlanRejected  TaskStatus = "CODING_PLAN_REJECTED"
 )
 
 // IsValid checks if the task status is valid
@@ -99,7 +109,10 @@ func (ts TaskStatus) IsValid() bool {
 	case TaskStatusDraft, TaskStatusReady, TaskStatusImplementing,
 		TaskStatusReadyForReview, TaskStatusReviewing, TaskStatusRejected,
 		TaskStatusApproved, TaskStatusMerged, TaskStatusBlocked,
-		TaskStatusAbandoned, TaskStatusSuperseded, TaskStatusIntegrationFailed:
+		TaskStatusAbandoned, TaskStatusSuperseded, TaskStatusIntegrationFailed,
+		TaskStatusDraftCodingPlan, TaskStatusCodePlanning,
+		TaskStatusCodingPlanToReview, TaskStatusReviewingCodingPlan,
+		TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected:
 		return true
 	}
 	return false
@@ -125,6 +138,14 @@ var taskTransitions = map[TaskStatus][]TaskStatus{
 	TaskStatusMerged:            {},
 	TaskStatusAbandoned:         {},
 	TaskStatusSuperseded:        {},
+
+	// Code-planning pair transitions
+	TaskStatusDraftCodingPlan:     {TaskStatusCodePlanning, TaskStatusAbandoned},
+	TaskStatusCodePlanning:        {TaskStatusCodingPlanToReview, TaskStatusBlocked, TaskStatusDraftCodingPlan},
+	TaskStatusCodingPlanToReview:  {TaskStatusReviewingCodingPlan},
+	TaskStatusReviewingCodingPlan: {TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected, TaskStatusCodingPlanToReview},
+	TaskStatusCodingPlanRejected:  {TaskStatusCodePlanning, TaskStatusBlocked, TaskStatusSuperseded, TaskStatusAbandoned},
+	TaskStatusCodingPlanApproved:  {},
 }
 
 // CanTransition reports whether a transition from ts to the given target status is valid.
@@ -146,6 +167,7 @@ func (t *Task) Transition(to TaskStatus) error {
 type Task struct {
 	ID                  string             `yaml:"id"`
 	Type                TaskType           `yaml:"type,omitempty"`
+	RolePair            string             `yaml:"role_pair,omitempty"`
 	Description         string             `yaml:"description"`
 	Status              TaskStatus         `yaml:"status"`
 	Priority            int                `yaml:"priority"`
@@ -192,19 +214,28 @@ func (t *Task) EffectiveType() TaskType {
 
 // IsClaimable checks if a task is claimable by the given role based on its type, status, and dependencies.
 func (t *Task) IsClaimable(role string, allTasks []Task) bool {
-	// Check that the task type includes this role
-	if !t.EffectiveType().HasRole(role) {
-		return false
-	}
-
 	// Check if status allows claiming for this role using the transition map.
 	switch role {
 	case RoleCoder:
+		if !t.EffectiveType().HasRole(role) {
+			return false
+		}
 		if !t.Status.CanTransition(TaskStatusImplementing) {
 			return false
 		}
 	case RoleCodeReviewer:
+		if !t.EffectiveType().HasRole(role) {
+			return false
+		}
 		if !t.Status.CanTransition(TaskStatusReviewing) {
+			return false
+		}
+	case RoleCodePlanner:
+		if !t.Status.CanTransition(TaskStatusCodePlanning) {
+			return false
+		}
+	case RoleCodePlanReviewer:
+		if !t.Status.CanTransition(TaskStatusReviewingCodingPlan) {
 			return false
 		}
 	case RoleOrchestrator:
@@ -302,16 +333,23 @@ func (s *State) FindTaskIndex(taskID string) int {
 	return -1
 }
 
+// IsSprintTerminal checks if the task status is terminal for sprint completion purposes.
+// This includes globally terminal states (MERGED, ABANDONED, SUPERSEDED) and
+// role-pair-specific sprint-terminal states (CODING_PLAN_APPROVED).
+func (ts TaskStatus) IsSprintTerminal() bool {
+	return ts.IsTerminal() || ts == TaskStatusCodingPlanApproved
+}
+
 // AllPlannedTasksTerminal returns true if the sprint has planned tasks and all of
-// them are in a terminal state (MERGED, ABANDONED, SUPERSEDED). Returns false if
-// the planned list is empty or any planned task is not found/not terminal.
+// them are in a sprint-terminal state. Returns false if the planned list is empty
+// or any planned task is not found/not sprint-terminal.
 func (s *State) AllPlannedTasksTerminal() bool {
 	if len(s.Sprint.Scope.Planned) == 0 {
 		return false
 	}
 	for _, taskID := range s.Sprint.Scope.Planned {
 		task := s.FindTask(taskID)
-		if task == nil || !task.Status.IsTerminal() {
+		if task == nil || !task.Status.IsSprintTerminal() {
 			return false
 		}
 	}
@@ -319,7 +357,7 @@ func (s *State) AllPlannedTasksTerminal() bool {
 }
 
 // SprintStalled returns true if the sprint has planned tasks and every planned
-// task is either terminal or BLOCKED, with at least one BLOCKED. This indicates
+// task is either sprint-terminal or BLOCKED, with at least one BLOCKED. This indicates
 // no agent can make progress — the sprint is stuck and needs human intervention.
 func (s *State) SprintStalled() bool {
 	if len(s.Sprint.Scope.Planned) == 0 {
@@ -333,7 +371,7 @@ func (s *State) SprintStalled() bool {
 		}
 		if task.Status == TaskStatusBlocked {
 			hasBlocked = true
-		} else if !task.Status.IsTerminal() {
+		} else if !task.Status.IsSprintTerminal() {
 			return false
 		}
 	}

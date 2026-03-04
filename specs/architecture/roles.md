@@ -10,6 +10,8 @@
 | Canonical Name | YAML Identifier | Agent ID Prefix | Agent Name Pattern |
 |----------------|-----------------|-----------------|-------------------|
 | Orchestrator | `orchestrator` | `orchestrator-` | `orchestrator-1`, `orchestrator-2` |
+| Code Planner | `code_planner` | `code-planner-` | `code-planner-1`, `code-planner-2` |
+| Code Plan Reviewer | `code_plan_reviewer` | `code-plan-reviewer-` | `code-plan-reviewer-1`, `code-plan-reviewer-2` |
 | Coder | `coder` | `coder-` | `coder-1`, `coder-2` |
 | Code Reviewer | `code_reviewer` | `code-reviewer-` | `code-reviewer-1`, `code-reviewer-2` |
 
@@ -19,7 +21,7 @@
 - **Agent IDs:** Use prefix form (`code-reviewer-1`, `coder-2`)
 - **Role → ID mapping:** `code_reviewer` maps to `code-reviewer-` prefix
 
-**ID Validation Regex:** `^(coder|code-reviewer|orchestrator)-[0-9]+$`
+**ID Validation Regex:** `^(coder|code-reviewer|orchestrator|code-planner|code-plan-reviewer)-[0-9]+$`
 
 ## Multiple Agents Per Role
 

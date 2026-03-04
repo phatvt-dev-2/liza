@@ -7,31 +7,39 @@ import "fmt"
 // Runtime role names used in agent configuration, CLI, and supervisor.
 // These are the hyphenated forms that appear in agent IDs like "code-reviewer-1".
 const (
-	RuntimeCoder        = "coder"
-	RuntimeCodeReviewer = "code-reviewer"
-	RuntimeOrchestrator = "orchestrator"
+	RuntimeCoder            = "coder"
+	RuntimeCodeReviewer     = "code-reviewer"
+	RuntimeOrchestrator     = "orchestrator"
+	RuntimeCodePlanner      = "code-planner"
+	RuntimeCodePlanReviewer = "code-plan-reviewer"
 )
 
 // Workflow role names used in task workflow definitions.
 // These are the underscore forms stored in models.
 const (
-	WorkflowCoder        = "coder"
-	WorkflowCodeReviewer = "code_reviewer"
-	WorkflowOrchestrator = "orchestrator"
+	WorkflowCoder            = "coder"
+	WorkflowCodeReviewer     = "code_reviewer"
+	WorkflowOrchestrator     = "orchestrator"
+	WorkflowCodePlanner      = "code_planner"
+	WorkflowCodePlanReviewer = "code_plan_reviewer"
 )
 
 // runtimeToWorkflow maps runtime role names to workflow role names.
 var runtimeToWorkflow = map[string]string{
-	RuntimeCoder:        WorkflowCoder,
-	RuntimeCodeReviewer: WorkflowCodeReviewer,
-	RuntimeOrchestrator: WorkflowOrchestrator,
+	RuntimeCoder:            WorkflowCoder,
+	RuntimeCodeReviewer:     WorkflowCodeReviewer,
+	RuntimeOrchestrator:     WorkflowOrchestrator,
+	RuntimeCodePlanner:      WorkflowCodePlanner,
+	RuntimeCodePlanReviewer: WorkflowCodePlanReviewer,
 }
 
 // workflowToRuntime maps workflow role names to runtime role names.
 var workflowToRuntime = map[string]string{
-	WorkflowCoder:        RuntimeCoder,
-	WorkflowCodeReviewer: RuntimeCodeReviewer,
-	WorkflowOrchestrator: RuntimeOrchestrator,
+	WorkflowCoder:            RuntimeCoder,
+	WorkflowCodeReviewer:     RuntimeCodeReviewer,
+	WorkflowOrchestrator:     RuntimeOrchestrator,
+	WorkflowCodePlanner:      RuntimeCodePlanner,
+	WorkflowCodePlanReviewer: RuntimeCodePlanReviewer,
 }
 
 // ToWorkflow converts a runtime role name to its workflow equivalent.
@@ -66,10 +74,10 @@ func IsValidWorkflow(role string) bool {
 
 // AllRuntime returns all valid runtime role names.
 func AllRuntime() []string {
-	return []string{RuntimeCoder, RuntimeCodeReviewer, RuntimeOrchestrator}
+	return []string{RuntimeCoder, RuntimeCodeReviewer, RuntimeOrchestrator, RuntimeCodePlanner, RuntimeCodePlanReviewer}
 }
 
 // AllWorkflow returns all valid workflow role names.
 func AllWorkflow() []string {
-	return []string{WorkflowCoder, WorkflowCodeReviewer, WorkflowOrchestrator}
+	return []string{WorkflowCoder, WorkflowCodeReviewer, WorkflowOrchestrator, WorkflowCodePlanner, WorkflowCodePlanReviewer}
 }

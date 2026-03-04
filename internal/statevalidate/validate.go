@@ -120,6 +120,11 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			return fmt.Errorf("DRAFT task with assigned_to: %s", task.ID)
 		}
 
+		// DRAFT_CODING_PLAN cannot have assigned_to
+		if task.Status == models.TaskStatusDraftCodingPlan && task.AssignedTo != nil {
+			return fmt.Errorf("DRAFT_CODING_PLAN task with assigned_to: %s", task.ID)
+		}
+
 		// IMPLEMENTING must have assigned_to
 		if task.Status == models.TaskStatusImplementing && task.AssignedTo == nil {
 			return fmt.Errorf("IMPLEMENTING task without assigned_to: %s", task.ID)
@@ -138,6 +143,54 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		// IMPLEMENTING must have lease_expires
 		if task.Status == models.TaskStatusImplementing && task.LeaseExpires == nil {
 			return fmt.Errorf("IMPLEMENTING task without lease_expires: %s", task.ID)
+		}
+
+		// CODE_PLANNING must have assigned_to
+		if task.Status == models.TaskStatusCodePlanning && task.AssignedTo == nil {
+			return fmt.Errorf("CODE_PLANNING task without assigned_to: %s", task.ID)
+		}
+
+		// CODE_PLANNING must have worktree
+		if task.Status == models.TaskStatusCodePlanning && task.Worktree == nil {
+			return fmt.Errorf("CODE_PLANNING task without worktree: %s", task.ID)
+		}
+
+		// CODE_PLANNING must have base_commit
+		if task.Status == models.TaskStatusCodePlanning && task.BaseCommit == nil {
+			return fmt.Errorf("CODE_PLANNING task without base_commit: %s", task.ID)
+		}
+
+		// CODE_PLANNING must have lease_expires
+		if task.Status == models.TaskStatusCodePlanning && task.LeaseExpires == nil {
+			return fmt.Errorf("CODE_PLANNING task without lease_expires: %s", task.ID)
+		}
+
+		// CODING_PLAN_TO_REVIEW must have review_commit
+		if task.Status == models.TaskStatusCodingPlanToReview && task.ReviewCommit == nil {
+			return fmt.Errorf("CODING_PLAN_TO_REVIEW task without review_commit: %s", task.ID)
+		}
+
+		// REVIEWING_CODING_PLAN must have reviewing_by, review_lease_expires, and review_commit
+		if task.Status == models.TaskStatusReviewingCodingPlan {
+			if task.ReviewingBy == nil {
+				return fmt.Errorf("REVIEWING_CODING_PLAN task without reviewing_by: %s", task.ID)
+			}
+			if task.ReviewLeaseExpires == nil {
+				return fmt.Errorf("REVIEWING_CODING_PLAN task without review_lease_expires: %s", task.ID)
+			}
+			if task.ReviewCommit == nil {
+				return fmt.Errorf("REVIEWING_CODING_PLAN task without review_commit: %s", task.ID)
+			}
+		}
+
+		// CODING_PLAN_APPROVED must have review_commit
+		if task.Status == models.TaskStatusCodingPlanApproved && task.ReviewCommit == nil {
+			return fmt.Errorf("CODING_PLAN_APPROVED task without review_commit: %s", task.ID)
+		}
+
+		// CODING_PLAN_REJECTED must have rejection_reason
+		if task.Status == models.TaskStatusCodingPlanRejected && task.RejectionReason == nil {
+			return fmt.Errorf("CODING_PLAN_REJECTED task without rejection_reason: %s", task.ID)
 		}
 
 		// READY_FOR_REVIEW must have review_commit
@@ -193,14 +246,14 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 		}
 
-		// Track assignments for duplicate check (only IMPLEMENTING tasks count as active)
-		if task.AssignedTo != nil && task.Status == models.TaskStatusImplementing {
+		// Track assignments for duplicate check (IMPLEMENTING and CODE_PLANNING tasks count as active)
+		if task.AssignedTo != nil && (task.Status == models.TaskStatusImplementing || task.Status == models.TaskStatusCodePlanning) {
 			agent := *task.AssignedTo
 			assignments[agent] = append(assignments[agent], task.ID)
 		}
 
-		// IMPLEMENTING worktree path must exist (only check if projectRoot is not empty to allow tests)
-		if task.Status == models.TaskStatusImplementing && task.Worktree != nil && projectRoot != "" {
+		// IMPLEMENTING/CODE_PLANNING worktree path must exist (only check if projectRoot is not empty to allow tests)
+		if (task.Status == models.TaskStatusImplementing || task.Status == models.TaskStatusCodePlanning) && task.Worktree != nil && projectRoot != "" {
 			wtPath := filepath.Join(projectRoot, *task.Worktree)
 			if _, err := os.Stat(wtPath); os.IsNotExist(err) {
 				return fmt.Errorf("IMPLEMENTING task %s has worktree=%s but directory does not exist", task.ID, *task.Worktree)
@@ -503,6 +556,7 @@ func buildTaskIDSet(tasks []models.Task) map[string]bool {
 
 func requiresCompletionFields(status models.TaskStatus) bool {
 	return status != models.TaskStatusDraft &&
+		status != models.TaskStatusDraftCodingPlan &&
 		status != models.TaskStatusSuperseded &&
 		status != models.TaskStatusAbandoned
 }
