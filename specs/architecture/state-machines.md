@@ -122,7 +122,7 @@ analogous to the coding pair (IMPLEMENTING → READY_FOR_REVIEW → REVIEWING �
 | CODE_PLANNING | Code Planner working | → CODING_PLAN_TO_REVIEW, BLOCKED, DRAFT_CODING_PLAN |
 | CODING_PLAN_TO_REVIEW | Code Planner done, awaiting Code Plan Reviewer | → REVIEWING_CODING_PLAN |
 | REVIEWING_CODING_PLAN | Code Plan Reviewer active | → CODING_PLAN_APPROVED, CODING_PLAN_REJECTED, CODING_PLAN_TO_REVIEW (stale lease) |
-| CODING_PLAN_REJECTED | Code Plan Reviewer rejected, feedback provided | → CODE_PLANNING (supervisor reclaims for planner) |
+| CODING_PLAN_REJECTED | Code Plan Reviewer rejected, feedback provided | → DRAFT_CODING_PLAN (supervisor reclaims for planner) |
 | CODING_PLAN_APPROVED | Code Plan Reviewer approved | Sprint-terminal (transition to coding pair via `liza proceed`) |
 
 ```
@@ -170,7 +170,7 @@ The transition CODING_PLAN_APPROVED → DRAFT (coding pair) is a human privilege
 
 | Role | Claims | States |
 |------|--------|--------|
-| Code Planner (`code_planner`) | DRAFT_CODING_PLAN, CODING_PLAN_REJECTED | Doer role |
+| Code Planner (`code_planner`) | DRAFT_CODING_PLAN | Doer role (supervisor transitions CODING_PLAN_REJECTED → DRAFT_CODING_PLAN first) |
 | Code Plan Reviewer (`code_plan_reviewer`) | CODING_PLAN_TO_REVIEW | Reviewer role |
 
 ### Forbidden Transitions

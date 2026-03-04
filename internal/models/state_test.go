@@ -1168,7 +1168,7 @@ func TestCodePlanningTransitions(t *testing.T) {
 		{TaskStatusReviewingCodingPlan, TaskStatusCodingPlanApproved, true},
 		{TaskStatusReviewingCodingPlan, TaskStatusCodingPlanRejected, true},
 		{TaskStatusReviewingCodingPlan, TaskStatusCodingPlanToReview, true},
-		{TaskStatusCodingPlanRejected, TaskStatusCodePlanning, true},
+		{TaskStatusCodingPlanRejected, TaskStatusDraftCodingPlan, true},
 		{TaskStatusCodingPlanRejected, TaskStatusBlocked, true},
 		{TaskStatusCodingPlanRejected, TaskStatusSuperseded, true},
 		{TaskStatusCodingPlanRejected, TaskStatusAbandoned, true},
@@ -1267,10 +1267,10 @@ func TestIsClaimable_CodePlanningRoles(t *testing.T) {
 			claimable: true,
 		},
 		{
-			name:      "code_planner can claim CODING_PLAN_REJECTED",
+			name:      "code_planner cannot claim CODING_PLAN_REJECTED directly",
 			task:      Task{Status: TaskStatusCodingPlanRejected, RolePair: "code-planning-pair"},
 			role:      RoleCodePlanner,
-			claimable: true,
+			claimable: false,
 		},
 		{
 			name:      "code_plan_reviewer can claim CODING_PLAN_TO_REVIEW",

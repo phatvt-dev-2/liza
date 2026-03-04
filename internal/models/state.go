@@ -144,7 +144,7 @@ var taskTransitions = map[TaskStatus][]TaskStatus{
 	TaskStatusCodePlanning:        {TaskStatusCodingPlanToReview, TaskStatusBlocked, TaskStatusDraftCodingPlan},
 	TaskStatusCodingPlanToReview:  {TaskStatusReviewingCodingPlan},
 	TaskStatusReviewingCodingPlan: {TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected, TaskStatusCodingPlanToReview},
-	TaskStatusCodingPlanRejected:  {TaskStatusCodePlanning, TaskStatusBlocked, TaskStatusSuperseded, TaskStatusAbandoned},
+	TaskStatusCodingPlanRejected:  {TaskStatusDraftCodingPlan, TaskStatusBlocked, TaskStatusSuperseded, TaskStatusAbandoned},
 	TaskStatusCodingPlanApproved:  {},
 }
 
