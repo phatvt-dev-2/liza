@@ -318,6 +318,28 @@ func (s *State) AllPlannedTasksTerminal() bool {
 	return true
 }
 
+// SprintStalled returns true if the sprint has planned tasks and every planned
+// task is either terminal or BLOCKED, with at least one BLOCKED. This indicates
+// no agent can make progress — the sprint is stuck and needs human intervention.
+func (s *State) SprintStalled() bool {
+	if len(s.Sprint.Scope.Planned) == 0 {
+		return false
+	}
+	hasBlocked := false
+	for _, taskID := range s.Sprint.Scope.Planned {
+		task := s.FindTask(taskID)
+		if task == nil {
+			return false
+		}
+		if task.Status == TaskStatusBlocked {
+			hasBlocked = true
+		} else if !task.Status.IsTerminal() {
+			return false
+		}
+	}
+	return hasBlocked
+}
+
 // Agent represents an agent (coder, reviewer, planner) in the system
 type Agent struct {
 	Role            string         `yaml:"role"`

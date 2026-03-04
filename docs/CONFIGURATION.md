@@ -156,6 +156,8 @@ CIRCUIT_BREAKER_TRIPPED -> RUNNING (liza resume, after fixing root cause)
 
 When `liza watch` triggers the circuit breaker, it also sets `sprint.status` to `CHECKPOINT`.
 
+`liza watch` also auto-checkpoints when all non-terminal planned tasks are BLOCKED (sprint stalled), since no agent can make further progress without human intervention.
+
 ## Task Lifecycle States
 
 | Status | Claimable | Reviewable | Terminal |

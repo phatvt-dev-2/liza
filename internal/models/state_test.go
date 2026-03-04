@@ -847,6 +847,89 @@ func TestCircuitBreakerHistoryYAML(t *testing.T) {
 	}
 }
 
+func TestSprintStalled(t *testing.T) {
+	now := time.Now().UTC()
+	mkTask := func(id string, status TaskStatus) Task {
+		return Task{ID: id, Status: status, Created: now, Priority: 1, Iteration: 1}
+	}
+
+	tests := []struct {
+		name    string
+		planned []string
+		tasks   []Task
+		want    bool
+	}{
+		{
+			name:    "empty planned list",
+			planned: []string{},
+			tasks:   []Task{mkTask("task-1", TaskStatusBlocked)},
+			want:    false,
+		},
+		{
+			name:    "all terminal — complete not stalled",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusMerged), mkTask("task-2", TaskStatusAbandoned)},
+			want:    false,
+		},
+		{
+			name:    "all blocked",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusBlocked), mkTask("task-2", TaskStatusBlocked)},
+			want:    true,
+		},
+		{
+			name:    "mix of terminal and blocked",
+			planned: []string{"task-1", "task-2", "task-3"},
+			tasks: []Task{
+				mkTask("task-1", TaskStatusMerged),
+				mkTask("task-2", TaskStatusBlocked),
+				mkTask("task-3", TaskStatusSuperseded),
+			},
+			want: true,
+		},
+		{
+			name:    "blocked plus in-progress — not stalled",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusBlocked), mkTask("task-2", TaskStatusImplementing)},
+			want:    false,
+		},
+		{
+			name:    "single blocked single ready — not stalled",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusBlocked), mkTask("task-2", TaskStatusReady)},
+			want:    false,
+		},
+		{
+			name:    "planned task missing from task list",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusBlocked)},
+			want:    false,
+		},
+		{
+			name:    "extra non-planned tasks dont affect result",
+			planned: []string{"task-1"},
+			tasks: []Task{
+				mkTask("task-1", TaskStatusBlocked),
+				mkTask("task-2", TaskStatusImplementing),
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &State{
+				Sprint: Sprint{Scope: SprintScope{Planned: tt.planned}},
+				Tasks:  tt.tasks,
+			}
+			got := state.SprintStalled()
+			if got != tt.want {
+				t.Errorf("SprintStalled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // Helper function for creating string pointers
 func strPtr(s string) *string {
 	return &s

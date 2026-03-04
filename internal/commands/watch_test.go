@@ -824,6 +824,232 @@ func TestWatchCommand(t *testing.T) {
 	}
 }
 
+func TestCheckSprintStalled(t *testing.T) {
+	now := time.Now().UTC()
+
+	t.Run("sprint stalled - all blocked - triggers checkpoint", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+		lizaPaths := paths.New(tmpDir)
+
+		state := testhelpers.CreateValidState()
+		state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
+			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusBlocked, now),
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		cache := make(map[string]time.Time)
+		alerts, err := checkSprintStalled(tmpDir, state, cache)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(alerts) != 2 {
+			t.Fatalf("len(alerts) = %d, want 2", len(alerts))
+		}
+		if alerts[0].Category != "SPRINT STALLED" {
+			t.Errorf("alert[0].Category = %q, want %q", alerts[0].Category, "SPRINT STALLED")
+		}
+		if alerts[0].Level != alertLevelCritical {
+			t.Errorf("alert[0].Level = %q, want %q", alerts[0].Level, alertLevelCritical)
+		}
+		if !strings.Contains(alerts[0].Message, "2 non-terminal planned tasks are BLOCKED") {
+			t.Errorf("alert[0].Message = %q, expected blocked count", alerts[0].Message)
+		}
+		if alerts[1].Category != "AUTO CHECKPOINT" {
+			t.Errorf("alert[1].Category = %q, want %q", alerts[1].Category, "AUTO CHECKPOINT")
+		}
+
+		// Verify sprint was checkpointed
+		bb := db.New(stateFile)
+		updatedState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("failed to read state: %v", err)
+		}
+		if updatedState.Sprint.Status != models.SprintStatusCheckpoint {
+			t.Errorf("sprint.status = %s, want %s", updatedState.Sprint.Status, models.SprintStatusCheckpoint)
+		}
+
+		// Verify report was written
+		if _, err := os.Stat(lizaPaths.SprintSummaryPath()); err != nil {
+			t.Fatalf("expected sprint summary report: %v", err)
+		}
+	})
+
+	t.Run("mix of terminal and blocked - triggers checkpoint", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		state := testhelpers.CreateValidState()
+		state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusBlocked, now),
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		cache := make(map[string]time.Time)
+		alerts, err := checkSprintStalled(tmpDir, state, cache)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(alerts) != 2 {
+			t.Fatalf("len(alerts) = %d, want 2", len(alerts))
+		}
+		if !strings.Contains(alerts[0].Message, "1 non-terminal planned tasks are BLOCKED") {
+			t.Errorf("alert[0].Message = %q, expected 1 blocked", alerts[0].Message)
+		}
+	})
+
+	t.Run("tasks in progress - no alert", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
+			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, now),
+		}
+
+		cache := make(map[string]time.Time)
+		alerts, err := checkSprintStalled("/nonexistent", state, cache)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0", len(alerts))
+		}
+	})
+
+	t.Run("sprint already at CHECKPOINT - no action", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		state.Sprint.Status = models.SprintStatusCheckpoint
+		state.Sprint.Scope.Planned = []string{"task-1"}
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
+		}
+
+		cache := make(map[string]time.Time)
+		alerts, err := checkSprintStalled("/nonexistent", state, cache)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0 (guarded by sprint status)", len(alerts))
+		}
+	})
+
+	t.Run("stall then resume still stalled re-triggers checkpoint", func(t *testing.T) {
+		// Regression: cache must be cleared when sprint leaves IN_PROGRESS,
+		// so a resumed-but-still-stalled sprint gets a fresh checkpoint.
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		state := testhelpers.CreateValidState()
+		state.Sprint.Scope.Planned = []string{"task-1"}
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		cache := make(map[string]time.Time)
+
+		// Step 1: Stall detected → checkpoint
+		alerts, err := checkSprintStalled(tmpDir, state, cache)
+		if err != nil {
+			t.Fatalf("step 1: unexpected error: %v", err)
+		}
+		if len(alerts) != 2 {
+			t.Fatalf("step 1: len(alerts) = %d, want 2", len(alerts))
+		}
+
+		// Step 2: Sprint is now at CHECKPOINT — simulate watch tick
+		bb := db.New(stateFile)
+		checkpointState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("failed to read checkpointed state: %v", err)
+		}
+		if checkpointState.Sprint.Status != models.SprintStatusCheckpoint {
+			t.Fatalf("sprint.status = %s, want CHECKPOINT", checkpointState.Sprint.Status)
+		}
+		alerts, err = checkSprintStalled(tmpDir, checkpointState, cache)
+		if err != nil {
+			t.Fatalf("step 2: unexpected error: %v", err)
+		}
+		if len(alerts) != 0 {
+			t.Errorf("step 2: len(alerts) = %d, want 0", len(alerts))
+		}
+		// Cache should have been cleared by the non-IN_PROGRESS guard
+		if _, cached := cache["sprint_stalled:alert"]; cached {
+			t.Error("step 2: cache should be cleared when sprint not IN_PROGRESS")
+		}
+
+		// Step 3: Human resumes without fixing → sprint back to IN_PROGRESS, still stalled
+		err = bb.Modify(func(s *models.State) error {
+			s.Sprint.Status = models.SprintStatusInProgress
+			s.Sprint.Timeline.CheckpointAt = nil
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("failed to resume sprint: %v", err)
+		}
+		resumedState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("failed to read resumed state: %v", err)
+		}
+
+		// Step 4: Stall re-detected → fresh checkpoint
+		alerts, err = checkSprintStalled(tmpDir, resumedState, cache)
+		if err != nil {
+			t.Fatalf("step 4: unexpected error: %v", err)
+		}
+		if len(alerts) != 2 {
+			t.Fatalf("step 4: len(alerts) = %d, want 2 (should re-trigger after resume)", len(alerts))
+		}
+		if alerts[0].Category != "SPRINT STALLED" {
+			t.Errorf("step 4: alert[0].Category = %q, want SPRINT STALLED", alerts[0].Category)
+		}
+	})
+
+	t.Run("throttling - second call does not re-trigger", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		state := testhelpers.CreateValidState()
+		state.Sprint.Scope.Planned = []string{"task-1"}
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		cache := make(map[string]time.Time)
+
+		// First call triggers
+		alerts, err := checkSprintStalled(tmpDir, state, cache)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(alerts) != 2 {
+			t.Fatalf("first call: len(alerts) = %d, want 2", len(alerts))
+		}
+
+		// Re-read state since checkpoint modified it
+		bb := db.New(stateFile)
+		updatedState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("failed to read state: %v", err)
+		}
+
+		// Second call should be guarded (sprint is now at CHECKPOINT)
+		alerts, err = checkSprintStalled(tmpDir, updatedState, cache)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(alerts) != 0 {
+			t.Errorf("second call: len(alerts) = %d, want 0 (sprint now at CHECKPOINT)", len(alerts))
+		}
+	})
+}
+
 func TestRunChecks_AutoSprintCheckpointOnCircuitBreakerPattern(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

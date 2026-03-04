@@ -28,6 +28,7 @@ sprint:
 
 **Sprint ends when ANY of:**
 - All planned tasks reach terminal state (MERGED, ABANDONED, SUPERSEDED)
+- All non-terminal planned tasks BLOCKED (sprint stalled)
 - Calendar deadline reached
 - Circuit breaker triggered
 - Human requests checkpoint
@@ -70,6 +71,7 @@ Checkpoints are **mandatory human review points**. No work proceeds until human 
 | Sprint tasks complete | Yes | Normal completion |
 | Sprint deadline reached | Yes | Time box enforced |
 | Circuit breaker fired | Yes | Systemic issue detected |
+| Sprint stalled | Yes | All non-terminal planned tasks BLOCKED |
 | `liza sprint-checkpoint` | Manual | Human-initiated review |
 
 ### Checkpoint Timeout Behavior

@@ -291,6 +291,9 @@ func buildPlannerStatus(state *models.State) plannerStatus {
 		ps.Reason = "No tasks exist; initial planning needed"
 	case "BLOCKED_TASKS":
 		ps.Reason = fmt.Sprintf("%d task(s) are blocked and need attention", count)
+		if state.SprintStalled() {
+			ps.Reason += " (\u26a0\ufe0f sprint stalled \u2014 all non-terminal tasks blocked)"
+		}
 	case "INTEGRATION_FAILED":
 		ps.Reason = fmt.Sprintf("%d task(s) failed integration", count)
 	case "HYPOTHESIS_EXHAUSTED":

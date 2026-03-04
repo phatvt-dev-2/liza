@@ -139,6 +139,18 @@ func runChecks(_ context.Context, config WatchConfig) error {
 		alerts = append(alerts, circuitBreakerAlerts...)
 	}
 
+	sprintStalledAlerts, err := checkSprintStalled(config.ProjectRoot, state, config.StateCache)
+	if err != nil {
+		alerts = append(alerts, alert{
+			Timestamp: time.Now().UTC(),
+			Level:     alertLevelCritical,
+			Category:  "SPRINT STALL ERROR",
+			Message:   err.Error(),
+		})
+	} else {
+		alerts = append(alerts, sprintStalledAlerts...)
+	}
+
 	if err := ValidateCommand(statePath, true); err != nil {
 		alerts = append(alerts, alert{
 			Timestamp: time.Now().UTC(),
@@ -213,6 +225,77 @@ func checkCircuitBreakerEscalation(projectRoot string, state *models.State) ([]a
 			Category:  "CIRCUIT BREAKER",
 			Message: fmt.Sprintf("pattern=%s severity=%s report=%s",
 				analyzeResult.Pattern, analyzeResult.Severity, analyzeResult.ReportPath),
+		},
+		{
+			Timestamp: timestamp,
+			Level:     alertLevelCritical,
+			Category:  "AUTO CHECKPOINT",
+			Message: fmt.Sprintf("created at %s report=%s",
+				sprintCheckpointResult.CheckpointAt.UTC().Format(time.RFC3339), sprintCheckpointResult.ReportPath),
+		},
+	}, nil
+}
+
+func checkSprintStalled(projectRoot string, state *models.State, cache map[string]time.Time) ([]alert, error) {
+	mode := state.Config.Mode
+	if mode == "" {
+		mode = models.SystemModeRunning
+	}
+
+	if mode != models.SystemModeRunning || state.Sprint.Status != models.SprintStatusInProgress {
+		// Clear throttle when sprint leaves IN_PROGRESS (e.g. after checkpoint).
+		// This ensures that if the human resumes without unblocking tasks,
+		// the next stall detection re-triggers a fresh checkpoint.
+		delete(cache, "sprint_stalled:alert")
+		return nil, nil
+	}
+
+	if !state.SprintStalled() {
+		delete(cache, "sprint_stalled:alert")
+		return nil, nil
+	}
+
+	// Throttle: only alert once per stall event within a single IN_PROGRESS period.
+	// The sprint status guard above resets the throttle across checkpoint/resume cycles.
+	if _, seen := cache["sprint_stalled:alert"]; seen {
+		return nil, nil
+	}
+
+	// Count blocked planned tasks for the message
+	blockedCount := 0
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if task != nil && task.Status == models.TaskStatusBlocked {
+			blockedCount++
+		}
+	}
+
+	// ops.SprintCheckpoint re-reads state under lock. Another process may checkpoint
+	// between our snapshot read and this call (same race pattern as circuit breaker).
+	sprintCheckpointResult, err := ops.SprintCheckpoint(projectRoot)
+	if err != nil {
+		if errors.Is(err, ops.ErrSprintAlreadyCheckpoint) {
+			cache["sprint_stalled:alert"] = time.Now().UTC()
+			return []alert{{
+				Timestamp: time.Now().UTC(),
+				Level:     alertLevelCritical,
+				Category:  "SPRINT STALLED",
+				Message: fmt.Sprintf("all %d non-terminal planned tasks are BLOCKED (sprint already at CHECKPOINT)",
+					blockedCount),
+			}}, nil
+		}
+		return nil, fmt.Errorf("auto checkpoint after sprint stall failed: %w", err)
+	}
+
+	cache["sprint_stalled:alert"] = time.Now().UTC()
+	timestamp := time.Now().UTC()
+	return []alert{
+		{
+			Timestamp: timestamp,
+			Level:     alertLevelCritical,
+			Category:  "SPRINT STALLED",
+			Message: fmt.Sprintf("all %d non-terminal planned tasks are BLOCKED",
+				blockedCount),
 		},
 		{
 			Timestamp: timestamp,
