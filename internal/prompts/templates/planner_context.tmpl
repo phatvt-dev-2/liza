@@ -57,6 +57,12 @@ FIELD FORMAT GUIDELINES:
 - done: observable behavior, specific, falsifiable. Bad: "works correctly". Good: "GET /users returns 200"
 - spec: path to spec optionally with #anchor
 
+TASK CREATION ORDER:
+When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. liza_add_task validates that all `depends` IDs already exist; creating a task that references a not-yet-created dependency will fail.
+
+ERROR RECOVERY:
+On MCP tool errors, diagnose the root cause before retrying. Read the error message, investigate the constraint that failed (e.g. missing dependency, invalid state), and fix the underlying issue. Do NOT retry the same call blindly.
+
 MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
 Work unit = all planned state changes executed. Do NOT exit until all tools have been called.
 
