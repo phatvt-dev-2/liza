@@ -9,22 +9,22 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 )
 
-// claimCoderTask finds and claims a claimable task.
-// If the same coder previously initiated a handoff, it resumes that task first.
-func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, worktree string, err error) {
+func claimDoerTask(projectRoot, agentID, workflowRole string, bb *db.Blackboard) (taskID, worktree string, err error) {
 	logger := GetLogger()
 
-	// First, try to resume a handoff task
-	handoffResult, err := ops.ResumeHandoff(ops.ResumeHandoffInput{
-		ProjectRoot: projectRoot,
-		AgentID:     agentID,
-	})
-	if err != nil {
-		return "", "", err
-	}
-	if handoffResult.Found {
-		logger.Info("Resuming claimed task from handoff", "task_id", handoffResult.TaskID, "agent_id", agentID)
-		return handoffResult.TaskID, handoffResult.Worktree, nil
+	// Handoff applies to doer roles (coder and code-planner).
+	if workflowRole == models.RoleCoder || workflowRole == models.RoleCodePlanner {
+		handoffResult, err := ops.ResumeHandoff(ops.ResumeHandoffInput{
+			ProjectRoot: projectRoot,
+			AgentID:     agentID,
+		})
+		if err != nil {
+			return "", "", err
+		}
+		if handoffResult.Found {
+			logger.Info("Resuming claimed task from handoff", "task_id", handoffResult.TaskID, "agent_id", agentID)
+			return handoffResult.TaskID, handoffResult.Worktree, nil
+		}
 	}
 
 	state, err := bb.Read()
@@ -34,7 +34,7 @@ func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, wor
 
 	var candidates []*models.Task
 	for i := range state.Tasks {
-		if state.Tasks[i].IsClaimable(models.RoleCoder, state.Tasks) {
+		if state.Tasks[i].IsClaimable(workflowRole, state.Tasks) {
 			candidates = append(candidates, &state.Tasks[i])
 		}
 	}
@@ -53,6 +53,12 @@ func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, wor
 	return result.TaskID, result.WorktreeRel, nil
 }
 
+// claimCoderTask finds and claims a coder task.
+// Backward-compatible wrapper for existing tests/callers.
+func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, worktree string, err error) {
+	return claimDoerTask(projectRoot, agentID, models.RoleCoder, bb)
+}
+
 // selectHighestPriorityTask returns the highest-priority task from candidates,
 // using creation time as FIFO tie-breaker. Returns nil if candidates is empty.
 func selectHighestPriorityTask(candidates []*models.Task) *models.Task {
@@ -69,12 +75,13 @@ func selectHighestPriorityTask(candidates []*models.Task) *models.Task {
 
 // claimReviewerTask finds and claims a reviewable task.
 // Delegates to ops.ClaimReviewerTask for the actual state mutation.
-func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
+func claimReviewerTaskForRole(projectRoot, agentID, workflowRole string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
 	logger := GetLogger()
 
 	result, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
 		ProjectRoot:   projectRoot,
 		AgentID:       agentID,
+		WorkflowRole:  workflowRole,
 		LeaseDuration: leaseDuration,
 	})
 	if err != nil {
@@ -83,6 +90,12 @@ func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Bl
 	}
 
 	return result.TaskID, result.Worktree, result.ReviewCommit, nil
+}
+
+// claimReviewerTask finds and claims a code-reviewer task.
+// Backward-compatible wrapper for existing tests/callers.
+func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
+	return claimReviewerTaskForRole(projectRoot, agentID, models.RoleCodeReviewer, leaseDuration, bb)
 }
 
 // handleApprovedMerges handles merging approved tasks
@@ -170,8 +183,8 @@ func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string) err
 
 	// Find the task
 	if task := state.FindTask(taskID); task != nil {
-		// Check if it's now READY_FOR_REVIEW
-		if task.Status == models.TaskStatusReadyForReview {
+		// Check if it's now in a submitted state
+		if task.Status == models.TaskStatusReadyForReview || task.Status == models.TaskStatusCodingPlanToReview {
 			// Log the successful submission
 			reviewCommit := "unknown"
 			if task.ReviewCommit != nil {

@@ -63,8 +63,8 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 			if t == nil {
 				return &lizaerrors.NotFoundError{Entity: "task", ID: id}
 			}
-			if t.Status != models.TaskStatusImplementing {
-				return fmt.Errorf("task %s is no longer IMPLEMENTING", id)
+			if t.Status != models.TaskStatusImplementing && t.Status != models.TaskStatusCodePlanning {
+				return fmt.Errorf("task %s is no longer IMPLEMENTING/CODE_PLANNING", id)
 			}
 			if t.AssignedTo == nil || *t.AssignedTo != agentID {
 				return fmt.Errorf("task %s is no longer assigned to %s", id, agentID)
@@ -115,7 +115,7 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 
 // isResumableHandoff checks if the task is a handoff that can be resumed by the given agent.
 func isResumableHandoff(task *models.Task, agentID string) bool {
-	if task.Status != models.TaskStatusImplementing {
+	if task.Status != models.TaskStatusImplementing && task.Status != models.TaskStatusCodePlanning {
 		return false
 	}
 	if task.AssignedTo == nil || *task.AssignedTo != agentID {

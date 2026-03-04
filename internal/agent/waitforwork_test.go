@@ -180,6 +180,106 @@ func TestWaitForReviewerWork(t *testing.T) {
 	}
 }
 
+func TestWaitForCodePlannerWork(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name     string
+		tasks    []models.Task
+		wantWork bool
+	}{
+		{
+			name: "draft coding plan task available",
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraftCodingPlan, now),
+			},
+			wantWork: true,
+		},
+		{
+			name: "no code-planner claimable tasks",
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusCodePlanning, now),
+			},
+			wantWork: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			lizaDir := filepath.Dir(statePath)
+
+			state := testhelpers.CreateValidState()
+			state.Tasks = tt.tasks
+
+			testhelpers.WriteInitialState(t, statePath, state)
+
+			config := SupervisorConfig{StatePath: statePath}
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+
+			hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "code-planner", config, 10*time.Millisecond, 100*time.Millisecond)
+			if err != nil {
+				t.Fatalf("waitForWork() error = %v", err)
+			}
+			if hasWork != tt.wantWork {
+				t.Errorf("waitForWork() = %v, want %v", hasWork, tt.wantWork)
+			}
+		})
+	}
+}
+
+func TestWaitForCodePlanReviewerWork(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name     string
+		tasks    []models.Task
+		wantWork bool
+	}{
+		{
+			name: "coding plan to review task available",
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusCodingPlanToReview, now),
+			},
+			wantWork: true,
+		},
+		{
+			name: "no code-plan-reviewer claimable tasks",
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewingCodingPlan, now),
+			},
+			wantWork: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			projectRoot := tmpDir
+
+			state := testhelpers.CreateValidState()
+			state.Tasks = tt.tasks
+
+			testhelpers.WriteInitialState(t, statePath, state)
+
+			config := SupervisorConfig{StatePath: statePath}
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+
+			hasWork, err := waitForWork(ctx, db.New(statePath), projectRoot, "code-plan-reviewer", config, 10*time.Millisecond, 100*time.Millisecond)
+			if err != nil {
+				t.Fatalf("waitForWork() error = %v", err)
+			}
+			if hasWork != tt.wantWork {
+				t.Errorf("waitForWork() = %v, want %v", hasWork, tt.wantWork)
+			}
+		})
+	}
+}
+
 // TestWaitForOrchestratorWork tests orchestrator work detection
 func TestWaitForOrchestratorWork(t *testing.T) {
 	now := time.Now().UTC()

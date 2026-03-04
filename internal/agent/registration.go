@@ -140,9 +140,27 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
 
+	case roles.RuntimeCodePlanner:
+		if task.Status == models.TaskStatusCodePlanning {
+			if err := task.Transition(models.TaskStatusDraftCodingPlan); err != nil {
+				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
+			}
+		}
+		task.AssignedTo = nil
+		task.LeaseExpires = nil
+
 	case roles.RuntimeCodeReviewer:
 		if task.Status == models.TaskStatusReviewing {
 			if err := task.Transition(models.TaskStatusReadyForReview); err != nil {
+				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
+			}
+		}
+		task.ReviewingBy = nil
+		task.ReviewLeaseExpires = nil
+
+	case roles.RuntimeCodePlanReviewer:
+		if task.Status == models.TaskStatusReviewingCodingPlan {
+			if err := task.Transition(models.TaskStatusCodingPlanToReview); err != nil {
 				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
 			}
 		}

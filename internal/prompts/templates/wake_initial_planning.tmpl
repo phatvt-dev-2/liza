@@ -1,96 +1,41 @@
 {{- define "wake_initial_planning" -}}
-This is initial planning. Decompose the goal into tasks:
+This is initial planning. Create exactly one task for the Code Planner.
 
 ⚠️  AUTONOMY NOTICE ⚠️
-You have FULL autonomy to execute all MCP tools immediately.
-Your approval is PRE-GRANTED. Do NOT wait for permission.
-Your job is to CREATE tasks on the blackboard, not to ask if you should.
-
-CRITICAL: If you see tool permission prompts, do NOT stop or wait.
-Permission prompts are handled automatically. Continue executing tools.
-Do NOT rationalize waiting with phrases like "awaiting approval" or "permission needed".
-
-1. Read the goal spec ({{.GoalSpecRef}}) thoroughly — understand the goal, constraints, success criteria
-
-2. Identify the minimal set of tasks that achieve the goal
-
-3. Analyze task dependencies:
-   - Which tasks produce artifacts others need? (APIs, schemas, utilities)
-   - Which tasks modify shared code that others will build on?
-   - Can tasks run in parallel, or must they be sequential?
-   - Draw the dependency graph mentally before writing tasks
-
-4. For each task, define:
-   - id: short kebab-case identifier (e.g., "add-auth-middleware")
-   - desc: what to build (1-2 sentences)
-   - done: observable completion criteria (testable, specific)
-   - scope: functional area and boundaries (in/out), not file names — coders decide structure
-   - priority: 1 (highest) to 5 (lowest)
-   - depends: [task-ids] that must be MERGED before this task can be claimed
-   - spec: path to relevant spec section
-
-5. TDD ENFORCEMENT (MANDATORY for code tasks):
-   - Each code task MUST include its own tests — do NOT create separate "add tests" tasks
-   - done_when criteria must be verifiable by tests the coder writes
-   - Code Reviewer will reject code tasks without tests covering done_when
-   - Exempt: documentation-only, config-only, or spec-only tasks (no code = no tests)
-   - Rationale: Coder can't validate their work without tests; separate test tasks break TDD
-
-6. Dependency guidelines:
-   - depends: [] for tasks with no prerequisites (can start immediately)
-   - depends: [task-a] for tasks that need task-a's output
-   - Avoid long chains — prefer wide parallelism over deep sequences
-   - If A depends on B depends on C, consider if A really needs C directly
-
-7. Prefer small, independent tasks over large coupled ones
-   - Each task = implementation + tests (not separate tasks)
-   - A task is "small" if one coder can complete it in one session
+You have FULL autonomy to execute MCP tools immediately.
+Do NOT wait for permission.
 
 --- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
 
-8. EXECUTION PHASE (MANDATORY - DO NOT SKIP):
+1. Read the goal spec ({{.GoalSpecRef}}) thoroughly.
+2. Create a single code-planning task that captures the full goal context.
+3. Do not decompose into coder tasks in this phase.
 
-   You MUST now execute liza_add_task tool for each planned task.
-   This is NOT optional. This is NOT pending approval.
-   Execute these tool calls IN THIS SAME SESSION:
+--- EXECUTION PHASE (MANDATORY - DO NOT SKIP) ---
+Use liza_add_task once with:
+{
+  "id": "code-planning-1",
+  "desc": "Create implementation plan for goal: <goal summary>",
+  "spec": "{{.GoalSpecRef}}",
+  "done": "Implementation plan is complete, reviewable, and submitted for code-plan-review",
+  "scope": "Planning only: analyze goal and produce actionable coding plan/output. No implementation.",
+  "priority": 1,
+  "depends": [],
+  "type": "coding",
+  "role_pair": "code-planning-pair",
+  "agent_id": "orchestrator-1"
+}
 
-   Use liza_add_task tool for each task with parameters:
-   {
-     "id": "<task-id>",
-     "desc": "<description>",
-     "spec": "<spec-ref>",
-     "done": "<done-when>",
-     "scope": "<scope>",
-     "priority": <N>,
-     "depends": ["<task-id-1>", "<task-id-2>"],
-     "type": "coding",
-     "agent_id": "orchestrator-1"
-   }
+SUCCESS CRITERIA:
+- Exactly one task is created.
+- Task role_pair is code-planning-pair.
+- Task enters DRAFT_CODING_PLAN and is claimable by code-planner.
 
-9. SUCCESS CRITERIA (Required before you stop):
+EXPECTED BEHAVIOR EXAMPLES:
+✅ Analyze goal, add one code-planning task, confirm success, exit.
+❌ Decompose into multiple coder tasks during initial planning.
 
-   You are NOT done until ALL of these are true:
-   ✓ All task definitions designed
-   ✓ All liza_add_task tool invocations executed
-   ✓ Confirmation messages received for each task
-   ✓ You explicitly state: "All [N] tasks successfully added to blackboard"
-
-   If you summarize your plan and stop WITHOUT executing tools,
-   you have FAILED your role responsibilities.
-
-10. EXPECTED BEHAVIOR EXAMPLES:
-
-    ✅ CORRECT:
-    1. Analyze requirements and design 3 tasks
-    2. Execute tool: liza_add_task with {"id": "task1", ...}
-    3. Execute tool: liza_add_task with {"id": "task2", ...}
-    4. Execute tool: liza_add_task with {"id": "task3", ...}
-    5. Confirm: "All 3 tasks successfully added to blackboard"
-    6. Exit
-
-    ❌ INCORRECT (DO NOT DO THIS):
-    1. Analyze requirements and design 3 tasks
-    2. Say "I've planned 3 tasks: [descriptions]"
-    3. Say "The tasks are ready to be added pending approval"
-    4. Exit ← THIS IS FAILURE. You did not complete your work.
+❌ INCORRECT (DO NOT DO THIS):
+1. Plan but do not execute liza_add_task
+2. Exit without creating the task
 {{- end -}}

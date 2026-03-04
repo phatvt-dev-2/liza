@@ -1,0 +1,27 @@
+{{- define "code_plan_reviewer_context" -}}
+
+=== ASSIGNED CODE PLAN REVIEW TASK ===
+TASK ID: {{.Task.ID}}
+WORKTREE: {{.WorktreePath}}
+REVIEW COMMIT: {{.ReviewCommit}}
+AUTHOR: {{.AssignedTo}}
+ITERATION: {{.Task.Iteration}}
+DESCRIPTION: {{.Task.Description}}
+
+DONE WHEN:
+{{.Task.DoneWhen}}
+
+CODE PLAN REVIEWER STATE TRANSITIONS:
+- REVIEWING_CODING_PLAN → CODING_PLAN_APPROVED
+- REVIEWING_CODING_PLAN → CODING_PLAN_REJECTED
+
+CODE PLAN REVIEWER TOOL:
+- liza_submit_verdict — Submit review verdict
+  APPROVED: {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
+  REJECTED: {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
+
+REVIEW PHASE:
+1. Inspect worktree changes for this review commit.
+2. Validate done_when criteria are satisfied.
+3. Submit verdict with liza_submit_verdict.
+{{- end -}}

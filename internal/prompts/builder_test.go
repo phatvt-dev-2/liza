@@ -165,9 +165,9 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				"liza_supersede_task",
 				"liza_wt_delete",
 				"This is initial planning",
-				"Decompose the goal into tasks",
-				"TDD ENFORCEMENT (MANDATORY for code tasks)",
-				"Use liza_add_task tool for each task with parameters:",
+				"Create exactly one task for the Code Planner",
+				"role_pair\": \"code-planning-pair\"",
+				"Exactly one task is created",
 			},
 		},
 		{
@@ -1240,5 +1240,75 @@ func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildCodePlannerContext(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-plan-1", models.TaskStatusCodePlanning, now)
+	task.Description = "Create implementation plan"
+	task.DoneWhen = "Plan covers all required changes"
+	task.Scope = "Runtime wiring"
+	task.Iteration = 1
+	worktree := ".worktrees/task-plan-1"
+	task.Worktree = &worktree
+
+	cfg := CodePlannerContextConfig{
+		ProjectRoot: "/project",
+		AgentID:     "code-planner-1",
+	}
+
+	prompt, err := BuildCodePlannerContext(&task, cfg)
+	if err != nil {
+		t.Fatalf("BuildCodePlannerContext() error: %v", err)
+	}
+
+	wantContains := []string{
+		"ASSIGNED CODE PLANNING TASK",
+		"TASK ID: task-plan-1",
+		"WORKTREE: /project/.worktrees/task-plan-1",
+		"liza_submit_for_review",
+		"liza_write_checkpoint",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("BuildCodePlannerContext() missing %q", want)
+		}
+	}
+}
+
+func TestBuildCodePlanReviewerContext(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-plan-1", models.TaskStatusReviewingCodingPlan, now)
+	task.Description = "Create implementation plan"
+	task.Iteration = 1
+	reviewCommit := "abc123"
+	task.ReviewCommit = &reviewCommit
+	worktree := ".worktrees/task-plan-1"
+	task.Worktree = &worktree
+	assigned := "code-planner-1"
+	task.AssignedTo = &assigned
+
+	cfg := CodePlanReviewerContextConfig{
+		ProjectRoot: "/project",
+		AgentID:     "code-plan-reviewer-1",
+	}
+
+	prompt, err := BuildCodePlanReviewerContext(&task, cfg)
+	if err != nil {
+		t.Fatalf("BuildCodePlanReviewerContext() error: %v", err)
+	}
+
+	wantContains := []string{
+		"ASSIGNED CODE PLAN REVIEW TASK",
+		"TASK ID: task-plan-1",
+		"WORKTREE: /project/.worktrees/task-plan-1",
+		"REVIEW COMMIT: abc123",
+		"liza_submit_verdict",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("BuildCodePlanReviewerContext() missing %q", want)
+		}
 	}
 }

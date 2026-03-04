@@ -130,6 +130,38 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 			return "", fmt.Errorf("building orchestrator context: %w", err)
 		}
 		prompt += context
+
+	case roles.RuntimeCodePlanner:
+		task := state.FindTask(taskID)
+		if task == nil {
+			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+
+		plannerConfig := prompts.CodePlannerContextConfig{
+			ProjectRoot: config.ProjectRoot,
+			AgentID:     config.AgentID,
+		}
+		context, err := prompts.BuildCodePlannerContext(task, plannerConfig)
+		if err != nil {
+			return "", fmt.Errorf("building code-planner context: %w", err)
+		}
+		prompt += context
+
+	case roles.RuntimeCodePlanReviewer:
+		task := state.FindTask(taskID)
+		if task == nil {
+			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+
+		reviewerConfig := prompts.CodePlanReviewerContextConfig{
+			ProjectRoot: config.ProjectRoot,
+			AgentID:     config.AgentID,
+		}
+		context, err := prompts.BuildCodePlanReviewerContext(task, reviewerConfig)
+		if err != nil {
+			return "", fmt.Errorf("building code-plan-reviewer context: %w", err)
+		}
+		prompt += context
 	}
 
 	// Add resume context if initial task

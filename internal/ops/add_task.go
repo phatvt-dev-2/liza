@@ -17,6 +17,7 @@ import (
 type AddTaskInput struct {
 	ID          string
 	Type        string
+	RolePair    string
 	Description string
 	SpecRef     string
 	DoneWhen    string
@@ -104,8 +105,9 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 	newTask := models.Task{
 		ID:          input.ID,
 		Type:        taskType,
+		RolePair:    input.RolePair,
 		Description: input.Description,
-		Status:      models.TaskStatusReady,
+		Status:      initialTaskStatus(input.RolePair),
 		Priority:    input.Priority,
 		SpecRef:     input.SpecRef,
 		DoneWhen:    input.DoneWhen,
@@ -156,4 +158,11 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 	}
 
 	return result, nil
+}
+
+func initialTaskStatus(rolePair string) models.TaskStatus {
+	if rolePair == "code-planning-pair" {
+		return models.TaskStatusDraftCodingPlan
+	}
+	return models.TaskStatusReady
 }

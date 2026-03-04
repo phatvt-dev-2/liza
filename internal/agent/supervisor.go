@@ -391,9 +391,9 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	if config.ExecutionTimeout == 0 {
 		// Default timeouts based on role
 		switch config.Role {
-		case roles.RuntimeCodeReviewer:
+		case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
 			config.ExecutionTimeout = 30 * time.Minute
-		case roles.RuntimeCoder:
+		case roles.RuntimeCoder, roles.RuntimeCodePlanner:
 			config.ExecutionTimeout = 2 * time.Hour
 		case roles.RuntimeOrchestrator:
 			config.ExecutionTimeout = 4 * time.Hour
@@ -462,20 +462,30 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			return nil
 		}
 
-		// Claim task (coder/reviewer only)
+		// Claim task (doer/reviewer roles only)
 		var taskID string
 		var claimedTaskID string // Track claimed task for completion logging
-		if config.Role == roles.RuntimeCoder {
-			taskID, _, err = claimCoderTask(config.ProjectRoot, config.AgentID, bb)
+		if config.Role == roles.RuntimeCoder || config.Role == roles.RuntimeCodePlanner {
+			workflowRole := models.RoleCoder
+			if config.Role == roles.RuntimeCodePlanner {
+				workflowRole = models.RoleCodePlanner
+			}
+
+			taskID, _, err = claimDoerTask(config.ProjectRoot, config.AgentID, workflowRole, bb)
 			if err != nil {
 				// Error already logged in claimCoderTask
 				time.Sleep(5 * time.Second)
 				continue
 			}
 			claimedTaskID = taskID
-		} else if config.Role == roles.RuntimeCodeReviewer {
+		} else if config.Role == roles.RuntimeCodeReviewer || config.Role == roles.RuntimeCodePlanReviewer {
+			workflowRole := models.RoleCodeReviewer
+			if config.Role == roles.RuntimeCodePlanReviewer {
+				workflowRole = models.RoleCodePlanReviewer
+			}
+
 			var reviewCommit string
-			taskID, _, reviewCommit, err = claimReviewerTask(config.ProjectRoot, config.AgentID, 1800, bb)
+			taskID, _, reviewCommit, err = claimReviewerTaskForRole(config.ProjectRoot, config.AgentID, workflowRole, 1800, bb)
 			if err != nil {
 				// Error already logged in claimReviewerTask
 				time.Sleep(5 * time.Second)
@@ -531,7 +541,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			GetLogger().Info("Agent completed, checking for more work")
 
 			// Log task submission if it happened (coder role only)
-			if config.Role == roles.RuntimeCoder && claimedTaskID != "" {
+			if (config.Role == roles.RuntimeCoder || config.Role == roles.RuntimeCodePlanner) && claimedTaskID != "" {
 				if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID); err != nil {
 					GetLogger().Warn("Failed to log task submission", "error", err, "task_id", claimedTaskID)
 				}

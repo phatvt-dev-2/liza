@@ -1,0 +1,35 @@
+{{- define "code_planner_context" -}}
+
+=== ASSIGNED CODE PLANNING TASK ===
+TASK ID: {{.Task.ID}}
+WORKTREE: {{.WorktreePath}}
+ITERATION: {{.Task.Iteration}}
+DESCRIPTION: {{.Task.Description}}
+
+DONE WHEN:
+{{.Task.DoneWhen}}
+
+SCOPE:
+{{.Task.Scope}}
+
+CODE PLANNER STATE TRANSITIONS:
+- CODE_PLANNING → CODING_PLAN_TO_REVIEW (submit for review)
+- CODE_PLANNING → BLOCKED (spec ambiguity or dependency blocker)
+- CODING_PLAN_REJECTED → DRAFT_CODING_PLAN (supervisor re-claims for revision)
+
+CODE PLANNER TOOLS:
+- liza_submit_for_review — Submit code plan for review
+  {"task_id": "{{.Task.ID}}", "commit_sha": "<SHA>", "agent_id": "{{.Config.AgentID}}"}
+  Get SHA first: git -C {{.WorktreePath}} rev-parse HEAD
+- liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
+- liza_mark_blocked — Cannot proceed
+  {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+
+IMPLEMENTATION PHASE:
+1. The task is already CODE_PLANNING for you. Do NOT run liza claim-task.
+2. Work ONLY in the worktree directory: cd {{.WorktreePath}}
+3. Update task output and artifacts required by DONE WHEN.
+4. Validate done_when criteria with concrete checks.
+5. Submit using liza_submit_for_review when complete.
+{{- end -}}

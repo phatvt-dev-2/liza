@@ -114,6 +114,20 @@ func requireRole(agentID, expectedRole string) error {
 	return nil
 }
 
+// requireOneOfRoles validates agent ID format and that it matches one of expected runtime roles.
+func requireOneOfRoles(agentID string, expectedRoles ...string) error {
+	if err := identity.ValidateFormat(agentID); err != nil {
+		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
+	}
+	role, _ := identity.ExtractRole(agentID) // cannot fail after ValidateFormat
+	for _, expected := range expectedRoles {
+		if role == expected {
+			return nil
+		}
+	}
+	return fmt.Errorf("requires one of %v roles (got %s from %s)", expectedRoles, role, agentID)
+}
+
 // handleGet implements the liza_get tool
 // Maps to: liza get <query>
 func (s *Server) handleGet(params map[string]any) (any, error) {
@@ -268,10 +282,12 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 	dependsOn := extractStringSlice(params, "depends")
 
 	taskType, _ := params["type"].(string)
+	rolePair, _ := params["role_pair"].(string)
 
 	input := &ops.AddTaskInput{
 		ID:          id,
 		Type:        taskType,
+		RolePair:    rolePair,
 		Description: description,
 		SpecRef:     specRef,
 		DoneWhen:    doneWhen,
@@ -300,7 +316,7 @@ func (s *Server) handleClaimTask(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireRole(agentID, roles.RuntimeCoder); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
 		return nil, err
 	}
 
@@ -331,7 +347,7 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireRole(agentID, roles.RuntimeCoder); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
 		return nil, err
 	}
 
@@ -350,7 +366,7 @@ func (s *Server) handleHandoff(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireRole(agentID, roles.RuntimeCoder); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
 		return nil, err
 	}
 
@@ -390,7 +406,7 @@ func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireRole(agentID, roles.RuntimeCodeReviewer); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer); err != nil {
 		return nil, err
 	}
 
@@ -624,7 +640,7 @@ func (s *Server) handleWriteCheckpoint(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireRole(agentID, roles.RuntimeCoder); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
 		return nil, err
 	}
 

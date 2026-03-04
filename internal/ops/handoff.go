@@ -6,8 +6,10 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // HandoffResult contains the outcome of a successful handoff initiation.
@@ -37,14 +39,23 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
 
-	err := bb.Modify(func(state *models.State) error {
+	runtimeRole, err := identity.ExtractRole(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
+	}
+
+	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
-		if task.Status != models.TaskStatusImplementing {
-			return fmt.Errorf("task %s is not IMPLEMENTING (current status: %s)", taskID, task.Status)
+		expectedStatus := models.TaskStatusImplementing
+		if runtimeRole == roles.RuntimeCodePlanner {
+			expectedStatus = models.TaskStatusCodePlanning
+		}
+		if task.Status != expectedStatus {
+			return fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedStatus, task.Status)
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
@@ -74,7 +85,7 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 
 		agent, exists := state.Agents[agentID]
 		if !exists {
-			agent = models.Agent{Role: "coder"}
+			agent = models.Agent{Role: runtimeRole}
 		}
 		currentTask := taskID
 		agent.Status = models.AgentStatusHandoff

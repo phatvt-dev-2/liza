@@ -10,8 +10,10 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
+	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ClaimResult contains the outcome of a successful task claim.
@@ -61,6 +63,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	var integrationBranch string
 	var leaseDuration int
 	var maxCoderIterations int
+	var workflowRole string
+	var targetStatus models.TaskStatus
 
 	// Read state to validate (lock is acquired and released)
 	state, task, err := readTaskState(bb, taskID)
@@ -68,18 +72,66 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		return nil, err
 	}
 
+	runtimeRole, err := identity.ExtractRole(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
+	}
+	workflowRole, err = roles.ToWorkflow(runtimeRole)
+	if err != nil {
+		return nil, err
+	}
+
 	switch task.Status {
 	case models.TaskStatusReady:
-		if unmet := unmetDependencies(task, state); len(unmet) > 0 {
-			return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
+		if workflowRole == models.RoleCoder {
+			targetStatus = models.TaskStatusImplementing
+			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+				return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
+			}
+			break
 		}
-	case models.TaskStatusRejected, models.TaskStatusIntegrationFailed:
-		// These are valid source states
-		if task.AssignedTo != nil {
-			previousAssignee = *task.AssignedTo
+		return nil, fmt.Errorf("task %s is %s (not DRAFT_CODING_PLAN or CODING_PLAN_REJECTED)", taskID, task.Status)
+	case models.TaskStatusRejected:
+		if workflowRole == models.RoleCoder {
+			targetStatus = models.TaskStatusImplementing
+			if task.AssignedTo != nil {
+				previousAssignee = *task.AssignedTo
+			}
+			break
 		}
-	default:
+		return nil, fmt.Errorf("task %s is %s (not DRAFT_CODING_PLAN or CODING_PLAN_REJECTED)", taskID, task.Status)
+	case models.TaskStatusIntegrationFailed:
+		if workflowRole == models.RoleCoder {
+			targetStatus = models.TaskStatusImplementing
+			if task.AssignedTo != nil {
+				previousAssignee = *task.AssignedTo
+			}
+			break
+		}
+		return nil, fmt.Errorf("task %s is %s (not DRAFT_CODING_PLAN or CODING_PLAN_REJECTED)", taskID, task.Status)
+	case models.TaskStatusDraftCodingPlan:
+		if workflowRole == models.RoleCodePlanner {
+			targetStatus = models.TaskStatusCodePlanning
+			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+				return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
+			}
+			break
+		}
 		return nil, fmt.Errorf("task %s is %s (not READY, REJECTED, or INTEGRATION_FAILED)", taskID, task.Status)
+	case models.TaskStatusCodingPlanRejected:
+		if workflowRole == models.RoleCodePlanner {
+			targetStatus = models.TaskStatusCodePlanning
+			if task.AssignedTo != nil {
+				previousAssignee = *task.AssignedTo
+			}
+			break
+		}
+		return nil, fmt.Errorf("task %s is %s (not READY, REJECTED, or INTEGRATION_FAILED)", taskID, task.Status)
+	default:
+		if workflowRole == models.RoleCoder {
+			return nil, fmt.Errorf("task %s is %s (not READY, REJECTED, or INTEGRATION_FAILED)", taskID, task.Status)
+		}
+		return nil, fmt.Errorf("task %s is %s (not DRAFT_CODING_PLAN or CODING_PLAN_REJECTED)", taskID, task.Status)
 	}
 
 	agent, exists := state.Agents[agentID]
@@ -98,7 +150,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 	// Enforce coder iteration limits before doing any filesystem work.
 	// A REJECTED task at/over the limit is escalated to BLOCKED for orchestrator action.
-	if taskStatus == models.TaskStatusRejected && task.Iteration >= maxCoderIterations {
+	if (taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected) && task.Iteration >= maxCoderIterations {
 		blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus)
 		if err != nil {
 			return nil, fmt.Errorf("failed to enforce iteration limit: %w", err)
@@ -153,7 +205,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		}
 
 		// Verify worktree exists on disk before committing state
-		if taskStatus == models.TaskStatusReady && worktreeCreated {
+		if (taskStatus == models.TaskStatusReady || taskStatus == models.TaskStatusDraftCodingPlan) && worktreeCreated {
 			worktreePath := filepath.Join(lp.ProjectRoot(), worktreeRel)
 			if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
 				return fmt.Errorf("worktree directory does not exist: %s", worktreePath)
@@ -161,7 +213,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		}
 
 		// For READY: re-check dependencies
-		if taskStatus == models.TaskStatusReady {
+		if taskStatus == models.TaskStatusReady || taskStatus == models.TaskStatusDraftCodingPlan {
 			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
 				return fmt.Errorf("race condition: dependencies changed: %v", unmet)
 			}
@@ -175,7 +227,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 		// Build event description
 		event := "claimed"
-		if taskStatus == models.TaskStatusRejected {
+		if taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected {
 			if previousAssignee == agentID {
 				event = "reclaimed_after_rejection"
 			} else {
@@ -186,7 +238,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		}
 
 		// Update task
-		if err := task.Transition(models.TaskStatusImplementing); err != nil {
+		if err := task.Transition(targetStatus); err != nil {
 			return err
 		}
 		task.AssignedTo = &agentID
@@ -199,12 +251,12 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		if taskStatus == models.TaskStatusIntegrationFailed {
 			// Set integration_fix flag
 			task.IntegrationFix = true
-		} else if taskStatus == models.TaskStatusRejected && previousAssignee != agentID {
+		} else if (taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected) && previousAssignee != agentID {
 			// Different coder: reset review_cycles_current, update base_commit and worktree
 			task.Worktree = &worktreeRel
 			task.BaseCommit = &baseCommit
 			task.ReviewCyclesCurrent = 0
-		} else if taskStatus == models.TaskStatusRejected && previousAssignee == agentID {
+		} else if (taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected) && previousAssignee == agentID {
 			// Same coder: preserve base_commit and worktree (already set)
 		} else {
 			// READY: new claim with fresh worktree and base_commit
@@ -219,7 +271,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 			Event: event,
 			Agent: agentPtr,
 		}
-		if taskStatus == models.TaskStatusRejected && previousAssignee != agentID && previousAssignee != "" {
+		if (taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected) && previousAssignee != agentID && previousAssignee != "" {
 			historyEntry.PreviousAssignee = &previousAssignee
 		}
 		task.History = append(task.History, historyEntry)
@@ -286,13 +338,13 @@ func handleClaimTaskWorktreePhase(
 	result := claimWorktreePhaseResult{}
 
 	switch taskStatus {
-	case models.TaskStatusReady:
+	case models.TaskStatusReady, models.TaskStatusDraftCodingPlan:
 		if err := handleReadyClaimWorktree(gitWrapper, taskID, integrationBranch, worktreeDir, worktreeRel); err != nil {
 			return result, err
 		}
 		result.created = true
 		return result, nil
-	case models.TaskStatusRejected:
+	case models.TaskStatusRejected, models.TaskStatusCodingPlanRejected:
 		return handleRejectedClaimWorktree(
 			gitWrapper,
 			taskID,

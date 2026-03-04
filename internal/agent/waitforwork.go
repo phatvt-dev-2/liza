@@ -28,7 +28,7 @@ func getRoleWaitConfig(state *models.State, role string) (pollInterval, maxWait 
 	case roles.RuntimeOrchestrator:
 		pollSeconds = nonZeroOr(state.Config.OrchestratorPollInterval, models.DefaultOrchestratorPollInterval)
 		maxWaitSeconds = nonZeroOr(state.Config.OrchestratorMaxWait, models.DefaultOrchestratorMaxWait)
-	case roles.RuntimeCodeReviewer:
+	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
 		pollSeconds = nonZeroOr(state.Config.ReviewerPollInterval, models.DefaultReviewerPollInterval)
 		maxWaitSeconds = nonZeroOr(state.Config.ReviewerMaxWait, models.DefaultReviewerMaxWait)
 	default:
@@ -51,8 +51,12 @@ func waitForWork(ctx context.Context, bb *db.Blackboard, projectRoot string, rol
 	switch role {
 	case roles.RuntimeCoder:
 		return waitForCoderWork(ctx, bb, projectRoot, config.AgentID, pollInterval, maxWait)
+	case roles.RuntimeCodePlanner:
+		return waitForCodePlannerWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	case roles.RuntimeCodeReviewer:
 		return waitForReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
+	case roles.RuntimeCodePlanReviewer:
+		return waitForCodePlanReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	case roles.RuntimeOrchestrator:
 		return waitForOrchestratorWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	default:
@@ -251,8 +255,19 @@ func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot, agent
 		})
 }
 
+func waitForCodePlannerWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
+	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
+		func(s *models.State) (bool, string) {
+			claimable := models.CountClaimableTasks(s, models.RoleCodePlanner)
+			if claimable > 0 {
+				return true, fmt.Sprintf("Found %d code-planner claimable task(s)", claimable)
+			}
+			return false, "No code-planner claimable tasks"
+		})
+}
+
 func isResumableHandoff(task *models.Task, agentID string) bool {
-	return task.Status == models.TaskStatusImplementing &&
+	return (task.Status == models.TaskStatusImplementing || task.Status == models.TaskStatusCodePlanning) &&
 		task.HandoffPending &&
 		task.AssignedTo != nil &&
 		*task.AssignedTo == agentID
@@ -281,6 +296,23 @@ func waitForReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot str
 			count := models.CountReviewableTasks(s, models.RoleCodeReviewer)
 			logMsg := models.GetReviewerWorkDiagnostics(s)
 			return count > 0, logMsg
+		})
+}
+
+func waitForCodePlanReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
+	if cleared, err := ops.ClearStaleReviewClaims(projectRoot); err != nil {
+		GetLogger().Warn("Failed to clear stale review claims before code-plan-reviewer wait", "error", err)
+	} else if cleared > 0 {
+		GetLogger().Info("Cleared stale review claims before code-plan-reviewer wait", "count", cleared)
+	}
+
+	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
+		func(s *models.State) (bool, string) {
+			count := models.CountReviewableTasks(s, models.RoleCodePlanReviewer)
+			if count > 0 {
+				return true, fmt.Sprintf("Found %d code-plan-reviewable task(s)", count)
+			}
+			return false, "No code-plan-reviewable tasks"
 		})
 }
 

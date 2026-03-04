@@ -8,8 +8,10 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
+	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // SubmitForReviewResult contains the outcome of submitting a task for review.
@@ -37,14 +39,26 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 
+	runtimeRole, err := identity.ExtractRole(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
+	}
+
+	expectedCurrentStatus := models.TaskStatusImplementing
+	targetSubmittedStatus := models.TaskStatusReadyForReview
+	if runtimeRole == roles.RuntimeCodePlanner {
+		expectedCurrentStatus = models.TaskStatusCodePlanning
+		targetSubmittedStatus = models.TaskStatusCodingPlanToReview
+	}
+
 	// Phase 1: Read state to get config and validate preconditions
 	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err
 	}
 
-	if task.Status != models.TaskStatusImplementing {
-		return nil, fmt.Errorf("task %s is not IMPLEMENTING (current status: %s)", taskID, task.Status)
+	if task.Status != expectedCurrentStatus {
+		return nil, fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)
 	}
 
 	if task.AssignedTo == nil || *task.AssignedTo != agentID {
@@ -93,8 +107,8 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, fmt.Errorf("provided commit SHA %s does not match worktree HEAD %s", commitSHA, preRebaseCommit)
 	}
 
-	// TDD enforcement: code tasks must include test files
-	if task.EffectiveType() == models.TaskTypeCoding && task.BaseCommit != nil {
+	// TDD enforcement: code tasks must include test files (coder role only).
+	if runtimeRole == roles.RuntimeCoder && task.EffectiveType() == models.TaskTypeCoding && task.BaseCommit != nil {
 		hasTests, err := HasTestFiles(g, taskID, *task.BaseCommit)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check test files: %w", err)
@@ -143,8 +157,8 @@ Alternatively, abort the rebase and ask for help:
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
-		if task.Status != models.TaskStatusImplementing {
-			return fmt.Errorf("task %s is not IMPLEMENTING (current status: %s)", taskID, task.Status)
+		if task.Status != expectedCurrentStatus {
+			return fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
@@ -155,7 +169,7 @@ Alternatively, abort the rebase and ask for help:
 			return fmt.Errorf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)
 		}
 
-		if err := task.Transition(models.TaskStatusReadyForReview); err != nil {
+		if err := task.Transition(targetSubmittedStatus); err != nil {
 			return err
 		}
 		task.ReviewCommit = &postRebaseCommit

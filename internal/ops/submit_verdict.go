@@ -9,8 +9,10 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
+	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // VerdictResult contains the outcome of a successful verdict submission.
@@ -49,6 +51,20 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 
+	runtimeRole, err := identity.ExtractRole(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
+	}
+
+	expectedReviewingStatus := models.TaskStatusReviewing
+	approvedStatus := models.TaskStatusApproved
+	rejectedStatus := models.TaskStatusRejected
+	if runtimeRole == roles.RuntimeCodePlanReviewer {
+		expectedReviewingStatus = models.TaskStatusReviewingCodingPlan
+		approvedStatus = models.TaskStatusCodingPlanApproved
+		rejectedStatus = models.TaskStatusCodingPlanRejected
+	}
+
 	// Phase 1: Read state and validate preconditions
 	_, task, err := readTaskState(bb, taskID)
 	if err != nil {
@@ -56,8 +72,8 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	}
 
 	// Fast-fail before git operations; re-checked authoritatively inside Modify.
-	if task.Status != models.TaskStatusReviewing {
-		return nil, fmt.Errorf("task %s is not REVIEWING (current status: %s)", taskID, task.Status)
+	if task.Status != expectedReviewingStatus {
+		return nil, fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedReviewingStatus, task.Status)
 	}
 
 	// Phase 2: Validate ReviewCommit exists and matches worktree HEAD
@@ -92,12 +108,12 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
-		if task.Status != models.TaskStatusReviewing {
-			return fmt.Errorf("task %s is not REVIEWING (current status: %s)", taskID, task.Status)
+		if task.Status != expectedReviewingStatus {
+			return fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedReviewingStatus, task.Status)
 		}
 
 		if verdict == "APPROVED" {
-			if err := task.Transition(models.TaskStatusApproved); err != nil {
+			if err := task.Transition(approvedStatus); err != nil {
 				return err
 			}
 			task.ApprovedBy = &agentID
@@ -110,7 +126,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 				Agent: agentPtr,
 			})
 		} else {
-			if err := task.Transition(models.TaskStatusRejected); err != nil {
+			if err := task.Transition(rejectedStatus); err != nil {
 				return err
 			}
 			task.RejectionReason = &reason

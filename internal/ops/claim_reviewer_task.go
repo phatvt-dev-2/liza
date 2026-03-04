@@ -5,14 +5,17 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ClaimReviewerTaskInput contains the parameters for claiming a reviewer task.
 type ClaimReviewerTaskInput struct {
 	ProjectRoot   string
 	AgentID       string
+	WorkflowRole  string
 	LeaseDuration int
 }
 
@@ -35,6 +38,17 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		input.LeaseDuration = models.DefaultLeaseDurationSeconds
 	}
 
+	workflowRole := input.WorkflowRole
+	if workflowRole == "" {
+		// Backward-compatible default: infer from agent_id, then default to code reviewer.
+		role, err := identity.ExtractRole(input.AgentID)
+		if err == nil && role == roles.RuntimeCodePlanReviewer {
+			workflowRole = models.RoleCodePlanReviewer
+		} else {
+			workflowRole = models.RoleCodeReviewer
+		}
+	}
+
 	lp := paths.New(input.ProjectRoot)
 	bb := db.For(lp.StatePath())
 
@@ -49,7 +63,7 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		// are reverted to READY_FOR_REVIEW by ops.ClearStaleReviewClaims)
 		var candidates []*models.Task
 		for i := range state.Tasks {
-			if state.Tasks[i].IsClaimable(models.RoleCodeReviewer, state.Tasks) {
+			if state.Tasks[i].IsClaimable(workflowRole, state.Tasks) {
 				candidates = append(candidates, &state.Tasks[i])
 			}
 		}
@@ -65,7 +79,11 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		}
 
 		// Atomically claim the task and transition to REVIEWING
-		if err := task.Transition(models.TaskStatusReviewing); err != nil {
+		targetStatus := models.TaskStatusReviewing
+		if workflowRole == models.RoleCodePlanReviewer {
+			targetStatus = models.TaskStatusReviewingCodingPlan
+		}
+		if err := task.Transition(targetStatus); err != nil {
 			return err
 		}
 		task.ReviewingBy = &input.AgentID

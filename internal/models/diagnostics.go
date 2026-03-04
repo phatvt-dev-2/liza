@@ -18,15 +18,12 @@ func CountClaimableTasks(state *State, role string) int {
 	return count
 }
 
-// CountReviewableTasks counts tasks that are immediately claimable by a reviewer.
-// Only READY_FOR_REVIEW tasks with the "code_reviewer" role in their workflow qualify.
-// REVIEWING tasks with expired leases require ClearStaleReviewClaimsCommand to revert
-// them to READY_FOR_REVIEW first.
+// CountReviewableTasks counts tasks immediately claimable by the reviewer role.
+// Uses IsClaimable so each role-pair's reviewer states are honored.
 func CountReviewableTasks(state *State, role string) int {
 	count := 0
 	for i := range state.Tasks {
-		task := &state.Tasks[i]
-		if task.Status == TaskStatusReadyForReview && task.EffectiveType().HasRole(role) {
+		if state.Tasks[i].IsClaimable(role, state.Tasks) {
 			count++
 		}
 	}

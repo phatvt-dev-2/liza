@@ -439,6 +439,10 @@ func (s *Server) registerMutationTools() {
 					Description: "Task type determining role workflow (default: coding)",
 					Default:     "coding",
 				},
+				"role_pair": {
+					Type:        "string",
+					Description: "Optional role-pair key (e.g. code-planning-pair) to select initial status",
+				},
 				"agent_id": {
 					Type:        "string",
 					Description: "Agent ID performing the action (default: orchestrator-1)",
@@ -452,7 +456,7 @@ func (s *Server) registerMutationTools() {
 	// liza_claim_task tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_claim_task",
-		Description: "Claim an unclaimed task for work. Requires coder role.",
+		Description: "Claim an unclaimed task for work. Requires coder or code-planner role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -472,7 +476,7 @@ func (s *Server) registerMutationTools() {
 	// liza_submit_for_review tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_for_review",
-		Description: "Submit completed work for review after commit SHA validation. Requires coder role.",
+		Description: "Submit completed work for review after commit SHA validation. Requires coder or code-planner role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -496,7 +500,7 @@ func (s *Server) registerMutationTools() {
 	// liza_handoff tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_handoff",
-		Description: "Initiate context-exhaustion handoff for a claimed task. Requires coder role.",
+		Description: "Initiate context-exhaustion handoff for a claimed task. Requires coder or code-planner role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -524,7 +528,7 @@ func (s *Server) registerMutationTools() {
 	// liza_submit_verdict tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_verdict",
-		Description: "Submit review verdict (APPROVED or REJECTED). Requires code-reviewer role.",
+		Description: "Submit review verdict (APPROVED or REJECTED). Requires code-reviewer or code-plan-reviewer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -738,7 +742,7 @@ func (s *Server) registerComplexOperations() {
 	// liza_write_checkpoint tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_write_checkpoint",
-		Description: "Write a pre-execution checkpoint before implementing a task. Required before submission for review. Requires coder role.",
+		Description: "Write a pre-execution checkpoint before implementing a task. Required before submission for review. Requires coder or code-planner role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{

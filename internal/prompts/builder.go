@@ -50,6 +50,18 @@ type ReviewerContextConfig struct {
 	TaskOrdinal    int // 1-based position in sprint plan
 }
 
+// CodePlannerContextConfig contains configuration for building code-planner context
+type CodePlannerContextConfig struct {
+	ProjectRoot string
+	AgentID     string
+}
+
+// CodePlanReviewerContextConfig contains configuration for building code-plan-reviewer context
+type CodePlanReviewerContextConfig struct {
+	ProjectRoot string
+	AgentID     string
+}
+
 // BuildBasePrompt creates the base bootstrap prompt for all agents
 func BuildBasePrompt(config BasePromptConfig) (string, error) {
 	return executeTemplate("base_prompt", config)
@@ -156,6 +168,22 @@ type reviewerContextData struct {
 	HasPriorRejection bool
 }
 
+// codePlannerContextData is the template data for code_planner_context.tmpl
+type codePlannerContextData struct {
+	Task         *models.Task
+	Config       CodePlannerContextConfig
+	WorktreePath string
+}
+
+// codePlanReviewerContextData is the template data for code_plan_reviewer_context.tmpl
+type codePlanReviewerContextData struct {
+	Task         *models.Task
+	Config       CodePlanReviewerContextConfig
+	WorktreePath string
+	ReviewCommit string
+	AssignedTo   string
+}
+
 // BuildReviewerContext creates reviewer-specific context with review details
 func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (string, error) {
 	worktreePath := ""
@@ -173,6 +201,38 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (stri
 		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("reviewer_context", data)
+}
+
+// BuildCodePlannerContext creates code-planner-specific context with task details
+func BuildCodePlannerContext(task *models.Task, config CodePlannerContextConfig) (string, error) {
+	worktreePath := ""
+	if task.Worktree != nil {
+		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
+	}
+
+	data := codePlannerContextData{
+		Task:         task,
+		Config:       config,
+		WorktreePath: worktreePath,
+	}
+	return executeTemplate("code_planner_context", data)
+}
+
+// BuildCodePlanReviewerContext creates code-plan-reviewer-specific context with review details
+func BuildCodePlanReviewerContext(task *models.Task, config CodePlanReviewerContextConfig) (string, error) {
+	worktreePath := ""
+	if task.Worktree != nil {
+		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
+	}
+
+	data := codePlanReviewerContextData{
+		Task:         task,
+		Config:       config,
+		WorktreePath: worktreePath,
+		ReviewCommit: derefString(task.ReviewCommit),
+		AssignedTo:   derefString(task.AssignedTo),
+	}
+	return executeTemplate("code_plan_reviewer_context", data)
 }
 
 // derefString returns the value pointed to by s, or "" if s is nil.

@@ -51,8 +51,8 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 			return fmt.Errorf("task %s not found", input.TaskID)
 		}
 
-		if task.Status != models.TaskStatusImplementing {
-			return fmt.Errorf("task %s is not IMPLEMENTING (current status: %s)", input.TaskID, task.Status)
+		if task.Status != models.TaskStatusImplementing && task.Status != models.TaskStatusCodePlanning {
+			return fmt.Errorf("task %s is not IMPLEMENTING/CODE_PLANNING (current status: %s)", input.TaskID, task.Status)
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != input.AgentID {

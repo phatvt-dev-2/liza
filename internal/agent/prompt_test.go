@@ -70,6 +70,20 @@ func TestBuildPrompt(t *testing.T) {
 			contains: []string{"orchestrator", "Test goal"},
 		},
 		{
+			name:     "code-planner prompt",
+			role:     "code-planner",
+			taskID:   "task-1",
+			wantErr:  false,
+			contains: []string{"code-planner", "ASSIGNED CODE PLANNING TASK", "task-1"},
+		},
+		{
+			name:     "code-plan-reviewer prompt",
+			role:     "code-plan-reviewer",
+			taskID:   "task-1",
+			wantErr:  false,
+			contains: []string{"code-plan-reviewer", "ASSIGNED CODE PLAN REVIEW TASK", "task-1"},
+		},
+		{
 			name:     "coder with non-existent task",
 			role:     "coder",
 			taskID:   "task-999",

@@ -902,22 +902,26 @@ var agentCmd = &cobra.Command{
 
 The supervisor:
 - Registers the agent with collision detection
-- Polls for role-specific work (coder/reviewer/orchestrator)
-- Claims tasks (coder/reviewer only)
+- Polls for role-specific work (coder/reviewer/orchestrator/code-planning roles)
+- Claims tasks (doer/reviewer roles only)
 - Builds and executes prompts with the specified CLI
 - Manages heartbeats to keep lease alive
 - Handles restarts on exit code 42
 - Loops until work is exhausted or ABORT signal
 
 Roles:
-  coder          - Claims and implements tasks
-  code-reviewer  - Reviews and approves/rejects tasks
-  orchestrator     - Creates and manages task breakdown
+  coder               - Claims and implements coding tasks
+  code-reviewer       - Reviews coding tasks and submits verdicts
+  orchestrator        - Creates and manages task breakdown
+  code-planner        - Claims and produces coding plans
+  code-plan-reviewer  - Reviews coding plans and submits verdicts
 
 Example:
   # Using --agent-id flag (recommended)
   liza agent coder --agent-id coder-1
   liza agent code-reviewer --agent-id code-reviewer-1 --cli claude
+  liza agent code-planner --agent-id code-planner-1 --cli claude
+  liza agent code-plan-reviewer --agent-id code-plan-reviewer-1 --cli claude
   liza agent orchestrator --agent-id orchestrator-1 --interactive
 
   # Save agent output to .liza/agent-outputs/
@@ -925,7 +929,9 @@ Example:
 
   # Using LIZA_AGENT_ID environment variable
   LIZA_AGENT_ID=coder-1 liza agent coder
-  LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer --cli claude`,
+  LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer --cli claude
+  LIZA_AGENT_ID=code-planner-1 liza agent code-planner --cli claude
+  LIZA_AGENT_ID=code-plan-reviewer-1 liza agent code-plan-reviewer --cli claude`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		role := args[0]
@@ -950,7 +956,7 @@ Example:
 		}
 
 		if !slices.Contains(roles.AllRuntime(), role) {
-			return fmt.Errorf("invalid role: %s (must be coder, code-reviewer, or orchestrator)", role)
+			return fmt.Errorf("invalid role: %s (must be coder, code-reviewer, orchestrator, code-planner, or code-plan-reviewer)", role)
 		}
 
 		cliName, _ := cmd.Flags().GetString("cli")

@@ -1579,25 +1579,25 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "claim_task rejects reviewer",
 			handler: server.handleClaimTask,
 			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
-			wantErr: "requires coder role",
+			wantErr: "requires one of [coder code-planner] roles",
 		},
 		{
 			name:    "submit_for_review rejects reviewer",
 			handler: server.handleSubmitForReview,
 			params:  map[string]any{"task_id": "task-1", "commit_sha": "abc123", "agent_id": "code-reviewer-1"},
-			wantErr: "requires coder role",
+			wantErr: "requires one of [coder code-planner] roles",
 		},
 		{
 			name:    "handoff rejects reviewer",
 			handler: server.handleHandoff,
 			params:  map[string]any{"task_id": "task-1", "summary": "s", "next_action": "n", "agent_id": "code-reviewer-1"},
-			wantErr: "requires coder role",
+			wantErr: "requires one of [coder code-planner] roles",
 		},
 		{
 			name:    "submit_verdict rejects coder",
 			handler: server.handleSubmitVerdict,
 			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "coder-1"},
-			wantErr: "requires code-reviewer role",
+			wantErr: "requires one of [code-reviewer code-plan-reviewer] roles",
 		},
 		{
 			name:    "wt_merge rejects coder",
@@ -1621,7 +1621,7 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "write_checkpoint rejects reviewer",
 			handler: server.handleWriteCheckpoint,
 			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
-			wantErr: "requires coder role",
+			wantErr: "requires one of [coder code-planner] roles",
 		},
 		// Malformed agent ID cases
 		{
@@ -1640,7 +1640,7 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "submit_verdict rejects unknown role",
 			handler: server.handleSubmitVerdict,
 			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "foobar-1"},
-			wantErr: "requires code-reviewer role",
+			wantErr: "requires one of [code-reviewer code-plan-reviewer] roles",
 		},
 	}
 
