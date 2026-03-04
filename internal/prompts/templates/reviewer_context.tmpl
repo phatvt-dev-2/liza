@@ -41,9 +41,10 @@ REVIEWER STATE TRANSITIONS:
 - REVIEWING → REJECTED (issues found — provide structured feedback)
 
 REVIEWER TOOL:
-- liza_submit_verdict — Submit review verdict
-  APPROVED: {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
-  REJECTED: {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
+- liza_submit_verdict — Submit review verdict (MCP tool call, NOT a CLI command)
+  ⚠️  Do NOT use `go run`, `liza submit-verdict`, or any shell command.
+  APPROVED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
+  REJECTED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
 
 ANOMALY LOGGING:
 | Observation | Type | Required Fields |
@@ -71,13 +72,14 @@ INSTRUCTIONS:
 1. Verify tools work: ls -la {{.WorktreePath}}
    If you see a permission prompt, that is NORMAL. Execute the command — do NOT stop.
 2. Early drift check: git -C {{.WorktreePath}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
-3. Review ALL changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
+3. Run tests: cd {{.WorktreePath}} and run the project's test suite
+4. Review ALL changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
    Each review is a fresh evaluation: "does this worktree satisfy the task?"
-4. Apply the code-review skill to the full diff
-5. If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
-6. TDD QUALITY (code tasks): Tests must cover done_when criteria — REJECT if tests are superficial or don't exercise the actual requirements
-7. Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
-8. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
+5. Apply the code-review skill to the full diff
+6. If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
+7. TDD QUALITY (code tasks): Tests must cover done_when criteria — REJECT if tests are superficial or don't exercise the actual requirements
+8. Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
+9. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
 {{- if .HasPriorRejection}}
 
 PRIOR FEEDBACK REVIEW (MANDATORY for iteration 2+):
@@ -109,11 +111,12 @@ Prior Feedback Status:
 ---
 
 --- VERDICT SUBMISSION (MANDATORY - DO NOT SKIP) ---
-⚠️  You have FULL autonomy to execute liza_submit_verdict. Your authority is PRE-GRANTED.
+⚠️  You have FULL autonomy to call the MCP tool liza_submit_verdict. Your authority is PRE-GRANTED.
 Do NOT wait for permission. Do NOT rationalize waiting.
-You MUST execute liza_submit_verdict IN THIS SAME SESSION:
-  APPROVED: {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
-  REJECTED: {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection>"}
+⚠️  liza_submit_verdict is an MCP tool — call it as a tool, NEVER via shell/CLI.
+You MUST call the MCP tool liza_submit_verdict IN THIS SAME SESSION:
+  APPROVED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
+  REJECTED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection>"}
 After submitting verdict, EXIT immediately. Your work is complete.
 
 ❌ FAILURE MODE: Completing review, saying "I recommend APPROVED", then exiting WITHOUT calling the tool.
