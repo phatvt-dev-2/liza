@@ -123,6 +123,14 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, fmt.Errorf("failed to fetch integration branch: %w", err)
 	}
 
+	// Capture integration HEAD immediately after fetch — this is the exact ref
+	// the rebase targets. Must be before rebase to avoid TOCTOU if integration
+	// advances between fetch and rebase completion.
+	rebaseBase, err := g.GetCommitSHA(integrationBranch)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get integration branch HEAD for rebase base: %w", err)
+	}
+
 	if err := g.RebaseOnto(wtPath, "FETCH_HEAD"); err != nil {
 		return nil, fmt.Errorf(`failed to submit task for review: rebase conflict detected
 
@@ -173,6 +181,10 @@ Alternatively, abort the rebase and ask for help:
 			return err
 		}
 		task.ReviewCommit = &postRebaseCommit
+		// Update BaseCommit from "branched from" to "rebased onto" — this is the
+		// integration HEAD the rebase targeted, ensuring the reviewer diffs only
+		// the coder's changes (not integration commits that landed since claim).
+		task.BaseCommit = &rebaseBase
 
 		agentPtr := &agentID
 		task.History = append(task.History, models.TaskHistoryEntry{
