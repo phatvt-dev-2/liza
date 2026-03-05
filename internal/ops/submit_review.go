@@ -55,14 +55,14 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	targetSubmittedStatus := models.TaskStatusReadyForReview
 	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 
-	resolver, resolverErr := loadResolver(projectRoot)
+	resolver, cfg, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
 	if resolver != nil && task.RolePair != "" {
 		expectedCurrentStatus, _ = resolver.ExecutingStatus(task.RolePair)
 		targetSubmittedStatus, _ = resolver.SubmittedStatus(task.RolePair)
-		pipelineTransitions = buildPipelineTransitions(resolver)
+		pipelineTransitions = buildPipelineTransitions(resolver, cfg)
 	} else if runtimeRole == roles.RuntimeCodePlanner {
 		expectedCurrentStatus = models.TaskStatusCodePlanning
 		targetSubmittedStatus = models.TaskStatusCodingPlanToReview

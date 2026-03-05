@@ -6,24 +6,33 @@ import (
 )
 
 // loadResolver loads the frozen pipeline config for the given project root.
-// Returns nil, nil for legacy goals (no pipeline.yaml).
-func loadResolver(projectRoot string) (*pipeline.Resolver, error) {
+// Returns (nil, nil, nil) for legacy goals (no pipeline.yaml).
+func loadResolver(projectRoot string) (*pipeline.Resolver, *pipeline.PipelineConfig, error) {
 	cfg, err := pipeline.LoadFrozen(projectRoot)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if cfg == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return pipeline.NewResolver(cfg), nil
+	return pipeline.NewResolver(cfg), cfg, nil
+}
+
+// rolePairNames extracts role-pair names from a pipeline config.
+func rolePairNames(cfg *pipeline.PipelineConfig) []string {
+	names := make([]string, 0, len(cfg.Pipeline.RolePairs))
+	for name := range cfg.Pipeline.RolePairs {
+		names = append(names, name)
+	}
+	return names
 }
 
 // buildPipelineTransitions creates a complete transition map by merging the
 // resolver's intra-pair transitions with cross-cutting meta-state transitions.
-func buildPipelineTransitions(r *pipeline.Resolver) map[models.TaskStatus][]models.TaskStatus {
+func buildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig) map[models.TaskStatus][]models.TaskStatus {
 	tm := r.TransitionMap()
 
-	for _, rpName := range r.RolePairNames() {
+	for _, rpName := range rolePairNames(cfg) {
 		initial, _ := r.InitialStatus(rpName)
 		executing, _ := r.ExecutingStatus(rpName)
 		submitted, _ := r.SubmittedStatus(rpName)
@@ -43,7 +52,7 @@ func buildPipelineTransitions(r *pipeline.Resolver) map[models.TaskStatus][]mode
 	tm[models.TaskStatusBlocked] = []models.TaskStatus{models.TaskStatusSuperseded, models.TaskStatusAbandoned}
 
 	ifTargets := []models.TaskStatus{models.TaskStatusAbandoned}
-	for _, rpName := range r.RolePairNames() {
+	for _, rpName := range rolePairNames(cfg) {
 		executing, _ := r.ExecutingStatus(rpName)
 		ifTargets = append(ifTargets, executing)
 	}

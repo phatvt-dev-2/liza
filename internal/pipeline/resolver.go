@@ -254,12 +254,3 @@ func (r *Resolver) resolvePhase(rolePair, phase string) models.TaskStatus {
 func (r *Resolver) IsDeclaredState(status models.TaskStatus) bool {
 	return slices.Contains(r.AllDeclaredStates(), status)
 }
-
-// RolePairNames returns all role-pair names defined in the pipeline config.
-func (r *Resolver) RolePairNames() []string {
-	names := make([]string, 0, len(r.config.Pipeline.RolePairs))
-	for name := range r.config.Pipeline.RolePairs {
-		names = append(names, name)
-	}
-	return names
-}

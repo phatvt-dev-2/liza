@@ -68,7 +68,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	rejectedStatus := models.TaskStatusRejected
 	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 
-	resolver, resolverErr := loadResolver(projectRoot)
+	resolver, cfg, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
@@ -76,7 +76,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		expectedReviewingStatus, _ = resolver.ReviewingStatus(task.RolePair)
 		approvedStatus, _ = resolver.ApprovedStatus(task.RolePair)
 		rejectedStatus, _ = resolver.RejectedStatus(task.RolePair)
-		pipelineTransitions = buildPipelineTransitions(resolver)
+		pipelineTransitions = buildPipelineTransitions(resolver, cfg)
 	} else if runtimeRole == roles.RuntimeCodePlanReviewer {
 		expectedReviewingStatus = models.TaskStatusReviewingCodingPlan
 		approvedStatus = models.TaskStatusCodingPlanApproved
@@ -171,7 +171,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 				iterationLimit,
 			)
 			if shouldEscalate {
-				if err := task.Transition(models.TaskStatusBlocked); err != nil {
+				if err := transitionTask(models.TaskStatusBlocked); err != nil {
 					return err
 				}
 

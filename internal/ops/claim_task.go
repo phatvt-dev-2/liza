@@ -79,7 +79,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	}
 
 	// Load pipeline resolver for pipeline-aware status resolution
-	resolver, err := loadResolver(projectRoot)
+	resolver, cfg, err := loadResolver(projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
@@ -125,7 +125,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		default:
 			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
 		}
-		pipelineTransitions = buildPipelineTransitions(resolver)
+		pipelineTransitions = buildPipelineTransitions(resolver, cfg)
 	} else {
 		// Legacy path: hardcoded status resolution
 		workflowRole, err := roles.ToWorkflow(runtimeRole)

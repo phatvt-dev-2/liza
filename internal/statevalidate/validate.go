@@ -45,7 +45,7 @@ func ValidateStateFile(statePath string, skipSpecFileCheck bool, warnWriter io.W
 			return validateTaskStates(state, projectRoot, skipSpecFileCheck, resolver)
 		},
 		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-			return validateTaskInvariants(state, projectRoot, skipSpecFileCheck, resolver)
+			return validateTaskInvariants(state, projectRoot, skipSpecFileCheck, resolver, cfg)
 		},
 		validateDependencies,
 		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
@@ -140,7 +140,7 @@ func validateTaskStates(state *models.State, projectRoot string, skipSpecFileChe
 	return nil
 }
 
-func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver) error {
+func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) error {
 	// Track agent assignments to prevent duplicates
 	assignments := make(map[string][]string) // agent ID -> task IDs
 	taskIDs := buildTaskIDSet(state.Tasks)
@@ -153,7 +153,7 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 	var pipelineApprovedStatuses []models.TaskStatus
 	var pipelineRejectedStatuses []models.TaskStatus
 	if resolver != nil {
-		for _, rpName := range resolver.RolePairNames() {
+		for rpName := range cfg.Pipeline.RolePairs {
 			if es, err := resolver.ExecutingStatus(rpName); err == nil {
 				pipelineExecutingStatuses = append(pipelineExecutingStatuses, es)
 			}
@@ -336,7 +336,7 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 		}
 
-		if requiresCompletionFields(task.Status, resolver) {
+		if requiresCompletionFields(task.Status, resolver, cfg) {
 			if task.DoneWhen == "" {
 				return fmt.Errorf("non-DRAFT task missing done_when: %s", task.ID)
 			}
@@ -657,7 +657,7 @@ func buildTaskIDSet(tasks []models.Task) map[string]bool {
 	return ids
 }
 
-func requiresCompletionFields(status models.TaskStatus, resolver *pipeline.Resolver) bool {
+func requiresCompletionFields(status models.TaskStatus, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) bool {
 	// Terminal meta-states don't require completion fields
 	if status == models.TaskStatusSuperseded || status == models.TaskStatusAbandoned {
 		return false
@@ -667,8 +667,8 @@ func requiresCompletionFields(status models.TaskStatus, resolver *pipeline.Resol
 		return false
 	}
 	// Pipeline initial states (drafts)
-	if resolver != nil {
-		for _, rpName := range resolver.RolePairNames() {
+	if resolver != nil && cfg != nil {
+		for rpName := range cfg.Pipeline.RolePairs {
 			if initial, err := resolver.InitialStatus(rpName); err == nil && status == initial {
 				return false
 			}

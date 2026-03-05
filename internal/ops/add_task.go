@@ -95,7 +95,7 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 
 	// Derive project root from state path (.liza/state.yaml → project root)
 	projectRoot := filepath.Dir(filepath.Dir(statePath))
-	resolver, err := loadResolver(projectRoot)
+	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}

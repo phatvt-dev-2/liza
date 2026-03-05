@@ -54,7 +54,7 @@ func findRepoRoot(t *testing.T) string {
 func TestLoadResolver_PipelineGoal(t *testing.T) {
 	tmpDir, _ := setupPipelineTest(t)
 
-	resolver, err := loadResolver(tmpDir)
+	resolver, _, err := loadResolver(tmpDir)
 	if err != nil {
 		t.Fatalf("loadResolver() error: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestLoadResolver_LegacyGoal(t *testing.T) {
 	testhelpers.SetupLizaDir(t, tmpDir)
 	// No pipeline.yaml → legacy goal
 
-	resolver, err := loadResolver(tmpDir)
+	resolver, _, err := loadResolver(tmpDir)
 	if err != nil {
 		t.Fatalf("loadResolver() error: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestClaimTask_LegacyGoalStillWorks(t *testing.T) {
 func TestInitialTaskStatus_PipelineGoal(t *testing.T) {
 	tmpDir, _ := setupPipelineTest(t)
 
-	resolver, err := loadResolver(tmpDir)
+	resolver, _, err := loadResolver(tmpDir)
 	if err != nil {
 		t.Fatalf("loadResolver error: %v", err)
 	}
