@@ -883,6 +883,36 @@ func TestResolver_IsDeclaredState(t *testing.T) {
 	}
 }
 
+func TestLoad_UnknownFieldRejected(t *testing.T) {
+	yaml := `
+pipeline:
+  agent-roles:
+    coder: "Coder"
+    reviewer: "Reviewer"
+  role-pairs:
+    pair-a:
+      doer: coder
+      reviewer: reviewer
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+  sub-pipelines: {}
+  entry-points: {}
+  agent_roles:
+    typo: "This should fail"
+`
+	cfg := writeTemp(t, yaml)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for unknown field in pipeline config")
+	}
+	assertContains(t, err.Error(), "agent_roles")
+}
+
 // --- helpers ---
 
 func writeTemp(t *testing.T, content string) string {

@@ -3,6 +3,7 @@
 package pipeline
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -74,7 +75,9 @@ func Load(path string) (*PipelineConfig, error) {
 		return nil, fmt.Errorf("reading pipeline config: %w", err)
 	}
 	var cfg PipelineConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("parsing pipeline config: %w", err)
 	}
 	if err := validate(&cfg); err != nil {
