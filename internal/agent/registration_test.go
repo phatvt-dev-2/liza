@@ -534,3 +534,222 @@ func TestResetAgentAfterExit_NotFound(t *testing.T) {
 		t.Errorf("expected NotFoundError, got %T: %v", err, err)
 	}
 }
+
+// TestResetAgentAfterExit_ReviewerReleasesTask tests that a reviewer exiting
+// without submitting a verdict releases the task claim (REVIEWING → READY_FOR_REVIEW).
+func TestResetAgentAfterExit_ReviewerReleasesTask(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	agentID := "code-reviewer-1"
+	taskID := "task-1"
+	now := time.Now().UTC()
+
+	state.Tasks = append(state.Tasks, models.Task{
+		ID:                 taskID,
+		Status:             models.TaskStatusReviewing,
+		ReviewingBy:        testhelpers.StringPtr(agentID),
+		ReviewLeaseExpires: testhelpers.TimePtr(now.Add(30 * time.Minute)),
+		Created:            now,
+		Priority:           1,
+		Iteration:          1,
+		Type:               models.TaskTypeCoding,
+	})
+	state.Agents[agentID] = models.Agent{
+		Role:        "code-reviewer",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: &taskID,
+		Heartbeat:   now,
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	err := resetAgentAfterExit(bb, agentID)
+	if err != nil {
+		t.Fatalf("resetAgentAfterExit() error = %v", err)
+	}
+
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	// Agent should be IDLE with no CurrentTask
+	agent := state.Agents[agentID]
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Expected agent status IDLE, got %s", agent.Status)
+	}
+	if agent.CurrentTask != nil {
+		t.Errorf("Expected CurrentTask nil, got %v", *agent.CurrentTask)
+	}
+
+	// Task should be back to READY_FOR_REVIEW with claim fields cleared
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusReadyForReview {
+		t.Errorf("Expected task status READY_FOR_REVIEW, got %s", task.Status)
+	}
+	if task.ReviewingBy != nil {
+		t.Errorf("Expected ReviewingBy nil, got %v", *task.ReviewingBy)
+	}
+	if task.ReviewLeaseExpires != nil {
+		t.Error("Expected ReviewLeaseExpires nil")
+	}
+}
+
+// TestResetAgentAfterExit_CoderReleasesTask tests that a coder exiting
+// without submitting for review releases the task claim (IMPLEMENTING → READY).
+func TestResetAgentAfterExit_CoderReleasesTask(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	agentID := "coder-1"
+	taskID := "task-1"
+	now := time.Now().UTC()
+
+	state.Tasks = append(state.Tasks, models.Task{
+		ID:         taskID,
+		Status:     models.TaskStatusImplementing,
+		AssignedTo: testhelpers.StringPtr(agentID),
+		Created:    now,
+		Priority:   1,
+		Iteration:  1,
+		Type:       models.TaskTypeCoding,
+	})
+	state.Agents[agentID] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: &taskID,
+		Heartbeat:   now,
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	err := resetAgentAfterExit(bb, agentID)
+	if err != nil {
+		t.Fatalf("resetAgentAfterExit() error = %v", err)
+	}
+
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	// Agent should be IDLE with no CurrentTask
+	agent := state.Agents[agentID]
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Expected agent status IDLE, got %s", agent.Status)
+	}
+	if agent.CurrentTask != nil {
+		t.Errorf("Expected CurrentTask nil, got %v", *agent.CurrentTask)
+	}
+
+	// Task should be back to READY with claim fields cleared
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusReady {
+		t.Errorf("Expected task status READY, got %s", task.Status)
+	}
+	if task.AssignedTo != nil {
+		t.Errorf("Expected AssignedTo nil, got %v", *task.AssignedTo)
+	}
+}
+
+// TestResetAgentAfterExit_HandoffPreservesTask tests that a HANDOFF agent
+// with CurrentTask set preserves the task claim (existing behavior).
+func TestResetAgentAfterExit_HandoffPreservesTask(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	agentID := "coder-1"
+	taskID := "task-1"
+	now := time.Now().UTC()
+
+	state.Tasks = append(state.Tasks, models.Task{
+		ID:         taskID,
+		Status:     models.TaskStatusImplementing,
+		AssignedTo: testhelpers.StringPtr(agentID),
+		Created:    now,
+		Priority:   1,
+		Iteration:  1,
+		Type:       models.TaskTypeCoding,
+	})
+	state.Agents[agentID] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusHandoff,
+		CurrentTask: &taskID,
+		Heartbeat:   now,
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	err := resetAgentAfterExit(bb, agentID)
+	if err != nil {
+		t.Fatalf("resetAgentAfterExit() error = %v", err)
+	}
+
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	// Agent should still be HANDOFF with CurrentTask preserved
+	agent := state.Agents[agentID]
+	if agent.Status != models.AgentStatusHandoff {
+		t.Errorf("Expected agent status HANDOFF, got %s", agent.Status)
+	}
+	if agent.CurrentTask == nil || *agent.CurrentTask != taskID {
+		t.Errorf("Expected CurrentTask %q, got %v", taskID, agent.CurrentTask)
+	}
+
+	// Task should still be IMPLEMENTING with assignment preserved
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusImplementing {
+		t.Errorf("Expected task status IMPLEMENTING, got %s", task.Status)
+	}
+	if task.AssignedTo == nil || *task.AssignedTo != agentID {
+		t.Errorf("Expected AssignedTo %q, got %v", agentID, task.AssignedTo)
+	}
+}
+
+// TestResetAgentAfterExit_NoCurrentTask tests that an agent with no CurrentTask
+// is a no-op for task release (no panic, no error).
+func TestResetAgentAfterExit_NoCurrentTask(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	agentID := "coder-1"
+	state.Agents[agentID] = models.Agent{
+		Role:      "coder",
+		Status:    models.AgentStatusWorking,
+		Heartbeat: time.Now().UTC(),
+		// CurrentTask is nil
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	err := resetAgentAfterExit(bb, agentID)
+	if err != nil {
+		t.Fatalf("resetAgentAfterExit() error = %v", err)
+	}
+
+	state, err = bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	agent := state.Agents[agentID]
+	if agent.Status != models.AgentStatusIdle {
+		t.Errorf("Expected status IDLE, got %s", agent.Status)
+	}
+	if agent.CurrentTask != nil {
+		t.Errorf("Expected CurrentTask nil, got %v", *agent.CurrentTask)
+	}
+}

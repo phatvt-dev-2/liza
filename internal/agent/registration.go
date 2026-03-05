@@ -222,6 +222,13 @@ func resetAgentAfterExit(bb *db.Blackboard, agentID string) error {
 			// CurrentTask already cleared — fall through to reset to IDLE
 		}
 
+		// Release any held task claim before clearing CurrentTask
+		if agent.CurrentTask != nil {
+			if task := state.FindTask(*agent.CurrentTask); task != nil {
+				releaseTaskClaim(state, task, agent.Role, agentID, now)
+			}
+		}
+
 		agent.Status = models.AgentStatusIdle
 		agent.CurrentTask = nil
 		agent.Heartbeat = now
