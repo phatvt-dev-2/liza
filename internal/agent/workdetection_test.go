@@ -485,6 +485,35 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			wantTrigger: WakeTriggerNone,
 			wantCount:   0,
 		},
+		{
+			name: "sprint CHECKPOINT suppresses re-wake",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Status = models.SprintStatusCheckpoint
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
+		},
+		{
+			name: "sprint COMPLETED suppresses re-wake",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Status = models.SprintStatusCompleted
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
+		},
 	}
 
 	for _, tt := range tests {

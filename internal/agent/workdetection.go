@@ -92,7 +92,14 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 
 	// Sprint-complete check: pipeline-aware when terminals are provided,
 	// falls back to universal terminals when nil.
+	// Guard: suppress when sprint is already CHECKPOINT or COMPLETED to prevent
+	// the re-wake loop (supervisor sets COMPLETED → state change fires detection
+	// → orchestrator wakes → calls sprint_checkpoint → rejected).
 	if state.AllPlannedTasksTerminalWith(pipelineTerminals) {
+		if state.Sprint.Status == models.SprintStatusCheckpoint ||
+			state.Sprint.Status == models.SprintStatusCompleted {
+			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
+		}
 		return OrchestratorWakeResult{
 			Trigger: WakeTriggerSprintComplete,
 			Count:   len(state.Sprint.Scope.Planned),
