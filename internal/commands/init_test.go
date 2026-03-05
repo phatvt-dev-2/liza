@@ -579,3 +579,285 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 		t.Errorf("Expected liza MCP tools in allow array (e.g., mcp__liza__liza_add_task)")
 	}
 }
+
+// validPipelineYAML is a minimal valid pipeline config for testing.
+const validPipelineYAML = `pipeline:
+  agent-roles:
+    code-planner: "Code Planner"
+    code-plan-reviewer: "Code Plan Reviewer"
+    coder: "Coder"
+    code-reviewer: "Code Reviewer"
+
+  role-pairs:
+    code-planning-pair:
+      doer: code-planner
+      reviewer: code-plan-reviewer
+      states:
+        initial: DRAFT_CODING_PLAN
+        executing: CODE_PLANNING
+        submitted: CODING_PLAN_TO_REVIEW
+        reviewing: REVIEWING_CODING_PLAN
+        approved: CODING_PLAN_APPROVED
+        rejected: CODING_PLAN_REJECTED
+
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - code-planning-pair
+        - coding-pair
+      transitions:
+        - name: code-plan-to-coding
+          from: code-planning-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+
+  entry-points:
+    detailed-spec: coding-subpipeline.code-planning-pair
+`
+
+func writePipelineConfig(t *testing.T, dir, content string) string {
+	t.Helper()
+	configPath := filepath.Join(dir, "pipeline.yaml")
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return configPath
+}
+
+func TestInitCommandWithConfig_FreezesPipeline(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	configPath := writePipelineConfig(t, tmpDir, validPipelineYAML)
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Pipeline goal",
+		SpecRef:     "specs/vision.md",
+		ConfigPath:  configPath,
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	// Verify .liza/pipeline.yaml exists and is identical to input
+	frozenPath := filepath.Join(tmpDir, ".liza", "pipeline.yaml")
+	frozen, err := os.ReadFile(frozenPath)
+	if err != nil {
+		t.Fatalf("Failed to read frozen pipeline.yaml: %v", err)
+	}
+	if string(frozen) != validPipelineYAML {
+		t.Errorf("Frozen pipeline.yaml differs from input.\nGot:\n%s\nWant:\n%s", string(frozen), validPipelineYAML)
+	}
+
+	// Verify state.yaml has pipeline_version: 2
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.PipelineVersion != 2 {
+		t.Errorf("state.PipelineVersion = %d, want 2", state.PipelineVersion)
+	}
+}
+
+func TestInitCommandWithConfig_EntryPoint(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	configPath := writePipelineConfig(t, tmpDir, validPipelineYAML)
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Pipeline goal",
+		SpecRef:     "specs/vision.md",
+		ConfigPath:  configPath,
+		EntryPoint:  "detailed-spec",
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	// Verify goal.entry_point is set
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Goal.EntryPoint != "detailed-spec" {
+		t.Errorf("state.Goal.EntryPoint = %q, want %q", state.Goal.EntryPoint, "detailed-spec")
+	}
+}
+
+func TestInitCommandWithConfig_NoConfigNoPipeline(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Init without --config
+	err = InitCommand("Legacy goal", "specs/vision.md", nil)
+	if err != nil {
+		t.Fatalf("InitCommand() error = %v", err)
+	}
+
+	// Verify no pipeline.yaml
+	frozenPath := filepath.Join(tmpDir, ".liza", "pipeline.yaml")
+	if _, err := os.Stat(frozenPath); !os.IsNotExist(err) {
+		t.Errorf("pipeline.yaml should not exist without --config, but it does")
+	}
+
+	// Verify no pipeline_version
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.PipelineVersion != 0 {
+		t.Errorf("state.PipelineVersion = %d, want 0 (unset)", state.PipelineVersion)
+	}
+
+	// Verify no entry_point
+	if state.Goal.EntryPoint != "" {
+		t.Errorf("state.Goal.EntryPoint = %q, want empty", state.Goal.EntryPoint)
+	}
+}
+
+func TestInitCommandWithConfig_InvalidConfig(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Write invalid pipeline config (missing required fields)
+	invalidYAML := `pipeline:
+  agent-roles: {}
+  role-pairs: {}
+`
+	configPath := writePipelineConfig(t, tmpDir, invalidYAML)
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Bad config goal",
+		SpecRef:     "specs/vision.md",
+		ConfigPath:  configPath,
+	})
+	if err == nil {
+		t.Fatal("Expected error for invalid config, got nil")
+	}
+	testhelpers.AssertErrorContains(t, err, "invalid pipeline config")
+
+	// Verify .liza was not created (early validation)
+	lizaDir := filepath.Join(tmpDir, ".liza")
+	if _, statErr := os.Stat(lizaDir); !os.IsNotExist(statErr) {
+		t.Errorf(".liza directory should not exist after config validation failure")
+	}
+}
+
+func TestInitCommandWithConfig_NonexistentEntryPoint(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	configPath := writePipelineConfig(t, tmpDir, validPipelineYAML)
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Goal",
+		SpecRef:     "specs/vision.md",
+		ConfigPath:  configPath,
+		EntryPoint:  "nonexistent",
+	})
+	if err == nil {
+		t.Fatal("Expected error for nonexistent entry-point, got nil")
+	}
+	testhelpers.AssertErrorContains(t, err, "entry-point")
+	testhelpers.AssertErrorContains(t, err, "not found")
+}
+
+func TestInitCommandWithConfig_EntryPointWithoutConfig(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Goal",
+		SpecRef:     "specs/vision.md",
+		EntryPoint:  "detailed-spec",
+	})
+	if err == nil {
+		t.Fatal("Expected error for --entry-point without --config, got nil")
+	}
+	testhelpers.AssertErrorContains(t, err, "--entry-point requires --config")
+}

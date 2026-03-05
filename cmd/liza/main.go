@@ -76,12 +76,24 @@ var initCmd = &cobra.Command{
 generating initial state.yaml, and setting up the integration branch.
 
 The description argument is required and describes the goal.
-The spec file (default: specs/vision.md) must exist before initialization.`,
+The spec file (default: specs/vision.md) must exist before initialization.
+
+Use --config to provide a pipeline YAML file. The config is validated and frozen
+into .liza/pipeline.yaml. Use --entry-point with --config to specify which
+entry-point to use (must be defined in the config).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		description := args[0]
 		specRef, _ := cmd.Flags().GetString("spec")
-		return commands.InitCommand(description, specRef, os.Stdin)
+		configPath, _ := cmd.Flags().GetString("config")
+		entryPoint, _ := cmd.Flags().GetString("entry-point")
+		return commands.InitCommandWithConfig(commands.InitParams{
+			Description: description,
+			SpecRef:     specRef,
+			ConfigPath:  configPath,
+			EntryPoint:  entryPoint,
+			Stdin:       os.Stdin,
+		})
 	},
 }
 
@@ -1321,6 +1333,8 @@ func init() {
 
 	// Init command flags
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")
+	initCmd.Flags().String("config", "", "path to pipeline YAML config file")
+	initCmd.Flags().String("entry-point", "", "entry-point name from pipeline config (requires --config)")
 
 	// Validate command flags
 	validateCmd.Flags().Bool("skip-spec-check", false, "skip spec file existence check")

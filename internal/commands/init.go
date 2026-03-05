@@ -15,7 +15,17 @@ import (
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
+
+// InitParams holds the parameters for InitCommand.
+type InitParams struct {
+	Description string
+	SpecRef     string
+	ConfigPath  string // --config: path to pipeline YAML
+	EntryPoint  string // --entry-point: name of entry-point in config
+	Stdin       io.Reader
+}
 
 // InitCommand initializes a new Liza workspace.
 // It creates the .liza directory structure, generates initial state.yaml,
@@ -24,9 +34,54 @@ import (
 // Prerequisite: 'liza setup' must have been run to populate ~/.liza/.
 // The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
 func InitCommand(description string, specRef string, stdin io.Reader) error {
+	return InitCommandWithConfig(InitParams{
+		Description: description,
+		SpecRef:     specRef,
+		Stdin:       stdin,
+	})
+}
+
+// InitCommandWithConfig initializes a workspace with optional pipeline config.
+func InitCommandWithConfig(params InitParams) error {
+	description := params.Description
+	specRef := params.SpecRef
+	stdin := params.Stdin
+	configPath := params.ConfigPath
+	entryPoint := params.EntryPoint
 	if stdin == nil {
 		stdin = os.Stdin
 	}
+
+	// --entry-point requires --config
+	if entryPoint != "" && configPath == "" {
+		return fmt.Errorf("--entry-point requires --config")
+	}
+
+	// Validate and load pipeline config early (before creating .liza dir)
+	var pipelineCfg *pipeline.PipelineConfig
+	var pipelineData []byte
+	if configPath != "" {
+		absConfigPath, err := filepath.Abs(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve config path: %w", err)
+		}
+		pipelineCfg, err = pipeline.Load(absConfigPath)
+		if err != nil {
+			return fmt.Errorf("invalid pipeline config: %w", err)
+		}
+		pipelineData, err = os.ReadFile(absConfigPath)
+		if err != nil {
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+		// Validate entry-point if provided
+		if entryPoint != "" {
+			if _, ok := pipelineCfg.Pipeline.EntryPoints[entryPoint]; !ok {
+				return fmt.Errorf("entry-point %q not found in pipeline config (available: %s)",
+					entryPoint, entryPointNames(pipelineCfg))
+			}
+		}
+	}
+
 	// Get project paths
 	lizaPaths, err := paths.LizaPathsFromGit()
 	if err != nil {
@@ -72,6 +127,15 @@ func InitCommand(description string, specRef string, stdin io.Reader) error {
 
 	cleanupInit := func() {
 		os.RemoveAll(lizaPaths.LizaDir())
+	}
+
+	// Freeze pipeline config into .liza/pipeline.yaml if provided
+	if pipelineCfg != nil {
+		frozenPath := filepath.Join(lizaPaths.LizaDir(), "pipeline.yaml")
+		if err := os.WriteFile(frozenPath, pipelineData, 0644); err != nil {
+			cleanupInit()
+			return fmt.Errorf("failed to freeze pipeline config: %w", err)
+		}
 	}
 
 	// Write/merge Claude Code settings to .claude/
@@ -151,13 +215,21 @@ func InitCommand(description string, specRef string, stdin io.Reader) error {
 	timestamp := time.Now().UTC()
 	goalID := fmt.Sprintf("goal-%d", timestamp.Unix())
 
+	// Set pipeline version if config was provided
+	pipelineVersion := 0
+	if pipelineCfg != nil {
+		pipelineVersion = 2
+	}
+
 	// Create initial state
 	state := &models.State{
-		Version: 1,
+		Version:         1,
+		PipelineVersion: pipelineVersion,
 		Goal: models.Goal{
 			ID:          goalID,
 			Description: description,
 			SpecRef:     specPath,
+			EntryPoint:  entryPoint,
 			Created:     timestamp,
 			Status:      models.GoalStatusInProgress,
 			AlignmentHistory: []models.AlignmentHistory{
@@ -288,4 +360,13 @@ func createIntegrationBranch() error {
 	}
 
 	return nil
+}
+
+// entryPointNames returns a comma-separated list of entry-point names from the config.
+func entryPointNames(cfg *pipeline.PipelineConfig) string {
+	names := make([]string, 0, len(cfg.Pipeline.EntryPoints))
+	for name := range cfg.Pipeline.EntryPoints {
+		names = append(names, name)
+	}
+	return strings.Join(names, ", ")
 }

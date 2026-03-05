@@ -10,20 +10,21 @@ import (
 
 // State represents the complete Liza state.yaml structure
 type State struct {
-	Version        int                    `yaml:"version"`
-	Goal           Goal                   `yaml:"goal"`
-	Tasks          []Task                 `yaml:"tasks"`
-	Agents         map[string]Agent       `yaml:"agents"`
-	Discovered     []Discovery            `yaml:"discovered"`
-	Handoff        map[string]HandoffNote `yaml:"handoff"`
-	HumanNotes     []HumanNote            `yaml:"human_notes"`
-	SpecChanges    []SpecChange           `yaml:"spec_changes"`
-	Anomalies      []Anomaly              `yaml:"anomalies"`
-	Sprint         Sprint                 `yaml:"sprint"`
-	SprintHistory  []SprintSummary        `yaml:"sprint_history,omitempty"`
-	CircuitBreaker CircuitBreaker         `yaml:"circuit_breaker"`
-	Config         Config                 `yaml:"config"`
-	Extra          map[string]any         `yaml:",inline"`
+	Version         int                    `yaml:"version"`
+	PipelineVersion int                    `yaml:"pipeline_version,omitempty"`
+	Goal            Goal                   `yaml:"goal"`
+	Tasks           []Task                 `yaml:"tasks"`
+	Agents          map[string]Agent       `yaml:"agents"`
+	Discovered      []Discovery            `yaml:"discovered"`
+	Handoff         map[string]HandoffNote `yaml:"handoff"`
+	HumanNotes      []HumanNote            `yaml:"human_notes"`
+	SpecChanges     []SpecChange           `yaml:"spec_changes"`
+	Anomalies       []Anomaly              `yaml:"anomalies"`
+	Sprint          Sprint                 `yaml:"sprint"`
+	SprintHistory   []SprintSummary        `yaml:"sprint_history,omitempty"`
+	CircuitBreaker  CircuitBreaker         `yaml:"circuit_breaker"`
+	Config          Config                 `yaml:"config"`
+	Extra           map[string]any         `yaml:",inline"`
 }
 
 // TaskType represents the kind of task, determining which roles participate in its lifecycle.
@@ -422,6 +423,7 @@ type Goal struct {
 	ID               string             `yaml:"id"`
 	Description      string             `yaml:"description"`
 	SpecRef          string             `yaml:"spec_ref"`
+	EntryPoint       string             `yaml:"entry_point,omitempty"`
 	Created          time.Time          `yaml:"created"`
 	Status           GoalStatus         `yaml:"status"`
 	AlignmentHistory []AlignmentHistory `yaml:"alignment_history"`
