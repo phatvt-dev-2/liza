@@ -2,14 +2,8 @@
 
 Status: In Progress
 
-Phase 1:
-- steps 1-4: Done
-- steps 5-8: To do
-
-Phase 2: Not to do yet.
-- steps 1-3
-
-**Only consider implementing Phase 1 steps 1-4 for now. The rest of the plan is future**
+Phase 1: Done
+Phase 2: To do
 
 ## Context
 
@@ -81,7 +75,7 @@ state machine.
 **Constraint:** Role-pair names must be globally unique across the pipeline config. A role-pair cannot appear in more than one sub-pipeline. This ensures the task's `role_pair` field is sufficient to resolve which sub-pipeline and transitions apply — no additional `sub_pipeline` field is needed on the task model.
 
 To be noted that role pairs may have a terminal state that doesn't match the initial state of the next role pair in the pipeline.
-In such a case, e.g. `CODING_PLAN_APPROVED → DRAFT_CODE`, only the user may execute the transition manually using `liza proceed <task-id> <transition-name>`. Both arguments are required — there is no auto-detection when multiple manual transitions are possible. The task's `role_pair` field scopes which transitions are valid; transition names only need to be unique within the sub-pipeline, not globally. `liza status` should show available transitions for tasks at manual-transition states.
+In such a case, e.g. `CODING_PLAN_APPROVED → DRAFT_CODE`, only the user may execute the transition manually using `liza proceed <task-id> <transition-name>`. Both arguments are required — there is no auto-detection when multiple manual transitions are possible. The task's `role_pair` field scopes which transitions are valid; transition names must be globally unique across all sub-pipelines (since `liza proceed` resolves transitions by name without sub-pipeline context). `liza status` shows available transitions for tasks at manual-transition states.
 
 ---
 
@@ -92,12 +86,12 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
 - making the existing pipeline declarative rather than hardcoded.
 
 ### Phase 1: configurable pipeline
-1. Rename the existing Planner to Orchestrator.
+1. ✅ Rename the existing Planner to Orchestrator.
 
-2. Extract the planning responsibility from the (now-renamed) Orchestrator into a new Code Planner role.
+2. ✅ Extract the planning responsibility from the (now-renamed) Orchestrator into a new Code Planner role.
    The Orchestrator's only remaining responsibility is creating a task for the Code Planner.
 
-3. Add a Code Plan Reviewer as the reviewer of the output of the Code Planner
+3. ✅ Add a Code Plan Reviewer as the reviewer of the output of the Code Planner
    This implies modifying the transitions from:
    ```
    DRAFT → READY
@@ -108,16 +102,23 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
      ↑                                                             ↓
      └───────────────────── CODING_PLAN_REJECTED ──────────────────┘
    ```
-   Note that the `CODING_PLAN_APPROVED` is a terminal state for the Sprint (like MERGED and ABANDONED).
-   The transition `CODING_PLAN_APPROVED → DRAFT_CODE` is a human privilege. It thus happens between sprints.
+   After approval, the reviewer's supervisor merges the worktree branch to integration
+   (CODING_PLAN_APPROVED → MERGED), same as for the coding pair. MERGED is therefore the
+   actual sprint-terminal state, and `liza proceed` operates on MERGED tasks.
 
-4. Implement a `liza proceed` command to do the `CODING_PLAN_APPROVED → DRAFT_CODE` transition.
+   **Implementation note:** The code-planning pair states and transitions are hardcoded in
+   `models/state.go` alongside the legacy coding-pair transitions. This dual representation
+   (hardcoded + YAML-driven) ensures backward compatibility: legacy goals (no pipeline config)
+   use the hardcoded transitions, while pipeline-configured goals use the resolver. Both paths
+   coexist and are exercised by different code paths at runtime.
+
+4. ✅ Implement a `liza proceed` command to do the `MERGED → DRAFT_CODE` transition.
    The next sprint may then be started using `liza resume`.
 
    **Task lifecycle semantics for `liza proceed`:**
 
    `liza proceed` never changes the source task's status. The source task stays at its
-   sprint-terminal state (e.g., CODING_PLAN_APPROVED) as a permanent record.
+   sprint-terminal state (e.g., MERGED) as a permanent record.
    The only field written back to the source task is `transitions_executed` (bookkeeping
    for idempotency — see below). This is not a state change.
 
@@ -152,7 +153,7 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    transition (e.g., N approved US tasks → N Code Planner tasks), the human runs it N times.
    A `liza proceed --all <transition-name>` convenience is deferred.
 
-5. Make `liza init` take a `--config` yaml file parameter. This yaml file will define the pipeline to implement.
+5. ✅ Make `liza init` take a `--config` yaml file parameter. This yaml file will define the pipeline to implement.
    At init time, `liza init --config pipeline.yaml "Project goal" --spec vision.md` freezes both the
    pipeline config (into `.liza/pipeline.yaml`) and the goal/spec reference. The Orchestrator reads
    the frozen pipeline to determine the entry-point, then reads the spec to classify and dispatch.
@@ -164,6 +165,10 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    source file. The config is immutable for the lifetime of the goal — changing the pipeline requires
    a new `liza init`. The blackboard records `pipeline_version: 2` at init time so tools can
    distinguish pipeline-configured goals from legacy hardcoded goals without relying on goal history.
+
+   An additional `--post-worktree-cmd` flag allows specifying a shell command to run after
+   worktree creation (e.g., dependency installation). This replaces the previously hardcoded
+   `syncEmbedded` call, making worktree post-creation configurable per project.
    So:
    ```yaml
    pipeline:
@@ -216,7 +221,16 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    - `manual`: requires the human to run `liza proceed <task-id> <transition-name>`. Used for quality gates where human judgment is needed before the next pipeline stage begins (e.g. reviewing a plan before committing to implementation).
    - `auto` *(RESERVED — not yet implemented)*: the Orchestrator's supervisor transitions the task automatically when it detects the `from` state. Happens on the next supervisor polling cycle. Preconditions beyond state match: for `per-subtask`, `output[]` must be non-empty and validated (each entry has `desc`, `done_when`, `scope`); for `one-to-one`, parent artifact must exist. No current transitions use `auto`.
 
-6. Make the Task state machine configured via the yaml file. No more hardcoded flow.
+6. ✅ Make the Task state machine configured via the yaml file.
+
+   **Implementation note:** The hardcoded state machine is retained alongside the YAML-driven
+   one for backward compatibility. Every ops function (claim, submit, verdict, checkpoint,
+   release) checks for a pipeline resolver first (`if resolver != nil && task.RolePair != ""`);
+   if present, it resolves states from the config. Otherwise, it falls back to the hardcoded
+   transitions. The `TransitionWith()` method on Task accepts a custom transition map from the
+   resolver, while the existing `Transition()` uses the hardcoded map. Cross-cutting transitions
+   (to/from BLOCKED, ABANDONED, SUPERSEDED) are merged into the pipeline transition map by
+   `BuildPipelineTransitions()` in `pipeline_ops.go`.
 
    **State name migration:** The coding-pair YAML uses new state names (e.g., DRAFT_CODE instead
    of DRAFT, CODE_READY_FOR_REVIEW instead of READY_FOR_REVIEW). This is a breaking change for
@@ -224,10 +238,9 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    in-progress goals continue using the hardcoded state machine until completed. No migration
    of active blackboard state is needed.
 
-7. Extend the task model with `role_pair`, `parent_task`, and `output` attributes.
-   The blackboard schema docs (`blackboard-schema.md`, `state-machines.md` validation rules)
-   will be updated when the implementation lands — until then, this spec is the source of
-   truth for the new task fields.
+7. ✅ Extend the task model with `role_pair`, `parent_task`, `output`, and `transitions_executed` attributes.
+   The blackboard schema docs (`blackboard-schema.md`, `state-machines.md`) have been updated
+   to reflect these fields.
 
    When a doer's work produces downstream tasks (1:N transitions), the doer writes the subtask definitions
    into `output[]` as part of its deliverable. The reviewer validates both the artifact and the `output[]`
@@ -256,11 +269,11 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    supervisor for downstream tasks created from `output[]`. `liza validate` must reject
    tasks whose `role_pair` is absent or not present in the frozen pipeline config.
 
-   **Supersedes `task.type`:** The current `type` field (see `state-machines.md` §Type-Aware
-   Claimability) is replaced by `role_pair` for claimability and state resolution. The role-pair
-   config defines which roles participate and which states are claimable — no separate type
-   registry needed. The `type` field may remain as a human-readable category (e.g., "coding",
-   "specification") but is no longer the mechanism for role dispatch.
+   **Relationship with `task.type`:** For pipeline-configured goals, `role_pair` is the
+   mechanism for claimability and state resolution — the role-pair config defines which roles
+   participate and which states are claimable. For legacy goals (no pipeline config), `task.type`
+   continues to drive claimability via `EffectiveType()` (defaults to "coding" when empty).
+   Both fields coexist; `role_pair` takes precedence when present.
 
    **Responsibilities:**
    - **Doer** writes `output[]` with full task specs (`desc`, `done_when`, `scope`, `spec_ref`) — same self-validation
@@ -281,7 +294,15 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    - `per-subtask`: create one downstream task per entry in `output[]`. Each entry provides `desc`, `done_when`, `scope`, `spec_ref`.
    - `one-to-one`: creates one child task. The parent task is the child's input, not a template — the child's `desc`, `done_when`, `scope` describe the *next phase's work* (e.g., "produce a coding plan for [parent US]"), not a copy of the parent's fields. `parent_task` links back. `spec_ref` points to the parent's artifact. No `output[]` needed. The `liza proceed` command (or supervisor for auto) generates the child's fields from the transition definition.
 
-8. Make the Orchestrator's supervisor create the downstream tasks from `output[]` on the configured transitions.
+8. ✅ Make the Orchestrator's supervisor create the downstream tasks from `output[]` on the configured transitions.
+
+   **Implementation note:** Downstream task creation is performed by `liza proceed` (the CLI
+   command invoked by the human), not automatically by the supervisor. The supervisor's role
+   is limited to intra-pair transitions (claim → execute → submit → review → approve/reject).
+   Cross-pair transitions remain a human-initiated operation, matching the `trigger: manual`
+   semantics in the YAML config. For pipeline-configured goals, `liza proceed` resolves the
+   transition definition from the frozen config via the resolver; for legacy goals, it falls
+   back to a hardcoded transition map.
 
 ---
 
@@ -295,6 +316,59 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
 
   The two reviewers can reject specs that are untestable, ambiguous, or scope-creeping, just as the Code Reviewer rejects
   bad code. The contract applies to specs, not just code.
+
+  **Epic Planner decomposition guidance:**
+
+  The Epic Planner decomposes a vision document into epics. Each epic becomes a US Writer
+  task via the `epic-to-us` transition (`per-subtask` cardinality). Getting epic granularity
+  wrong propagates as task topology — a bad decomposition approved by the reviewer fans out
+  into N US Writer tasks before anyone notices the framing was off.
+
+  Granularity heuristics for right-sized epics:
+
+  | Signal | Diagnosis |
+  |--------|-----------|
+  | Epic spans multiple independent capabilities (different persona clusters, unrelated subsystems) | Too broad — split by capability boundary |
+  | Epic would produce >8 user stories to cover its scope | Too broad — find a natural seam to split |
+  | done_when requires outcomes across unrelated subsystems | Too broad — each subsystem likely deserves its own epic |
+  | Epic description contains conjunctions joining unrelated capabilities ("auth and notifications and reporting") | Too broad — same smell as composite coding tasks |
+  | Epic is a single user action with one acceptance criterion | Too narrow — this is a user story, not an epic |
+  | Epic can be implemented in a single coding task without further decomposition | Too narrow — skip the US Writer stage |
+  | Epic would produce <2 meaningful user stories | Too narrow — merge with an adjacent epic or promote the stories directly |
+
+  A right-sized epic:
+  - Represents one cohesive capability area (e.g., "user authentication", "task import/export")
+  - Serves a coherent persona cluster — the US Writer shouldn't need to context-switch between
+    unrelated user types within a single epic
+  - Is expected to decompose into 3–8 user stories
+  - Can be delivered and validated independently of other epics (minimal cross-epic dependencies)
+  - Has a done_when that is falsifiable at the epic level (all stories passing their ACs satisfies
+    the epic's done_when)
+
+  The Epic Planner's prompt template must include these heuristics (parallel to the Code
+  Planner's `TASK DECOMPOSITION PRINCIPLE` block added in Phase 1).
+
+  **Epic Plan Reviewer checklist:**
+
+  The Epic Plan Reviewer gates approval on decomposition quality, not just artifact quality.
+  The prompt template must include a review checklist (parallel to the Code Plan Reviewer's):
+
+  | Gate | Reject if |
+  |------|-----------|
+  | Cohesive capability | Epic spans multiple unrelated capabilities — reject with split suggestion |
+  | Right-sized scope | Epic would produce >8 or <2 user stories — reject with merge/split suggestion |
+  | Falsifiable done_when | done_when is vague, untestable, or requires outcomes across unrelated subsystems |
+  | Persona coherence | Epic mixes unrelated persona clusters — US Writer would need to context-switch |
+  | Independence | Epic has unnecessary coupling to other epics — verify cross-epic dependencies are true ordering constraints |
+  | Vision coverage | Epics collectively miss or exceed vision scope — reject with gap/scope-absorption note |
+
+  **US Writer and US Reviewer guidance:**
+
+  The US Writer uses the existing `user-story-writing` skill, which already defines SMARC
+  criteria, persona quality gates, acceptance criteria standards, and self-review checklists.
+  The US Writer's prompt template must reference this skill. The US Reviewer uses the existing
+  `spec-review` skill, supplemented by the user-story-specific anti-patterns from the
+  `user-story-writing` skill (Persona Laundering, Giant Story, Wishful Story, etc.).
 
 2. Change the responsibility of the Orchestrator
    On system start, it still takes a document as an input (currently the "vision" document) but depending on its content, it will:
@@ -448,9 +522,10 @@ No pipeline-aware derivation needed.
 
 **`liza proceed` and sprint boundaries:**
 - `liza proceed <task-id> <transition-name>` executes a manual inter-pair transition
-  (e.g., CODING_PLAN_APPROVED → DRAFT_CODE).
+  (e.g., MERGED → DRAFT_CODE via `code-plan-to-coding`).
 - It operates **between sprints** — the preceding sprint must be COMPLETED. CHECKPOINT
   is not sufficient (may have non-terminal tasks from the current sprint still in progress).
+  The sprint must also not be STOPPED; `liza proceed` fails fast on STOPPED state.
 - `liza resume` then starts the next sprint with the transitioned tasks in scope.
 - Sequence: sprint completes → human reviews → `liza proceed` → `liza resume`.
 
@@ -486,8 +561,18 @@ The agent calls the same tool regardless of role. The supervisor resolves the ta
 state from the task's role-pair in the pipeline config (e.g., `submit_for_review` on a
 Code Planner task resolves to CODING_PLAN_TO_REVIEW).
 
+**Implemented in Phase 1:**
+- Bootstrap prompt templates for Code Planner and Code Plan Reviewer roles
+- `liza status` shows available manual transitions for tasks at sprint-terminal states
+- `AvailableTransitions()` filters to manual-only, excludes already-executed transitions
+- `release_claim` is pipeline-aware with role authorization
+
 **Deferred to follow-up spec:**
-- Bootstrap prompt templates for new roles (Epic Planner, US Writer, etc.)
+- Bootstrap prompt templates for Phase 2 roles, including:
+  - Epic Planner: decomposition guidance with granularity heuristics (defined in Phase 2 §1)
+  - Epic Plan Reviewer: review checklist with decomposition gates (defined in Phase 2 §1)
+  - US Writer: integration with `user-story-writing` skill
+  - US Reviewer: integration with `spec-review` + `user-story-writing` anti-patterns
 - Orchestrator supervisor loop: wake conditions, `auto` transition polling, entry-point dispatch
 
 ---
@@ -521,6 +606,11 @@ rediscover them as bugs.
   need lower caps — 3-4 cycles without convergence on a spec likely signals a framing
   problem, not incremental progress. Making `iteration_cap` configurable per role-pair is
   an implementation concern.
+
+- **Single-intent decomposition.** The Code Planner prompt enforces single-intent task
+  decomposition: each `output[]` entry must have exactly one intent (Atomic Intent from
+  CORE.md Rule 2). This is enforced at the prompt level, not the schema level — the
+  reviewer catches violations that slip through.
 
 ---
 
