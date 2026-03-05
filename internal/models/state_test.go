@@ -579,7 +579,7 @@ func TestIsClaimableWithRole(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(tt.role, nil)
+			result := tt.task.IsClaimable(tt.role, nil, nil)
 			if result != tt.claimable {
 				t.Errorf("IsClaimable(%q) = %v, want %v", tt.role, result, tt.claimable)
 			}
@@ -649,7 +649,7 @@ func TestTaskClaimability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(RoleCoder, nil) // nil means all dependencies are satisfied
+			result := tt.task.IsClaimable(RoleCoder, nil, nil) // nil means all dependencies are satisfied
 			if result != tt.claimable {
 				t.Errorf("IsClaimable() = %v, want %v", result, tt.claimable)
 			}
@@ -692,7 +692,7 @@ func TestTaskClaimabilityWithDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(RoleCoder, allTasks)
+			result := tt.task.IsClaimable(RoleCoder, allTasks, nil)
 			if result != tt.claimable {
 				t.Errorf("IsClaimable() = %v, want %v", result, tt.claimable)
 			}
@@ -1444,11 +1444,147 @@ func TestIsClaimable_CodePlanningRoles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(tt.role, nil)
+			result := tt.task.IsClaimable(tt.role, nil, nil)
 			if result != tt.claimable {
 				t.Errorf("IsClaimable(%q) = %v, want %v", tt.role, result, tt.claimable)
 			}
 		})
+	}
+}
+
+// mockPipelineResolver implements PipelineResolver for testing.
+type mockPipelineResolver struct {
+	doer      string
+	reviewer  string
+	initial   TaskStatus
+	rejected  TaskStatus
+	submitted TaskStatus
+	reviewing TaskStatus
+	executing TaskStatus
+}
+
+func (m *mockPipelineResolver) DoerRole(string) (string, error)            { return m.doer, nil }
+func (m *mockPipelineResolver) ReviewerRole(string) (string, error)        { return m.reviewer, nil }
+func (m *mockPipelineResolver) InitialStatus(string) (TaskStatus, error)   { return m.initial, nil }
+func (m *mockPipelineResolver) RejectedStatus(string) (TaskStatus, error)  { return m.rejected, nil }
+func (m *mockPipelineResolver) SubmittedStatus(string) (TaskStatus, error) { return m.submitted, nil }
+func (m *mockPipelineResolver) ReviewingStatus(string) (TaskStatus, error) { return m.reviewing, nil }
+func (m *mockPipelineResolver) ExecutingStatus(string) (TaskStatus, error) { return m.executing, nil }
+
+func TestIsClaimable_Pipeline(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "coder",         // runtime form
+		reviewer:  "code-reviewer", // runtime form
+		initial:   "DRAFT_CODE",
+		rejected:  "CODE_REJECTED",
+		submitted: "CODE_READY_FOR_REVIEW",
+		reviewing: "REVIEWING_CODE",
+		executing: "IMPLEMENTING_CODE",
+	}
+
+	tests := []struct {
+		name      string
+		task      Task
+		role      string // workflow form
+		claimable bool
+	}{
+		{
+			name:      "coder can claim pipeline initial status",
+			task:      Task{Status: "DRAFT_CODE", RolePair: "coding-pair"},
+			role:      RoleCoder,
+			claimable: true,
+		},
+		{
+			name:      "coder can claim pipeline rejected status",
+			task:      Task{Status: "CODE_REJECTED", RolePair: "coding-pair"},
+			role:      RoleCoder,
+			claimable: true,
+		},
+		{
+			name:      "coder can claim INTEGRATION_FAILED pipeline task",
+			task:      Task{Status: TaskStatusIntegrationFailed, RolePair: "coding-pair"},
+			role:      RoleCoder,
+			claimable: true,
+		},
+		{
+			name:      "coder cannot claim pipeline submitted status",
+			task:      Task{Status: "CODE_READY_FOR_REVIEW", RolePair: "coding-pair"},
+			role:      RoleCoder,
+			claimable: false,
+		},
+		{
+			name:      "reviewer can claim pipeline submitted status",
+			task:      Task{Status: "CODE_READY_FOR_REVIEW", RolePair: "coding-pair"},
+			role:      RoleCodeReviewer,
+			claimable: true,
+		},
+		{
+			name:      "reviewer cannot claim pipeline initial status",
+			task:      Task{Status: "DRAFT_CODE", RolePair: "coding-pair"},
+			role:      RoleCodeReviewer,
+			claimable: false,
+		},
+		{
+			name:      "orchestrator cannot claim pipeline task",
+			task:      Task{Status: "DRAFT_CODE", RolePair: "coding-pair"},
+			role:      RoleOrchestrator,
+			claimable: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.task.IsClaimable(tt.role, nil, pr)
+			if result != tt.claimable {
+				t.Errorf("IsClaimable(%q) = %v, want %v", tt.role, result, tt.claimable)
+			}
+		})
+	}
+}
+
+func TestIsClaimable_Pipeline_WithDependencies(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "coder",
+		reviewer:  "code-reviewer",
+		initial:   "DRAFT_CODE",
+		rejected:  "CODE_REJECTED",
+		submitted: "CODE_READY_FOR_REVIEW",
+		reviewing: "REVIEWING_CODE",
+		executing: "IMPLEMENTING_CODE",
+	}
+
+	allTasks := []Task{
+		{ID: "dep-1", Status: TaskStatusMerged},
+		{ID: "dep-2", Status: TaskStatusImplementing},
+	}
+
+	t.Run("pipeline task with satisfied deps is claimable", func(t *testing.T) {
+		task := Task{Status: "DRAFT_CODE", RolePair: "coding-pair", DependsOn: []string{"dep-1"}}
+		if !task.IsClaimable(RoleCoder, allTasks, pr) {
+			t.Error("expected claimable with satisfied deps")
+		}
+	})
+
+	t.Run("pipeline task with unsatisfied deps is not claimable", func(t *testing.T) {
+		task := Task{Status: "DRAFT_CODE", RolePair: "coding-pair", DependsOn: []string{"dep-2"}}
+		if task.IsClaimable(RoleCoder, allTasks, pr) {
+			t.Error("expected not claimable with unsatisfied deps")
+		}
+	})
+}
+
+func TestIsClaimable_Pipeline_NilResolver_FallsBackToLegacy(t *testing.T) {
+	// Pipeline task with nil resolver should fall back to legacy path.
+	// Legacy path won't recognize custom statuses, so it should return false.
+	task := Task{Status: "DRAFT_CODE", RolePair: "coding-pair"}
+	if task.IsClaimable(RoleCoder, nil, nil) {
+		t.Error("expected not claimable with nil resolver and custom status")
+	}
+
+	// But legacy statuses should still work even with RolePair set when resolver is nil.
+	task2 := Task{Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"}
+	if !task2.IsClaimable(RoleCoder, nil, nil) {
+		t.Error("expected claimable via legacy path with nil resolver")
 	}
 }
 

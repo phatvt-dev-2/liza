@@ -89,7 +89,7 @@ func TestCountClaimableTasks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CountClaimableTasks(tt.state, tt.role)
+			got := CountClaimableTasks(tt.state, tt.role, nil)
 			if got != tt.want {
 				t.Errorf("CountClaimableTasks() = %d, want %d", got, tt.want)
 			}
@@ -156,7 +156,7 @@ func TestCountReviewableTasks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CountReviewableTasks(tt.state, tt.role)
+			got := CountReviewableTasks(tt.state, tt.role, nil)
 			if got != tt.want {
 				t.Errorf("CountReviewableTasks() = %d, want %d", got, tt.want)
 			}
@@ -220,7 +220,7 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetCoderWorkDiagnostics(tt.state)
+			got := GetCoderWorkDiagnostics(tt.state, nil)
 			for _, want := range tt.wantContains {
 				if !strings.Contains(got, want) {
 					t.Errorf("GetCoderWorkDiagnostics() = %q, want it to contain %q", got, want)
@@ -296,7 +296,7 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetReviewerWorkDiagnostics(tt.state)
+			got := GetReviewerWorkDiagnostics(tt.state, nil)
 			for _, want := range tt.wantContains {
 				if !strings.Contains(got, want) {
 					t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain %q", got, want)

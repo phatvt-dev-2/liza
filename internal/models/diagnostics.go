@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // CountClaimableTasks counts tasks claimable by the given role.
 // Uses IsClaimable which checks task type, status, and dependencies.
-func CountClaimableTasks(state *State, role string) int {
+func CountClaimableTasks(state *State, role string, pr PipelineResolver) int {
 	count := 0
 	for i := range state.Tasks {
-		if state.Tasks[i].IsClaimable(role, state.Tasks) {
+		if state.Tasks[i].IsClaimable(role, state.Tasks, pr) {
 			count++
 		}
 	}
@@ -20,10 +22,10 @@ func CountClaimableTasks(state *State, role string) int {
 
 // CountReviewableTasks counts tasks immediately claimable by the reviewer role.
 // Uses IsClaimable so each role-pair's reviewer states are honored.
-func CountReviewableTasks(state *State, role string) int {
+func CountReviewableTasks(state *State, role string, pr PipelineResolver) int {
 	count := 0
 	for i := range state.Tasks {
-		if state.Tasks[i].IsClaimable(role, state.Tasks) {
+		if state.Tasks[i].IsClaimable(role, state.Tasks, pr) {
 			count++
 		}
 	}
@@ -31,8 +33,8 @@ func CountReviewableTasks(state *State, role string) int {
 }
 
 // GetCoderWorkDiagnostics returns detailed diagnostic information about task availability for coders.
-func GetCoderWorkDiagnostics(state *State) string {
-	claimable := CountClaimableTasks(state, RoleCoder)
+func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
+	claimable := CountClaimableTasks(state, RoleCoder, pr)
 
 	if claimable > 0 {
 		return fmt.Sprintf("Found %d claimable task(s)", claimable)
@@ -49,6 +51,19 @@ func GetCoderWorkDiagnostics(state *State) string {
 	}
 
 	for _, task := range state.Tasks {
+		// Pipeline tasks with a resolver: use pipeline-only path to avoid
+		// fragile skip-lists that must track all legacy statuses.
+		if task.RolePair != "" && pr != nil {
+			if isBlockedByDepsPipeline(&task, pr, mergedIDs) {
+				blockedByDeps++
+			}
+			if isInProgressPipeline(&task, pr) {
+				inProgress++
+			}
+			continue
+		}
+
+		// Legacy path.
 		if task.Status == TaskStatusReady ||
 			task.Status == TaskStatusRejected ||
 			task.Status == TaskStatusIntegrationFailed {
@@ -83,8 +98,40 @@ func GetCoderWorkDiagnostics(state *State) string {
 	return strings.Join(parts, "; ")
 }
 
+// isBlockedByDepsPipeline checks if a pipeline task is in an initial/rejected status
+// with unsatisfied dependencies.
+func isBlockedByDepsPipeline(task *Task, pr PipelineResolver, mergedIDs map[string]bool) bool {
+	initial, err := pr.InitialStatus(task.RolePair)
+	if err != nil {
+		return false
+	}
+	rejected, err := pr.RejectedStatus(task.RolePair)
+	if err != nil {
+		return false
+	}
+	if task.Status != initial && task.Status != rejected && task.Status != TaskStatusIntegrationFailed {
+		return false
+	}
+	for _, depID := range task.DependsOn {
+		if !mergedIDs[depID] {
+			return true
+		}
+	}
+	return false
+}
+
+// isInProgressPipeline checks if a pipeline task is in a pipeline-defined in-progress state.
+func isInProgressPipeline(task *Task, pr PipelineResolver) bool {
+	executing, _ := pr.ExecutingStatus(task.RolePair)
+	submitted, _ := pr.SubmittedStatus(task.RolePair)
+	reviewing, _ := pr.ReviewingStatus(task.RolePair)
+	return task.Status == executing || task.Status == submitted || task.Status == reviewing
+}
+
 // GetReviewerWorkDiagnostics returns detailed diagnostic information about review availability.
-func GetReviewerWorkDiagnostics(state *State) string {
+// For pipeline tasks, filters by the resolved reviewer role to avoid counting tasks
+// belonging to a different reviewer role (e.g. code-plan-reviewer).
+func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 	now := time.Now().UTC()
 
 	unassigned := 0
@@ -92,9 +139,40 @@ func GetReviewerWorkDiagnostics(state *State) string {
 	activelyReviewing := 0
 
 	for _, task := range state.Tasks {
+		// Pipeline tasks with a resolver: use pipeline-only path.
+		if task.RolePair != "" && pr != nil {
+			// Gate by reviewer role: only count tasks whose pipeline reviewer
+			// matches the code-reviewer runtime role.
+			reviewerRole, err := pr.ReviewerRole(task.RolePair)
+			if err != nil {
+				continue
+			}
+			// Convert to workflow form for comparison with the caller's role.
+			wfRole, err := roles.ToWorkflow(reviewerRole)
+			if err != nil || wfRole != RoleCodeReviewer {
+				continue
+			}
+
+			submitted, _ := pr.SubmittedStatus(task.RolePair)
+			reviewing, _ := pr.ReviewingStatus(task.RolePair)
+
+			if task.Status == submitted {
+				unassigned++
+			} else if task.Status == reviewing {
+				if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
+					expiredLeases++
+				} else {
+					activelyReviewing++
+				}
+			}
+			continue
+		}
+
+		// Legacy submitted states.
 		if task.Status == TaskStatusReadyForReview && task.EffectiveType().HasRole(RoleCodeReviewer) {
 			unassigned++
 		}
+		// Legacy reviewing states.
 		if task.Status == TaskStatusReviewing && task.EffectiveType().HasRole(RoleCodeReviewer) {
 			if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
 				expiredLeases++

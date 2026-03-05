@@ -109,7 +109,7 @@ func TestCountClaimableTasks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
-			got := models.CountClaimableTasks(state, models.RoleCoder)
+			got := models.CountClaimableTasks(state, models.RoleCoder, nil)
 			if got != tt.want {
 				t.Errorf("CountClaimableTasks() = %d, want %d", got, tt.want)
 			}
@@ -224,7 +224,7 @@ func TestCountReviewableTasks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
-			got := models.CountReviewableTasks(state, models.RoleCodeReviewer)
+			got := models.CountReviewableTasks(state, models.RoleCodeReviewer, nil)
 			if got != tt.want {
 				t.Errorf("CountReviewableTasks() = %d, want %d", got, tt.want)
 			}
@@ -626,7 +626,7 @@ func TestHasCoderWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.CountClaimableTasks(tt.state, models.RoleCoder) > 0
+			got := models.CountClaimableTasks(tt.state, models.RoleCoder, nil) > 0
 			if got != tt.want {
 				t.Errorf("CountClaimableTasks() = %v, want %v", got, tt.want)
 			}
@@ -677,7 +677,7 @@ func TestHasReviewerWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.CountReviewableTasks(tt.state, models.RoleCodeReviewer) > 0
+			got := models.CountReviewableTasks(tt.state, models.RoleCodeReviewer, nil) > 0
 			if got != tt.want {
 				t.Errorf("CountReviewableTasks() = %v, want %v", got, tt.want)
 			}
@@ -843,7 +843,7 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.GetCoderWorkDiagnostics(tt.state)
+			got := models.GetCoderWorkDiagnostics(tt.state, nil)
 			if got != tt.wantMsg {
 				t.Errorf("GetCoderWorkDiagnostics() = %q, want %q", got, tt.wantMsg)
 			}
@@ -954,7 +954,7 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.GetReviewerWorkDiagnostics(tt.state)
+			got := models.GetReviewerWorkDiagnostics(tt.state, nil)
 			if got != tt.wantMsg {
 				t.Errorf("GetReviewerWorkDiagnostics() = %q, want %q", got, tt.wantMsg)
 			}

@@ -57,13 +57,20 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 
 	var result ClaimReviewerTaskResult
 
+	// Load pipeline config once for both IsClaimable and transition.
+	pb := loadPipelineBundle(input.ProjectRoot)
+	var pr models.PipelineResolver
+	if pb != nil {
+		pr = pb.pr
+	}
+
 	err := bb.Modify(func(state *models.State) error {
 		// Find reviewable task with highest priority
 		// READY_FOR_REVIEW tasks are available for claiming (stale REVIEWING leases
 		// are reverted to READY_FOR_REVIEW by ops.ClearStaleReviewClaims)
 		var candidates []*models.Task
 		for i := range state.Tasks {
-			if state.Tasks[i].IsClaimable(workflowRole, state.Tasks) {
+			if state.Tasks[i].IsClaimable(workflowRole, state.Tasks, pr) {
 				candidates = append(candidates, &state.Tasks[i])
 			}
 		}
@@ -79,12 +86,24 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		}
 
 		// Atomically claim the task and transition to REVIEWING
-		targetStatus := models.TaskStatusReviewing
-		if workflowRole == models.RoleCodePlanReviewer {
-			targetStatus = models.TaskStatusReviewingCodingPlan
-		}
-		if err := task.Transition(targetStatus); err != nil {
-			return err
+		if task.RolePair != "" && pb != nil {
+			// Pipeline path: resolve reviewing status from role-pair.
+			reviewing, err := pr.ReviewingStatus(task.RolePair)
+			if err != nil {
+				return fmt.Errorf("failed to resolve reviewing status for role-pair %q: %w", task.RolePair, err)
+			}
+			if err := task.TransitionWith(reviewing, pb.transitions); err != nil {
+				return err
+			}
+		} else {
+			// Legacy path: hardcoded target status.
+			targetStatus := models.TaskStatusReviewing
+			if workflowRole == models.RoleCodePlanReviewer {
+				targetStatus = models.TaskStatusReviewingCodingPlan
+			}
+			if err := task.Transition(targetStatus); err != nil {
+				return err
+			}
 		}
 		task.ReviewingBy = &input.AgentID
 		task.ReviewLeaseExpires = &leaseExpires

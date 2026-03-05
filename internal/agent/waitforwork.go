@@ -236,11 +236,12 @@ func waitForWorkPolling(
 
 // waitForCoderWork waits for claimable tasks or resumable handoff tasks.
 func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
+	pr := ops.LoadResolverForModels(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			claimable := models.CountClaimableTasks(s, models.RoleCoder)
-			resumableHandoffs := countResumableHandoffTasks(s, agentID)
-			logMsg := models.GetCoderWorkDiagnostics(s)
+			claimable := models.CountClaimableTasks(s, models.RoleCoder, pr)
+			resumableHandoffs := countResumableHandoffTasks(s, agentID, pr)
+			logMsg := models.GetCoderWorkDiagnostics(s, pr)
 
 			if resumableHandoffs > 0 {
 				handoffMsg := fmt.Sprintf("Found %d resumable handoff task(s) for %s", resumableHandoffs, agentID)
@@ -256,27 +257,36 @@ func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot, agent
 }
 
 func waitForCodePlannerWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
+	pr := ops.LoadResolverForModels(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			claimable := models.CountClaimableTasks(s, models.RoleCodePlanner)
-			resumableHandoffs := countResumableHandoffTasks(s, agentID)
+			claimable := models.CountClaimableTasks(s, models.RoleCodePlanner, pr)
+			resumableHandoffs := countResumableHandoffTasks(s, agentID, pr)
 			logMsg := fmt.Sprintf("code-planner: %d claimable, %d resumable handoffs", claimable, resumableHandoffs)
 
 			return claimable > 0 || resumableHandoffs > 0, logMsg
 		})
 }
 
-func isResumableHandoff(task *models.Task, agentID string) bool {
-	return (task.Status == models.TaskStatusImplementing || task.Status == models.TaskStatusCodePlanning) &&
+func isResumableHandoff(task *models.Task, agentID string, pr models.PipelineResolver) bool {
+	isExecuting := task.Status == models.TaskStatusImplementing || task.Status == models.TaskStatusCodePlanning
+	// For pipeline tasks, also check pipeline-defined executing status.
+	if !isExecuting && task.RolePair != "" && pr != nil {
+		executing, err := pr.ExecutingStatus(task.RolePair)
+		if err == nil && task.Status == executing {
+			isExecuting = true
+		}
+	}
+	return isExecuting &&
 		task.HandoffPending &&
 		task.AssignedTo != nil &&
 		*task.AssignedTo == agentID
 }
 
-func countResumableHandoffTasks(state *models.State, agentID string) int {
+func countResumableHandoffTasks(state *models.State, agentID string, pr models.PipelineResolver) int {
 	count := 0
 	for i := range state.Tasks {
-		if isResumableHandoff(&state.Tasks[i], agentID) {
+		if isResumableHandoff(&state.Tasks[i], agentID, pr) {
 			count++
 		}
 	}
@@ -291,10 +301,11 @@ func waitForReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot str
 		GetLogger().Info("Cleared stale review claims before reviewer wait", "count", cleared)
 	}
 
+	pr := ops.LoadResolverForModels(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			count := models.CountReviewableTasks(s, models.RoleCodeReviewer)
-			logMsg := models.GetReviewerWorkDiagnostics(s)
+			count := models.CountReviewableTasks(s, models.RoleCodeReviewer, pr)
+			logMsg := models.GetReviewerWorkDiagnostics(s, pr)
 			return count > 0, logMsg
 		})
 }
@@ -306,9 +317,10 @@ func waitForCodePlanReviewerWork(ctx context.Context, bb *db.Blackboard, project
 		GetLogger().Info("Cleared stale review claims before code-plan-reviewer wait", "count", cleared)
 	}
 
+	pr := ops.LoadResolverForModels(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			count := models.CountReviewableTasks(s, models.RoleCodePlanReviewer)
+			count := models.CountReviewableTasks(s, models.RoleCodePlanReviewer, pr)
 			if count > 0 {
 				return true, fmt.Sprintf("Found %d code-plan-reviewable task(s)", count)
 			}

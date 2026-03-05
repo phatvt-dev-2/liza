@@ -10,31 +10,39 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
-// ClearStaleReviewClaims finds and clears expired review leases on REVIEWING tasks.
-// When a lease expires, the task reverts to READY_FOR_REVIEW.
-// Returns the number of claims cleared.
-// TODO: make pipeline-aware — currently hardcodes TaskStatusReviewing and
-// TaskStatusReadyForReview, which won't match pipeline-defined reviewing states.
-func ClearStaleReviewClaims(projectRoot string) (int, error) {
-	// Setup paths
-	lp := paths.New(projectRoot)
+// reviewMatch captures the detection result for a task in a reviewing state,
+// including the revert target and whether pipeline transitions are needed.
+type reviewMatch struct {
+	revertStatus models.TaskStatus
+	usePipeline  bool
+}
 
-	// Get database and logger instances
+// ClearStaleReviewClaims finds and clears expired review leases on reviewing tasks.
+// For legacy tasks, checks TaskStatusReviewing / TaskStatusReviewingCodingPlan and
+// reverts to their corresponding submitted states. For pipeline tasks, also checks
+// pipeline-defined reviewing states and reverts to pipeline-defined submitted states.
+// Returns the number of claims cleared.
+func ClearStaleReviewClaims(projectRoot string) (int, error) {
+	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 	logger := log.New(lp.LogPath())
 
-	// Track cleared claims
+	// Load pipeline config once for both detection and transition.
+	pb := loadPipelineBundle(projectRoot)
+
 	cleared := 0
 	now := time.Now().UTC()
 
-	// Atomic update
 	err := bb.Modify(func(state *models.State) error {
-		// Find REVIEWING tasks with expired review leases
 		for i := range state.Tasks {
 			task := &state.Tasks[i]
 
-			// Skip if not REVIEWING
-			if task.Status != models.TaskStatusReviewing {
+			// Determine if this task is in a reviewing state.
+			match, err := detectReviewingState(task, pb)
+			if err != nil {
+				return err
+			}
+			if match == nil {
 				continue
 			}
 
@@ -43,19 +51,17 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 				continue
 			}
 
-			// Check if lease is expired
-			// If lease is nil but reviewing_by is set, treat as malformed/expired
+			// Check if lease is expired.
+			// If lease is nil but reviewing_by is set, treat as malformed/expired.
 			isExpired := false
 			var staleReviewer string
 			var expiredAt string
 
 			if task.ReviewLeaseExpires == nil {
-				// Malformed state: reviewing_by set but no lease
 				isExpired = true
 				staleReviewer = *task.ReviewingBy
 				expiredAt = "unknown (lease missing)"
 			} else if task.ReviewLeaseExpires.Before(now) || task.ReviewLeaseExpires.Equal(now) {
-				// Lease has expired
 				isExpired = true
 				staleReviewer = *task.ReviewingBy
 				expiredAt = task.ReviewLeaseExpires.Format(time.RFC3339)
@@ -65,16 +71,20 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 				continue
 			}
 
-			// Revert to READY_FOR_REVIEW and clear the stale claim
-			if err := task.Transition(models.TaskStatusReadyForReview); err != nil {
-				return err
+			// Revert to submitted state and clear the stale claim.
+			if match.usePipeline {
+				if err := task.TransitionWith(match.revertStatus, pb.transitions); err != nil {
+					return err
+				}
+			} else {
+				if err := task.Transition(match.revertStatus); err != nil {
+					return err
+				}
 			}
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
 
-			// Log the cleanup
 			detail := fmt.Sprintf("Review claim expired at %s (reviewer: %s)", expiredAt, staleReviewer)
-
 			logEntry := log.Entry{
 				Timestamp: now,
 				Agent:     "system",
@@ -82,8 +92,6 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 				Task:      &task.ID,
 				Detail:    detail,
 			}
-
-			// Append log entry (this will acquire its own lock)
 			if err := logger.Append(logEntry); err != nil {
 				return fmt.Errorf("failed to log stale review cleanup for %s: %w", task.ID, err)
 			}
@@ -99,4 +107,34 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 	}
 
 	return cleared, nil
+}
+
+// detectReviewingState checks whether a task is in any reviewing state (legacy or pipeline).
+// Returns (nil, nil) if the task is not in a reviewing state.
+// Returns a non-nil error if the task IS in a pipeline reviewing state but the
+// submitted status cannot be resolved — callers should surface this rather than
+// silently skipping, as it would leave the task stuck.
+func detectReviewingState(task *models.Task, pb *pipelineBundle) (*reviewMatch, error) {
+	// Legacy reviewing states.
+	switch task.Status {
+	case models.TaskStatusReviewing:
+		return &reviewMatch{revertStatus: models.TaskStatusReadyForReview, usePipeline: false}, nil
+	case models.TaskStatusReviewingCodingPlan:
+		return &reviewMatch{revertStatus: models.TaskStatusCodingPlanToReview, usePipeline: false}, nil
+	}
+
+	// Pipeline reviewing states.
+	if task.RolePair != "" && pb != nil {
+		reviewing, err := pb.pr.ReviewingStatus(task.RolePair)
+		if err == nil && task.Status == reviewing {
+			submitted, err := pb.pr.SubmittedStatus(task.RolePair)
+			if err != nil {
+				return nil, fmt.Errorf("task %s is in pipeline reviewing state %s but submitted status resolution failed for role-pair %q: %w",
+					task.ID, task.Status, task.RolePair, err)
+			}
+			return &reviewMatch{revertStatus: submitted, usePipeline: true}, nil
+		}
+	}
+
+	return nil, nil
 }

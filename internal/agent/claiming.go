@@ -32,9 +32,11 @@ func claimDoerTask(projectRoot, agentID, workflowRole string, bb *db.Blackboard)
 		return "", "", fmt.Errorf("failed to read state: %w", err)
 	}
 
+	pr := ops.LoadResolverForModels(projectRoot)
+
 	var candidates []*models.Task
 	for i := range state.Tasks {
-		if state.Tasks[i].IsClaimable(workflowRole, state.Tasks) {
+		if state.Tasks[i].IsClaimable(workflowRole, state.Tasks, pr) {
 			candidates = append(candidates, &state.Tasks[i])
 		}
 	}

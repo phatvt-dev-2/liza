@@ -158,7 +158,7 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 	}
 
 	// Populate task statistics
-	data.Tasks = buildTaskStatus(state)
+	data.Tasks = buildTaskStatus(state, projectRoot)
 
 	// Populate agent information
 	data.Agents = buildAgentStatuses(state)
@@ -167,7 +167,7 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 	data.OrchestratorState = buildOrchestratorStatus(state, projectRoot)
 
 	// Populate work queues
-	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable)
+	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable, projectRoot)
 
 	// Collect pending transitions for tasks
 	for i := range state.Tasks {
@@ -213,7 +213,7 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 }
 
 // buildTaskStatus calculates task statistics
-func buildTaskStatus(state *models.State) taskStatus {
+func buildTaskStatus(state *models.State, projectRoot string) taskStatus {
 	ts := taskStatus{
 		Total:    len(state.Tasks),
 		ByStatus: make(map[string]int),
@@ -257,8 +257,9 @@ func buildTaskStatus(state *models.State) taskStatus {
 	}
 
 	// Count work availability
-	ts.Claimable = models.CountClaimableTasks(state, models.RoleCoder)
-	ts.Reviewable = models.CountReviewableTasks(state, models.RoleCodeReviewer)
+	pr := ops.LoadResolverForModels(projectRoot)
+	ts.Claimable = models.CountClaimableTasks(state, models.RoleCoder, pr)
+	ts.Reviewable = models.CountReviewableTasks(state, models.RoleCodeReviewer, pr)
 
 	return ts
 }
@@ -376,15 +377,16 @@ func detectOrchestratorWakeTriggers(state *models.State, projectRoot string) (tr
 }
 
 // buildWorkQueuesStatus calculates work queue availability
-func buildWorkQueuesStatus(state *models.State, claimable, reviewable int) workQueuesStatus {
+func buildWorkQueuesStatus(state *models.State, claimable, reviewable int, projectRoot string) workQueuesStatus {
+	pr := ops.LoadResolverForModels(projectRoot)
 	return workQueuesStatus{
 		Coder: queueStatus{
 			Available: claimable,
-			Reason:    models.GetCoderWorkDiagnostics(state),
+			Reason:    models.GetCoderWorkDiagnostics(state, pr),
 		},
 		Reviewer: queueStatus{
 			Available: reviewable,
-			Reason:    models.GetReviewerWorkDiagnostics(state),
+			Reason:    models.GetReviewerWorkDiagnostics(state, pr),
 		},
 	}
 }

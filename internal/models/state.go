@@ -187,6 +187,18 @@ type OutputEntry struct {
 	SpecRef  string `yaml:"spec_ref"`
 }
 
+// PipelineResolver provides pipeline state resolution for tasks with role-pairs.
+// Implemented by pipeline.Resolver. Pass nil for legacy projects.
+type PipelineResolver interface {
+	DoerRole(rolePair string) (string, error)
+	ReviewerRole(rolePair string) (string, error)
+	InitialStatus(rolePair string) (TaskStatus, error)
+	RejectedStatus(rolePair string) (TaskStatus, error)
+	SubmittedStatus(rolePair string) (TaskStatus, error)
+	ReviewingStatus(rolePair string) (TaskStatus, error)
+	ExecutingStatus(rolePair string) (TaskStatus, error)
+}
+
 // Task represents a single task in the Liza system
 type Task struct {
 	ID                  string             `yaml:"id"`
@@ -240,8 +252,18 @@ func (t *Task) EffectiveType() TaskType {
 }
 
 // IsClaimable checks if a task is claimable by the given role based on its type, status, and dependencies.
-func (t *Task) IsClaimable(role string, allTasks []Task) bool {
-	// Check if status allows claiming for this role using the transition map.
+// The role parameter uses workflow form (e.g. "code_reviewer").
+// When pr is non-nil and the task has a RolePair, pipeline-defined states are used.
+func (t *Task) IsClaimable(role string, allTasks []Task, pr PipelineResolver) bool {
+	// Pipeline path: use resolver for tasks with role-pairs.
+	if t.RolePair != "" && pr != nil {
+		if !t.isClaimablePipeline(role, pr) {
+			return false
+		}
+		return checkDependencies(t, allTasks)
+	}
+
+	// Legacy path: hardcoded status checks.
 	switch role {
 	case RoleCoder:
 		if !t.EffectiveType().HasRole(role) {
@@ -272,7 +294,52 @@ func (t *Task) IsClaimable(role string, allTasks []Task) bool {
 		return false
 	}
 
-	// Check dependencies if allTasks is provided
+	return checkDependencies(t, allTasks)
+}
+
+// isClaimablePipeline checks claimability using pipeline-resolved states.
+func (t *Task) isClaimablePipeline(role string, pr PipelineResolver) bool {
+	// Convert workflow role to runtime form for comparison with pipeline roles.
+	runtimeRole, err := roles.ToRuntime(role)
+	if err != nil {
+		return false
+	}
+
+	doerRole, err := pr.DoerRole(t.RolePair)
+	if err != nil {
+		return false
+	}
+	reviewerRole, err := pr.ReviewerRole(t.RolePair)
+	if err != nil {
+		return false
+	}
+
+	switch runtimeRole {
+	case doerRole:
+		initial, err := pr.InitialStatus(t.RolePair)
+		if err != nil {
+			return false
+		}
+		rejected, err := pr.RejectedStatus(t.RolePair)
+		if err != nil {
+			return false
+		}
+		return t.Status == initial || t.Status == rejected || t.Status == TaskStatusIntegrationFailed
+
+	case reviewerRole:
+		submitted, err := pr.SubmittedStatus(t.RolePair)
+		if err != nil {
+			return false
+		}
+		return t.Status == submitted
+
+	default:
+		return false
+	}
+}
+
+// checkDependencies returns true if all dependencies of the task are satisfied (MERGED).
+func checkDependencies(t *Task, allTasks []Task) bool {
 	if allTasks != nil && len(t.DependsOn) > 0 {
 		for _, depID := range t.DependsOn {
 			depSatisfied := false
@@ -287,7 +354,6 @@ func (t *Task) IsClaimable(role string, allTasks []Task) bool {
 			}
 		}
 	}
-
 	return true
 }
 

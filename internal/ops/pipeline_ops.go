@@ -123,6 +123,36 @@ func allPlannedTasksTerminalForProject(s *models.State, projectRoot string) bool
 	return s.AllPlannedTasksTerminalWith(SprintTerminalStates(projectRoot))
 }
 
+// LoadResolverForModels loads the pipeline resolver as a models.PipelineResolver.
+// Returns nil for legacy projects (no pipeline.yaml) or on error.
+func LoadResolverForModels(projectRoot string) models.PipelineResolver {
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil || resolver == nil {
+		return nil
+	}
+	return resolver
+}
+
+// pipelineBundle holds the resolver, interface, and transition map from a single config load.
+// Used to avoid double-parsing pipeline.yaml within a single operation.
+type pipelineBundle struct {
+	pr          models.PipelineResolver
+	transitions map[models.TaskStatus][]models.TaskStatus
+}
+
+// loadPipelineBundle loads the pipeline config once and returns the resolver interface
+// and pre-built transition map. Returns nil for legacy projects.
+func loadPipelineBundle(projectRoot string) *pipelineBundle {
+	resolver, cfg, err := loadResolver(projectRoot)
+	if err != nil || resolver == nil {
+		return nil
+	}
+	return &pipelineBundle{
+		pr:          resolver,
+		transitions: BuildPipelineTransitions(resolver, cfg),
+	}
+}
+
 // initialTaskStatusWithResolver returns the initial task status for a role-pair,
 // consulting the pipeline config when available.
 func initialTaskStatusWithResolver(rolePair string, resolver *pipeline.Resolver) models.TaskStatus {
