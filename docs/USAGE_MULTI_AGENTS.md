@@ -80,6 +80,12 @@ liza init "[Goal description]" --spec [spec_ref]
 # Examples:
 #   liza init "Implement retry logic"                        # uses specs/vision.md
 #   liza init "Add auth" --spec specs/auth-feature.md        # uses custom spec
+#
+# With a pipeline config (code-planning-pair → coding-pair):
+#   liza init "Sub-pipelines phase 2" \
+#     --post-worktree-cmd "make sync-embedded" \
+#     --spec specs/build/2\ -\ Sub-pipelines\ and\ spec\ writing.md \
+#     --config pipeline-phase1.yaml
 
 # Verify
 cat .liza/state.yaml
