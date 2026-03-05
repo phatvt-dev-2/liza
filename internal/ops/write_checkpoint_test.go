@@ -85,7 +85,84 @@ func TestWriteCheckpoint_WrongStatus(t *testing.T) {
 		ValidationPlan: "test",
 		FilesToModify:  []string{"file.go"},
 	})
-	testhelpers.RequireErrorContains(t, err, "not IMPLEMENTING")
+	testhelpers.RequireErrorContains(t, err, "not in an executing state")
+}
+
+func TestWriteCheckpoint_PipelineExecutingStatus(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	agent := "coder-1"
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:          "task-1",
+			Type:        models.TaskTypeCoding,
+			Description: "Pipeline task",
+			Status:      "IMPLEMENTING_CODE",
+			RolePair:    "coding-pair",
+			Priority:    1,
+			Created:     now,
+			AssignedTo:  &agent,
+			SpecRef:     "README.md",
+			DoneWhen:    "Done",
+			Scope:       "Test",
+			History:     []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	err := WriteCheckpoint(tmpDir, &WriteCheckpointInput{
+		TaskID:         "task-1",
+		AgentID:        "coder-1",
+		Intent:         "Implement feature via pipeline",
+		ValidationPlan: "go test ./...",
+		FilesToModify:  []string{"main.go"},
+	})
+	if err != nil {
+		t.Fatalf("WriteCheckpoint failed for pipeline executing status: %v", err)
+	}
+
+	bb := db.For(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if !HasCheckpoint(readState.FindTask("task-1").History, "coder-1") {
+		t.Fatal("Expected checkpoint in task history")
+	}
+}
+
+func TestWriteCheckpoint_PipelineNonExecutingStatus(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:          "task-1",
+			Type:        models.TaskTypeCoding,
+			Description: "Pipeline task at initial",
+			Status:      "DRAFT_CODE",
+			RolePair:    "coding-pair",
+			Priority:    1,
+			Created:     now,
+			SpecRef:     "README.md",
+			DoneWhen:    "Done",
+			Scope:       "Test",
+			History:     []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	err := WriteCheckpoint(tmpDir, &WriteCheckpointInput{
+		TaskID:         "task-1",
+		AgentID:        "coder-1",
+		Intent:         "Should not work",
+		ValidationPlan: "go test ./...",
+		FilesToModify:  []string{"main.go"},
+	})
+	testhelpers.RequireErrorContains(t, err, "not in an executing state")
 }
 
 func TestWriteCheckpoint_WrongAgent(t *testing.T) {
