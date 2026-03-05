@@ -80,19 +80,26 @@ The spec file (default: specs/vision.md) must exist before initialization.
 
 Use --config to provide a pipeline YAML file. The config is validated and frozen
 into .liza/pipeline.yaml. Use --entry-point with --config to specify which
-entry-point to use (must be defined in the config).`,
+entry-point to use (must be defined in the config).
+
+Use --post-worktree-cmd to specify a shell command that runs after every worktree
+creation (e.g. 'make setup', 'npm install'). This ensures worktrees are
+build/test-ready without hardcoding project-specific tooling into Liza.
+Existing workspaces can add post_worktree_cmd to state.yaml's config section.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		description := args[0]
 		specRef, _ := cmd.Flags().GetString("spec")
 		configPath, _ := cmd.Flags().GetString("config")
 		entryPoint, _ := cmd.Flags().GetString("entry-point")
+		postCreateCmd, _ := cmd.Flags().GetString("post-worktree-cmd")
 		return commands.InitCommandWithConfig(commands.InitParams{
-			Description: description,
-			SpecRef:     specRef,
-			ConfigPath:  configPath,
-			EntryPoint:  entryPoint,
-			Stdin:       os.Stdin,
+			Description:     description,
+			SpecRef:         specRef,
+			ConfigPath:      configPath,
+			EntryPoint:      entryPoint,
+			PostWorktreeCmd: postCreateCmd,
+			Stdin:           os.Stdin,
 		})
 	},
 }
@@ -1335,6 +1342,7 @@ func init() {
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")
 	initCmd.Flags().String("config", "", "path to pipeline YAML config file")
 	initCmd.Flags().String("entry-point", "", "entry-point name from pipeline config (requires --config)")
+	initCmd.Flags().String("post-worktree-cmd", "", "shell command to run after worktree creation (e.g. 'make setup')")
 
 	// Validate command flags
 	validateCmd.Flags().Bool("skip-spec-check", false, "skip spec file existence check")

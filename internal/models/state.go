@@ -747,5 +747,6 @@ type Config struct {
 	ModeChangedAt           *time.Time     `yaml:"mode_changed_at,omitempty"`
 	ModeChangedBy           *string        `yaml:"mode_changed_by,omitempty"`
 	DiagnosticLogging       bool           `yaml:"diagnostic_logging,omitempty"`
+	PostWorktreeCmd         *string        `yaml:"post_worktree_cmd,omitempty"`
 	Extra                   map[string]any `yaml:",inline"`
 }

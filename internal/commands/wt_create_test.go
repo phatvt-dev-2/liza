@@ -243,6 +243,161 @@ func TestWtCreateCommand(t *testing.T) {
 	}
 }
 
+func TestWtCreateCommand_PostWorktreeCmd(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	agent := "coder-1"
+	worktreePath := filepath.Join(".worktrees", "task-postcmd")
+	leaseExpires := now.Add(30 * time.Minute)
+	postCmd := "touch .post-worktree-ran"
+
+	initialState := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:               "goal-1",
+			Description:      "Test goal",
+			SpecRef:          "README.md",
+			Created:          now,
+			Status:           models.GoalStatusInProgress,
+			AlignmentHistory: []models.AlignmentHistory{},
+		},
+		Tasks: []models.Task{
+			{
+				ID:           "task-postcmd",
+				Description:  "Test task",
+				Status:       models.TaskStatusImplementing,
+				Priority:     1,
+				Created:      now,
+				SpecRef:      "README.md",
+				DoneWhen:     "Done",
+				Scope:        "Test",
+				AssignedTo:   &agent,
+				Worktree:     &worktreePath,
+				LeaseExpires: &leaseExpires,
+				History:      []models.TaskHistoryEntry{},
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Sprint: models.Sprint{
+			ID:      "sprint-1",
+			GoalRef: "goal-1",
+			Scope: models.SprintScope{
+				Planned: []string{"task-postcmd"},
+				Stretch: []string{},
+			},
+			Timeline: models.SprintTimeline{
+				Started: now,
+			},
+			Status: models.SprintStatusInProgress,
+		},
+		CircuitBreaker: models.CircuitBreaker{
+			Status:  "OK",
+			History: []models.CircuitBreakerHistory{},
+		},
+		Config: models.Config{
+			MaxCoderIterations: 10,
+			MaxReviewCycles:    5,
+			IntegrationBranch:  "integration",
+			PostWorktreeCmd:    &postCmd,
+		},
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	if err := WtCreateCommand(tmpDir, "task-postcmd", false); err != nil {
+		t.Fatalf("WtCreateCommand failed: %v", err)
+	}
+
+	// Verify post-worktree command ran: the sentinel file should exist in the worktree
+	wtDir := filepath.Join(tmpDir, ".worktrees", "task-postcmd")
+	sentinelPath := filepath.Join(wtDir, ".post-worktree-ran")
+	if _, err := os.Stat(sentinelPath); os.IsNotExist(err) {
+		t.Error("post_worktree_cmd did not run: sentinel file not found in worktree")
+	}
+}
+
+func TestWtCreateCommand_NoPostWorktreeCmd(t *testing.T) {
+	// When PostWorktreeCmd is nil, no command should run and no warnings should appear.
+	tmpDir := t.TempDir()
+
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	agent := "coder-1"
+	worktreePath := filepath.Join(".worktrees", "task-nocmd")
+	leaseExpires := now.Add(30 * time.Minute)
+
+	initialState := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:               "goal-1",
+			Description:      "Test goal",
+			SpecRef:          "README.md",
+			Created:          now,
+			Status:           models.GoalStatusInProgress,
+			AlignmentHistory: []models.AlignmentHistory{},
+		},
+		Tasks: []models.Task{
+			{
+				ID:           "task-nocmd",
+				Description:  "Test task",
+				Status:       models.TaskStatusImplementing,
+				Priority:     1,
+				Created:      now,
+				SpecRef:      "README.md",
+				DoneWhen:     "Done",
+				Scope:        "Test",
+				AssignedTo:   &agent,
+				Worktree:     &worktreePath,
+				LeaseExpires: &leaseExpires,
+				History:      []models.TaskHistoryEntry{},
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Sprint: models.Sprint{
+			ID:      "sprint-1",
+			GoalRef: "goal-1",
+			Scope: models.SprintScope{
+				Planned: []string{"task-nocmd"},
+				Stretch: []string{},
+			},
+			Timeline: models.SprintTimeline{
+				Started: now,
+			},
+			Status: models.SprintStatusInProgress,
+		},
+		CircuitBreaker: models.CircuitBreaker{
+			Status:  "OK",
+			History: []models.CircuitBreakerHistory{},
+		},
+		Config: models.Config{
+			MaxCoderIterations: 10,
+			MaxReviewCycles:    5,
+			IntegrationBranch:  "integration",
+			// PostWorktreeCmd is nil — no command should run
+		},
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	err := WtCreateCommand(tmpDir, "task-nocmd", false)
+	if err != nil {
+		t.Fatalf("WtCreateCommand failed: %v", err)
+	}
+
+	// No sentinel file should exist
+	wtDir := filepath.Join(tmpDir, ".worktrees", "task-nocmd")
+	sentinelPath := filepath.Join(wtDir, ".post-worktree-ran")
+	if _, err := os.Stat(sentinelPath); err == nil {
+		t.Error("sentinel file should not exist when PostWorktreeCmd is nil")
+	}
+}
+
 func TestWtCreateCommandIntegration(t *testing.T) {
 	// Create temp directory (project root)
 	tmpDir := t.TempDir()

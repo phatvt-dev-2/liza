@@ -45,6 +45,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	}
 
 	integrationBranch := state.Config.IntegrationBranch
+	postCmd := state.Config.PostWorktreeCmd
 
 	gitWrapper := git.New(lp.ProjectRoot())
 
@@ -56,9 +57,11 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 				WorktreeDir:    worktreeDir,
 				AlreadyExisted: true,
 			}
-			// Sync even on existing worktrees — idempotent, catches prior failures.
-			if err := syncEmbedded(worktreeDir); err != nil {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("sync-embedded: %v", err))
+			// Run post-worktree command even on existing worktrees — idempotent, catches prior failures.
+			if postCmd != nil {
+				if err := runPostWorktreeCmd(*postCmd, worktreeDir); err != nil {
+					result.Warnings = append(result.Warnings, fmt.Sprintf("post-worktree-cmd: %v", err))
+				}
 			}
 			return result, nil
 		}
@@ -95,18 +98,25 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 		BaseCommit:  baseCommit,
 	}
 
-	// Sync embedded assets so the worktree is build/test-ready.
-	// Non-fatal: agents can run `make sync-embedded` manually.
-	if err := syncEmbedded(worktreeDir); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("sync-embedded: %v", err))
+	// Run post-worktree command so the worktree is build/test-ready.
+	// Non-fatal: agents can run the command manually.
+	if postCmd != nil {
+		if err := runPostWorktreeCmd(*postCmd, worktreeDir); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("post-worktree-cmd: %v", err))
+		}
 	}
 
 	return result, nil
 }
 
-// syncEmbedded runs `make sync-embedded` in the given directory.
-func syncEmbedded(dir string) error {
-	cmd := exec.Command("make", "sync-embedded")
+// runPostWorktreeCmd runs the configured post-worktree shell command in the given directory.
+//
+// Trust model: the command comes from state.yaml which lives inside .liza/ in
+// the project root. Write access to state.yaml implies write access to the
+// repo (same trust boundary as Makefile, .github/workflows/, package.json
+// scripts). No additional confirmation gate is needed.
+func runPostWorktreeCmd(cmdStr, dir string) error {
+	cmd := exec.Command("sh", "-c", cmdStr)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

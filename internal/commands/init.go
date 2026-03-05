@@ -20,11 +20,12 @@ import (
 
 // InitParams holds the parameters for InitCommand.
 type InitParams struct {
-	Description string
-	SpecRef     string
-	ConfigPath  string // --config: path to pipeline YAML
-	EntryPoint  string // --entry-point: name of entry-point in config
-	Stdin       io.Reader
+	Description     string
+	SpecRef         string
+	ConfigPath      string // --config: path to pipeline YAML
+	EntryPoint      string // --entry-point: name of entry-point in config
+	PostWorktreeCmd string // --post-worktree-cmd: shell command to run after worktree creation
+	Stdin           io.Reader
 }
 
 // InitCommand initializes a new Liza workspace.
@@ -291,6 +292,7 @@ func InitCommandWithConfig(params InitParams) error {
 			IntegrationBranch:        "integration",
 			EscalationWebhook:        nil,
 			Mode:                     models.SystemModeRunning,
+			PostWorktreeCmd:          stringPtrOrNil(params.PostWorktreeCmd),
 		},
 	}
 
@@ -360,6 +362,14 @@ func createIntegrationBranch() error {
 	}
 
 	return nil
+}
+
+// stringPtrOrNil returns a pointer to s if non-empty, otherwise nil.
+func stringPtrOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // entryPointNames returns a comma-separated list of entry-point names from the config.

@@ -835,6 +835,80 @@ func TestInitCommandWithConfig_NonexistentEntryPoint(t *testing.T) {
 	testhelpers.AssertErrorContains(t, err, "not found")
 }
 
+func TestInitCommandWithConfig_PostWorktreeCmd(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	err = InitCommandWithConfig(InitParams{
+		Description:     "Goal with post-worktree-cmd",
+		SpecRef:         "specs/vision.md",
+		PostWorktreeCmd: "make sync-embedded",
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	// Verify post_worktree_cmd is set in state
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.PostWorktreeCmd == nil {
+		t.Fatal("state.Config.PostWorktreeCmd is nil, want non-nil")
+	}
+	if *state.Config.PostWorktreeCmd != "make sync-embedded" {
+		t.Errorf("state.Config.PostWorktreeCmd = %q, want %q", *state.Config.PostWorktreeCmd, "make sync-embedded")
+	}
+}
+
+func TestInitCommandWithConfig_PostWorktreeCmdOmittedWhenEmpty(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Goal without post-worktree-cmd",
+		SpecRef:     "specs/vision.md",
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	// Verify post_worktree_cmd is nil in state
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.PostWorktreeCmd != nil {
+		t.Errorf("state.Config.PostWorktreeCmd = %q, want nil", *state.Config.PostWorktreeCmd)
+	}
+}
+
 func TestInitCommandWithConfig_EntryPointWithoutConfig(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)
