@@ -493,6 +493,27 @@ func (s *Server) handleReleaseClaim(params map[string]any) (any, error) {
 		return nil, err
 	}
 
+	// Validate agent's role authorizes releasing the requested claim type.
+	// Orchestrator can release any claim; others only their own role category.
+	if err := identity.ValidateFormat(agentID); err != nil {
+		return nil, fmt.Errorf("invalid agent ID %q: %w", agentID, err)
+	}
+	agentRole, _ := identity.ExtractRole(agentID)
+	switch agentRole {
+	case roles.RuntimeOrchestrator:
+		// orchestrator can release any role
+	case roles.RuntimeCoder, roles.RuntimeCodePlanner:
+		if role != "coder" {
+			return nil, fmt.Errorf("agent %s (role %s) can only release coder claims", agentID, agentRole)
+		}
+	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
+		if role != "code-reviewer" {
+			return nil, fmt.Errorf("agent %s (role %s) can only release code-reviewer claims", agentID, agentRole)
+		}
+	default:
+		return nil, fmt.Errorf("agent %s has unrecognized role %q for claim release", agentID, agentRole)
+	}
+
 	reason, _ := params["reason"].(string)
 	force, _ := params["force"].(bool)
 

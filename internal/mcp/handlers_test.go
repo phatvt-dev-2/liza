@@ -891,6 +891,110 @@ func TestHandleReleaseClaim(t *testing.T) {
 	}
 }
 
+// TestHandleReleaseClaim_RoleValidation verifies agents can only release their own role's claims
+func TestHandleReleaseClaim_RoleValidation(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Setup: task claimed by coder with reviewer also assigned
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Tasks[0].Status = models.TaskStatusImplementing
+		assignedTo := "coder-1"
+		state.Tasks[0].AssignedTo = &assignedTo
+		worktree := ".worktrees/task-1"
+		state.Tasks[0].Worktree = &worktree
+		leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+		state.Tasks[0].LeaseExpires = &leaseExpires
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	tests := []struct {
+		name    string
+		agentID string
+		role    string
+		wantErr string
+	}{
+		{
+			name:    "coder releasing coder claim succeeds",
+			agentID: "coder-1",
+			role:    "coder",
+			wantErr: "", // no error
+		},
+		{
+			name:    "coder releasing reviewer claim rejected",
+			agentID: "coder-1",
+			role:    "code-reviewer",
+			wantErr: "can only release coder claims",
+		},
+		{
+			name:    "coder releasing both rejected",
+			agentID: "coder-1",
+			role:    "both",
+			wantErr: "can only release coder claims",
+		},
+		{
+			name:    "reviewer releasing coder claim rejected",
+			agentID: "code-reviewer-1",
+			role:    "coder",
+			wantErr: "can only release code-reviewer claims",
+		},
+		{
+			name:    "orchestrator releasing coder claim succeeds",
+			agentID: "orchestrator-1",
+			role:    "coder",
+			wantErr: "", // no error
+		},
+		{
+			name:    "orchestrator releasing both claims succeeds",
+			agentID: "orchestrator-1",
+			role:    "both",
+			wantErr: "", // no error
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := server.handleReleaseClaim(map[string]any{
+				"task_id":  "task-1",
+				"role":     tt.role,
+				"agent_id": tt.agentID,
+				"force":    true,
+			})
+
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+				// Re-setup state for next test that expects success
+				_ = bb.Modify(func(state *models.State) error {
+					state.Tasks[0].Status = models.TaskStatusImplementing
+					assignedTo := "coder-1"
+					state.Tasks[0].AssignedTo = &assignedTo
+					worktree := ".worktrees/task-1"
+					state.Tasks[0].Worktree = &worktree
+					leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+					state.Tasks[0].LeaseExpires = &leaseExpires
+					return nil
+				})
+			} else {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("expected error containing %q, got: %v", tt.wantErr, err)
+				}
+			}
+		})
+	}
+}
+
 // TestHandleSupersede verifies liza_supersede_task tool
 func TestHandleSupersede(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
