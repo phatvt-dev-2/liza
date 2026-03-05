@@ -1,0 +1,44 @@
+pipeline:
+  agent-roles:
+    code-planner: "Code Planner"
+    code-plan-reviewer: "Code Plan Reviewer"
+    coder: "Coder"
+    code-reviewer: "Code Reviewer"
+
+  role-pairs:
+    code-planning-pair:
+      doer: code-planner
+      reviewer: code-plan-reviewer
+      states:
+        initial: DRAFT_CODING_PLAN
+        executing: CODE_PLANNING
+        submitted: CODING_PLAN_TO_REVIEW
+        reviewing: REVIEWING_CODING_PLAN
+        approved: CODING_PLAN_APPROVED
+        rejected: CODING_PLAN_REJECTED
+
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - code-planning-pair
+        - coding-pair
+      transitions:
+        - name: code-plan-to-coding
+          from: code-planning-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+
+  entry-points:
+    detailed-spec: coding-subpipeline.code-planning-pair
