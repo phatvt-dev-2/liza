@@ -164,7 +164,7 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 	data.Agents = buildAgentStatuses(state)
 
 	// Populate orchestrator state
-	data.OrchestratorState = buildOrchestratorStatus(state)
+	data.OrchestratorState = buildOrchestratorStatus(state, projectRoot)
 
 	// Populate work queues
 	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable)
@@ -295,8 +295,8 @@ func buildAgentStatuses(state *models.State) []agentStatus {
 }
 
 // buildOrchestratorStatus determines orchestrator state
-func buildOrchestratorStatus(state *models.State) orchestratorStatus {
-	trigger, count := detectOrchestratorWakeTriggers(state)
+func buildOrchestratorStatus(state *models.State, projectRoot string) orchestratorStatus {
+	trigger, count := detectOrchestratorWakeTriggers(state, projectRoot)
 
 	ps := orchestratorStatus{
 		Trigger:      trigger,
@@ -330,7 +330,7 @@ func buildOrchestratorStatus(state *models.State) orchestratorStatus {
 }
 
 // detectOrchestratorWakeTriggers detects conditions that should wake the orchestrator
-func detectOrchestratorWakeTriggers(state *models.State) (trigger string, count int) {
+func detectOrchestratorWakeTriggers(state *models.State, projectRoot string) (trigger string, count int) {
 	if len(state.Tasks) == 0 {
 		return "INITIAL_PLANNING", 1
 	}
@@ -368,7 +368,7 @@ func detectOrchestratorWakeTriggers(state *models.State) (trigger string, count 
 		return "IMMEDIATE_DISCOVERY", immediateDiscoveries
 	}
 
-	if state.AllPlannedTasksTerminal() {
+	if state.AllPlannedTasksTerminalWith(ops.SprintTerminalStates(projectRoot)) {
 		return "SPRINT_COMPLETE", len(state.Sprint.Scope.Planned)
 	}
 

@@ -64,20 +64,15 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 		Description: "Immediate discoveries need orchestrator triage.",
 		Count:       countImmediateDiscoveries,
 	},
-	{
-		Trigger:     WakeTriggerSprintComplete,
-		Description: "All planned tasks are terminal and the sprint can be closed out.",
-		Count: func(state *models.State) int {
-			if state.AllPlannedTasksTerminal() {
-				return len(state.Sprint.Scope.Planned)
-			}
-			return 0
-		},
-	},
+	// WakeTriggerSprintComplete is handled separately in DetectOrchestratorWakeTriggers
+	// because it requires pipeline-aware terminal state checking.
 }
 
-// DetectOrchestratorWakeTriggers detects conditions that should wake the orchestrator
-// Returns the highest-priority trigger and count of items for that trigger
+// DetectOrchestratorWakeTriggers detects conditions that should wake the orchestrator.
+// pipelineTerminals provides pipeline-defined sprint-terminal states (from ops.SprintTerminalStates).
+// Pass nil for legacy projects.
+//
+// Returns the highest-priority trigger and count of items for that trigger.
 // Priority order:
 // 1. No tasks (initial planning)
 // 2. Blocked tasks
@@ -85,13 +80,22 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // 4. Hypothesis exhausted (2+ failed_by)
 // 5. Immediate discoveries (not yet converted to tasks)
 // 6. Sprint complete (all planned tasks terminal)
-func DetectOrchestratorWakeTriggers(state *models.State) OrchestratorWakeResult {
+func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus) OrchestratorWakeResult {
 	for _, triggerSpec := range orchestratorWakeTriggerSpecs {
 		if count := triggerSpec.Count(state); count > 0 {
 			return OrchestratorWakeResult{
 				Trigger: triggerSpec.Trigger,
 				Count:   count,
 			}
+		}
+	}
+
+	// Sprint-complete check: pipeline-aware when terminals are provided,
+	// falls back to universal terminals when nil.
+	if state.AllPlannedTasksTerminalWith(pipelineTerminals) {
+		return OrchestratorWakeResult{
+			Trigger: WakeTriggerSprintComplete,
+			Count:   len(state.Sprint.Scope.Planned),
 		}
 	}
 

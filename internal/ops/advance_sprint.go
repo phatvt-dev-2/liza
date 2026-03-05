@@ -48,7 +48,7 @@ func AdvanceSprint(projectRoot string) (*AdvanceSprintResult, error) {
 	var result AdvanceSprintResult
 
 	err := blackboard.Modify(func(s *models.State) error {
-		plan, err := planSprintAdvance(s, time.Now().UTC())
+		plan, err := planSprintAdvance(s, time.Now().UTC(), projectRoot)
 		if err != nil {
 			return err
 		}
@@ -82,11 +82,11 @@ func AdvanceSprint(projectRoot string) (*AdvanceSprintResult, error) {
 // planSprintAdvance validates preconditions and computes all derived values
 // for a sprint advance without mutating state. Returns a plan that can be
 // applied via applySprintAdvance.
-func planSprintAdvance(s *models.State, now time.Time) (*sprintAdvancePlan, error) {
+func planSprintAdvance(s *models.State, now time.Time, projectRoot string) (*sprintAdvancePlan, error) {
 	if s.Sprint.Status != models.SprintStatusCheckpoint {
 		return nil, fmt.Errorf("cannot advance sprint: status is %s, expected CHECKPOINT", s.Sprint.Status)
 	}
-	if !s.AllPlannedTasksTerminal() {
+	if !allPlannedTasksTerminalForProject(s, projectRoot) {
 		return nil, fmt.Errorf("cannot advance sprint: not all planned tasks are terminal")
 	}
 

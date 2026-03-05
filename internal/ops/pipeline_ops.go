@@ -101,6 +101,28 @@ func BuildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig
 	return tm
 }
 
+// SprintTerminalStates returns pipeline-defined sprint-terminal states for a project.
+// Returns nil for legacy projects (no pipeline config). On config load error, logs a
+// warning and returns nil (falls back to universal terminal states).
+func SprintTerminalStates(projectRoot string) []models.TaskStatus {
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil {
+		log.Printf("WARNING: failed to load pipeline config for sprint-terminal states: %v", err)
+		return nil
+	}
+	if resolver == nil {
+		return nil // Legacy project — no pipeline config
+	}
+	return resolver.SprintTerminalStates()
+}
+
+// allPlannedTasksTerminalForProject checks if all planned tasks are sprint-terminal,
+// consulting the pipeline config when available. For legacy projects (no pipeline.yaml),
+// falls back to universal terminal states only.
+func allPlannedTasksTerminalForProject(s *models.State, projectRoot string) bool {
+	return s.AllPlannedTasksTerminalWith(SprintTerminalStates(projectRoot))
+}
+
 // initialTaskStatusWithResolver returns the initial task status for a role-pair,
 // consulting the pipeline config when available.
 func initialTaskStatusWithResolver(rolePair string, resolver *pipeline.Resolver) models.TaskStatus {

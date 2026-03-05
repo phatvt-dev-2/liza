@@ -20,6 +20,7 @@ type BasePromptConfig struct {
 
 // OrchestratorContextConfig contains configuration for building orchestrator context
 type OrchestratorContextConfig struct {
+	ProjectRoot string
 }
 
 // SiblingTaskSummary provides minimal context about sibling tasks in the same sprint
@@ -110,7 +111,8 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 		}
 	}
 
-	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, state.AllPlannedTasksTerminal())
+	sprintComplete := state.AllPlannedTasksTerminalWith(ops.SprintTerminalStates(config.ProjectRoot))
+	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, sprintComplete)
 
 	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, state.Goal.SpecRef)
 	if err != nil {

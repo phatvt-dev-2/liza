@@ -318,9 +318,10 @@ func waitForCodePlanReviewerWork(ctx context.Context, bb *db.Blackboard, project
 
 // waitForOrchestratorWork waits for orchestrator wake triggers using event-driven detection
 func waitForOrchestratorWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
+	pipelineTerminals := ops.SprintTerminalStates(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
-			result := DetectOrchestratorWakeTriggers(s)
+			result := DetectOrchestratorWakeTriggers(s, pipelineTerminals)
 			if result.Trigger != WakeTriggerNone {
 				return true, fmt.Sprintf("Orchestrator wake trigger: %s (count: %d)", result.Trigger, result.Count)
 			}

@@ -124,7 +124,9 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 		prompt += context
 
 	case roles.RuntimeOrchestrator:
-		orchestratorConfig := prompts.OrchestratorContextConfig{}
+		orchestratorConfig := prompts.OrchestratorContextConfig{
+			ProjectRoot: config.ProjectRoot,
+		}
 		context, err := prompts.BuildOrchestratorContext(state, orchestratorConfig)
 		if err != nil {
 			return "", fmt.Errorf("building orchestrator context: %w", err)

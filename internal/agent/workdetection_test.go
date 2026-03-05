@@ -233,13 +233,14 @@ func TestCountReviewableTasks(t *testing.T) {
 }
 
 func TestOrchestratorWakeTriggerSpecs(t *testing.T) {
+	// SprintComplete is handled separately in DetectOrchestratorWakeTriggers
+	// (requires pipeline-aware terminal state checking), so it's not in the table.
 	wantOrder := []OrchestratorWakeTrigger{
 		WakeTriggerInitialPlanning,
 		WakeTriggerBlocked,
 		WakeTriggerIntegrationFailed,
 		WakeTriggerHypothesisExhausted,
 		WakeTriggerImmediateDiscovery,
-		WakeTriggerSprintComplete,
 	}
 
 	if len(orchestratorWakeTriggerSpecs) != len(wantOrder) {
@@ -488,7 +489,90 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectOrchestratorWakeTriggers(tt.state)
+			result := DetectOrchestratorWakeTriggers(tt.state, nil)
+			if result.Trigger != tt.wantTrigger {
+				t.Errorf("DetectOrchestratorWakeTriggers() trigger = %v, want %v", result.Trigger, tt.wantTrigger)
+			}
+			if result.Count != tt.wantCount {
+				t.Errorf("DetectOrchestratorWakeTriggers() count = %d, want %d", result.Count, tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestDetectOrchestratorWakeTriggers_PipelineTerminals(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name              string
+		state             *models.State
+		pipelineTerminals []models.TaskStatus
+		wantTrigger       OrchestratorWakeTrigger
+		wantCount         int
+	}{
+		{
+			name: "CODING_PLAN_APPROVED is sprint-terminal with pipeline terminals",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusCodingPlanApproved, now)
+				task.RolePair = "code-planning-pair"
+				state.Tasks = []models.Task{task}
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				return state
+			}(),
+			pipelineTerminals: []models.TaskStatus{models.TaskStatusCodingPlanApproved, models.TaskStatusMerged},
+			wantTrigger:       WakeTriggerSprintComplete,
+			wantCount:         1,
+		},
+		{
+			name: "CODING_PLAN_APPROVED is NOT sprint-terminal without pipeline terminals",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusCodingPlanApproved, now)
+				task.RolePair = "code-planning-pair"
+				state.Tasks = []models.Task{task}
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				return state
+			}(),
+			pipelineTerminals: nil,
+			wantTrigger:       WakeTriggerNone,
+			wantCount:         0,
+		},
+		{
+			name: "mixed legacy and pipeline tasks — all terminal",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				legacyTask := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				pipelineTask := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusCodingPlanApproved, now)
+				pipelineTask.RolePair = "code-planning-pair"
+				state.Tasks = []models.Task{legacyTask, pipelineTask}
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+				return state
+			}(),
+			pipelineTerminals: []models.TaskStatus{models.TaskStatusCodingPlanApproved, models.TaskStatusMerged},
+			wantTrigger:       WakeTriggerSprintComplete,
+			wantCount:         2,
+		},
+		{
+			name: "mixed — pipeline task not yet terminal",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				legacyTask := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				pipelineTask := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusCodePlanning, now)
+				pipelineTask.RolePair = "code-planning-pair"
+				state.Tasks = []models.Task{legacyTask, pipelineTask}
+				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+				return state
+			}(),
+			pipelineTerminals: []models.TaskStatus{models.TaskStatusCodingPlanApproved, models.TaskStatusMerged},
+			wantTrigger:       WakeTriggerNone,
+			wantCount:         0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DetectOrchestratorWakeTriggers(tt.state, tt.pipelineTerminals)
 			if result.Trigger != tt.wantTrigger {
 				t.Errorf("DetectOrchestratorWakeTriggers() trigger = %v, want %v", result.Trigger, tt.wantTrigger)
 			}
@@ -657,7 +741,7 @@ func TestHasOrchestratorWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectOrchestratorWakeTriggers(tt.state)
+			result := DetectOrchestratorWakeTriggers(tt.state, nil)
 			got := result.Trigger != WakeTriggerNone
 			if got != tt.want {
 				t.Errorf("HasOrchestratorWork() = %v, want %v", got, tt.want)

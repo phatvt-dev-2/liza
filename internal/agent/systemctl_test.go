@@ -101,7 +101,7 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder(t *testi
 
 	bb := db.New(statePath)
 
-	err := verifyOrchestratorStateChanges(bb, stateBefore)
+	err := verifyOrchestratorStateChanges(bb, stateBefore, nil)
 	if err != nil {
 		t.Errorf("Expected validation to pass when coder claims INTEGRATION_FAILED task, got error: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded(t *testing.T
 
 	bb := db.New(statePath)
 
-	err := verifyOrchestratorStateChanges(bb, stateBefore)
+	err := verifyOrchestratorStateChanges(bb, stateBefore, nil)
 	if err != nil {
 		t.Errorf("Expected validation to pass when orchestrator supersedes INTEGRATION_FAILED task, got error: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedNotHandled(t *testing.T
 
 	bb := db.New(statePath)
 
-	err := verifyOrchestratorStateChanges(bb, stateBefore)
+	err := verifyOrchestratorStateChanges(bb, stateBefore, nil)
 	if err == nil {
 		t.Error("Expected validation to fail when INTEGRATION_FAILED task remains unchanged")
 	}
@@ -273,7 +273,7 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedMixedOutcomes(t *testin
 
 	bb := db.New(statePath)
 
-	err := verifyOrchestratorStateChanges(bb, stateBefore)
+	err := verifyOrchestratorStateChanges(bb, stateBefore, nil)
 	if err != nil {
 		t.Errorf("Expected validation to pass when some INTEGRATION_FAILED tasks are handled, got error: %v", err)
 	}

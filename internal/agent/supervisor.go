@@ -12,6 +12,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/roles"
 )
@@ -553,7 +554,8 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 			// Verify expected state changes for orchestrator
 			if config.Role == roles.RuntimeOrchestrator {
-				if err := verifyOrchestratorStateChanges(bb, state); err != nil {
+				pipelineTerminals := ops.SprintTerminalStates(config.ProjectRoot)
+				if err := verifyOrchestratorStateChanges(bb, state, pipelineTerminals); err != nil {
 					GetLogger().Warn("Orchestrator state verification failed",
 						"error", err,
 						"hint", "Agent may not have executed required commands - check prompt file")

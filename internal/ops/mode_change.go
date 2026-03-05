@@ -160,7 +160,7 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 				resumedFrom = "COMPLETED sprint"
 			}
 		} else if isCheckpoint {
-			if s.AllPlannedTasksTerminal() {
+			if allPlannedTasksTerminalForProject(s, projectRoot) {
 				// Sprint is truly done — mark COMPLETED for human review.
 				// Human runs liza proceed, then liza resume again to advance.
 				s.Sprint.Status = models.SprintStatusCompleted
