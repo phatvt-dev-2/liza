@@ -1,6 +1,13 @@
 # Goal
 
-Status: To Do
+Status: In Progress
+
+Phase 1:
+- steps 1-4: Done
+- steps 5-8: To do
+
+Phase 2: Not to do yet.
+- steps 1-3
 
 **Only consider implementing Phase 1 steps 1-4 for now. The rest of the plan is future**
 
@@ -399,45 +406,38 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
 ## Sprint Governance Impact
 
 Sub-pipelines introduce role-pair-specific terminal states. Today, sprint completion
-checks only `{MERGED, ABANDONED, SUPERSEDED}`. With configurable pipelines, a task
-reaches sprint-terminal when it hits the `approved` state of its role-pair (or MERGED
-for the coding-pair, or ABANDONED/SUPERSEDED).
+checks only `{MERGED, ABANDONED, SUPERSEDED}`. With configurable pipelines, this
+remains unchanged: every role-pair's supervisor merges the worktree branch after
+approval, so MERGED is the universal sprint-terminal for all role-pairs.
 
 Sprint scope is inferred from the tasks in `sprint.scope.planned[]`. Each task carries
-a `role_pair` field — the sprint completion predicate checks each task's terminal state
-against its role-pair's `approved` state (or MERGED for coding-pair).
+a `role_pair` field — the sprint completion predicate checks that each task has reached
+MERGED (or ABANDONED/SUPERSEDED).
 
 **Sprint homogeneity:** Sprints are not restricted to a single role-pair — the predicate
 handles mixed-role-pair sprints by checking each task against its own role-pair's terminal.
 In practice, sprints tend to be homogeneous because `liza proceed` creates downstream tasks
 for the next sprint, so each sprint naturally contains tasks from one pipeline stage. But
-the machinery doesn't enforce this — a sprint with both code-planning and coding tasks would
-complete when all code-planning tasks reach CODING_PLAN_APPROVED and all coding tasks reach
-MERGED. The `liza proceed` transition happens between sprints.
+the machinery doesn't enforce this — a sprint with both code-planning and coding tasks
+completes when all tasks reach MERGED. The `liza proceed` transition happens between sprints.
 
 **Sprint-terminal states by role-pair:**
 
 | Role-pair | Sprint-terminal state | Notes |
 |-----------|-----------------------|-------|
-| epic-planning-pair | EPIC_PLAN_APPROVED | Spec-only, no merge step |
-| us-writing-pair | US_APPROVED | Spec-only, no merge step |
-| code-planning-pair | CODING_PLAN_APPROVED | Plan approved, coding starts next sprint |
-| coding-pair | MERGED | Supervisor merges after CODE_APPROVED |
+| all role-pairs | MERGED | Supervisor merges worktree after `approved` |
 
 Plus ABANDONED and SUPERSEDED for all role-pairs.
 
-The coding pair is special: its terminal state is not `approved` from the YAML config
-but the mechanical MERGED that follows the supervisor merge.
+All doers work in worktrees and commit their artifacts (code, plans, specs, stories)
+to git. The supervisor merges the worktree branch to integration after the reviewer
+approves — this is the same mechanical step for every role-pair. MERGED is therefore
+not part of the YAML config (it's a cross-cutting post-approval action, like BLOCKED
+or ABANDONED) but it is the universal sprint-terminal state.
 
-**Implication:** The sprint completion predicate (`AllPlannedTasksTerminal`) must become
-pipeline-aware. Rather than hardcoding terminal states, it should read the configured
-pipeline and derive terminals as: `{role-pair.approved, ABANDONED, SUPERSEDED}` for
-each pair, except the coding-pair which uses `{MERGED, ABANDONED, SUPERSEDED}`.
-
-**Tech debt:** The coding-pair's MERGED state is a hardcoded exception in an otherwise
-declarative system. If a future role-pair needs a post-approval mechanical step (e.g.,
-architecture docs committed to repo), consider modeling it as an optional `post-approval`
-config block. Revisit when a second role-pair needs post-approval actions.
+**Implication:** The sprint completion predicate (`AllPlannedTasksTerminal`) remains
+simple: terminal states are `{MERGED, ABANDONED, SUPERSEDED}` for all role-pairs.
+No pipeline-aware derivation needed.
 
 **`liza proceed` and sprint boundaries:**
 - `liza proceed <task-id> <transition-name>` executes a manual inter-pair transition
@@ -473,7 +473,7 @@ resolve target states: from hardcoded values to pipeline config lookups.
 | `submit_for_review` | → READY_FOR_REVIEW | → role-pair.`submitted` |
 | `submit_verdict(APPROVED)` | → APPROVED | → role-pair.`approved` |
 | `submit_verdict(REJECTED)` | → REJECTED | → role-pair.`rejected` |
-| `wt_merge` | → MERGED | unchanged (coding-pair only) |
+| `wt_merge` | → MERGED | unchanged (all role-pairs) |
 
 The agent calls the same tool regardless of role. The supervisor resolves the target
 state from the task's role-pair in the pipeline config (e.g., `submit_for_review` on a
@@ -491,15 +491,10 @@ Structural trade-offs inherent to the design, acknowledged here so implementers 
 rediscover them as bugs.
 
 - **Partial declarativity.** The YAML config governs state naming and happy-path routing.
-  Entry-point dispatch (Orchestrator), cross-cutting meta-states (BLOCKED, etc.), and the
-  coding-pair's MERGED post-approval step remain in code. This is intentional — full
+  Entry-point dispatch (Orchestrator) and cross-cutting meta-states (BLOCKED, MERGED,
+  etc.) remain in code. This is intentional — full
   declarativity would require a DSL, which trades one complexity for another. The boundary
-  is: YAML owns role-pair flow, code owns exceptions and orchestration.
-
-- **MERGED as imperative exception.** The coding-pair's terminal is MERGED (post-approval
-  supervisor merge), not the YAML's `approved` state. Every code path iterating role-pairs
-  must branch on this. Acknowledged as tech debt with explicit trigger (§Sprint Governance
-  Impact): revisit when a second role-pair needs post-approval actions.
+  is: YAML owns role-pair flow, code owns cross-cutting states and orchestration.
 
 - **Sprint lock-step.** Sprint boundaries force all tasks to complete before any can
   `liza proceed`. This serializes independent tasks but is the price of human judgment at
