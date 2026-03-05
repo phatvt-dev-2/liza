@@ -63,8 +63,9 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	var integrationBranch string
 	var leaseDuration int
 	var maxCoderIterations int
-	var workflowRole string
 	var targetStatus models.TaskStatus
+	var isFreshClaim, isRejectionClaim, isIntegrationFixClaim bool
+	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 
 	// Read state to validate (lock is acquired and released)
 	state, task, err := readTaskState(bb, taskID)
@@ -76,38 +77,100 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
 	}
-	workflowRole, err = roles.ToWorkflow(runtimeRole)
+
+	// Load pipeline resolver for pipeline-aware status resolution
+	resolver, err := loadResolver(projectRoot)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
 
-	switch task.Status {
-	case models.TaskStatusReady, models.TaskStatusRejected, models.TaskStatusIntegrationFailed:
-		if workflowRole != models.RoleCoder {
-			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
+	if resolver != nil && task.RolePair != "" {
+		// Pipeline path: resolve statuses from config
+		pipelineInitial, err := resolver.InitialStatus(task.RolePair)
+		if err != nil {
+			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
 		}
-		targetStatus = models.TaskStatusImplementing
-		if task.Status == models.TaskStatusReady {
+		pipelineRejected, _ := resolver.RejectedStatus(task.RolePair)
+		pipelineExecuting, _ := resolver.ExecutingStatus(task.RolePair)
+		doerRole, _ := resolver.DoerRole(task.RolePair)
+
+		switch task.Status {
+		case pipelineInitial:
+			if runtimeRole != doerRole {
+				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
+			}
+			targetStatus = pipelineExecuting
+			isFreshClaim = true
 			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
 				return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
 			}
-		} else if task.AssignedTo != nil {
-			previousAssignee = *task.AssignedTo
+		case pipelineRejected:
+			if runtimeRole != doerRole {
+				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
+			}
+			targetStatus = pipelineExecuting
+			isRejectionClaim = true
+			if task.AssignedTo != nil {
+				previousAssignee = *task.AssignedTo
+			}
+		case models.TaskStatusIntegrationFailed:
+			if runtimeRole != doerRole {
+				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
+			}
+			targetStatus = pipelineExecuting
+			isIntegrationFixClaim = true
+			if task.AssignedTo != nil {
+				previousAssignee = *task.AssignedTo
+			}
+		default:
+			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
 		}
-	case models.TaskStatusDraftCodingPlan, models.TaskStatusCodingPlanRejected:
-		if workflowRole != models.RoleCodePlanner {
+		pipelineTransitions = buildPipelineTransitions(resolver)
+	} else {
+		// Legacy path: hardcoded status resolution
+		workflowRole, err := roles.ToWorkflow(runtimeRole)
+		if err != nil {
+			return nil, err
+		}
+
+		switch task.Status {
+		case models.TaskStatusReady, models.TaskStatusRejected, models.TaskStatusIntegrationFailed:
+			if workflowRole != models.RoleCoder {
+				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
+			}
+			targetStatus = models.TaskStatusImplementing
+			if task.Status == models.TaskStatusReady {
+				isFreshClaim = true
+				if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+					return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
+				}
+			} else if task.Status == models.TaskStatusIntegrationFailed {
+				isIntegrationFixClaim = true
+			} else {
+				isRejectionClaim = true
+				if task.AssignedTo != nil {
+					previousAssignee = *task.AssignedTo
+				}
+			}
+		case models.TaskStatusDraftCodingPlan, models.TaskStatusCodingPlanRejected:
+			if workflowRole != models.RoleCodePlanner {
+				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
+			}
+			targetStatus = models.TaskStatusCodePlanning
+			if task.Status == models.TaskStatusDraftCodingPlan {
+				isFreshClaim = true
+				if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+					return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
+				}
+			} else {
+				isRejectionClaim = true
+				if task.AssignedTo != nil {
+					previousAssignee = *task.AssignedTo
+				}
+			}
+		default:
 			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
 		}
-		targetStatus = models.TaskStatusCodePlanning
-		if task.Status == models.TaskStatusDraftCodingPlan {
-			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
-				return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
-			}
-		} else if task.AssignedTo != nil {
-			previousAssignee = *task.AssignedTo
-		}
-	default:
-		return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
 	}
 
 	agent, exists := state.Agents[agentID]
@@ -126,7 +189,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 	// Enforce coder iteration limits before doing any filesystem work.
 	// A REJECTED task at/over the limit is escalated to BLOCKED for orchestrator action.
-	if (taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected) && task.Iteration >= maxCoderIterations {
+	if isRejectionClaim && task.Iteration >= maxCoderIterations {
 		blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus)
 		if err != nil {
 			return nil, fmt.Errorf("failed to enforce iteration limit: %w", err)
@@ -152,7 +215,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	worktreePhase, err := handleClaimTaskWorktreePhase(
 		gitWrapper,
 		taskID,
-		taskStatus,
+		isFreshClaim, isRejectionClaim, isIntegrationFixClaim,
 		integrationBranch,
 		previousAssignee,
 		agentID,
@@ -181,15 +244,15 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		}
 
 		// Verify worktree exists on disk before committing state
-		if (taskStatus == models.TaskStatusReady || taskStatus == models.TaskStatusDraftCodingPlan) && worktreeCreated {
+		if isFreshClaim && worktreeCreated {
 			worktreePath := filepath.Join(lp.ProjectRoot(), worktreeRel)
 			if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
 				return fmt.Errorf("worktree directory does not exist: %s", worktreePath)
 			}
 		}
 
-		// For READY: re-check dependencies
-		if taskStatus == models.TaskStatusReady || taskStatus == models.TaskStatusDraftCodingPlan {
+		// For fresh claims: re-check dependencies
+		if isFreshClaim {
 			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
 				return fmt.Errorf("race condition: dependencies changed: %v", unmet)
 			}
@@ -203,19 +266,25 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 		// Build event description
 		event := "claimed"
-		if taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected {
+		if isRejectionClaim {
 			if previousAssignee == agentID {
 				event = "reclaimed_after_rejection"
 			} else {
 				event = "reassigned_after_rejection"
 			}
-		} else if taskStatus == models.TaskStatusIntegrationFailed {
+		} else if isIntegrationFixClaim {
 			event = "claimed_for_integration_fix"
 		}
 
 		// Update task
-		if err := task.Transition(targetStatus); err != nil {
-			return err
+		if pipelineTransitions != nil {
+			if err := task.TransitionWith(targetStatus, pipelineTransitions); err != nil {
+				return err
+			}
+		} else {
+			if err := task.Transition(targetStatus); err != nil {
+				return err
+			}
 		}
 		task.AssignedTo = &agentID
 		task.LeaseExpires = &leaseExpires
@@ -224,18 +293,18 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		task.Iteration++
 
 		// Different updates based on source state
-		if taskStatus == models.TaskStatusIntegrationFailed {
+		if isIntegrationFixClaim {
 			// Set integration_fix flag
 			task.IntegrationFix = true
-		} else if (taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected) && previousAssignee != agentID {
+		} else if isRejectionClaim && previousAssignee != agentID {
 			// Different coder: reset review_cycles_current, update base_commit and worktree
 			task.Worktree = &worktreeRel
 			task.BaseCommit = &baseCommit
 			task.ReviewCyclesCurrent = 0
-		} else if (taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected) && previousAssignee == agentID {
+		} else if isRejectionClaim && previousAssignee == agentID {
 			// Same coder: preserve base_commit and worktree (already set)
 		} else {
-			// READY: new claim with fresh worktree and base_commit
+			// Fresh claim: new worktree and base_commit
 			task.Worktree = &worktreeRel
 			task.BaseCommit = &baseCommit
 		}
@@ -247,7 +316,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 			Event: event,
 			Agent: agentPtr,
 		}
-		if (taskStatus == models.TaskStatusRejected || taskStatus == models.TaskStatusCodingPlanRejected) && previousAssignee != agentID && previousAssignee != "" {
+		if isRejectionClaim && previousAssignee != agentID && previousAssignee != "" {
 			historyEntry.PreviousAssignee = &previousAssignee
 		}
 		task.History = append(task.History, historyEntry)
@@ -288,7 +357,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		WorktreeRel:       worktreeRel,
 		BaseCommit:        baseCommit,
 		LeaseExpires:      leaseExpires,
-		IntegrationFix:    taskStatus == models.TaskStatusIntegrationFailed,
+		IntegrationFix:    isIntegrationFixClaim,
 		PreviousAssignee:  previousAssignee,
 		WorktreeRecreated: worktreeDeleted && worktreeCreated,
 	}, nil
@@ -308,19 +377,19 @@ func unmetDependencies(task *models.Task, state *models.State) []string {
 func handleClaimTaskWorktreePhase(
 	gitWrapper *git.Git,
 	taskID string,
-	taskStatus models.TaskStatus,
+	isFreshClaim, isRejectionClaim, isIntegrationFixClaim bool,
 	integrationBranch, previousAssignee, agentID, worktreeDir, worktreeRel string,
 ) (claimWorktreePhaseResult, error) {
 	result := claimWorktreePhaseResult{}
 
-	switch taskStatus {
-	case models.TaskStatusReady, models.TaskStatusDraftCodingPlan:
+	switch {
+	case isFreshClaim:
 		if err := handleReadyClaimWorktree(gitWrapper, taskID, integrationBranch, worktreeDir, worktreeRel); err != nil {
 			return result, err
 		}
 		result.created = true
 		return result, nil
-	case models.TaskStatusRejected, models.TaskStatusCodingPlanRejected:
+	case isRejectionClaim:
 		return handleRejectedClaimWorktree(
 			gitWrapper,
 			taskID,
@@ -330,13 +399,13 @@ func handleClaimTaskWorktreePhase(
 			worktreeDir,
 			worktreeRel,
 		)
-	case models.TaskStatusIntegrationFailed:
+	case isIntegrationFixClaim:
 		if err := ensureIntegrationFailedWorktreeExists(worktreeDir, worktreeRel); err != nil {
 			return result, err
 		}
 		return result, nil
 	default:
-		return result, fmt.Errorf("unsupported claim source status in worktree phase: %s", taskStatus)
+		return result, fmt.Errorf("unsupported claim type in worktree phase")
 	}
 }
 

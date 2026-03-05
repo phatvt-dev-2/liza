@@ -44,17 +44,28 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
 	}
 
-	expectedCurrentStatus := models.TaskStatusImplementing
-	targetSubmittedStatus := models.TaskStatusReadyForReview
-	if runtimeRole == roles.RuntimeCodePlanner {
-		expectedCurrentStatus = models.TaskStatusCodePlanning
-		targetSubmittedStatus = models.TaskStatusCodingPlanToReview
-	}
-
 	// Phase 1: Read state to get config and validate preconditions
 	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Resolve expected statuses (pipeline or legacy)
+	expectedCurrentStatus := models.TaskStatusImplementing
+	targetSubmittedStatus := models.TaskStatusReadyForReview
+	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
+
+	resolver, resolverErr := loadResolver(projectRoot)
+	if resolverErr != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
+	}
+	if resolver != nil && task.RolePair != "" {
+		expectedCurrentStatus, _ = resolver.ExecutingStatus(task.RolePair)
+		targetSubmittedStatus, _ = resolver.SubmittedStatus(task.RolePair)
+		pipelineTransitions = buildPipelineTransitions(resolver)
+	} else if runtimeRole == roles.RuntimeCodePlanner {
+		expectedCurrentStatus = models.TaskStatusCodePlanning
+		targetSubmittedStatus = models.TaskStatusCodingPlanToReview
 	}
 
 	if task.Status != expectedCurrentStatus {
@@ -177,8 +188,14 @@ Alternatively, abort the rebase and ask for help:
 			return fmt.Errorf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)
 		}
 
-		if err := task.Transition(targetSubmittedStatus); err != nil {
-			return err
+		if pipelineTransitions != nil {
+			if err := task.TransitionWith(targetSubmittedStatus, pipelineTransitions); err != nil {
+				return err
+			}
+		} else {
+			if err := task.Transition(targetSubmittedStatus); err != nil {
+				return err
+			}
 		}
 		task.ReviewCommit = &postRebaseCommit
 		// Update BaseCommit from "branched from" to "rebased onto" — this is the

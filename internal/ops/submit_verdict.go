@@ -56,19 +56,31 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
 	}
 
-	expectedReviewingStatus := models.TaskStatusReviewing
-	approvedStatus := models.TaskStatusApproved
-	rejectedStatus := models.TaskStatusRejected
-	if runtimeRole == roles.RuntimeCodePlanReviewer {
-		expectedReviewingStatus = models.TaskStatusReviewingCodingPlan
-		approvedStatus = models.TaskStatusCodingPlanApproved
-		rejectedStatus = models.TaskStatusCodingPlanRejected
-	}
-
 	// Phase 1: Read state and validate preconditions
 	_, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Resolve expected statuses (pipeline or legacy)
+	expectedReviewingStatus := models.TaskStatusReviewing
+	approvedStatus := models.TaskStatusApproved
+	rejectedStatus := models.TaskStatusRejected
+	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
+
+	resolver, resolverErr := loadResolver(projectRoot)
+	if resolverErr != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
+	}
+	if resolver != nil && task.RolePair != "" {
+		expectedReviewingStatus, _ = resolver.ReviewingStatus(task.RolePair)
+		approvedStatus, _ = resolver.ApprovedStatus(task.RolePair)
+		rejectedStatus, _ = resolver.RejectedStatus(task.RolePair)
+		pipelineTransitions = buildPipelineTransitions(resolver)
+	} else if runtimeRole == roles.RuntimeCodePlanReviewer {
+		expectedReviewingStatus = models.TaskStatusReviewingCodingPlan
+		approvedStatus = models.TaskStatusCodingPlanApproved
+		rejectedStatus = models.TaskStatusCodingPlanRejected
 	}
 
 	// Fast-fail before git operations; re-checked authoritatively inside Modify.
@@ -112,8 +124,15 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 			return fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedReviewingStatus, task.Status)
 		}
 
+		transitionTask := func(to models.TaskStatus) error {
+			if pipelineTransitions != nil {
+				return task.TransitionWith(to, pipelineTransitions)
+			}
+			return task.Transition(to)
+		}
+
 		if verdict == "APPROVED" {
-			if err := task.Transition(approvedStatus); err != nil {
+			if err := transitionTask(approvedStatus); err != nil {
 				return err
 			}
 			task.ApprovedBy = &agentID
@@ -126,7 +145,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 				Agent: agentPtr,
 			})
 		} else {
-			if err := task.Transition(rejectedStatus); err != nil {
+			if err := transitionTask(rejectedStatus); err != nil {
 				return err
 			}
 			task.RejectionReason = &reason

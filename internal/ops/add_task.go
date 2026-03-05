@@ -3,6 +3,7 @@ package ops
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -92,6 +93,13 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 	now := time.Now().UTC()
 	agentID := orchestratorID
 
+	// Derive project root from state path (.liza/state.yaml → project root)
+	projectRoot := filepath.Dir(filepath.Dir(statePath))
+	resolver, err := loadResolver(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+
 	bb := db.For(statePath)
 
 	existingTask, err := bb.GetTask(input.ID)
@@ -107,7 +115,7 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 		Type:        taskType,
 		RolePair:    input.RolePair,
 		Description: input.Description,
-		Status:      initialTaskStatus(input.RolePair),
+		Status:      initialTaskStatusWithResolver(input.RolePair, resolver),
 		Priority:    input.Priority,
 		SpecRef:     input.SpecRef,
 		DoneWhen:    input.DoneWhen,

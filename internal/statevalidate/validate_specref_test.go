@@ -26,7 +26,7 @@ func TestValidate_RejectsWorktreePrefixInTaskSpecRef(t *testing.T) {
 		},
 	}
 
-	err := validateTaskInvariants(state, t.TempDir(), true)
+	err := validateTaskInvariants(state, t.TempDir(), true, nil)
 	if err == nil {
 		t.Fatal("Expected error for worktree-prefixed spec_ref")
 	}
@@ -61,7 +61,7 @@ func TestValidate_RejectsWorktreePrefixInOutputSpecRef(t *testing.T) {
 		},
 	}
 
-	err := validateTaskInvariants(state, t.TempDir(), true)
+	err := validateTaskInvariants(state, t.TempDir(), true, nil)
 	if err == nil {
 		t.Fatal("Expected error for worktree-prefixed output spec_ref")
 	}
@@ -96,7 +96,7 @@ func TestValidate_AcceptsRepoRelativeSpecRef(t *testing.T) {
 		},
 	}
 
-	err := validateTaskInvariants(state, t.TempDir(), true)
+	err := validateTaskInvariants(state, t.TempDir(), true, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error for repo-relative spec_ref: %v", err)
 	}

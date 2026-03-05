@@ -10,6 +10,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 // ValidateStateFile validates the state.yaml file against all schema rules.
@@ -28,10 +29,24 @@ func ValidateStateFile(statePath string, skipSpecFileCheck bool, warnWriter io.W
 		return fmt.Errorf("failed to read state file: %w", err)
 	}
 
+	// Load pipeline resolver (nil for legacy goals)
+	var resolver *pipeline.Resolver
+	cfg, cfgErr := pipeline.LoadFrozen(projectRoot)
+	if cfgErr != nil {
+		return fmt.Errorf("failed to load pipeline config: %w", cfgErr)
+	}
+	if cfg != nil {
+		resolver = pipeline.NewResolver(cfg)
+	}
+
 	validators := []func(*models.State, string, bool) error{
 		validateRequiredFields,
-		validateTaskStates,
-		validateTaskInvariants,
+		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+			return validateTaskStates(state, projectRoot, skipSpecFileCheck, resolver)
+		},
+		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+			return validateTaskInvariants(state, projectRoot, skipSpecFileCheck, resolver)
+		},
 		validateDependencies,
 		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 			return validateAgentInvariants(state, projectRoot, skipSpecFileCheck, warnWriter)
@@ -98,123 +113,197 @@ func validateRequiredFields(state *models.State, projectRoot string, skipSpecFil
 	return nil
 }
 
-func validateTaskStates(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+func validateTaskStates(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver) error {
 	for _, task := range state.Tasks {
-		if !task.Status.IsValid() {
+		statusValid := task.Status.IsValid()
+		if !statusValid && resolver != nil {
+			// Accept pipeline-declared states and cross-cutting meta-states
+			statusValid = resolver.IsDeclaredState(task.Status) || isCrossCuttingState(task.Status)
+		}
+		if !statusValid {
 			return fmt.Errorf("unknown task status '%s' for task %s", task.Status, task.ID)
 		}
 		if !task.EffectiveType().IsValid() {
 			return fmt.Errorf("unknown task type '%s' for task %s", task.Type, task.ID)
 		}
+
+		// Pipeline-goal tasks must have a valid role_pair
+		if resolver != nil && task.RolePair != "" {
+			if _, err := resolver.InitialStatus(task.RolePair); err != nil {
+				return fmt.Errorf("task %s has invalid role_pair %q: %w", task.ID, task.RolePair, err)
+			}
+		}
+		if resolver != nil && task.RolePair == "" {
+			// Pipeline-declared status without role_pair is invalid
+			if resolver.IsDeclaredState(task.Status) {
+				return fmt.Errorf("task %s has pipeline-declared status %s but missing role_pair", task.ID, task.Status)
+			}
+		}
 	}
 	return nil
 }
 
-func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+// isCrossCuttingState returns true for meta-states valid across all role-pairs.
+func isCrossCuttingState(status models.TaskStatus) bool {
+	switch status {
+	case models.TaskStatusBlocked, models.TaskStatusAbandoned,
+		models.TaskStatusSuperseded, models.TaskStatusIntegrationFailed,
+		models.TaskStatusMerged:
+		return true
+	}
+	return false
+}
+
+func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver) error {
 	// Track agent assignments to prevent duplicates
 	assignments := make(map[string][]string) // agent ID -> task IDs
 	taskIDs := buildTaskIDSet(state.Tasks)
 
+	// Build the set of pipeline executing statuses for invariant checks
+	var pipelineExecutingStatuses []models.TaskStatus
+	var pipelineInitialStatuses []models.TaskStatus
+	var pipelineSubmittedStatuses []models.TaskStatus
+	var pipelineReviewingStatuses []models.TaskStatus
+	var pipelineApprovedStatuses []models.TaskStatus
+	var pipelineRejectedStatuses []models.TaskStatus
+	if resolver != nil {
+		for _, rpName := range resolver.RolePairNames() {
+			if es, err := resolver.ExecutingStatus(rpName); err == nil {
+				pipelineExecutingStatuses = append(pipelineExecutingStatuses, es)
+			}
+			if is, err := resolver.InitialStatus(rpName); err == nil {
+				pipelineInitialStatuses = append(pipelineInitialStatuses, is)
+			}
+			if ss, err := resolver.SubmittedStatus(rpName); err == nil {
+				pipelineSubmittedStatuses = append(pipelineSubmittedStatuses, ss)
+			}
+			if rs, err := resolver.ReviewingStatus(rpName); err == nil {
+				pipelineReviewingStatuses = append(pipelineReviewingStatuses, rs)
+			}
+			if as, err := resolver.ApprovedStatus(rpName); err == nil {
+				pipelineApprovedStatuses = append(pipelineApprovedStatuses, as)
+			}
+			if rs, err := resolver.RejectedStatus(rpName); err == nil {
+				pipelineRejectedStatuses = append(pipelineRejectedStatuses, rs)
+			}
+		}
+	}
+
+	isExecuting := func(s models.TaskStatus) bool {
+		if s == models.TaskStatusImplementing || s == models.TaskStatusCodePlanning {
+			return true
+		}
+		for _, es := range pipelineExecutingStatuses {
+			if s == es {
+				return true
+			}
+		}
+		return false
+	}
+
+	isInitial := func(s models.TaskStatus) bool {
+		if s == models.TaskStatusDraft || s == models.TaskStatusReady || s == models.TaskStatusDraftCodingPlan {
+			return true
+		}
+		for _, is := range pipelineInitialStatuses {
+			if s == is {
+				return true
+			}
+		}
+		return false
+	}
+
+	isSubmitted := func(s models.TaskStatus) bool {
+		if s == models.TaskStatusReadyForReview || s == models.TaskStatusCodingPlanToReview {
+			return true
+		}
+		for _, ss := range pipelineSubmittedStatuses {
+			if s == ss {
+				return true
+			}
+		}
+		return false
+	}
+
+	isReviewing := func(s models.TaskStatus) bool {
+		if s == models.TaskStatusReviewing || s == models.TaskStatusReviewingCodingPlan {
+			return true
+		}
+		for _, rs := range pipelineReviewingStatuses {
+			if s == rs {
+				return true
+			}
+		}
+		return false
+	}
+
+	isApproved := func(s models.TaskStatus) bool {
+		if s == models.TaskStatusApproved || s == models.TaskStatusCodingPlanApproved {
+			return true
+		}
+		for _, as := range pipelineApprovedStatuses {
+			if s == as {
+				return true
+			}
+		}
+		return false
+	}
+
+	isRejected := func(s models.TaskStatus) bool {
+		if s == models.TaskStatusRejected || s == models.TaskStatusCodingPlanRejected {
+			return true
+		}
+		for _, rs := range pipelineRejectedStatuses {
+			if s == rs {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, task := range state.Tasks {
-		// DRAFT cannot have assigned_to
-		if task.Status == models.TaskStatusDraft && task.AssignedTo != nil {
-			return fmt.Errorf("DRAFT task with assigned_to: %s", task.ID)
+		// Initial/draft states cannot have assigned_to
+		if isInitial(task.Status) && task.AssignedTo != nil {
+			return fmt.Errorf("%s task with assigned_to: %s", task.Status, task.ID)
 		}
 
-		// DRAFT_CODING_PLAN cannot have assigned_to
-		if task.Status == models.TaskStatusDraftCodingPlan && task.AssignedTo != nil {
-			return fmt.Errorf("DRAFT_CODING_PLAN task with assigned_to: %s", task.ID)
+		// Executing states must have assigned_to, worktree, base_commit (unless integration_fix), lease_expires
+		if isExecuting(task.Status) {
+			if task.AssignedTo == nil {
+				return fmt.Errorf("%s task without assigned_to: %s", task.Status, task.ID)
+			}
+			if task.Worktree == nil {
+				return fmt.Errorf("%s task without worktree: %s", task.Status, task.ID)
+			}
+			if !task.IntegrationFix && task.BaseCommit == nil {
+				return fmt.Errorf("%s task without base_commit: %s", task.Status, task.ID)
+			}
+			if task.LeaseExpires == nil {
+				return fmt.Errorf("%s task without lease_expires: %s", task.Status, task.ID)
+			}
 		}
 
-		// IMPLEMENTING must have assigned_to
-		if task.Status == models.TaskStatusImplementing && task.AssignedTo == nil {
-			return fmt.Errorf("IMPLEMENTING task without assigned_to: %s", task.ID)
+		// Submitted states must have review_commit
+		if isSubmitted(task.Status) && task.ReviewCommit == nil {
+			return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
 		}
 
-		// IMPLEMENTING must have worktree
-		if task.Status == models.TaskStatusImplementing && task.Worktree == nil {
-			return fmt.Errorf("IMPLEMENTING task without worktree: %s", task.ID)
-		}
-
-		// IMPLEMENTING must have base_commit (except integration_fix tasks)
-		if task.Status == models.TaskStatusImplementing && !task.IntegrationFix && task.BaseCommit == nil {
-			return fmt.Errorf("IMPLEMENTING task without base_commit: %s", task.ID)
-		}
-
-		// IMPLEMENTING must have lease_expires
-		if task.Status == models.TaskStatusImplementing && task.LeaseExpires == nil {
-			return fmt.Errorf("IMPLEMENTING task without lease_expires: %s", task.ID)
-		}
-
-		// CODE_PLANNING must have assigned_to
-		if task.Status == models.TaskStatusCodePlanning && task.AssignedTo == nil {
-			return fmt.Errorf("CODE_PLANNING task without assigned_to: %s", task.ID)
-		}
-
-		// CODE_PLANNING must have worktree
-		if task.Status == models.TaskStatusCodePlanning && task.Worktree == nil {
-			return fmt.Errorf("CODE_PLANNING task without worktree: %s", task.ID)
-		}
-
-		// CODE_PLANNING must have base_commit
-		if task.Status == models.TaskStatusCodePlanning && task.BaseCommit == nil {
-			return fmt.Errorf("CODE_PLANNING task without base_commit: %s", task.ID)
-		}
-
-		// CODE_PLANNING must have lease_expires
-		if task.Status == models.TaskStatusCodePlanning && task.LeaseExpires == nil {
-			return fmt.Errorf("CODE_PLANNING task without lease_expires: %s", task.ID)
-		}
-
-		// CODING_PLAN_TO_REVIEW must have review_commit
-		if task.Status == models.TaskStatusCodingPlanToReview && task.ReviewCommit == nil {
-			return fmt.Errorf("CODING_PLAN_TO_REVIEW task without review_commit: %s", task.ID)
-		}
-
-		// REVIEWING_CODING_PLAN must have reviewing_by, review_lease_expires, and review_commit
-		if task.Status == models.TaskStatusReviewingCodingPlan {
+		// Reviewing states must have reviewing_by, review_lease_expires, and review_commit
+		if isReviewing(task.Status) {
 			if task.ReviewingBy == nil {
-				return fmt.Errorf("REVIEWING_CODING_PLAN task without reviewing_by: %s", task.ID)
+				return fmt.Errorf("%s task without reviewing_by: %s", task.Status, task.ID)
 			}
 			if task.ReviewLeaseExpires == nil {
-				return fmt.Errorf("REVIEWING_CODING_PLAN task without review_lease_expires: %s", task.ID)
+				return fmt.Errorf("%s task without review_lease_expires: %s", task.Status, task.ID)
 			}
 			if task.ReviewCommit == nil {
-				return fmt.Errorf("REVIEWING_CODING_PLAN task without review_commit: %s", task.ID)
+				return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
 			}
 		}
 
-		// CODING_PLAN_APPROVED must have review_commit
-		if task.Status == models.TaskStatusCodingPlanApproved && task.ReviewCommit == nil {
-			return fmt.Errorf("CODING_PLAN_APPROVED task without review_commit: %s", task.ID)
-		}
-
-		// CODING_PLAN_REJECTED must have rejection_reason
-		if task.Status == models.TaskStatusCodingPlanRejected && task.RejectionReason == nil {
-			return fmt.Errorf("CODING_PLAN_REJECTED task without rejection_reason: %s", task.ID)
-		}
-
-		// READY_FOR_REVIEW must have review_commit
-		if task.Status == models.TaskStatusReadyForReview && task.ReviewCommit == nil {
-			return fmt.Errorf("READY_FOR_REVIEW task without review_commit: %s", task.ID)
-		}
-
-		// REVIEWING must have reviewing_by, review_lease_expires, and review_commit
-		if task.Status == models.TaskStatusReviewing {
-			if task.ReviewingBy == nil {
-				return fmt.Errorf("REVIEWING task without reviewing_by: %s", task.ID)
-			}
-			if task.ReviewLeaseExpires == nil {
-				return fmt.Errorf("REVIEWING task without review_lease_expires: %s", task.ID)
-			}
-			if task.ReviewCommit == nil {
-				return fmt.Errorf("REVIEWING task without review_commit: %s", task.ID)
-			}
-		}
-
-		// APPROVED task must have review_commit
-		if task.Status == models.TaskStatusApproved && task.ReviewCommit == nil {
-			return fmt.Errorf("APPROVED task without review_commit: %s", task.ID)
+		// Approved states must have review_commit
+		if isApproved(task.Status) && task.ReviewCommit == nil {
+			return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
 		}
 
 		// MERGED task must NOT have worktree
@@ -232,9 +321,9 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 		}
 
-		// REJECTED must have rejection_reason
-		if task.Status == models.TaskStatusRejected && task.RejectionReason == nil {
-			return fmt.Errorf("REJECTED task without rejection_reason: %s", task.ID)
+		// Rejected states must have rejection_reason
+		if isRejected(task.Status) && task.RejectionReason == nil {
+			return fmt.Errorf("%s task without rejection_reason: %s", task.Status, task.ID)
 		}
 
 		// SUPERSEDED must have superseded_by and rescope_reason
@@ -247,21 +336,21 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 		}
 
-		// Track assignments for duplicate check (IMPLEMENTING and CODE_PLANNING tasks count as active)
-		if task.AssignedTo != nil && (task.Status == models.TaskStatusImplementing || task.Status == models.TaskStatusCodePlanning) {
+		// Track assignments for duplicate check (executing tasks count as active)
+		if task.AssignedTo != nil && isExecuting(task.Status) {
 			agent := *task.AssignedTo
 			assignments[agent] = append(assignments[agent], task.ID)
 		}
 
-		// IMPLEMENTING/CODE_PLANNING worktree path must exist (only check if projectRoot is not empty to allow tests)
-		if (task.Status == models.TaskStatusImplementing || task.Status == models.TaskStatusCodePlanning) && task.Worktree != nil && projectRoot != "" {
+		// Executing task worktree path must exist (only check if projectRoot is not empty to allow tests)
+		if isExecuting(task.Status) && task.Worktree != nil && projectRoot != "" {
 			wtPath := filepath.Join(projectRoot, *task.Worktree)
 			if _, err := os.Stat(wtPath); os.IsNotExist(err) {
-				return fmt.Errorf("IMPLEMENTING task %s has worktree=%s but directory does not exist", task.ID, *task.Worktree)
+				return fmt.Errorf("%s task %s has worktree=%s but directory does not exist", task.Status, task.ID, *task.Worktree)
 			}
 		}
 
-		if requiresCompletionFields(task.Status) {
+		if requiresCompletionFields(task.Status, resolver) {
 			if task.DoneWhen == "" {
 				return fmt.Errorf("non-DRAFT task missing done_when: %s", task.ID)
 			}
@@ -582,9 +671,22 @@ func buildTaskIDSet(tasks []models.Task) map[string]bool {
 	return ids
 }
 
-func requiresCompletionFields(status models.TaskStatus) bool {
-	return status != models.TaskStatusDraft &&
-		status != models.TaskStatusDraftCodingPlan &&
-		status != models.TaskStatusSuperseded &&
-		status != models.TaskStatusAbandoned
+func requiresCompletionFields(status models.TaskStatus, resolver *pipeline.Resolver) bool {
+	// Terminal meta-states don't require completion fields
+	if status == models.TaskStatusSuperseded || status == models.TaskStatusAbandoned {
+		return false
+	}
+	// Legacy draft states
+	if status == models.TaskStatusDraft || status == models.TaskStatusDraftCodingPlan {
+		return false
+	}
+	// Pipeline initial states (drafts)
+	if resolver != nil {
+		for _, rpName := range resolver.RolePairNames() {
+			if initial, err := resolver.InitialStatus(rpName); err == nil && status == initial {
+				return false
+			}
+		}
+	}
+	return true
 }

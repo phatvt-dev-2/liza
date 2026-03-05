@@ -164,6 +164,16 @@ func (t *Task) Transition(to TaskStatus) error {
 	return nil
 }
 
+// TransitionWith validates and applies a status transition using a custom transition map.
+// This supports pipeline-defined states that aren't in the hardcoded transition map.
+func (t *Task) TransitionWith(to TaskStatus, transitions map[TaskStatus][]TaskStatus) error {
+	if !slices.Contains(transitions[t.Status], to) {
+		return fmt.Errorf("invalid task transition: %s → %s (task %s)", t.Status, to, t.ID)
+	}
+	t.Status = to
+	return nil
+}
+
 // OutputEntry represents a structured subtask definition produced by a doer role.
 // When a task completes with output[], each entry defines a downstream child task.
 type OutputEntry struct {
@@ -352,6 +362,13 @@ func (ts TaskStatus) IsSprintTerminal() bool {
 	return ts.IsTerminal()
 }
 
+// IsPipelineSprintTerminal checks if the status is terminal for sprint purposes
+// using pipeline-defined terminal states. Universal terminals (MERGED, ABANDONED,
+// SUPERSEDED) are always considered sprint-terminal.
+func (ts TaskStatus) IsPipelineSprintTerminal(terminalStates []TaskStatus) bool {
+	return ts.IsTerminal() || slices.Contains(terminalStates, ts)
+}
+
 // AllPlannedTasksTerminal returns true if the sprint has planned tasks and all of
 // them are in a sprint-terminal state. Returns false if the planned list is empty
 // or any planned task is not found/not sprint-terminal.
@@ -363,6 +380,31 @@ func (s *State) AllPlannedTasksTerminal() bool {
 		task := s.FindTask(taskID)
 		if task == nil || !task.Status.IsSprintTerminal() {
 			return false
+		}
+	}
+	return true
+}
+
+// AllPlannedTasksTerminalWith is like AllPlannedTasksTerminal but uses pipeline-defined
+// sprint-terminal states for tasks with a role_pair. Legacy tasks (no role_pair) use the
+// standard IsSprintTerminal check. This supports mixed legacy/pipeline sprints.
+func (s *State) AllPlannedTasksTerminalWith(pipelineTerminals []TaskStatus) bool {
+	if len(s.Sprint.Scope.Planned) == 0 {
+		return false
+	}
+	for _, taskID := range s.Sprint.Scope.Planned {
+		task := s.FindTask(taskID)
+		if task == nil {
+			return false
+		}
+		if task.RolePair != "" {
+			if !task.Status.IsPipelineSprintTerminal(pipelineTerminals) {
+				return false
+			}
+		} else {
+			if !task.Status.IsSprintTerminal() {
+				return false
+			}
 		}
 	}
 	return true

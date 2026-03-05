@@ -33,22 +33,36 @@ func ResumeHandoff(input ResumeHandoffInput) (*ResumeHandoffResult, error) {
 	lp := paths.New(input.ProjectRoot)
 	bb := db.For(lp.StatePath())
 
+	// Collect pipeline executing statuses (if pipeline config exists)
+	var executingStatuses []models.TaskStatus
+	resolver, err := loadResolver(input.ProjectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+	if resolver != nil {
+		for _, rpName := range resolver.RolePairNames() {
+			if es, err := resolver.ExecutingStatus(rpName); err == nil {
+				executingStatuses = append(executingStatuses, es)
+			}
+		}
+	}
+
 	state, err := bb.Read()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read state: %w", err)
 	}
 
-	return resumeHandoffWithState(bb, state, input.AgentID)
+	return resumeHandoffWithState(bb, state, input.AgentID, executingStatuses)
 }
 
 // resumeHandoffWithState performs the handoff resumption with an already-read state.
 // This allows for efficient checking without re-reading state.
-func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID string) (*ResumeHandoffResult, error) {
+func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID string, executingStatuses []models.TaskStatus) (*ResumeHandoffResult, error) {
 	now := time.Now().UTC()
 
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		if !isResumableHandoff(task, agentID) {
+		if !isResumableHandoff(task, agentID, executingStatuses) {
 			continue
 		}
 		if task.Worktree == nil {
@@ -63,8 +77,8 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 			if t == nil {
 				return &lizaerrors.NotFoundError{Entity: "task", ID: id}
 			}
-			if t.Status != models.TaskStatusImplementing && t.Status != models.TaskStatusCodePlanning {
-				return fmt.Errorf("task %s is no longer IMPLEMENTING/CODE_PLANNING", id)
+			if !isExecutingStatus(t.Status, executingStatuses) {
+				return fmt.Errorf("task %s is no longer in an executing state (current: %s)", id, t.Status)
 			}
 			if t.AssignedTo == nil || *t.AssignedTo != agentID {
 				return fmt.Errorf("task %s is no longer assigned to %s", id, agentID)
@@ -114,8 +128,8 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 }
 
 // isResumableHandoff checks if the task is a handoff that can be resumed by the given agent.
-func isResumableHandoff(task *models.Task, agentID string) bool {
-	if task.Status != models.TaskStatusImplementing && task.Status != models.TaskStatusCodePlanning {
+func isResumableHandoff(task *models.Task, agentID string, executingStatuses []models.TaskStatus) bool {
+	if !isExecutingStatus(task.Status, executingStatuses) {
 		return false
 	}
 	if task.AssignedTo == nil || *task.AssignedTo != agentID {
@@ -125,4 +139,17 @@ func isResumableHandoff(task *models.Task, agentID string) bool {
 		return false
 	}
 	return true
+}
+
+// isExecutingStatus returns true if the status is a legacy or pipeline executing state.
+func isExecutingStatus(status models.TaskStatus, pipelineExecuting []models.TaskStatus) bool {
+	if status == models.TaskStatusImplementing || status == models.TaskStatusCodePlanning {
+		return true
+	}
+	for _, es := range pipelineExecuting {
+		if status == es {
+			return true
+		}
+	}
+	return false
 }
