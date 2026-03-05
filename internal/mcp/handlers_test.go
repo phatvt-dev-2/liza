@@ -104,6 +104,32 @@ func TestHandleGetSpecificTask(t *testing.T) {
 	}
 }
 
+// TestHandleGetTasksSlashID verifies liza_get with "tasks/<id>" query format
+func TestHandleGetTasksSlashID(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspace(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	// "tasks/task-1" should resolve identically to bare "task-1"
+	result, err := server.handleGet(map[string]any{
+		"query": "tasks/task-1",
+	})
+
+	if err != nil {
+		t.Fatalf("handleGet with tasks/<id> failed: %v", err)
+	}
+
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+}
+
 // TestHandleStatus verifies liza_status
 func TestHandleStatus(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspace(t)

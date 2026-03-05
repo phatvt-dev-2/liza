@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/identity"
@@ -172,7 +173,10 @@ func (s *Server) handleGet(params map[string]any) (any, error) {
 		Internal:    false, // Get formatted output
 	}
 
-	result, err := commands.InspectCommand([]string{query}, opts)
+	// Split on "/" so "tasks/<id>" becomes ["tasks", "<id>"]
+	args := strings.SplitN(query, "/", 2)
+
+	result, err := commands.InspectCommand(args, opts)
 	if err != nil {
 		return nil, fmt.Errorf("inspect command failed: %w", err)
 	}
