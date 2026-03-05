@@ -115,7 +115,7 @@ func StatusCommand(opts StatusOptions) (string, error) {
 	}
 
 	// Build status data
-	status := buildStatusData(state, opts.Detailed)
+	status := buildStatusData(state, opts.Detailed, opts.ProjectRoot)
 
 	// Format output
 	switch opts.Format {
@@ -129,7 +129,7 @@ func StatusCommand(opts StatusOptions) (string, error) {
 }
 
 // buildStatusData populates the statusData structure from state
-func buildStatusData(state *models.State, detailed bool) statusData {
+func buildStatusData(state *models.State, detailed bool, projectRoot string) statusData {
 	data := statusData{}
 
 	// Populate goal information
@@ -171,7 +171,7 @@ func buildStatusData(state *models.State, detailed bool) statusData {
 
 	// Collect pending transitions for tasks
 	for i := range state.Tasks {
-		avail := ops.AvailableTransitions(&state.Tasks[i])
+		avail := ops.AvailableTransitions(&state.Tasks[i], projectRoot)
 		if len(avail) > 0 {
 			data.PendingTransitions = append(data.PendingTransitions, pendingTransition{
 				TaskID:      state.Tasks[i].ID,

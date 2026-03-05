@@ -2,11 +2,14 @@ package ops
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 // ProceedResult contains the outcome of executing a manual inter-pair transition.
@@ -16,7 +19,7 @@ type ProceedResult struct {
 	ChildTaskIDs   []string
 }
 
-// transitionDef defines a hardcoded manual transition between role pairs.
+// transitionDef defines a manual transition between role pairs.
 type transitionDef struct {
 	// requiredStatus is the source task status required for this transition.
 	requiredStatus models.TaskStatus
@@ -24,6 +27,8 @@ type transitionDef struct {
 	targetStatus models.TaskStatus
 	// cardinality is "per-subtask" or "one-to-one".
 	cardinality string
+	// targetRolePair is the role-pair set on child tasks (pipeline goals only).
+	targetRolePair string
 }
 
 // knownTransitions is the hardcoded transition registry.
@@ -49,9 +54,9 @@ var knownTransitions = map[string]transitionDef{
 // Crash recovery: if the transition key is already set but some children
 // are missing, only the missing children are created.
 func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error) {
-	tDef, ok := knownTransitions[transitionName]
-	if !ok {
-		return nil, fmt.Errorf("unknown transition %q (available: code-plan-to-coding)", transitionName)
+	tDef, err := resolveTransitionDef(projectRoot, transitionName)
+	if err != nil {
+		return nil, err
 	}
 
 	statePath := paths.New(projectRoot).StatePath()
@@ -63,7 +68,7 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 		TransitionName: transitionName,
 	}
 
-	err := blackboard.Modify(func(s *models.State) error {
+	err = blackboard.Modify(func(s *models.State) error {
 		// Validate sprint is COMPLETED
 		if s.Sprint.Status != models.SprintStatusCompleted {
 			return fmt.Errorf("sprint must be COMPLETED before proceeding (current: %s)", s.Sprint.Status)
@@ -101,7 +106,7 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 				// Create only missing children (crash recovery)
 				for _, idx := range missingChildren {
 					childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, idx)
-					child := buildChildTask(childID, taskID, task.Output[idx], tDef.targetStatus, now)
+					child := buildChildTask(childID, taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, now)
 					s.Tasks = append(s.Tasks, child)
 					result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 				}
@@ -141,7 +146,7 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 		if tDef.cardinality == "per-subtask" {
 			for i, entry := range task.Output {
 				childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
-				child := buildChildTask(childID, taskID, entry, tDef.targetStatus, now)
+				child := buildChildTask(childID, taskID, entry, tDef.targetStatus, tDef.targetRolePair, now)
 				s.Tasks = append(s.Tasks, child)
 				result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 			}
@@ -168,10 +173,11 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 }
 
 // buildChildTask creates a child task from an output entry.
-func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, now time.Time) models.Task {
+func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, now time.Time) models.Task {
 	return models.Task{
 		ID:          childID,
 		Type:        models.TaskTypeCoding,
+		RolePair:    targetRolePair,
 		Description: entry.Desc,
 		Status:      targetStatus,
 		Priority:    1,
@@ -202,8 +208,15 @@ func validateOutputEntry(entry models.OutputEntry, index int) error {
 }
 
 // AvailableTransitions returns the available manual transitions for a task.
+// For pipeline-configured goals, transitions are read from the frozen config.
+// For legacy goals, transitions are read from the hardcoded knownTransitions map.
 // Returns nil if no transitions are available.
-func AvailableTransitions(task *models.Task) []string {
+func AvailableTransitions(task *models.Task, projectRoot string) []string {
+	resolver, _, err := loadResolver(projectRoot)
+	if err == nil && resolver != nil {
+		return resolver.AvailableTransitions(task.Status, task.TransitionsExecuted)
+	}
+	// Legacy path
 	var available []string
 	for name, tDef := range knownTransitions {
 		if task.Status == tDef.requiredStatus && !task.TransitionsExecuted[name] {
@@ -211,4 +224,93 @@ func AvailableTransitions(task *models.Task) []string {
 		}
 	}
 	return available
+}
+
+// resolveTransitionDef looks up a transition definition, trying the pipeline config
+// first (if present) and falling back to the legacy knownTransitions map.
+func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, error) {
+	resolver, cfg, err := loadResolver(projectRoot)
+	if err != nil {
+		return transitionDef{}, fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+
+	if resolver != nil {
+		// Pipeline path: look up transition from config
+		td, err := resolver.Transition(transitionName)
+		if err != nil {
+			names := allTransitionNames(cfg)
+			return transitionDef{}, fmt.Errorf("unknown transition %q (available: %s)", transitionName, strings.Join(names, ", "))
+		}
+
+		fromStatus, err := resolvePhaseRef(resolver, td.From)
+		if err != nil {
+			return transitionDef{}, fmt.Errorf("invalid from reference in transition %q: %w", transitionName, err)
+		}
+		toStatus, err := resolvePhaseRef(resolver, td.To)
+		if err != nil {
+			return transitionDef{}, fmt.Errorf("invalid to reference in transition %q: %w", transitionName, err)
+		}
+		targetPair, err := resolver.TransitionTargetRolePair(transitionName)
+		if err != nil {
+			return transitionDef{}, fmt.Errorf("invalid target role-pair in transition %q: %w", transitionName, err)
+		}
+
+		return transitionDef{
+			requiredStatus: fromStatus,
+			targetStatus:   toStatus,
+			cardinality:    td.Cardinality,
+			targetRolePair: targetPair,
+		}, nil
+	}
+
+	// Legacy path
+	td, ok := knownTransitions[transitionName]
+	if !ok {
+		names := make([]string, 0, len(knownTransitions))
+		for name := range knownTransitions {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		return transitionDef{}, fmt.Errorf("unknown transition %q (available: %s)", transitionName, strings.Join(names, ", "))
+	}
+	return td, nil
+}
+
+// resolvePhaseRef resolves a "pair.phase" reference (e.g., "code-planning-pair.approved")
+// to a concrete TaskStatus using the resolver's public API.
+func resolvePhaseRef(resolver *pipeline.Resolver, ref string) (models.TaskStatus, error) {
+	parts := strings.SplitN(ref, ".", 2)
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid transition reference %q (expected pair.phase)", ref)
+	}
+	pair, phase := parts[0], parts[1]
+
+	switch phase {
+	case "initial":
+		return resolver.InitialStatus(pair)
+	case "executing":
+		return resolver.ExecutingStatus(pair)
+	case "submitted":
+		return resolver.SubmittedStatus(pair)
+	case "reviewing":
+		return resolver.ReviewingStatus(pair)
+	case "approved":
+		return resolver.ApprovedStatus(pair)
+	case "rejected":
+		return resolver.RejectedStatus(pair)
+	default:
+		return "", fmt.Errorf("unknown phase %q in reference %q", phase, ref)
+	}
+}
+
+// allTransitionNames collects all transition names from the pipeline config.
+func allTransitionNames(cfg *pipeline.PipelineConfig) []string {
+	var names []string
+	for _, sp := range cfg.Pipeline.SubPipelines {
+		for _, t := range sp.Transitions {
+			names = append(names, t.Name)
+		}
+	}
+	slices.Sort(names)
+	return names
 }

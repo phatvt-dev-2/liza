@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -527,5 +529,260 @@ func TestProceed_RejectsOutputMissingFields(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "output") {
 		t.Errorf("Error = %q, want to contain 'output'", err.Error())
+	}
+}
+
+// --- Pipeline-aware Proceed tests ---
+
+// setupPipelineProceedTest creates a test dir with frozen pipeline config.
+func setupPipelineProceedTest(t *testing.T) (string, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Copy the valid pipeline YAML to .liza/pipeline.yaml (frozen config).
+	src, err := os.ReadFile(filepath.Join(findRepoRoot(t), "internal", "pipeline", "testdata", "valid-coding-subpipeline.yaml"))
+	if err != nil {
+		t.Fatalf("Failed to read pipeline testdata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".liza", "pipeline.yaml"), src, 0o644); err != nil {
+		t.Fatalf("Failed to write frozen pipeline config: %v", err)
+	}
+
+	return tmpDir, stateFile
+}
+
+func TestProceed_PipelineCreatesChildTasksWithRolePair(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-task-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan the auth module",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Implement login", DoneWhen: "POST /login works", Scope: "auth", SpecRef: "specs/auth.md#login"},
+			{Desc: "Implement refresh", DoneWhen: "POST /refresh works", Scope: "auth", SpecRef: "specs/auth.md#refresh"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	if len(result.ChildTaskIDs) != 2 {
+		t.Fatalf("ChildTaskIDs count = %d, want 2", len(result.ChildTaskIDs))
+	}
+
+	// Verify persisted state
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	// Child task 0: should have pipeline status and role_pair
+	child0 := readState.FindTask(result.ChildTaskIDs[0])
+	if child0 == nil {
+		t.Fatal("Child task 0 not found")
+	}
+	if child0.Status != models.TaskStatus("DRAFT_CODE") {
+		t.Errorf("Child 0 status = %v, want DRAFT_CODE", child0.Status)
+	}
+	if child0.RolePair != "coding-pair" {
+		t.Errorf("Child 0 role_pair = %q, want %q", child0.RolePair, "coding-pair")
+	}
+	if child0.ParentTask == nil || *child0.ParentTask != parentID {
+		t.Errorf("Child 0 parent_task = %v, want %q", child0.ParentTask, parentID)
+	}
+	if child0.Description != "Implement login" {
+		t.Errorf("Child 0 desc = %q, want %q", child0.Description, "Implement login")
+	}
+
+	// Child task 1
+	child1 := readState.FindTask(result.ChildTaskIDs[1])
+	if child1 == nil {
+		t.Fatal("Child task 1 not found")
+	}
+	if child1.Status != models.TaskStatus("DRAFT_CODE") {
+		t.Errorf("Child 1 status = %v, want DRAFT_CODE", child1.Status)
+	}
+	if child1.RolePair != "coding-pair" {
+		t.Errorf("Child 1 role_pair = %q, want %q", child1.RolePair, "coding-pair")
+	}
+	if child1.ParentTask == nil || *child1.ParentTask != parentID {
+		t.Errorf("Child 1 parent_task = %v, want %q", child1.ParentTask, parentID)
+	}
+
+	// Source task status should be unchanged
+	srcTask := readState.FindTask(parentID)
+	if srcTask.Status != models.TaskStatus("CODING_PLAN_APPROVED") {
+		t.Errorf("Source status = %v, want CODING_PLAN_APPROVED", srcTask.Status)
+	}
+	if !srcTask.TransitionsExecuted["code-plan-to-coding"] {
+		t.Error("transitions_executed should contain code-plan-to-coding")
+	}
+}
+
+func TestProceed_LegacyStillUsesKnownTransitions(t *testing.T) {
+	// No pipeline.yaml → legacy path
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Child", DoneWhen: "Done", Scope: "s", SpecRef: "README.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child := readState.FindTask(result.ChildTaskIDs[0])
+	if child == nil {
+		t.Fatal("Child task not found")
+	}
+	if child.Status != models.TaskStatusDraft {
+		t.Errorf("Child status = %v, want DRAFT", child.Status)
+	}
+	if child.RolePair != "" {
+		t.Errorf("Child role_pair = %q, want empty (legacy)", child.RolePair)
+	}
+	if child.ParentTask == nil || *child.ParentTask != parentID {
+		t.Errorf("Child parent_task = %v, want %q", child.ParentTask, parentID)
+	}
+}
+
+func TestAvailableTransitions_PipelineTask(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	now := time.Now().UTC()
+	task := models.Task{
+		ID:          "plan-1",
+		Type:        models.TaskTypeCoding,
+		RolePair:    "code-planning-pair",
+		Description: "Plan task",
+		Status:      models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "README.md",
+		DoneWhen:    "Done",
+		Scope:       "scope",
+		History:     []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	avail := AvailableTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
+	if len(avail) != 1 || avail[0] != "code-plan-to-coding" {
+		t.Errorf("AvailableTransitions = %v, want [code-plan-to-coding]", avail)
+	}
+}
+
+func TestAvailableTransitions_LegacyTask(t *testing.T) {
+	// No pipeline.yaml → legacy path
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           "plan-1",
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan task",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Done",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	avail := AvailableTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
+	if len(avail) != 1 || avail[0] != "code-plan-to-coding" {
+		t.Errorf("AvailableTransitions = %v, want [code-plan-to-coding]", avail)
+	}
+}
+
+func TestAvailableTransitions_PipelineExcludesExecuted(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	now := time.Now().UTC()
+	task := models.Task{
+		ID:                  "plan-1",
+		Type:                models.TaskTypeCoding,
+		RolePair:            "code-planning-pair",
+		Description:         "Plan task",
+		Status:              models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:            1,
+		Created:             now,
+		SpecRef:             "README.md",
+		DoneWhen:            "Done",
+		Scope:               "scope",
+		TransitionsExecuted: map[string]bool{"code-plan-to-coding": true},
+		History:             []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	avail := AvailableTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
+	if len(avail) != 0 {
+		t.Errorf("AvailableTransitions = %v, want [] (already executed)", avail)
 	}
 }

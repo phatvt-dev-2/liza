@@ -366,7 +366,7 @@ func TestBuildStatusData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data := buildStatusData(tt.state, tt.detailed)
+			data := buildStatusData(tt.state, tt.detailed, "")
 			tt.validate(t, data)
 		})
 	}
@@ -386,7 +386,7 @@ func TestBuildStatusData_ByStatusMap(t *testing.T) {
 		testhelpers.BuildTaskByStatus("task-7", models.TaskStatusMerged, now),
 	}
 
-	data := buildStatusData(state, false)
+	data := buildStatusData(state, false, "")
 
 	// Check ByStatus map
 	if data.Tasks.ByStatus == nil {
@@ -421,7 +421,7 @@ func TestBuildStatusData_AgentProcessStatus(t *testing.T) {
 		},
 	}
 
-	data := buildStatusData(state, false)
+	data := buildStatusData(state, false, "")
 
 	if len(data.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(data.Agents))
@@ -485,7 +485,7 @@ func TestBuildStatusData_WorkQueuesReason(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data := buildStatusData(tt.state, false)
+			data := buildStatusData(tt.state, false, "")
 
 			if !strings.Contains(data.WorkQueues.Coder.Reason, tt.expectCoderMsg) {
 				t.Errorf("expected coder reason to contain %q, got %q", tt.expectCoderMsg, data.WorkQueues.Coder.Reason)
