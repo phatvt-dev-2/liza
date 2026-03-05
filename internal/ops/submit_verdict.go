@@ -73,9 +73,15 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
 	if resolver != nil && task.RolePair != "" {
-		expectedReviewingStatus, _ = resolver.ReviewingStatus(task.RolePair)
-		approvedStatus, _ = resolver.ApprovedStatus(task.RolePair)
-		rejectedStatus, _ = resolver.RejectedStatus(task.RolePair)
+		if expectedReviewingStatus, err = resolver.ReviewingStatus(task.RolePair); err != nil {
+			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		}
+		if approvedStatus, err = resolver.ApprovedStatus(task.RolePair); err != nil {
+			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		}
+		if rejectedStatus, err = resolver.RejectedStatus(task.RolePair); err != nil {
+			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		}
 		pipelineTransitions = buildPipelineTransitions(resolver, cfg)
 	} else if runtimeRole == roles.RuntimeCodePlanReviewer {
 		expectedReviewingStatus = models.TaskStatusReviewingCodingPlan

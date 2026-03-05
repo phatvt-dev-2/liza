@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"log"
+
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
 )
@@ -27,18 +29,48 @@ func rolePairNames(cfg *pipeline.PipelineConfig) []string {
 	return names
 }
 
+// warnSkipRolePair logs a warning when a role-pair is skipped due to a resolver
+// error during transition map construction. Should not happen on validated configs.
+func warnSkipRolePair(rpName string, err error) {
+	log.Printf("WARNING: buildPipelineTransitions: skipping role-pair %q: %v", rpName, err)
+}
+
 // buildPipelineTransitions creates a complete transition map by merging the
 // resolver's intra-pair transitions with cross-cutting meta-state transitions.
 func buildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig) map[models.TaskStatus][]models.TaskStatus {
 	tm := r.TransitionMap()
 
 	for _, rpName := range rolePairNames(cfg) {
-		initial, _ := r.InitialStatus(rpName)
-		executing, _ := r.ExecutingStatus(rpName)
-		submitted, _ := r.SubmittedStatus(rpName)
-		reviewing, _ := r.ReviewingStatus(rpName)
-		rejected, _ := r.RejectedStatus(rpName)
-		approved, _ := r.ApprovedStatus(rpName)
+		initial, err := r.InitialStatus(rpName)
+		if err != nil {
+			warnSkipRolePair(rpName, err)
+			continue
+		}
+		executing, err := r.ExecutingStatus(rpName)
+		if err != nil {
+			warnSkipRolePair(rpName, err)
+			continue
+		}
+		submitted, err := r.SubmittedStatus(rpName)
+		if err != nil {
+			warnSkipRolePair(rpName, err)
+			continue
+		}
+		reviewing, err := r.ReviewingStatus(rpName)
+		if err != nil {
+			warnSkipRolePair(rpName, err)
+			continue
+		}
+		rejected, err := r.RejectedStatus(rpName)
+		if err != nil {
+			warnSkipRolePair(rpName, err)
+			continue
+		}
+		approved, err := r.ApprovedStatus(rpName)
+		if err != nil {
+			warnSkipRolePair(rpName, err)
+			continue
+		}
 
 		// Cross-cutting additions per lifecycle phase:
 		tm[initial] = append(tm[initial], models.TaskStatusAbandoned)
@@ -53,7 +85,11 @@ func buildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig
 
 	ifTargets := []models.TaskStatus{models.TaskStatusAbandoned}
 	for _, rpName := range rolePairNames(cfg) {
-		executing, _ := r.ExecutingStatus(rpName)
+		executing, err := r.ExecutingStatus(rpName)
+		if err != nil {
+			log.Printf("WARNING: buildPipelineTransitions: skipping INTEGRATION_FAILED target for role-pair %q: %v", rpName, err)
+			continue
+		}
 		ifTargets = append(ifTargets, executing)
 	}
 	tm[models.TaskStatusIntegrationFailed] = ifTargets

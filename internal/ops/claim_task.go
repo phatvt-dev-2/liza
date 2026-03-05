@@ -90,9 +90,18 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
 		}
-		pipelineRejected, _ := resolver.RejectedStatus(task.RolePair)
-		pipelineExecuting, _ := resolver.ExecutingStatus(task.RolePair)
-		doerRole, _ := resolver.DoerRole(task.RolePair)
+		pipelineRejected, err := resolver.RejectedStatus(task.RolePair)
+		if err != nil {
+			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		}
+		pipelineExecuting, err := resolver.ExecutingStatus(task.RolePair)
+		if err != nil {
+			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		}
+		doerRole, err := resolver.DoerRole(task.RolePair)
+		if err != nil {
+			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		}
 
 		switch task.Status {
 		case pipelineInitial:

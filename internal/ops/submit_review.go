@@ -60,8 +60,12 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
 	if resolver != nil && task.RolePair != "" {
-		expectedCurrentStatus, _ = resolver.ExecutingStatus(task.RolePair)
-		targetSubmittedStatus, _ = resolver.SubmittedStatus(task.RolePair)
+		if expectedCurrentStatus, err = resolver.ExecutingStatus(task.RolePair); err != nil {
+			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		}
+		if targetSubmittedStatus, err = resolver.SubmittedStatus(task.RolePair); err != nil {
+			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		}
 		pipelineTransitions = buildPipelineTransitions(resolver, cfg)
 	} else if runtimeRole == roles.RuntimeCodePlanner {
 		expectedCurrentStatus = models.TaskStatusCodePlanning
