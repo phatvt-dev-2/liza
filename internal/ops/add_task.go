@@ -102,14 +102,6 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 
 	bb := db.For(statePath)
 
-	existingTask, err := bb.GetTask(input.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check for existing task: %w", err)
-	}
-	if existingTask != nil {
-		return nil, fmt.Errorf("task '%s' already exists in %s", input.ID, statePath)
-	}
-
 	newTask := models.Task{
 		ID:          input.ID,
 		Type:        taskType,
@@ -126,6 +118,9 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 	}
 
 	err = bb.Modify(func(state *models.State) error {
+		if state.FindTask(input.ID) != nil {
+			return fmt.Errorf("task '%s' already exists in %s", input.ID, statePath)
+		}
 		state.Tasks = append(state.Tasks, newTask)
 
 		if !slices.Contains(state.Sprint.Scope.Planned, input.ID) {
