@@ -128,6 +128,133 @@ pipeline:
 	assertContains(t, err.Error(), "WORKING")
 }
 
+func TestLoad_DuplicateTransitionNames(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    a: "A"
+    b: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_A
+        executing: WORKING_A
+        submitted: SUBMITTED_A
+        reviewing: REVIEWING_A
+        approved: APPROVED_A
+        rejected: REJECTED_A
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_B
+        executing: WORKING_B
+        submitted: SUBMITTED_B
+        reviewing: REVIEWING_B
+        approved: APPROVED_B
+        rejected: REJECTED_B
+  sub-pipelines:
+    sp1:
+      steps: [pair-a, pair-b]
+      transitions:
+        - name: advance
+          from: pair-a.approved
+          to: pair-b.initial
+          trigger: manual
+          cardinality: per-subtask
+        - name: advance
+          from: pair-b.approved
+          to: pair-a.initial
+          trigger: manual
+          cardinality: per-subtask
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for duplicate transition name")
+	}
+	assertContains(t, err.Error(), "duplicate transition name")
+	assertContains(t, err.Error(), "advance")
+}
+
+func TestLoad_DuplicateTransitionNames_AcrossSubPipelines(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    a: "A"
+    b: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_A
+        executing: WORKING_A
+        submitted: SUBMITTED_A
+        reviewing: REVIEWING_A
+        approved: APPROVED_A
+        rejected: REJECTED_A
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_B
+        executing: WORKING_B
+        submitted: SUBMITTED_B
+        reviewing: REVIEWING_B
+        approved: APPROVED_B
+        rejected: REJECTED_B
+    pair-c:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_C
+        executing: WORKING_C
+        submitted: SUBMITTED_C
+        reviewing: REVIEWING_C
+        approved: APPROVED_C
+        rejected: REJECTED_C
+    pair-d:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_D
+        executing: WORKING_D
+        submitted: SUBMITTED_D
+        reviewing: REVIEWING_D
+        approved: APPROVED_D
+        rejected: REJECTED_D
+  sub-pipelines:
+    sp1:
+      steps: [pair-a, pair-b]
+      transitions:
+        - name: advance
+          from: pair-a.approved
+          to: pair-b.initial
+          trigger: manual
+          cardinality: per-subtask
+    sp2:
+      steps: [pair-c, pair-d]
+      transitions:
+        - name: advance
+          from: pair-c.approved
+          to: pair-d.initial
+          trigger: manual
+          cardinality: per-subtask
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for duplicate transition name across sub-pipelines")
+	}
+	assertContains(t, err.Error(), "duplicate transition name")
+	assertContains(t, err.Error(), "advance")
+}
+
 func TestLoad_InvalidTransitionReference(t *testing.T) {
 	yaml := `
 pipeline:

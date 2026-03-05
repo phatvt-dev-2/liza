@@ -128,6 +128,8 @@ func validate(cfg *PipelineConfig) error {
 
 	// Track role-pair membership across sub-pipelines (blocker fix 1).
 	rpSubPipeline := make(map[string]string) // role-pair → sub-pipeline name
+	// Track transition name uniqueness across sub-pipelines.
+	transitionOwner := make(map[string]string) // transition name → sub-pipeline name
 
 	// Validate sub-pipelines.
 	for spName, sp := range p.SubPipelines {
@@ -150,6 +152,10 @@ func validate(cfg *PipelineConfig) error {
 			if err := validateTransition(t, p, sp.Steps); err != nil {
 				return fmt.Errorf("sub-pipeline %q transition %q: %w", spName, t.Name, err)
 			}
+			if owner, exists := transitionOwner[t.Name]; exists {
+				return fmt.Errorf("duplicate transition name %q: used by sub-pipelines %q and %q", t.Name, owner, spName)
+			}
+			transitionOwner[t.Name] = spName
 		}
 	}
 
