@@ -43,8 +43,8 @@ func TestLoad_ValidConfig(t *testing.T) {
 	if len(sp.Steps) != 2 {
 		t.Fatalf("expected 2 steps, got %d", len(sp.Steps))
 	}
-	if len(sp.Transitions) != 1 {
-		t.Fatalf("expected 1 transition, got %d", len(sp.Transitions))
+	if len(sp.Transitions) != 2 {
+		t.Fatalf("expected 2 transitions, got %d", len(sp.Transitions))
 	}
 
 	// Verify entry-points.
@@ -843,10 +843,10 @@ func TestResolver_TransitionUnknown(t *testing.T) {
 func TestResolver_AvailableTransitions(t *testing.T) {
 	r := NewResolver(loadTestConfig(t))
 
-	// CODING_PLAN_APPROVED with no executed transitions.
+	// CODING_PLAN_APPROVED with no executed transitions — auto transition excluded.
 	got := r.AvailableTransitions("CODING_PLAN_APPROVED", nil)
 	if len(got) != 1 || got[0] != "code-plan-to-coding" {
-		t.Errorf("AvailableTransitions(CODING_PLAN_APPROVED, nil) = %v, want [code-plan-to-coding]", got)
+		t.Errorf("AvailableTransitions(CODING_PLAN_APPROVED, nil) = %v, want [code-plan-to-coding] (auto-code-plan-to-coding should be excluded)", got)
 	}
 
 	// Already executed.

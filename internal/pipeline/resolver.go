@@ -195,6 +195,9 @@ func (r *Resolver) AvailableTransitions(status models.TaskStatus, transitionsExe
 	var available []string
 	for _, sp := range r.config.Pipeline.SubPipelines {
 		for _, t := range sp.Transitions {
+			if t.Trigger != "manual" {
+				continue
+			}
 			if transitionsExecuted[t.Name] {
 				continue
 			}
