@@ -318,3 +318,95 @@ func TestReleaseClaim_DefaultAgentAndReason(t *testing.T) {
 		t.Fatalf("ReleaseClaim() error: %v", err)
 	}
 }
+
+func TestReleaseClaim_PipelineCoderClaim(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", "IMPLEMENTING_CODE", now)
+	task.RolePair = "coding-pair"
+	agent := "coder-1"
+	task.AssignedTo = &agent
+	leaseExpires := now.Add(30 * time.Minute)
+	task.LeaseExpires = &leaseExpires
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: testhelpers.StringPtr("task-1"),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := ReleaseClaim(tmpDir, "task-1", "coder", true, "pipeline test", "human")
+	if err != nil {
+		t.Fatalf("ReleaseClaim() error: %v", err)
+	}
+	if !result.ReleasedCoder {
+		t.Error("ReleasedCoder should be true")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	readTask := readState.FindTask("task-1")
+	if readTask == nil {
+		t.Fatal("Task not found")
+	}
+	// Pipeline coder release: IMPLEMENTING_CODE → DRAFT_CODE
+	if readTask.Status != "DRAFT_CODE" {
+		t.Errorf("Status = %v, want DRAFT_CODE", readTask.Status)
+	}
+	if readTask.AssignedTo != nil {
+		t.Error("AssignedTo should be nil")
+	}
+}
+
+func TestReleaseClaim_PipelineReviewerClaim(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", "REVIEWING_CODE", now)
+	task.RolePair = "coding-pair"
+	reviewer := "code-reviewer-1"
+	task.ReviewingBy = &reviewer
+	reviewLease := now.Add(30 * time.Minute)
+	task.ReviewLeaseExpires = &reviewLease
+	state.Tasks = []models.Task{task}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:        "code-reviewer",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: testhelpers.StringPtr("task-1"),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := ReleaseClaim(tmpDir, "task-1", "code-reviewer", true, "pipeline test", "human")
+	if err != nil {
+		t.Fatalf("ReleaseClaim() error: %v", err)
+	}
+	if !result.ReleasedReviewer {
+		t.Error("ReleasedReviewer should be true")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	readTask := readState.FindTask("task-1")
+	if readTask == nil {
+		t.Fatal("Task not found")
+	}
+	// Pipeline reviewer release: REVIEWING_CODE → CODE_READY_FOR_REVIEW
+	if readTask.Status != "CODE_READY_FOR_REVIEW" {
+		t.Errorf("Status = %v, want CODE_READY_FOR_REVIEW", readTask.Status)
+	}
+	if readTask.ReviewingBy != nil {
+		t.Error("ReviewingBy should be nil")
+	}
+}

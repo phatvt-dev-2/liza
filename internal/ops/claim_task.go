@@ -134,7 +134,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		default:
 			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
 		}
-		pipelineTransitions = buildPipelineTransitions(resolver, cfg)
+		pipelineTransitions = BuildPipelineTransitions(resolver, cfg)
 	} else {
 		// Legacy path: hardcoded status resolution
 		workflowRole, err := roles.ToWorkflow(runtimeRole)

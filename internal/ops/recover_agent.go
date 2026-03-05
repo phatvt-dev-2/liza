@@ -80,6 +80,16 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 		}
 	}
 
+	// Load pipeline resolver for pipeline-aware claim release
+	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
+	resolver, cfg, resolverErr := loadResolver(projectRoot)
+	if resolverErr != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("pipeline config: %v", resolverErr))
+	}
+	if resolver != nil && cfg != nil {
+		pipelineTransitions = BuildPipelineTransitions(resolver, cfg)
+	}
+
 	// Phase 3: State modify (atomic)
 	now := time.Now().UTC()
 	err = bb.Modify(func(state *models.State) error {
@@ -93,9 +103,10 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 		if taskID != "" {
 			task := state.FindTask(taskID)
 			if task != nil {
+				effectiveCoderRelease, effectiveReviewerRelease := resolveClaimReleaseStatuses(task, resolver)
 				switch role {
 				case roles.RuntimeCoder:
-					released, err := releaseOneClaim(state, task, coderRelease, true, agentID, reason, now)
+					released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, true, agentID, reason, now)
 					if err != nil {
 						result.Warnings = append(result.Warnings, fmt.Sprintf("coder claim release: %v", err))
 					}
@@ -105,7 +116,7 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 						task.Worktree = nil
 					}
 				case roles.RuntimeCodeReviewer:
-					released, err := releaseOneClaim(state, task, reviewerRelease, true, agentID, reason, now)
+					released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, true, agentID, reason, now)
 					if err != nil {
 						result.Warnings = append(result.Warnings, fmt.Sprintf("reviewer claim release: %v", err))
 					}

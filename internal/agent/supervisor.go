@@ -381,7 +381,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	if err := registerAgent(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800); err != nil {
 		return err
 	}
-	defer unregisterAgent(bb, config.AgentID)
+	defer unregisterAgent(bb, config.AgentID, config.ProjectRoot)
 
 	// Load config from state
 	state, err := bb.Read()
@@ -535,7 +535,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		// Reset runtime status after CLI exits, but preserve explicit command-driven
 		// states such as WAITING and HANDOFF.
-		if err := resetAgentAfterExit(bb, config.AgentID); err != nil {
+		if err := resetAgentAfterExit(bb, config.AgentID, config.ProjectRoot); err != nil {
 			GetLogger().Warn("Failed to reset agent status after exit", "error", err, "agent_id", config.AgentID)
 		}
 

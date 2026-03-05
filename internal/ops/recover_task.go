@@ -134,6 +134,16 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 		return result, nil
 	}
 
+	// Load pipeline resolver for pipeline-aware claim release
+	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
+	resolver, cfg, resolverErr := loadResolver(projectRoot)
+	if resolverErr != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("pipeline config: %v", resolverErr))
+	}
+	if resolver != nil && cfg != nil {
+		pipelineTransitions = BuildPipelineTransitions(resolver, cfg)
+	}
+
 	// Phase 3: State cleanup (atomic)
 	// All agent IDs are re-read from current state inside Modify to avoid TOCTOU.
 	now := time.Now().UTC()
@@ -153,10 +163,13 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 			agentsToRecover[*task.ReviewingBy] = true
 		}
 
+		// Resolve pipeline-aware statuses for claim release
+		effectiveCoderRelease, effectiveReviewerRelease := resolveClaimReleaseStatuses(task, resolver)
+
 		// Release coder claim if present
 		if task.AssignedTo != nil {
 			currentCoderID := *task.AssignedTo
-			released, err := releaseOneClaim(state, task, coderRelease, true, currentCoderID, reason, now)
+			released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, true, currentCoderID, reason, now)
 			if err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("coder claim release: %v", err))
 			}
@@ -168,7 +181,7 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 		// Release reviewer claim if present
 		if task.ReviewingBy != nil {
 			currentReviewerID := *task.ReviewingBy
-			released, err := releaseOneClaim(state, task, reviewerRelease, true, currentReviewerID, reason, now)
+			released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, true, currentReviewerID, reason, now)
 			if err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("reviewer claim release: %v", err))
 			}

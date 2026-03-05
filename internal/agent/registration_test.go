@@ -283,7 +283,7 @@ func TestUnregisterAgent(t *testing.T) {
 
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	unregisterAgent(bb, agentID)
+	unregisterAgent(bb, agentID, tmpDir)
 
 	// Verify agent was removed
 	state, err := bb.Read()
@@ -461,7 +461,7 @@ func TestResetAgentAfterExit_WaitingWithoutCurrentTask(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := resetAgentAfterExit(bb, agentID)
+	err := resetAgentAfterExit(bb, agentID, tmpDir)
 	if err != nil {
 		t.Fatalf("resetAgentAfterExit() error = %v", err)
 	}
@@ -497,7 +497,7 @@ func TestResetAgentAfterExit_WaitingWithCurrentTask(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := resetAgentAfterExit(bb, agentID)
+	err := resetAgentAfterExit(bb, agentID, tmpDir)
 	if err != nil {
 		t.Fatalf("resetAgentAfterExit() error = %v", err)
 	}
@@ -526,7 +526,7 @@ func TestResetAgentAfterExit_NotFound(t *testing.T) {
 
 	bb := db.New(statePath)
 
-	err := resetAgentAfterExit(bb, "nonexistent")
+	err := resetAgentAfterExit(bb, "nonexistent", tmpDir)
 	if err == nil {
 		t.Fatal("Expected error for nonexistent agent")
 	}
@@ -564,7 +564,7 @@ func TestResetAgentAfterExit_ReviewerReleasesTask(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := resetAgentAfterExit(bb, agentID)
+	err := resetAgentAfterExit(bb, agentID, tmpDir)
 	if err != nil {
 		t.Fatalf("resetAgentAfterExit() error = %v", err)
 	}
@@ -627,7 +627,7 @@ func TestResetAgentAfterExit_CoderReleasesTask(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := resetAgentAfterExit(bb, agentID)
+	err := resetAgentAfterExit(bb, agentID, tmpDir)
 	if err != nil {
 		t.Fatalf("resetAgentAfterExit() error = %v", err)
 	}
@@ -687,7 +687,7 @@ func TestResetAgentAfterExit_HandoffPreservesTask(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := resetAgentAfterExit(bb, agentID)
+	err := resetAgentAfterExit(bb, agentID, tmpDir)
 	if err != nil {
 		t.Fatalf("resetAgentAfterExit() error = %v", err)
 	}
@@ -735,7 +735,7 @@ func TestResetAgentAfterExit_NoCurrentTask(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := resetAgentAfterExit(bb, agentID)
+	err := resetAgentAfterExit(bb, agentID, tmpDir)
 	if err != nil {
 		t.Fatalf("resetAgentAfterExit() error = %v", err)
 	}

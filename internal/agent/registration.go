@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -97,9 +98,12 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 // unregisterAgent releases any task claim held by the agent, then removes
 // the agent from state. Both operations happen in a single atomic modify
 // so that an interrupt between them cannot leave a stuck task.
-func unregisterAgent(bb *db.Blackboard, agentID string) {
+func unregisterAgent(bb *db.Blackboard, agentID, projectRoot string) {
 	logger := GetLogger()
 	now := time.Now().UTC()
+
+	// Load pipeline config outside the lock to avoid disk I/O under bb.Modify
+	pipelineTransitions, resolver := loadPipelineForRelease(projectRoot)
 
 	err := bb.Modify(func(state *models.State) error {
 		agent, exists := state.Agents[agentID]
@@ -111,7 +115,7 @@ func unregisterAgent(bb *db.Blackboard, agentID string) {
 		if agent.CurrentTask != nil {
 			taskID := *agent.CurrentTask
 			if task := state.FindTask(taskID); task != nil {
-				releaseTaskClaim(state, task, agent.Role, agentID, now)
+				releaseTaskClaim(state, task, agent.Role, agentID, pipelineTransitions, resolver, now)
 			}
 		}
 
@@ -126,43 +130,40 @@ func unregisterAgent(bb *db.Blackboard, agentID string) {
 
 // releaseTaskClaim transitions a task back to its unclaimed status and clears
 // the claim fields. Best-effort: logs warnings instead of failing.
-func releaseTaskClaim(state *models.State, task *models.Task, role, agentID string, now time.Time) {
+// pipelineTransitions and resolver are pre-loaded by the caller (outside bb.Modify)
+// to avoid disk I/O under the state lock.
+func releaseTaskClaim(state *models.State, task *models.Task, role, agentID string, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, resolver *pipeline.Resolver, now time.Time) {
 	logger := GetLogger()
 	reason := "agent interrupted"
 
+	// Resolve pipeline-aware statuses (shared logic with ops.ReleaseClaim)
+	activeExecuting, releasedInitial, activeReviewing, releasedSubmitted := ops.ResolveReleaseStatuses(task, resolver)
+
+	transitionTask := func(to models.TaskStatus) {
+		if pipelineTransitions != nil {
+			if err := task.TransitionWith(to, pipelineTransitions); err != nil {
+				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
+			}
+		} else {
+			if err := task.Transition(to); err != nil {
+				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
+			}
+		}
+	}
+
+	// Collapse roles into claim types: doer (AssignedTo) vs reviewer (ReviewingBy).
+	// Pipeline-resolved statuses apply to both legacy and pipeline roles within each type.
 	switch role {
-	case roles.RuntimeCoder:
-		if task.Status == models.TaskStatusImplementing {
-			if err := task.Transition(models.TaskStatusReady); err != nil {
-				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
-			}
+	case roles.RuntimeCoder, roles.RuntimeCodePlanner:
+		if task.Status == activeExecuting {
+			transitionTask(releasedInitial)
 		}
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
 
-	case roles.RuntimeCodePlanner:
-		if task.Status == models.TaskStatusCodePlanning {
-			if err := task.Transition(models.TaskStatusDraftCodingPlan); err != nil {
-				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
-			}
-		}
-		task.AssignedTo = nil
-		task.LeaseExpires = nil
-
-	case roles.RuntimeCodeReviewer:
-		if task.Status == models.TaskStatusReviewing {
-			if err := task.Transition(models.TaskStatusReadyForReview); err != nil {
-				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
-			}
-		}
-		task.ReviewingBy = nil
-		task.ReviewLeaseExpires = nil
-
-	case roles.RuntimeCodePlanReviewer:
-		if task.Status == models.TaskStatusReviewingCodingPlan {
-			if err := task.Transition(models.TaskStatusCodingPlanToReview); err != nil {
-				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
-			}
+	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
+		if task.Status == activeReviewing {
+			transitionTask(releasedSubmitted)
 		}
 		task.ReviewingBy = nil
 		task.ReviewLeaseExpires = nil
@@ -179,6 +180,24 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 		Agent:  &agentID,
 		Reason: &reason,
 	})
+}
+
+// loadPipelineForRelease loads pipeline resolver and transitions, logging
+// warnings on failure. Returns nil values for legacy (no pipeline) projects.
+func loadPipelineForRelease(projectRoot string) (map[models.TaskStatus][]models.TaskStatus, *pipeline.Resolver) {
+	if projectRoot == "" {
+		return nil, nil
+	}
+	cfg, err := pipeline.LoadFrozen(projectRoot)
+	if err != nil {
+		GetLogger().Warn("Failed to load pipeline config for claim release", "error", err)
+		return nil, nil
+	}
+	if cfg == nil {
+		return nil, nil
+	}
+	resolver := pipeline.NewResolver(cfg)
+	return ops.BuildPipelineTransitions(resolver, cfg), resolver
 }
 
 // resetAgentToIdle resets an agent's status to IDLE and clears CurrentTask
@@ -203,8 +222,11 @@ func resetAgentToIdle(bb *db.Blackboard, agentID string) error {
 
 // resetAgentAfterExit clears transient runtime states after CLI exit while preserving
 // explicit command-driven states that are meaningful between loops.
-func resetAgentAfterExit(bb *db.Blackboard, agentID string) error {
+func resetAgentAfterExit(bb *db.Blackboard, agentID, projectRoot string) error {
 	now := time.Now().UTC()
+
+	// Load pipeline config outside the lock to avoid disk I/O under bb.Modify
+	pipelineTransitions, resolver := loadPipelineForRelease(projectRoot)
 
 	return bb.Modify(func(state *models.State) error {
 		agent, exists := state.Agents[agentID]
@@ -225,7 +247,7 @@ func resetAgentAfterExit(bb *db.Blackboard, agentID string) error {
 		// Release any held task claim before clearing CurrentTask
 		if agent.CurrentTask != nil {
 			if task := state.FindTask(*agent.CurrentTask); task != nil {
-				releaseTaskClaim(state, task, agent.Role, agentID, now)
+				releaseTaskClaim(state, task, agent.Role, agentID, pipelineTransitions, resolver, now)
 			}
 		}
 

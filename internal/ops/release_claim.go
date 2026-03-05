@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 // ReleaseClaimResult contains the outcome of releasing a claim.
@@ -73,9 +74,46 @@ var coderRelease = claimRelease{
 	activeLeaseMsg:  "coder lease still valid until %s, use --force to clear",
 }
 
+// ResolveReleaseStatuses returns the active/released status pairs for doer and
+// reviewer claims, resolving from the pipeline when the task has a RolePair.
+// Falls back to legacy defaults (IMPLEMENTING→READY, REVIEWING→READY_FOR_REVIEW).
+func ResolveReleaseStatuses(task *models.Task, resolver *pipeline.Resolver) (doerActive, doerReleased, reviewerActive, reviewerReleased models.TaskStatus) {
+	doerActive = models.TaskStatusImplementing
+	doerReleased = models.TaskStatusReady
+	reviewerActive = models.TaskStatusReviewing
+	reviewerReleased = models.TaskStatusReadyForReview
+	if resolver == nil || task.RolePair == "" {
+		return
+	}
+	initial, initialErr := resolver.InitialStatus(task.RolePair)
+	executing, executingErr := resolver.ExecutingStatus(task.RolePair)
+	if initialErr == nil && executingErr == nil {
+		doerActive = executing
+		doerReleased = initial
+	}
+	submitted, submittedErr := resolver.SubmittedStatus(task.RolePair)
+	reviewing, reviewingErr := resolver.ReviewingStatus(task.RolePair)
+	if submittedErr == nil && reviewingErr == nil {
+		reviewerActive = reviewing
+		reviewerReleased = submitted
+	}
+	return
+}
+
+// resolveClaimReleaseStatuses returns coder and reviewer claimRelease configs with
+// pipeline-resolved active/released statuses when the task has a RolePair and a
+// resolver is available. Falls back to legacy defaults otherwise.
+func resolveClaimReleaseStatuses(task *models.Task, resolver *pipeline.Resolver) (coder claimRelease, reviewer claimRelease) {
+	coder = coderRelease
+	reviewer = reviewerRelease
+	coder.activeStatus, coder.releasedStatus, reviewer.activeStatus, reviewer.releasedStatus = ResolveReleaseStatuses(task, resolver)
+	return coder, reviewer
+}
+
 // releaseOneClaim executes the 9-step release sequence for a single role's claim.
+// pipelineTransitions, if non-nil, overrides the default transition map.
 // Returns true if a claim was released.
-func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, force bool, agentID, reason string, now time.Time) (bool, error) {
+func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, force bool, agentID, reason string, now time.Time) (bool, error) {
 	if !cfg.hasClaimFn(task) {
 		return false, nil
 	}
@@ -94,8 +132,14 @@ func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, f
 	}
 
 	if task.Status == cfg.activeStatus {
-		if err := task.Transition(cfg.releasedStatus); err != nil {
-			return false, err
+		if pipelineTransitions != nil {
+			if err := task.TransitionWith(cfg.releasedStatus, pipelineTransitions); err != nil {
+				return false, err
+			}
+		} else {
+			if err := task.Transition(cfg.releasedStatus); err != nil {
+				return false, err
+			}
 		}
 	}
 
@@ -142,14 +186,27 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 
 	now := time.Now().UTC()
 
+	// Load pipeline resolver for pipeline-aware status resolution
+	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
+	resolver, cfg, resolverErr := loadResolver(projectRoot)
+	if resolverErr != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
+	}
+	if resolver != nil && cfg != nil {
+		pipelineTransitions = BuildPipelineTransitions(resolver, cfg)
+	}
+
 	err := bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
+		// Resolve pipeline-aware statuses for claim release
+		effectiveCoderRelease, effectiveReviewerRelease := resolveClaimReleaseStatuses(task, resolver)
+
 		if role == "code-reviewer" || role == "both" {
-			released, err := releaseOneClaim(state, task, reviewerRelease, force, agentID, reason, now)
+			released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, force, agentID, reason, now)
 			if err != nil {
 				return err
 			}
@@ -157,7 +214,7 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 		}
 
 		if role == "coder" || role == "both" {
-			released, err := releaseOneClaim(state, task, coderRelease, force, agentID, reason, now)
+			released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, force, agentID, reason, now)
 			if err != nil {
 				return err
 			}

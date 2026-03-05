@@ -82,7 +82,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		if rejectedStatus, err = resolver.RejectedStatus(task.RolePair); err != nil {
 			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
 		}
-		pipelineTransitions = buildPipelineTransitions(resolver, cfg)
+		pipelineTransitions = BuildPipelineTransitions(resolver, cfg)
 	} else if runtimeRole == roles.RuntimeCodePlanReviewer {
 		expectedReviewingStatus = models.TaskStatusReviewingCodingPlan
 		approvedStatus = models.TaskStatusCodingPlanApproved

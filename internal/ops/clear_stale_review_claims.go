@@ -13,6 +13,8 @@ import (
 // ClearStaleReviewClaims finds and clears expired review leases on REVIEWING tasks.
 // When a lease expires, the task reverts to READY_FOR_REVIEW.
 // Returns the number of claims cleared.
+// TODO: make pipeline-aware — currently hardcodes TaskStatusReviewing and
+// TaskStatusReadyForReview, which won't match pipeline-defined reviewing states.
 func ClearStaleReviewClaims(projectRoot string) (int, error) {
 	// Setup paths
 	lp := paths.New(projectRoot)

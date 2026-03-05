@@ -66,7 +66,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		if targetSubmittedStatus, err = resolver.SubmittedStatus(task.RolePair); err != nil {
 			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
 		}
-		pipelineTransitions = buildPipelineTransitions(resolver, cfg)
+		pipelineTransitions = BuildPipelineTransitions(resolver, cfg)
 	} else if runtimeRole == roles.RuntimeCodePlanner {
 		expectedCurrentStatus = models.TaskStatusCodePlanning
 		targetSubmittedStatus = models.TaskStatusCodingPlanToReview

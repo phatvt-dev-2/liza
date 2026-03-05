@@ -32,12 +32,12 @@ func rolePairNames(cfg *pipeline.PipelineConfig) []string {
 // warnSkipRolePair logs a warning when a role-pair is skipped due to a resolver
 // error during transition map construction. Should not happen on validated configs.
 func warnSkipRolePair(rpName string, err error) {
-	log.Printf("WARNING: buildPipelineTransitions: skipping role-pair %q: %v", rpName, err)
+	log.Printf("WARNING: BuildPipelineTransitions: skipping role-pair %q: %v", rpName, err)
 }
 
-// buildPipelineTransitions creates a complete transition map by merging the
+// BuildPipelineTransitions creates a complete transition map by merging the
 // resolver's intra-pair transitions with cross-cutting meta-state transitions.
-func buildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig) map[models.TaskStatus][]models.TaskStatus {
+func BuildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig) map[models.TaskStatus][]models.TaskStatus {
 	tm := r.TransitionMap()
 
 	for _, rpName := range rolePairNames(cfg) {
@@ -87,7 +87,7 @@ func buildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig
 	for _, rpName := range rolePairNames(cfg) {
 		executing, err := r.ExecutingStatus(rpName)
 		if err != nil {
-			log.Printf("WARNING: buildPipelineTransitions: skipping INTEGRATION_FAILED target for role-pair %q: %v", rpName, err)
+			log.Printf("WARNING: BuildPipelineTransitions: skipping INTEGRATION_FAILED target for role-pair %q: %v", rpName, err)
 			continue
 		}
 		ifTargets = append(ifTargets, executing)
