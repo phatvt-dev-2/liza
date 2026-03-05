@@ -123,8 +123,8 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		return nil, err
 	}
 
-	if task.Status != models.TaskStatusApproved {
-		return nil, fmt.Errorf("task must be APPROVED to merge (current status: %s)", task.Status)
+	if task.Status != models.TaskStatusApproved && task.Status != models.TaskStatusCodingPlanApproved {
+		return nil, fmt.Errorf("task must be APPROVED or CODING_PLAN_APPROVED to merge (current status: %s)", task.Status)
 	}
 
 	if task.Worktree == nil {
@@ -325,7 +325,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
 		}
 		// Re-validate status under lock to prevent concurrent transition
-		if t.Status != models.TaskStatusApproved {
+		if t.Status != models.TaskStatusApproved && t.Status != models.TaskStatusCodingPlanApproved {
 			return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
 		}
 		if err := t.Transition(models.TaskStatusMerged); err != nil {

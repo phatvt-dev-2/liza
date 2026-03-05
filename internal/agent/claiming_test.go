@@ -81,6 +81,19 @@ func TestHasPendingMerges(t *testing.T) {
 			expected: true,
 		},
 		{
+			name: "coding_plan_approved task by this agent without merge_commit returns true",
+			tasks: []models.Task{
+				{
+					ID:          "task-1",
+					Status:      models.TaskStatusCodingPlanApproved,
+					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
+					MergeCommit: nil,
+				},
+			},
+			agentID:  "code-reviewer-1",
+			expected: true,
+		},
+		{
 			name: "integration_failed task returns false",
 			tasks: []models.Task{
 				{

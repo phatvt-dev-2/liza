@@ -1173,13 +1173,14 @@ func TestCodePlanningTransitions(t *testing.T) {
 		{TaskStatusCodingPlanRejected, TaskStatusSuperseded, true},
 		{TaskStatusCodingPlanRejected, TaskStatusAbandoned, true},
 
-		// Terminal — no transitions out
+		// CODING_PLAN_APPROVED → MERGED (mirrors APPROVED)
+		{TaskStatusCodingPlanApproved, TaskStatusMerged, true},
+		{TaskStatusCodingPlanApproved, TaskStatusIntegrationFailed, true},
 		{TaskStatusCodingPlanApproved, TaskStatusDraftCodingPlan, false},
 
 		// Invalid cross-pair transitions
 		{TaskStatusDraftCodingPlan, TaskStatusImplementing, false},
 		{TaskStatusCodePlanning, TaskStatusReadyForReview, false},
-		{TaskStatusCodingPlanApproved, TaskStatusMerged, false},
 	}
 
 	for _, tt := range tests {
@@ -1193,11 +1194,13 @@ func TestCodePlanningTransitions(t *testing.T) {
 	}
 }
 
-func TestCodingPlanApprovedIsSprintTerminal(t *testing.T) {
-	// CODING_PLAN_APPROVED is sprint-terminal but NOT globally terminal
-	// (it's terminal for the code-planning pair, not for the whole task lifecycle)
+func TestCodingPlanApprovedIsNotSprintTerminal(t *testing.T) {
+	// CODING_PLAN_APPROVED is no longer sprint-terminal — MERGED is the universal terminal.
+	if TaskStatusCodingPlanApproved.IsSprintTerminal() {
+		t.Error("CODING_PLAN_APPROVED should NOT be sprint-terminal (MERGED is)")
+	}
 	if TaskStatusCodingPlanApproved.IsTerminal() {
-		t.Error("CODING_PLAN_APPROVED should NOT be globally terminal (it's sprint-terminal)")
+		t.Error("CODING_PLAN_APPROVED should NOT be globally terminal")
 	}
 }
 
@@ -1327,21 +1330,21 @@ func TestAllPlannedTasksTerminal_WithCodingPlanApproved(t *testing.T) {
 		want    bool
 	}{
 		{
-			name:    "all CODING_PLAN_APPROVED",
+			name:    "CODING_PLAN_APPROVED is not sprint-terminal",
 			planned: []string{"task-1", "task-2"},
 			tasks:   []Task{mkTask("task-1", TaskStatusCodingPlanApproved), mkTask("task-2", TaskStatusCodingPlanApproved)},
+			want:    false,
+		},
+		{
+			name:    "all MERGED is sprint-terminal",
+			planned: []string{"task-1", "task-2"},
+			tasks:   []Task{mkTask("task-1", TaskStatusMerged), mkTask("task-2", TaskStatusMerged)},
 			want:    true,
 		},
 		{
-			name:    "mix CODING_PLAN_APPROVED and MERGED",
+			name:    "mix MERGED and ABANDONED",
 			planned: []string{"task-1", "task-2"},
-			tasks:   []Task{mkTask("task-1", TaskStatusCodingPlanApproved), mkTask("task-2", TaskStatusMerged)},
-			want:    true,
-		},
-		{
-			name:    "mix CODING_PLAN_APPROVED and ABANDONED",
-			planned: []string{"task-1", "task-2"},
-			tasks:   []Task{mkTask("task-1", TaskStatusCodingPlanApproved), mkTask("task-2", TaskStatusAbandoned)},
+			tasks:   []Task{mkTask("task-1", TaskStatusMerged), mkTask("task-2", TaskStatusAbandoned)},
 			want:    true,
 		},
 		{

@@ -270,6 +270,9 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 		}
 
+		if task.SpecRef != "" && strings.Contains(task.SpecRef, ".worktrees/") {
+			return fmt.Errorf("task %s spec_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.SpecRef)
+		}
 		if !skipSpecFileCheck && task.SpecRef != "" {
 			if err := checkSpecFileExists(projectRoot, task.SpecRef); err != nil {
 				return fmt.Errorf("%w (task: %s)", err, task.ID)
@@ -319,6 +322,9 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 			if entry.SpecRef == "" {
 				return fmt.Errorf("task %s output[%d] missing spec_ref", task.ID, i)
+			}
+			if strings.Contains(entry.SpecRef, ".worktrees/") {
+				return fmt.Errorf("task %s output[%d] spec_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.SpecRef)
 			}
 		}
 	}

@@ -330,21 +330,21 @@ func TestResume_CheckpointAllTerminal_MarksCompleted(t *testing.T) {
 	state.Config.Mode = models.SystemModeRunning
 	state.Sprint.Status = models.SprintStatusCheckpoint
 
-	// Add a sprint-terminal task
+	// Add a sprint-terminal task (MERGED is the universal sprint-terminal)
 	now := time.Now().UTC()
-	reviewCommit := "abc123"
+	mergeCommit := "abc123"
 	task := models.Task{
-		ID:           "plan-1",
-		Type:         models.TaskTypeCoding,
-		Description:  "Plan task",
-		Status:       models.TaskStatusCodingPlanApproved,
-		Priority:     1,
-		Created:      now,
-		SpecRef:      "README.md",
-		DoneWhen:     "Approved",
-		Scope:        "scope",
-		ReviewCommit: &reviewCommit,
-		History:      []models.TaskHistoryEntry{},
+		ID:          "plan-1",
+		Type:        models.TaskTypeCoding,
+		Description: "Plan task",
+		Status:      models.TaskStatusMerged,
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "README.md",
+		DoneWhen:    "Approved",
+		Scope:       "scope",
+		MergeCommit: &mergeCommit,
+		History:     []models.TaskHistoryEntry{},
 	}
 	state.Tasks = append(state.Tasks, task)
 	state.Sprint.Scope.Planned = []string{"plan-1"}

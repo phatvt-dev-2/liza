@@ -30,7 +30,7 @@ type transitionDef struct {
 // Future step 5 will replace this with YAML config.
 var knownTransitions = map[string]transitionDef{
 	"code-plan-to-coding": {
-		requiredStatus: models.TaskStatusCodingPlanApproved,
+		requiredStatus: models.TaskStatusMerged,
 		targetStatus:   models.TaskStatusDraft,
 		cardinality:    "per-subtask",
 	},

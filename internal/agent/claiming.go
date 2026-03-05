@@ -106,10 +106,10 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard) error 
 		return err
 	}
 
-	// Find APPROVED tasks where approved_by = agentID and merge_commit = null
+	// Find APPROVED/CODING_PLAN_APPROVED tasks where approved_by = agentID and merge_commit = null
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		if task.Status == models.TaskStatusApproved &&
+		if (task.Status == models.TaskStatusApproved || task.Status == models.TaskStatusCodingPlanApproved) &&
 			task.ApprovedBy != nil && *task.ApprovedBy == agentID &&
 			task.MergeCommit == nil {
 
@@ -164,7 +164,7 @@ func hasPendingMerges(bb *db.Blackboard, agentID string) bool {
 
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		if task.Status == models.TaskStatusApproved &&
+		if (task.Status == models.TaskStatusApproved || task.Status == models.TaskStatusCodingPlanApproved) &&
 			task.ApprovedBy != nil && *task.ApprovedBy == agentID &&
 			task.MergeCommit == nil {
 			return true

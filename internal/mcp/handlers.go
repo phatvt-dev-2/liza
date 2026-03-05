@@ -561,7 +561,7 @@ func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireRole(agentID, roles.RuntimeCodeReviewer); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer); err != nil {
 		return nil, err
 	}
 

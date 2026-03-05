@@ -26,7 +26,7 @@ func TestProceed_CreatesChildTasks(t *testing.T) {
 		ID:           parentID,
 		Type:         models.TaskTypeCoding,
 		Description:  "Plan the auth module",
-		Status:       models.TaskStatusCodingPlanApproved,
+		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -79,8 +79,8 @@ func TestProceed_CreatesChildTasks(t *testing.T) {
 	if srcTask == nil {
 		t.Fatal("Source task not found")
 	}
-	if srcTask.Status != models.TaskStatusCodingPlanApproved {
-		t.Errorf("Source status = %v, want CODING_PLAN_APPROVED", srcTask.Status)
+	if srcTask.Status != models.TaskStatusMerged {
+		t.Errorf("Source status = %v, want MERGED", srcTask.Status)
 	}
 	if !srcTask.TransitionsExecuted["code-plan-to-coding"] {
 		t.Error("transitions_executed should contain code-plan-to-coding")
@@ -139,7 +139,7 @@ func TestProceed_RejectsRepeatedTransition(t *testing.T) {
 		ID:           parentID,
 		Type:         models.TaskTypeCoding,
 		Description:  "Plan task",
-		Status:       models.TaskStatusCodingPlanApproved,
+		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -194,7 +194,7 @@ func TestProceed_RejectsIfSprintNotCompleted(t *testing.T) {
 		ID:           "plan-1",
 		Type:         models.TaskTypeCoding,
 		Description:  "Plan task",
-		Status:       models.TaskStatusCodingPlanApproved,
+		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -234,7 +234,7 @@ func TestProceed_RejectsUnknownTransition(t *testing.T) {
 		ID:           "plan-1",
 		Type:         models.TaskTypeCoding,
 		Description:  "Plan task",
-		Status:       models.TaskStatusCodingPlanApproved,
+		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -312,8 +312,8 @@ func TestProceed_RejectsWrongStatus(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for wrong status")
 	}
-	if !strings.Contains(err.Error(), "CODING_PLAN_APPROVED") {
-		t.Errorf("Error = %q, want to contain 'CODING_PLAN_APPROVED'", err.Error())
+	if !strings.Contains(err.Error(), "MERGED") {
+		t.Errorf("Error = %q, want to contain 'MERGED'", err.Error())
 	}
 }
 
@@ -332,7 +332,7 @@ func TestProceed_RejectsEmptyOutput(t *testing.T) {
 		ID:           "plan-1",
 		Type:         models.TaskTypeCoding,
 		Description:  "Plan task",
-		Status:       models.TaskStatusCodingPlanApproved,
+		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -371,7 +371,7 @@ func TestProceed_CrashRecovery_CreatesMissingChildren(t *testing.T) {
 		ID:           parentID,
 		Type:         models.TaskTypeCoding,
 		Description:  "Plan task",
-		Status:       models.TaskStatusCodingPlanApproved,
+		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -449,7 +449,7 @@ func TestProceed_CrashRecovery_AllChildrenExist(t *testing.T) {
 		ID:           parentID,
 		Type:         models.TaskTypeCoding,
 		Description:  "Plan task",
-		Status:       models.TaskStatusCodingPlanApproved,
+		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -505,7 +505,7 @@ func TestProceed_RejectsOutputMissingFields(t *testing.T) {
 		ID:           "plan-1",
 		Type:         models.TaskTypeCoding,
 		Description:  "Plan task",
-		Status:       models.TaskStatusCodingPlanApproved,
+		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",

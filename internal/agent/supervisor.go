@@ -425,7 +425,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 
 		// Handle approved merges (reviewer only)
-		if config.Role == roles.RuntimeCodeReviewer {
+		if config.Role == roles.RuntimeCodeReviewer || config.Role == roles.RuntimeCodePlanReviewer {
 			if err := handleApprovedMerges(config.ProjectRoot, config.AgentID, bb); err != nil {
 				GetLogger().Warn("Merge handler error", "error", err)
 			}

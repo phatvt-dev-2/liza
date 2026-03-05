@@ -1603,7 +1603,7 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "wt_merge rejects coder",
 			handler: server.handleWtMerge,
 			params:  map[string]any{"task_id": "task-1", "agent_id": "coder-1"},
-			wantErr: "requires code-reviewer role",
+			wantErr: "requires one of [code-reviewer code-plan-reviewer] roles",
 		},
 		{
 			name:    "add_task rejects coder",

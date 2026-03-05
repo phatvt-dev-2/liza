@@ -145,7 +145,7 @@ var taskTransitions = map[TaskStatus][]TaskStatus{
 	TaskStatusCodingPlanToReview:  {TaskStatusReviewingCodingPlan},
 	TaskStatusReviewingCodingPlan: {TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected, TaskStatusCodingPlanToReview},
 	TaskStatusCodingPlanRejected:  {TaskStatusDraftCodingPlan, TaskStatusBlocked, TaskStatusSuperseded, TaskStatusAbandoned},
-	TaskStatusCodingPlanApproved:  {},
+	TaskStatusCodingPlanApproved:  {TaskStatusMerged, TaskStatusIntegrationFailed},
 }
 
 // CanTransition reports whether a transition from ts to the given target status is valid.
@@ -346,10 +346,9 @@ func (s *State) FindTaskIndex(taskID string) int {
 }
 
 // IsSprintTerminal checks if the task status is terminal for sprint completion purposes.
-// This includes globally terminal states (MERGED, ABANDONED, SUPERSEDED) and
-// role-pair-specific sprint-terminal states (CODING_PLAN_APPROVED).
+// MERGED is the universal sprint-terminal state for all role-pairs.
 func (ts TaskStatus) IsSprintTerminal() bool {
-	return ts.IsTerminal() || ts == TaskStatusCodingPlanApproved
+	return ts.IsTerminal()
 }
 
 // AllPlannedTasksTerminal returns true if the sprint has planned tasks and all of

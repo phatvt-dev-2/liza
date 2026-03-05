@@ -270,6 +270,13 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    - **Orchestrator's supervisor** reads approved `output[]` and creates one downstream task per entry — purely mechanical,
      no LLM judgment involved in task creation
 
+   **Path convention for `spec_ref`:** All `spec_ref` values in `output[]` (and on tasks generally) MUST
+   use **repo-relative paths** (e.g. `specs/plans/auth-module.md`), never worktree-prefixed paths
+   (e.g. ~~`.worktrees/code-planning-1/specs/plans/auth-module.md`~~). Doers work inside worktrees,
+   but the worktree content merges to the integration branch — the repo-relative path is the
+   stable reference that survives the merge. Reviewers should reject `spec_ref` values containing
+   `.worktrees/` prefixes. `liza validate` enforces this constraint.
+
    **Cardinality semantics:**
    - `per-subtask`: create one downstream task per entry in `output[]`. Each entry provides `desc`, `done_when`, `scope`, `spec_ref`.
    - `one-to-one`: creates one child task. The parent task is the child's input, not a template — the child's `desc`, `done_when`, `scope` describe the *next phase's work* (e.g., "produce a coding plan for [parent US]"), not a copy of the parent's fields. `parent_task` links back. `spec_ref` points to the parent's artifact. No `output[]` needed. The `liza proceed` command (or supervisor for auto) generates the child's fields from the transition definition.

@@ -178,9 +178,9 @@ This is the final step in the task lifecycle, integrating completed and approved
 work back into the main codebase.
 
 Requirements:
-  - Task must be in APPROVED status
+  - Task must be in APPROVED or CODING_PLAN_APPROVED status
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
-  - Agent must be a code-reviewer role
+  - Agent must be a code-reviewer or code-plan-reviewer role
   - Worktree HEAD must match the task's review_commit
 
 Process:
@@ -205,8 +205,8 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 		if err != nil {
 			return err
 		}
-		if role != roles.RuntimeCodeReviewer {
-			return fmt.Errorf("wt-merge requires code-reviewer agent (got: %s)", role)
+		if role != roles.RuntimeCodeReviewer && role != roles.RuntimeCodePlanReviewer {
+			return fmt.Errorf("wt-merge requires code-reviewer or code-plan-reviewer agent (got: %s)", role)
 		}
 
 		projectRoot, err := requireProjectRoot()

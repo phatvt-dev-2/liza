@@ -357,6 +357,107 @@ func TestMergeWorktree_Success(t *testing.T) {
 	}
 }
 
+func TestMergeWorktree_CodingPlanApproved(t *testing.T) {
+	taskID := "merge-plan-ok"
+	agentID := "code-plan-reviewer-1"
+	tmpDir := t.TempDir()
+
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create integration branch
+	cmd := exec.Command("git", "-C", tmpDir, "checkout", "-b", "integration")
+	output, err := cmd.CombinedOutput()
+	if err != nil && !strings.Contains(string(output), "already exists") {
+		t.Fatalf("Failed to create integration branch: %v\nOutput: %s", err, output)
+	}
+
+	now := time.Now().UTC()
+	initialState := testhelpers.CreateValidState()
+	initialState.Config.IntegrationBranch = "integration"
+
+	// Create worktree
+	wtDir := filepath.Join(tmpDir, ".worktrees", taskID)
+	if err := os.MkdirAll(filepath.Dir(wtDir), 0755); err != nil {
+		t.Fatalf("Failed to create worktrees directory: %v", err)
+	}
+	cmd = exec.Command("git", "-C", tmpDir, "worktree", "add", wtDir, "integration", "-b", "task/"+taskID)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+
+	// Make a commit in the worktree
+	testFile := filepath.Join(wtDir, "plan-"+taskID+".md")
+	if err := os.WriteFile(testFile, []byte("# Plan\n"), 0644); err != nil {
+		t.Fatalf("Failed to write plan file: %v", err)
+	}
+	cmd = exec.Command("git", "-C", wtDir, "add", ".")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+	cmd = exec.Command("git", "-C", wtDir, "commit", "-m", "Plan for "+taskID)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	// Get worktree HEAD SHA
+	cmd = exec.Command("git", "-C", wtDir, "rev-parse", "HEAD")
+	shaOutput, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("Failed to get commit SHA: %v", err)
+	}
+	wtCommit := strings.TrimSpace(string(shaOutput))
+
+	worktreePath := filepath.Join(".worktrees", taskID)
+	baseCommit := "base123"
+	approvedBy := agentID
+	task := models.Task{
+		ID:           taskID,
+		Description:  "Plan task",
+		Status:       models.TaskStatusCodingPlanApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth",
+		RolePair:     "code-planning-pair",
+		Worktree:     &worktreePath,
+		AssignedTo:   testhelpers.StringPtr("code-planner-1"),
+		BaseCommit:   &baseCommit,
+		ReviewCommit: &wtCommit,
+		ApprovedBy:   &approvedBy,
+		History:      []models.TaskHistoryEntry{},
+	}
+
+	initialState.Tasks = append(initialState.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+
+	if result.TaskID != taskID {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, taskID)
+	}
+	if result.MergeCommit == "" {
+		t.Error("MergeCommit should not be empty")
+	}
+
+	// Verify state updated to MERGED
+	state := readStateForTest(t, stateFile)
+	mergedTask := state.FindTask(taskID)
+	if mergedTask == nil {
+		t.Fatal("Task not found in state")
+	}
+	if mergedTask.Status != models.TaskStatusMerged {
+		t.Errorf("Task status = %v, want MERGED", mergedTask.Status)
+	}
+	if mergedTask.Worktree != nil {
+		t.Errorf("Worktree should be nil after merge, got %v", *mergedTask.Worktree)
+	}
+}
+
 func TestMergeWorktree_MergeConflict(t *testing.T) {
 	taskID := "merge-conflict"
 	agentID := "coder-1"

@@ -115,7 +115,7 @@ func TestMutationCommandWiring(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected wt-merge error, got nil")
 		}
-		if !strings.Contains(err.Error(), "task must be APPROVED to merge (current status: READY)") {
+		if !strings.Contains(err.Error(), "task must be APPROVED or CODING_PLAN_APPROVED to merge (current status: READY)") {
 			t.Fatalf("unexpected wt-merge error: %v", err)
 		}
 	})
