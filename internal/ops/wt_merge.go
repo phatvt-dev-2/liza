@@ -267,6 +267,17 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		return nil, fmt.Errorf("merge CAS failed after %d attempts — high contention on %s", maxMergeRetries, integrationRef)
 	}
 
+	// Sync files changed by the merge into the main working tree.
+	// update-ref only moves the ref pointer; without this, files added/modified
+	// by the merged commit are absent from the working directory. This is required
+	// both for integration test correctness (tests run in projectRoot) and so the
+	// working tree reflects what's committed after merge.
+	// Only touches merge-affected files — safe for working trees with unrelated
+	// pending changes (e.g. .liza/state.yaml).
+	if err := gitWrapper.SyncMergedFiles(preMergeHEAD, mergeCommit); err != nil {
+		return nil, fmt.Errorf("failed to sync working tree after merge: %w", err)
+	}
+
 	// Run integration tests if they exist
 	var testsRan bool
 	var noTestScriptFound bool
@@ -292,6 +303,11 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 					log.Printf("wt-merge %s: skipping rollback — another merge landed on top of %s", taskID, mergeCommit[:7])
 				} else {
 					rollbackErr = err
+				}
+			} else {
+				// Ref rolled back — sync working tree to match pre-merge state.
+				if syncErr := gitWrapper.SyncMergedFiles(mergeCommit, preMergeHEAD); syncErr != nil {
+					log.Printf("wt-merge %s: WARNING — failed to sync working tree after rollback: %v", taskID, syncErr)
 				}
 			}
 

@@ -321,6 +321,17 @@ func TestMergeWorktree_Success(t *testing.T) {
 		t.Error("NoTestScriptFound should be true (no integration-test.sh)")
 	}
 
+	// Verify main working tree was synced: the file committed in the worktree
+	// must appear in the main working tree after merge (not just in git objects).
+	mergedFile := filepath.Join(tmpDir, "test-"+taskID+".txt")
+	content, readErr := os.ReadFile(mergedFile)
+	if readErr != nil {
+		t.Fatalf("Merged file should exist in main working tree after merge (working tree not synced): %v", readErr)
+	}
+	if string(content) != "test content for "+taskID {
+		t.Errorf("Merged file content = %q, want %q", string(content), "test content for "+taskID)
+	}
+
 	// Verify state updated to MERGED
 	state := readStateForTest(t, stateFile)
 	task := state.FindTask(taskID)
@@ -354,6 +365,151 @@ func TestMergeWorktree_Success(t *testing.T) {
 	}
 	if testsRanVal != false {
 		t.Errorf("tests_ran = %v, want false", testsRanVal)
+	}
+}
+
+func TestMergeWorktree_SyncsRenamedFiles(t *testing.T) {
+	taskID := "merge-rename"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	// The setupMergeTestRepo already created "test-merge-rename.txt" in the worktree.
+	// Now rename it in the worktree and commit.
+	wtDir := filepath.Join(tmpDir, ".worktrees", taskID)
+	testhelpers.MustGit(t, wtDir, "mv", "test-"+taskID+".txt", "renamed-"+taskID+".txt")
+	testhelpers.MustGit(t, wtDir, "commit", "-m", "Rename test file")
+
+	// Update review_commit in state to the new HEAD.
+	newSHA := testhelpers.MustGit(t, wtDir, "rev-parse", "HEAD")
+	bb := db.New(stateFile)
+	if err := bb.Modify(func(s *models.State) error {
+		task := s.FindTask(taskID)
+		task.ReviewCommit = &newSHA
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed to update review_commit: %v", err)
+	}
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+	if result.MergeCommit == "" {
+		t.Error("MergeCommit should not be empty")
+	}
+
+	// Old path must be gone from working tree.
+	oldPath := filepath.Join(tmpDir, "test-"+taskID+".txt")
+	if _, statErr := os.Stat(oldPath); !os.IsNotExist(statErr) {
+		t.Errorf("Old renamed file should not exist in working tree, but Stat returned: %v", statErr)
+	}
+
+	// New path must exist with correct content.
+	newPath := filepath.Join(tmpDir, "renamed-"+taskID+".txt")
+	content, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatalf("Renamed file should exist in working tree: %v", err)
+	}
+	if string(content) != "test content for "+taskID {
+		t.Errorf("Renamed file content = %q, want %q", string(content), "test content for "+taskID)
+	}
+}
+
+func TestMergeWorktree_SyncsDeletedFiles(t *testing.T) {
+	taskID := "merge-delete"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	// Delete the file in the worktree and commit.
+	wtDir := filepath.Join(tmpDir, ".worktrees", taskID)
+	testhelpers.MustGit(t, wtDir, "rm", "test-"+taskID+".txt")
+	testhelpers.MustGit(t, wtDir, "commit", "-m", "Delete test file")
+
+	// Update review_commit in state.
+	newSHA := testhelpers.MustGit(t, wtDir, "rev-parse", "HEAD")
+	bb := db.New(stateFile)
+	if err := bb.Modify(func(s *models.State) error {
+		task := s.FindTask(taskID)
+		task.ReviewCommit = &newSHA
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed to update review_commit: %v", err)
+	}
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+	if result.MergeCommit == "" {
+		t.Error("MergeCommit should not be empty")
+	}
+
+	// File must be gone from working tree.
+	deletedPath := filepath.Join(tmpDir, "test-"+taskID+".txt")
+	if _, statErr := os.Stat(deletedPath); !os.IsNotExist(statErr) {
+		t.Errorf("Deleted file should not exist in working tree, but Stat returned: %v", statErr)
+	}
+}
+
+func TestMergeWorktree_RollbackSyncsRenamedFiles(t *testing.T) {
+	taskID := "merge-rename-rollback"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	// Rename the file in the worktree and commit.
+	wtDir := filepath.Join(tmpDir, ".worktrees", taskID)
+	testhelpers.MustGit(t, wtDir, "mv", "test-"+taskID+".txt", "renamed-"+taskID+".txt")
+	testhelpers.MustGit(t, wtDir, "commit", "-m", "Rename test file")
+
+	// Update review_commit in state.
+	newSHA := testhelpers.MustGit(t, wtDir, "rev-parse", "HEAD")
+	bb := db.New(stateFile)
+	if err := bb.Modify(func(s *models.State) error {
+		task := s.FindTask(taskID)
+		task.ReviewCommit = &newSHA
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed to update review_commit: %v", err)
+	}
+
+	// Create a failing integration test script to trigger rollback.
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatalf("Failed to create scripts dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(scriptsDir, "integration-test.sh"),
+		[]byte("#!/bin/sh\nexit 1\n"),
+		0755,
+	); err != nil {
+		t.Fatalf("Failed to write test script: %v", err)
+	}
+
+	_, err := MergeWorktree(tmpDir, taskID, agentID)
+	var intErr *IntegrationFailedError
+	if !errors.As(err, &intErr) {
+		t.Fatalf("Expected *IntegrationFailedError, got %T: %v", err, err)
+	}
+
+	// After rollback: old path must be restored (absent in toCommit=preMerge means
+	// the file existed before the rename), new path must be gone.
+	// But wait — the original file (test-<taskID>.txt) was created in the worktree,
+	// not on integration. Before merge, it didn't exist in the main working tree.
+	// So after rollback, NEITHER file should exist.
+	oldPath := filepath.Join(tmpDir, "test-"+taskID+".txt")
+	if _, statErr := os.Stat(oldPath); !os.IsNotExist(statErr) {
+		t.Errorf("Original file should not exist in working tree after rollback (it was worktree-only), Stat: %v", statErr)
+	}
+	newPath := filepath.Join(tmpDir, "renamed-"+taskID+".txt")
+	if _, statErr := os.Stat(newPath); !os.IsNotExist(statErr) {
+		t.Errorf("Renamed file should not exist in working tree after rollback, Stat: %v", statErr)
+	}
+
+	// State should be INTEGRATION_FAILED.
+	state := readStateForTest(t, stateFile)
+	task := state.FindTask(taskID)
+	if task.Status != models.TaskStatusIntegrationFailed {
+		t.Errorf("Task status = %v, want INTEGRATION_FAILED", task.Status)
 	}
 }
 

@@ -449,6 +449,97 @@ func (g *Git) DiffFiles(dir, commitA, commitB string) ([]string, error) {
 	return strings.Split(output, "\n"), nil
 }
 
+// SyncMergedFiles updates the working tree and index for files changed between
+// two commits. Required after update-ref advances a branch, since update-ref
+// only moves the ref pointer without touching the working tree or index.
+// Only touches files affected by the merge — safe for working trees with
+// unrelated pending changes (e.g. .liza/state.yaml).
+//
+// Handles all change types: added/modified files are checked out from toCommit,
+// deleted files are removed, and renames are handled by removing the old path
+// and checking out the new path.
+func (g *Git) SyncMergedFiles(fromCommit, toCommit string) error {
+	// Use --name-status to distinguish change types, including renames.
+	// Format: "<status>\t<path>" or "<status>\t<old>\t<new>" for renames/copies.
+	output, err := g.exec("diff", "--name-status", fromCommit+".."+toCommit)
+	if err != nil {
+		return fmt.Errorf("failed to diff %s..%s: %w", shortSHA(fromCommit), shortSHA(toCommit), err)
+	}
+	if output == "" {
+		return nil
+	}
+
+	var checkoutPaths []string // files to checkout from toCommit
+	var removePaths []string   // files to remove from working tree + index
+
+	for _, line := range strings.Split(output, "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			continue
+		}
+		status := parts[0]
+
+		switch {
+		case status == "D":
+			// Deleted: remove old path.
+			removePaths = append(removePaths, parts[1])
+
+		case strings.HasPrefix(status, "R"):
+			// Renamed: remove old path, checkout new path.
+			// Format: "R100\told\tnew" (similarity index varies).
+			if len(parts) >= 3 {
+				removePaths = append(removePaths, parts[1])
+				checkoutPaths = append(checkoutPaths, parts[2])
+			}
+
+		case strings.HasPrefix(status, "C"):
+			// Copied: checkout new path only, old path still exists in toCommit.
+			if len(parts) >= 3 {
+				checkoutPaths = append(checkoutPaths, parts[2])
+			}
+
+		default:
+			// Added, Modified, Type-changed: checkout from toCommit.
+			checkoutPaths = append(checkoutPaths, parts[1])
+		}
+	}
+
+	// Checkout files that should exist in toCommit.
+	if len(checkoutPaths) > 0 {
+		args := append([]string{"checkout", toCommit, "--"}, checkoutPaths...)
+		if _, err := g.exec(args...); err != nil {
+			return fmt.Errorf("failed to checkout merged files: %w", err)
+		}
+	}
+
+	// Remove files that should not exist in toCommit.
+	if len(removePaths) > 0 {
+		for _, f := range removePaths {
+			path := filepath.Join(g.projectRoot, f)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove deleted file %s: %w", f, err)
+			}
+		}
+		args := append([]string{"rm", "--cached", "--ignore-unmatch", "--"}, removePaths...)
+		if _, err := g.exec(args...); err != nil {
+			return fmt.Errorf("failed to update index for removed files: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// shortSHA returns the first 7 characters of a SHA, or the full string if shorter.
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
+}
+
 // IsAncestor checks if commitA is an ancestor of commitB
 func (g *Git) IsAncestor(commitA, commitB string) (bool, error) {
 	_, err := g.exec("merge-base", "--is-ancestor", commitA, commitB)
