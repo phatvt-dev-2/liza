@@ -281,6 +281,15 @@ open liza-session-analyzer.html   # or xdg-open on Linux
 
 Drop one or more log files. Produces the same analysis with bar charts for content breakdown and context growth.
 
+**LLM-assisted analysis** — use a coding agent to cross-correlate logs and diagnose patterns:
+
+```
+analyze all the logs in .liza/agent-outputs using scripts/analyze-log.py,
+find recurring error patterns and propose fixes whenever possible.
+```
+
+This works with any coding agent (Claude Code, Codex, etc.) in pairing mode. The agent runs the analyzer, reads the reports, correlates errors across agents, and suggests actionable fixes.
+
 **Raw inspection** with `jq` (no dependencies):
 
 ```bash
