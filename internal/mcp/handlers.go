@@ -81,6 +81,31 @@ func extractStringSlice(params map[string]any, key string) []string {
 	return out
 }
 
+// extractScopeExtensions extracts an optional []ScopeExtensionEntry from a JSON params map.
+// JSON arrays arrive as []any of map[string]any; malformed entries are silently skipped.
+func extractScopeExtensions(params map[string]any, key string) []ops.ScopeExtensionEntry {
+	raw, ok := params[key].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]ops.ScopeExtensionEntry, 0, len(raw))
+	for _, v := range raw {
+		m, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		file, _ := m["file"].(string)
+		justification, _ := m["justification"].(string)
+		if file != "" && justification != "" {
+			out = append(out, ops.ScopeExtensionEntry{
+				File:          file,
+				Justification: justification,
+			})
+		}
+	}
+	return out
+}
+
 // appendWarnings appends warning lines to a message string.
 func appendWarnings(msg string, warnings []string) string {
 	for _, w := range warnings {
@@ -663,16 +688,18 @@ func (s *Server) handleWriteCheckpoint(params map[string]any) (any, error) {
 
 	risks, _ := params["risks"].(string)
 	tddNotRequired, _ := params["tdd_not_required"].(string)
+	scopeExtensions := extractScopeExtensions(params, "scope_extensions")
 
 	input := &ops.WriteCheckpointInput{
-		TaskID:         taskID,
-		AgentID:        agentID,
-		Intent:         intent,
-		ValidationPlan: validationPlan,
-		FilesToModify:  filesToModify,
-		Assumptions:    assumptions,
-		Risks:          risks,
-		TDDNotRequired: tddNotRequired,
+		TaskID:          taskID,
+		AgentID:         agentID,
+		Intent:          intent,
+		ValidationPlan:  validationPlan,
+		FilesToModify:   filesToModify,
+		Assumptions:     assumptions,
+		Risks:           risks,
+		TDDNotRequired:  tddNotRequired,
+		ScopeExtensions: scopeExtensions,
 	}
 
 	if err := ops.WriteCheckpoint(s.projectRoot, input); err != nil {

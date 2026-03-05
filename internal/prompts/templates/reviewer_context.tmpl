@@ -30,6 +30,15 @@ SIBLING TASKS (for scope boundary awareness):
 - {{.ID}}: {{.Description}} [{{.Status}}]
 {{- end}}
 {{- end}}
+{{- if .ScopeExtensions}}
+
+SCOPE EXTENSIONS (declared by coder):
+{{- range .ScopeExtensions}}
+- {{index . "file"}} — {{index . "justification"}}
+{{- end}}
+Evaluate each extension: is it a legitimate dependency of the task's work?
+Reject if the extension is unjustified, introduces unrelated changes, or a cleaner in-scope solution exists.
+{{- end}}
 {{- if .HasPriorRejection}}
 
 === PRIOR REJECTION (iteration {{sub .Task.Iteration 1}}) ===

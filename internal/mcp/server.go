@@ -778,6 +778,10 @@ func (s *Server) registerComplexOperations() {
 					Type:        "string",
 					Description: "Justification for why this task does not require new test files (e.g. cosmetic-only change, existing tests cover behavior). If omitted, TDD enforcement applies normally.",
 				},
+				"scope_extensions": {
+					Type:        "array",
+					Description: "Files outside task scope that must be modified, with justification. Each entry: {\"file\": \"path\", \"justification\": \"why\"}",
+				},
 			},
 			Required: []string{"task_id", "agent_id", "intent", "validation_plan", "files_to_modify"},
 		},

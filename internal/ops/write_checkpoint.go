@@ -9,16 +9,24 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// ScopeExtensionEntry represents a file outside the declared task scope
+// that must be modified, along with the justification for why.
+type ScopeExtensionEntry struct {
+	File          string
+	Justification string
+}
+
 // WriteCheckpointInput contains the parameters for writing a pre-execution checkpoint.
 type WriteCheckpointInput struct {
-	TaskID         string
-	AgentID        string
-	Intent         string
-	ValidationPlan string
-	FilesToModify  []string
-	Assumptions    []string
-	Risks          string
-	TDDNotRequired string
+	TaskID          string
+	AgentID         string
+	Intent          string
+	ValidationPlan  string
+	FilesToModify   []string
+	Assumptions     []string
+	Risks           string
+	TDDNotRequired  string
+	ScopeExtensions []ScopeExtensionEntry
 }
 
 // WriteCheckpoint writes a pre-execution checkpoint to a task's history.
@@ -77,6 +85,16 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 		if input.TDDNotRequired != "" {
 			extra["tdd_not_required"] = input.TDDNotRequired
 		}
+		if len(input.ScopeExtensions) > 0 {
+			entries := make([]map[string]string, len(input.ScopeExtensions))
+			for i, se := range input.ScopeExtensions {
+				entries[i] = map[string]string{
+					"file":          se.File,
+					"justification": se.Justification,
+				}
+			}
+			extra["scope_extensions"] = entries
+		}
 
 		agentPtr := &input.AgentID
 		task.History = append(task.History, models.TaskHistoryEntry{
@@ -114,4 +132,48 @@ func GetTDDWaiver(history []models.TaskHistoryEntry, agentID string) string {
 		}
 	}
 	return ""
+}
+
+// GetLatestScopeExtensions returns scope_extensions from the latest
+// pre_execution_checkpoint by agentID, or nil if none were declared.
+func GetLatestScopeExtensions(history []models.TaskHistoryEntry, agentID string) []map[string]string {
+	for i := len(history) - 1; i >= 0; i-- {
+		entry := history[i]
+		if entry.Event != "pre_execution_checkpoint" || entry.Agent == nil || *entry.Agent != agentID {
+			continue
+		}
+		raw, ok := entry.Extra["scope_extensions"]
+		if !ok {
+			return nil
+		}
+		// Handle []map[string]string (direct Go usage)
+		if typed, ok := raw.([]map[string]string); ok {
+			return typed
+		}
+		// Handle []any (after YAML round-trip)
+		arr, ok := raw.([]any)
+		if !ok {
+			return nil
+		}
+		result := make([]map[string]string, 0, len(arr))
+		for _, item := range arr {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			file, _ := m["file"].(string)
+			justification, _ := m["justification"].(string)
+			if file != "" && justification != "" {
+				result = append(result, map[string]string{
+					"file":          file,
+					"justification": justification,
+				})
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+		return nil
+	}
+	return nil
 }

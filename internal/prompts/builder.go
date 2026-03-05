@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 )
 
 // BasePromptConfig contains configuration for building the base prompt
@@ -166,6 +167,7 @@ type reviewerContextData struct {
 	ReviewCommit      string
 	AssignedTo        string
 	HasPriorRejection bool
+	ScopeExtensions   []map[string]string
 }
 
 // codePlannerContextData is the template data for code_planner_context.tmpl
@@ -191,6 +193,11 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (stri
 		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
 	}
 
+	var scopeExtensions []map[string]string
+	if task.AssignedTo != nil {
+		scopeExtensions = ops.GetLatestScopeExtensions(task.History, *task.AssignedTo)
+	}
+
 	data := reviewerContextData{
 		Task:              task,
 		Config:            config,
@@ -199,6 +206,7 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (stri
 		ReviewCommit:      derefString(task.ReviewCommit),
 		AssignedTo:        derefString(task.AssignedTo),
 		HasPriorRejection: hasPriorRejection(task),
+		ScopeExtensions:   scopeExtensions,
 	}
 	return executeTemplate("reviewer_context", data)
 }

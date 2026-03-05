@@ -938,7 +938,8 @@ func TestCoderContext_CollectiveScopingRendered(t *testing.T) {
 		"1 of 3 in the current sprint",
 		"specs/vision.md",
 		"Your scope is LIMITED",
-		"Do NOT implement work outside your scope",
+		"declare it in scope_extensions with justification",
+		"Do NOT silently modify out-of-scope files",
 		"spec_gap anomaly",
 		"SIBLING TASKS (for context only",
 		"task-2: Add user API [READY]",
@@ -1019,6 +1020,95 @@ func TestReviewerContext_CollectiveScopingRendered(t *testing.T) {
 		if !strings.Contains(result, want) {
 			t.Errorf("BuildReviewerContext() missing expected content: %q", want)
 		}
+	}
+}
+
+func TestReviewerContext_ScopeExtensionsRendered(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.Description = "Add auth module"
+	task.DoneWhen = "Auth works"
+	task.Iteration = 1
+	assignedTo := "coder-1"
+	task.AssignedTo = &assignedTo
+	baseCommit := "abc123"
+	task.BaseCommit = &baseCommit
+	reviewCommit := "def456"
+	task.ReviewCommit = &reviewCommit
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+	// Add checkpoint with scope extensions to history
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: "pre_execution_checkpoint",
+		Agent: &assignedTo,
+		Extra: map[string]any{
+			"intent":          "Add auth",
+			"validation_plan": "go test ./...",
+			"files_to_modify": []string{"auth.go"},
+			"scope_extensions": []map[string]string{
+				{"file": "internal/utils/hash.go", "justification": "Need password hashing helper"},
+				{"file": "go.mod", "justification": "Add bcrypt dependency"},
+			},
+		},
+	})
+
+	config := ReviewerContextConfig{
+		ProjectRoot:    "/project",
+		AgentID:        "code-reviewer-1",
+		TotalPlanTasks: 2,
+		TaskOrdinal:    1,
+		SiblingTasks: []SiblingTaskSummary{
+			{ID: "task-2", Description: "Add user API", Status: "READY"},
+		},
+	}
+
+	result, err := BuildReviewerContext(&task, config)
+	if err != nil {
+		t.Fatalf("BuildReviewerContext() error: %v", err)
+	}
+
+	wantContains := []string{
+		"SCOPE EXTENSIONS (declared by coder):",
+		"internal/utils/hash.go",
+		"Need password hashing helper",
+		"go.mod",
+		"Add bcrypt dependency",
+		"Evaluate each extension",
+		"Reject if the extension is unjustified",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(result, want) {
+			t.Errorf("BuildReviewerContext() missing expected content: %q", want)
+		}
+	}
+}
+
+func TestReviewerContext_NoScopeExtensionsWhenAbsent(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.Iteration = 1
+	assignedTo := "coder-1"
+	task.AssignedTo = &assignedTo
+	baseCommit := "abc123"
+	task.BaseCommit = &baseCommit
+	reviewCommit := "def456"
+	task.ReviewCommit = &reviewCommit
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+
+	config := ReviewerContextConfig{
+		ProjectRoot: "/project",
+		AgentID:     "code-reviewer-1",
+	}
+
+	result, err := BuildReviewerContext(&task, config)
+	if err != nil {
+		t.Fatalf("BuildReviewerContext() error: %v", err)
+	}
+
+	if strings.Contains(result, "SCOPE EXTENSIONS") {
+		t.Error("BuildReviewerContext() should NOT contain SCOPE EXTENSIONS when none declared")
 	}
 }
 

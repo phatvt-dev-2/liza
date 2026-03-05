@@ -17,8 +17,9 @@ SCOPE:
 This task is {{.Config.TaskOrdinal}} of {{.Config.TotalPlanTasks}} in the current sprint plan.
 Read the full goal spec ({{.Config.GoalSpecRef}}) to understand how your work integrates.
 Your scope is LIMITED to what is described in SCOPE above.
-Do NOT implement work outside your scope boundary — other agents handle those parts.
-If you discover work needed outside your scope, log it as a spec_gap anomaly.
+If you must modify a file outside your scope, declare it in scope_extensions with justification.
+Do NOT silently modify out-of-scope files — undeclared scope changes will be rejected.
+If you discover work needed outside your scope that you cannot handle, log it as a spec_gap anomaly.
 
 SIBLING TASKS (for context only — do NOT implement):
 {{- range .Config.SiblingTasks}}
@@ -60,7 +61,8 @@ CODER TOOLS:
   {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
 - liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
   {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
-  Optional: "assumptions", "risks", "tdd_not_required" (justification if no new tests needed)
+  Optional: "assumptions", "risks", "tdd_not_required", "scope_extensions"
+  scope_extensions: [{"file": "<path>", "justification": "<why this out-of-scope file must change>"}]
 
 ANOMALY LOGGING:
 | Event | Type | Required Fields |

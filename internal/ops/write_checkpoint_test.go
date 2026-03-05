@@ -280,6 +280,171 @@ func TestWriteCheckpoint_TDDNotRequired_OmittedWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestWriteCheckpoint_ScopeExtensions(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	err := WriteCheckpoint(tmpDir, &WriteCheckpointInput{
+		TaskID:         "task-1",
+		AgentID:        "coder-1",
+		Intent:         "Add helper to shared package",
+		ValidationPlan: "go test ./...",
+		FilesToModify:  []string{"internal/ops/main.go"},
+		ScopeExtensions: []ScopeExtensionEntry{
+			{File: "internal/utils/helpers.go", Justification: "Need to add shared helper used by main implementation"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteCheckpoint failed: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-1")
+	lastEntry := task.History[len(task.History)-1]
+
+	raw, ok := lastEntry.Extra["scope_extensions"]
+	if !ok {
+		t.Fatal("Expected scope_extensions in Extra")
+	}
+
+	// After storage, the value should be recoverable via GetLatestScopeExtensions
+	extensions := GetLatestScopeExtensions(task.History, "coder-1")
+	if len(extensions) != 1 {
+		t.Fatalf("Expected 1 scope extension, got %d (raw: %v)", len(extensions), raw)
+	}
+	if extensions[0]["file"] != "internal/utils/helpers.go" {
+		t.Errorf("Expected file 'internal/utils/helpers.go', got %q", extensions[0]["file"])
+	}
+	if extensions[0]["justification"] != "Need to add shared helper used by main implementation" {
+		t.Errorf("Expected justification mismatch, got %q", extensions[0]["justification"])
+	}
+}
+
+func TestWriteCheckpoint_ScopeExtensions_OmittedWhenEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	err := WriteCheckpoint(tmpDir, &WriteCheckpointInput{
+		TaskID:         "task-1",
+		AgentID:        "coder-1",
+		Intent:         "Simple change",
+		ValidationPlan: "go test ./...",
+		FilesToModify:  []string{"main.go"},
+		// ScopeExtensions intentionally empty
+	})
+	if err != nil {
+		t.Fatalf("WriteCheckpoint failed: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-1")
+	lastEntry := task.History[len(task.History)-1]
+
+	if _, ok := lastEntry.Extra["scope_extensions"]; ok {
+		t.Error("Expected no scope_extensions key when none provided")
+	}
+}
+
+func TestGetLatestScopeExtensions(t *testing.T) {
+	agent := "coder-1"
+	otherAgent := "coder-2"
+
+	tests := []struct {
+		name    string
+		history []models.TaskHistoryEntry
+		agentID string
+		want    int // expected count
+	}{
+		{
+			name:    "empty history",
+			history: nil,
+			agentID: "coder-1",
+			want:    0,
+		},
+		{
+			name: "checkpoint without scope extensions",
+			history: []models.TaskHistoryEntry{
+				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{"intent": "test"}},
+			},
+			agentID: "coder-1",
+			want:    0,
+		},
+		{
+			name: "checkpoint with scope extensions",
+			history: []models.TaskHistoryEntry{
+				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{
+					"intent": "test",
+					"scope_extensions": []map[string]string{
+						{"file": "pkg/util.go", "justification": "shared helper"},
+					},
+				}},
+			},
+			agentID: "coder-1",
+			want:    1,
+		},
+		{
+			name: "checkpoint from different agent ignored",
+			history: []models.TaskHistoryEntry{
+				{Event: "pre_execution_checkpoint", Agent: &otherAgent, Extra: map[string]any{
+					"scope_extensions": []map[string]string{
+						{"file": "other.go", "justification": "other"},
+					},
+				}},
+			},
+			agentID: "coder-1",
+			want:    0,
+		},
+		{
+			name: "latest checkpoint wins",
+			history: []models.TaskHistoryEntry{
+				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{
+					"scope_extensions": []map[string]string{
+						{"file": "old.go", "justification": "old"},
+					},
+				}},
+				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{
+					"intent": "new checkpoint without extensions",
+				}},
+			},
+			agentID: "coder-1",
+			want:    0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetLatestScopeExtensions(tt.history, tt.agentID)
+			if len(got) != tt.want {
+				t.Errorf("GetLatestScopeExtensions() returned %d entries, want %d", len(got), tt.want)
+			}
+		})
+	}
+}
+
 func TestGetTDDWaiver(t *testing.T) {
 	agent := "coder-1"
 	otherAgent := "coder-2"
