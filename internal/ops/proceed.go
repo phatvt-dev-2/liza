@@ -242,6 +242,12 @@ func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, er
 			return transitionDef{}, fmt.Errorf("unknown transition %q (available: %s)", transitionName, strings.Join(names, ", "))
 		}
 
+		// Only manual transitions are executable via liza proceed.
+		// Auto transitions are reserved for supervisor execution.
+		if td.Trigger != "manual" {
+			return transitionDef{}, fmt.Errorf("transition %q has trigger %q; only manual transitions can be executed via proceed", transitionName, td.Trigger)
+		}
+
 		fromStatus, err := resolvePhaseRef(resolver, td.From)
 		if err != nil {
 			return transitionDef{}, fmt.Errorf("invalid from reference in transition %q: %w", transitionName, err)

@@ -758,6 +758,100 @@ func TestAvailableTransitions_LegacyTask(t *testing.T) {
 	}
 }
 
+func TestProceed_PipelineRejectsAutoTransition(t *testing.T) {
+	// Create a pipeline config with an auto transition to verify proceed rejects it.
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	autoYAML := `pipeline:
+  agent-roles:
+    code-planner: "Code Planner"
+    code-plan-reviewer: "Code Plan Reviewer"
+    coder: "Coder"
+    code-reviewer: "Code Reviewer"
+
+  role-pairs:
+    code-planning-pair:
+      doer: code-planner
+      reviewer: code-plan-reviewer
+      states:
+        initial: DRAFT_CODING_PLAN
+        executing: CODE_PLANNING
+        submitted: CODING_PLAN_TO_REVIEW
+        reviewing: REVIEWING_CODING_PLAN
+        approved: CODING_PLAN_APPROVED
+        rejected: CODING_PLAN_REJECTED
+
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - code-planning-pair
+        - coding-pair
+      transitions:
+        - name: code-plan-to-coding
+          from: code-planning-pair.approved
+          to: coding-pair.initial
+          trigger: auto
+          cardinality: per-subtask
+
+  entry-points:
+    detailed-spec: coding-subpipeline.code-planning-pair
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".liza", "pipeline.yaml"), []byte(autoYAML), 0o644); err != nil {
+		t.Fatalf("Failed to write pipeline config: %v", err)
+	}
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan task",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Child", DoneWhen: "Done", Scope: "s", SpecRef: "README.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for auto transition via proceed")
+	}
+	if !strings.Contains(err.Error(), "manual") {
+		t.Errorf("Error = %q, want to mention 'manual'", err.Error())
+	}
+	if !strings.Contains(err.Error(), "auto") {
+		t.Errorf("Error = %q, want to mention 'auto'", err.Error())
+	}
+}
+
 func TestAvailableTransitions_PipelineExcludesExecuted(t *testing.T) {
 	tmpDir, stateFile := setupPipelineProceedTest(t)
 
