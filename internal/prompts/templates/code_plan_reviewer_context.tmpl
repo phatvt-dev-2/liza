@@ -20,8 +20,18 @@ CODE PLAN REVIEWER TOOL:
   APPROVED: {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
   REJECTED: {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
 
+REVIEW CHECKLIST:
+| Gate | Reject if |
+|------|-----------|
+| Single intent per task | Task description has conjunctions ("X and Y and Z") indicating multiple intents bundled together |
+| Falsifiable done_when | done_when is vague or untestable |
+| Scope smell | done_when spans >2 packages or >4 conditions — verify the task has a single intent; reject with split suggestion if composite |
+| Dependency order | Tasks have circular or missing dependencies |
+| Spec coverage | Plan does not cover all spec requirements |
+
 REVIEW PHASE:
 1. Inspect worktree changes for this review commit.
 2. Validate done_when criteria are satisfied.
-3. Submit verdict with liza_submit_verdict.
+3. Verify each proposed coding task passes the review checklist above.
+4. Submit verdict with liza_submit_verdict.
 {{- end -}}
