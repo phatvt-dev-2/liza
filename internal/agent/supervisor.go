@@ -258,7 +258,11 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 		}
 		cmd = exec.CommandContext(ctx, "claude", args...)
 	case "codex":
-		args := []string{"exec", prompt}
+		args := []string{
+			"-c", fmt.Sprintf("mcp_servers.liza.command=%q", "liza-mcp"),
+			"-c", fmt.Sprintf("mcp_servers.liza.args=[%q,%q]", "--project-root", projectRoot),
+			"exec", prompt,
+		}
 		if d.outputsDir != "" {
 			args = append(args, "--json")
 		}
