@@ -1290,6 +1290,55 @@ func TestCanPipelineTransition(t *testing.T) {
 	}
 }
 
+func TestTransitionWith(t *testing.T) {
+	transitions := map[TaskStatus][]TaskStatus{
+		TaskStatus("DRAFT_CODE"):            {TaskStatus("IMPLEMENTING_CODE"), TaskStatusAbandoned},
+		TaskStatus("IMPLEMENTING_CODE"):     {TaskStatus("CODE_READY_FOR_REVIEW"), TaskStatusBlocked},
+		TaskStatusBlocked:                   {TaskStatusAbandoned},
+		TaskStatusAbandoned:                 {},
+		TaskStatus("CODE_READY_FOR_REVIEW"): {},
+	}
+
+	t.Run("valid transition to declared target", func(t *testing.T) {
+		task := Task{ID: "t1", Status: TaskStatus("DRAFT_CODE")}
+		err := task.TransitionWith(TaskStatus("IMPLEMENTING_CODE"), transitions)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if task.Status != TaskStatus("IMPLEMENTING_CODE") {
+			t.Errorf("status = %s, want IMPLEMENTING_CODE", task.Status)
+		}
+	})
+
+	t.Run("invalid edge rejected", func(t *testing.T) {
+		task := Task{ID: "t2", Status: TaskStatus("DRAFT_CODE")}
+		err := task.TransitionWith(TaskStatus("CODE_READY_FOR_REVIEW"), transitions)
+		if err == nil {
+			t.Fatal("expected error for invalid transition edge")
+		}
+		if task.Status != TaskStatus("DRAFT_CODE") {
+			t.Errorf("status should be unchanged, got %s", task.Status)
+		}
+	})
+
+	t.Run("valid edge to undeclared target rejected", func(t *testing.T) {
+		// DRAFT_CODE → ABANDONED is a valid edge, but if ABANDONED were missing
+		// as a key in the map, it should be rejected. Simulate with a map that
+		// has the edge but not the target key.
+		incomplete := map[TaskStatus][]TaskStatus{
+			TaskStatus("DRAFT_CODE"): {TaskStatus("GHOST_STATUS")},
+		}
+		task := Task{ID: "t3", Status: TaskStatus("DRAFT_CODE")}
+		err := task.TransitionWith(TaskStatus("GHOST_STATUS"), incomplete)
+		if err == nil {
+			t.Fatal("expected error for undeclared target status")
+		}
+		if task.Status != TaskStatus("DRAFT_CODE") {
+			t.Errorf("status should be unchanged, got %s", task.Status)
+		}
+	})
+}
+
 func TestRolePairField(t *testing.T) {
 	task := Task{
 		ID:       "task-1",

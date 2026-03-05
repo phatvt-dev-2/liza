@@ -142,121 +142,94 @@ func validateTaskStates(state *models.State, projectRoot string, skipSpecFileChe
 	return nil
 }
 
+// statusClassifier resolves whether a TaskStatus belongs to a given lifecycle
+// phase, combining hardcoded legacy statuses with pipeline-declared ones.
+// Built once and shared by validateTaskInvariants and validateDependencies.
+type statusClassifier struct {
+	executing []models.TaskStatus
+	initial   []models.TaskStatus
+	submitted []models.TaskStatus
+	reviewing []models.TaskStatus
+	approved  []models.TaskStatus
+	rejected  []models.TaskStatus
+}
+
+func newStatusClassifier(resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) statusClassifier {
+	sc := statusClassifier{}
+	if resolver == nil || cfg == nil {
+		return sc
+	}
+	for rpName := range cfg.Pipeline.RolePairs {
+		if s, err := resolver.ExecutingStatus(rpName); err == nil {
+			sc.executing = append(sc.executing, s)
+		}
+		if s, err := resolver.InitialStatus(rpName); err == nil {
+			sc.initial = append(sc.initial, s)
+		}
+		if s, err := resolver.SubmittedStatus(rpName); err == nil {
+			sc.submitted = append(sc.submitted, s)
+		}
+		if s, err := resolver.ReviewingStatus(rpName); err == nil {
+			sc.reviewing = append(sc.reviewing, s)
+		}
+		if s, err := resolver.ApprovedStatus(rpName); err == nil {
+			sc.approved = append(sc.approved, s)
+		}
+		if s, err := resolver.RejectedStatus(rpName); err == nil {
+			sc.rejected = append(sc.rejected, s)
+		}
+	}
+	return sc
+}
+
+func containsStatus(list []models.TaskStatus, s models.TaskStatus) bool {
+	for _, v := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
+func (sc *statusClassifier) IsExecuting(s models.TaskStatus) bool {
+	return s == models.TaskStatusImplementing || s == models.TaskStatusCodePlanning || containsStatus(sc.executing, s)
+}
+
+func (sc *statusClassifier) IsInitial(s models.TaskStatus) bool {
+	return s == models.TaskStatusDraft || s == models.TaskStatusReady || s == models.TaskStatusDraftCodingPlan || containsStatus(sc.initial, s)
+}
+
+func (sc *statusClassifier) IsSubmitted(s models.TaskStatus) bool {
+	return s == models.TaskStatusReadyForReview || s == models.TaskStatusCodingPlanToReview || containsStatus(sc.submitted, s)
+}
+
+func (sc *statusClassifier) IsReviewing(s models.TaskStatus) bool {
+	return s == models.TaskStatusReviewing || s == models.TaskStatusReviewingCodingPlan || containsStatus(sc.reviewing, s)
+}
+
+func (sc *statusClassifier) IsApproved(s models.TaskStatus) bool {
+	return s == models.TaskStatusApproved || s == models.TaskStatusCodingPlanApproved || containsStatus(sc.approved, s)
+}
+
+func (sc *statusClassifier) IsRejected(s models.TaskStatus) bool {
+	return s == models.TaskStatusRejected || s == models.TaskStatusCodingPlanRejected || containsStatus(sc.rejected, s)
+}
+
 func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) error {
 	// Track agent assignments to prevent duplicates
 	assignments := make(map[string][]string) // agent ID -> task IDs
 	taskIDs := buildTaskIDSet(state.Tasks)
 
-	// Build the set of pipeline executing statuses for invariant checks
-	var pipelineExecutingStatuses []models.TaskStatus
-	var pipelineInitialStatuses []models.TaskStatus
-	var pipelineSubmittedStatuses []models.TaskStatus
-	var pipelineReviewingStatuses []models.TaskStatus
-	var pipelineApprovedStatuses []models.TaskStatus
-	var pipelineRejectedStatuses []models.TaskStatus
-	if resolver != nil {
-		for rpName := range cfg.Pipeline.RolePairs {
-			if es, err := resolver.ExecutingStatus(rpName); err == nil {
-				pipelineExecutingStatuses = append(pipelineExecutingStatuses, es)
-			}
-			if is, err := resolver.InitialStatus(rpName); err == nil {
-				pipelineInitialStatuses = append(pipelineInitialStatuses, is)
-			}
-			if ss, err := resolver.SubmittedStatus(rpName); err == nil {
-				pipelineSubmittedStatuses = append(pipelineSubmittedStatuses, ss)
-			}
-			if rs, err := resolver.ReviewingStatus(rpName); err == nil {
-				pipelineReviewingStatuses = append(pipelineReviewingStatuses, rs)
-			}
-			if as, err := resolver.ApprovedStatus(rpName); err == nil {
-				pipelineApprovedStatuses = append(pipelineApprovedStatuses, as)
-			}
-			if rs, err := resolver.RejectedStatus(rpName); err == nil {
-				pipelineRejectedStatuses = append(pipelineRejectedStatuses, rs)
-			}
-		}
-	}
-
-	isExecuting := func(s models.TaskStatus) bool {
-		if s == models.TaskStatusImplementing || s == models.TaskStatusCodePlanning {
-			return true
-		}
-		for _, es := range pipelineExecutingStatuses {
-			if s == es {
-				return true
-			}
-		}
-		return false
-	}
-
-	isInitial := func(s models.TaskStatus) bool {
-		if s == models.TaskStatusDraft || s == models.TaskStatusReady || s == models.TaskStatusDraftCodingPlan {
-			return true
-		}
-		for _, is := range pipelineInitialStatuses {
-			if s == is {
-				return true
-			}
-		}
-		return false
-	}
-
-	isSubmitted := func(s models.TaskStatus) bool {
-		if s == models.TaskStatusReadyForReview || s == models.TaskStatusCodingPlanToReview {
-			return true
-		}
-		for _, ss := range pipelineSubmittedStatuses {
-			if s == ss {
-				return true
-			}
-		}
-		return false
-	}
-
-	isReviewing := func(s models.TaskStatus) bool {
-		if s == models.TaskStatusReviewing || s == models.TaskStatusReviewingCodingPlan {
-			return true
-		}
-		for _, rs := range pipelineReviewingStatuses {
-			if s == rs {
-				return true
-			}
-		}
-		return false
-	}
-
-	isApproved := func(s models.TaskStatus) bool {
-		if s == models.TaskStatusApproved || s == models.TaskStatusCodingPlanApproved {
-			return true
-		}
-		for _, as := range pipelineApprovedStatuses {
-			if s == as {
-				return true
-			}
-		}
-		return false
-	}
-
-	isRejected := func(s models.TaskStatus) bool {
-		if s == models.TaskStatusRejected || s == models.TaskStatusCodingPlanRejected {
-			return true
-		}
-		for _, rs := range pipelineRejectedStatuses {
-			if s == rs {
-				return true
-			}
-		}
-		return false
-	}
+	sc := newStatusClassifier(resolver, cfg)
 
 	for _, task := range state.Tasks {
 		// Initial/draft states cannot have assigned_to
-		if isInitial(task.Status) && task.AssignedTo != nil {
+		if sc.IsInitial(task.Status) && task.AssignedTo != nil {
 			return fmt.Errorf("%s task with assigned_to: %s", task.Status, task.ID)
 		}
 
 		// Executing states must have assigned_to, worktree, base_commit (unless integration_fix), lease_expires
-		if isExecuting(task.Status) {
+		if sc.IsExecuting(task.Status) {
 			if task.AssignedTo == nil {
 				return fmt.Errorf("%s task without assigned_to: %s", task.Status, task.ID)
 			}
@@ -272,12 +245,12 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		}
 
 		// Submitted states must have review_commit
-		if isSubmitted(task.Status) && task.ReviewCommit == nil {
+		if sc.IsSubmitted(task.Status) && task.ReviewCommit == nil {
 			return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
 		}
 
 		// Reviewing states must have reviewing_by, review_lease_expires, and review_commit
-		if isReviewing(task.Status) {
+		if sc.IsReviewing(task.Status) {
 			if task.ReviewingBy == nil {
 				return fmt.Errorf("%s task without reviewing_by: %s", task.Status, task.ID)
 			}
@@ -290,7 +263,7 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		}
 
 		// Approved states must have review_commit
-		if isApproved(task.Status) && task.ReviewCommit == nil {
+		if sc.IsApproved(task.Status) && task.ReviewCommit == nil {
 			return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
 		}
 
@@ -310,7 +283,7 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		}
 
 		// Rejected states must have rejection_reason
-		if isRejected(task.Status) && task.RejectionReason == nil {
+		if sc.IsRejected(task.Status) && task.RejectionReason == nil {
 			return fmt.Errorf("%s task without rejection_reason: %s", task.Status, task.ID)
 		}
 
@@ -325,13 +298,13 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		}
 
 		// Track assignments for duplicate check (executing tasks count as active)
-		if task.AssignedTo != nil && isExecuting(task.Status) {
+		if task.AssignedTo != nil && sc.IsExecuting(task.Status) {
 			agent := *task.AssignedTo
 			assignments[agent] = append(assignments[agent], task.ID)
 		}
 
 		// Executing task worktree path must exist (only check if projectRoot is not empty to allow tests)
-		if isExecuting(task.Status) && task.Worktree != nil && projectRoot != "" {
+		if sc.IsExecuting(task.Status) && task.Worktree != nil && projectRoot != "" {
 			wtPath := filepath.Join(projectRoot, *task.Worktree)
 			if _, err := os.Stat(wtPath); os.IsNotExist(err) {
 				return fmt.Errorf("%s task %s has worktree=%s but directory does not exist", task.Status, task.ID, *task.Worktree)
@@ -418,21 +391,7 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 
 func validateDependencies(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) error {
 	taskIDs := buildTaskIDSet(state.Tasks)
-
-	// Build pipeline executing statuses for dependency enforcement
-	isExecuting := func(s models.TaskStatus) bool {
-		if s == models.TaskStatusImplementing || s == models.TaskStatusCodePlanning {
-			return true
-		}
-		if resolver != nil && cfg != nil {
-			for rpName := range cfg.Pipeline.RolePairs {
-				if es, err := resolver.ExecutingStatus(rpName); err == nil && s == es {
-					return true
-				}
-			}
-		}
-		return false
-	}
+	sc := newStatusClassifier(resolver, cfg)
 
 	for _, task := range state.Tasks {
 		if len(task.DependsOn) == 0 {
@@ -447,7 +406,7 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 		}
 
 		// Executing tasks must have all dependencies MERGED
-		if isExecuting(task.Status) {
+		if sc.IsExecuting(task.Status) {
 			var unmet []string
 			for _, depID := range task.DependsOn {
 				depTask := state.FindTask(depID)

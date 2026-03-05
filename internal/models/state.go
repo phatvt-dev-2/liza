@@ -166,9 +166,13 @@ func (t *Task) Transition(to TaskStatus) error {
 
 // TransitionWith validates and applies a status transition using a custom transition map.
 // This supports pipeline-defined states that aren't in the hardcoded transition map.
+// The target status must exist as a key in the transition map (i.e., be a declared state).
 func (t *Task) TransitionWith(to TaskStatus, transitions map[TaskStatus][]TaskStatus) error {
 	if !slices.Contains(transitions[t.Status], to) {
 		return fmt.Errorf("invalid task transition: %s → %s (task %s)", t.Status, to, t.ID)
+	}
+	if _, declared := transitions[to]; !declared {
+		return fmt.Errorf("target status %s is not a declared state in the transition map (task %s)", to, t.ID)
 	}
 	t.Status = to
 	return nil
