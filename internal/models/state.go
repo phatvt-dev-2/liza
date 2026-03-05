@@ -362,6 +362,22 @@ func (ts TaskStatus) IsSprintTerminal() bool {
 	return ts.IsTerminal()
 }
 
+// IsPipelineValid checks if the status is valid in a pipeline context.
+// A status is valid if it is a hardcoded valid status (legacy) OR appears in
+// the provided set of pipeline-declared states OR is a cross-cutting meta-state.
+func (ts TaskStatus) IsPipelineValid(declaredStates []TaskStatus) bool {
+	if ts.IsValid() {
+		return true
+	}
+	return slices.Contains(declaredStates, ts)
+}
+
+// CanPipelineTransition checks if a transition from ts to the given target is
+// valid using the provided transition map (built from pipeline config).
+func (ts TaskStatus) CanPipelineTransition(to TaskStatus, transitions map[TaskStatus][]TaskStatus) bool {
+	return slices.Contains(transitions[ts], to)
+}
+
 // IsPipelineSprintTerminal checks if the status is terminal for sprint purposes
 // using pipeline-defined terminal states. Universal terminals (MERGED, ABANDONED,
 // SUPERSEDED) are always considered sprint-terminal.

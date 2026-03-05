@@ -118,7 +118,7 @@ func validateTaskStates(state *models.State, projectRoot string, skipSpecFileChe
 		statusValid := task.Status.IsValid()
 		if !statusValid && resolver != nil {
 			// Accept pipeline-declared states and cross-cutting meta-states
-			statusValid = resolver.IsDeclaredState(task.Status) || isCrossCuttingState(task.Status)
+			statusValid = task.Status.IsPipelineValid(resolver.AllDeclaredStates())
 		}
 		if !statusValid {
 			return fmt.Errorf("unknown task status '%s' for task %s", task.Status, task.ID)
@@ -127,31 +127,17 @@ func validateTaskStates(state *models.State, projectRoot string, skipSpecFileChe
 			return fmt.Errorf("unknown task type '%s' for task %s", task.Type, task.ID)
 		}
 
-		// Pipeline-goal tasks must have a valid role_pair
-		if resolver != nil && task.RolePair != "" {
+		// Pipeline-goal tasks: role_pair is required unconditionally
+		if resolver != nil {
+			if task.RolePair == "" {
+				return fmt.Errorf("task %s missing role_pair (required for pipeline-configured goals)", task.ID)
+			}
 			if _, err := resolver.InitialStatus(task.RolePair); err != nil {
 				return fmt.Errorf("task %s has invalid role_pair %q: %w", task.ID, task.RolePair, err)
 			}
 		}
-		if resolver != nil && task.RolePair == "" {
-			// Pipeline-declared status without role_pair is invalid
-			if resolver.IsDeclaredState(task.Status) {
-				return fmt.Errorf("task %s has pipeline-declared status %s but missing role_pair", task.ID, task.Status)
-			}
-		}
 	}
 	return nil
-}
-
-// isCrossCuttingState returns true for meta-states valid across all role-pairs.
-func isCrossCuttingState(status models.TaskStatus) bool {
-	switch status {
-	case models.TaskStatusBlocked, models.TaskStatusAbandoned,
-		models.TaskStatusSuperseded, models.TaskStatusIntegrationFailed,
-		models.TaskStatusMerged:
-		return true
-	}
-	return false
 }
 
 func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver) error {

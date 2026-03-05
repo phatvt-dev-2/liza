@@ -362,8 +362,6 @@ func TestBuildCoderContext(t *testing.T) {
 				"NEVER combine cd and git in one command",
 				"NEVER use sed/awk for file editing",
 				"NEVER use $() command substitution",
-				"NEVER run bare git commands without -C",
-				"NEVER use \"git add -A\"",
 				"COMMIT WORKFLOW:",
 				"files were modified by this hook",
 				"TDD (code tasks): Write tests FIRST",

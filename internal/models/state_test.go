@@ -1204,6 +1204,92 @@ func TestCodingPlanApprovedIsNotSprintTerminal(t *testing.T) {
 	}
 }
 
+func TestIsPipelineValid(t *testing.T) {
+	// Simulate pipeline-declared states (e.g., from a coding-pair config)
+	pipelineDeclared := []TaskStatus{
+		TaskStatus("DRAFT_CODE"),
+		TaskStatus("IMPLEMENTING_CODE"),
+		TaskStatus("CODE_READY_FOR_REVIEW"),
+		TaskStatus("REVIEWING_CODE"),
+		TaskStatus("CODE_APPROVED"),
+		TaskStatus("CODE_REJECTED"),
+	}
+
+	tests := []struct {
+		name   string
+		status TaskStatus
+		want   bool
+	}{
+		// Hardcoded statuses are always valid
+		{"hardcoded DRAFT", TaskStatusDraft, true},
+		{"hardcoded MERGED", TaskStatusMerged, true},
+		{"hardcoded BLOCKED", TaskStatusBlocked, true},
+		{"hardcoded IMPLEMENTING", TaskStatusImplementing, true},
+
+		// Pipeline-declared statuses
+		{"pipeline DRAFT_CODE", TaskStatus("DRAFT_CODE"), true},
+		{"pipeline IMPLEMENTING_CODE", TaskStatus("IMPLEMENTING_CODE"), true},
+		{"pipeline CODE_APPROVED", TaskStatus("CODE_APPROVED"), true},
+
+		// Unknown status not in either set
+		{"unknown FOOBAR", TaskStatus("FOOBAR"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.status.IsPipelineValid(pipelineDeclared)
+			if got != tt.want {
+				t.Errorf("IsPipelineValid(%s) = %v, want %v", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCanPipelineTransition(t *testing.T) {
+	// Simulate a pipeline transition map
+	transitions := map[TaskStatus][]TaskStatus{
+		TaskStatus("DRAFT_CODE"):            {TaskStatus("IMPLEMENTING_CODE"), TaskStatusAbandoned},
+		TaskStatus("IMPLEMENTING_CODE"):     {TaskStatus("CODE_READY_FOR_REVIEW"), TaskStatusBlocked, TaskStatus("DRAFT_CODE")},
+		TaskStatus("CODE_READY_FOR_REVIEW"): {TaskStatus("REVIEWING_CODE")},
+		TaskStatus("REVIEWING_CODE"):        {TaskStatus("CODE_APPROVED"), TaskStatus("CODE_REJECTED")},
+		TaskStatus("CODE_APPROVED"):         {TaskStatusMerged, TaskStatusIntegrationFailed},
+		TaskStatus("CODE_REJECTED"):         {TaskStatus("DRAFT_CODE")},
+		TaskStatusMerged:                    {},
+	}
+
+	tests := []struct {
+		from TaskStatus
+		to   TaskStatus
+		want bool
+	}{
+		// Valid pipeline transitions
+		{TaskStatus("DRAFT_CODE"), TaskStatus("IMPLEMENTING_CODE"), true},
+		{TaskStatus("DRAFT_CODE"), TaskStatusAbandoned, true},
+		{TaskStatus("IMPLEMENTING_CODE"), TaskStatus("CODE_READY_FOR_REVIEW"), true},
+		{TaskStatus("REVIEWING_CODE"), TaskStatus("CODE_APPROVED"), true},
+		{TaskStatus("CODE_APPROVED"), TaskStatusMerged, true},
+		{TaskStatus("CODE_REJECTED"), TaskStatus("DRAFT_CODE"), true},
+
+		// Invalid pipeline transitions
+		{TaskStatus("DRAFT_CODE"), TaskStatus("CODE_APPROVED"), false},
+		{TaskStatus("IMPLEMENTING_CODE"), TaskStatusMerged, false},
+		{TaskStatusMerged, TaskStatus("DRAFT_CODE"), false},
+
+		// Status not in transition map
+		{TaskStatus("UNKNOWN"), TaskStatus("DRAFT_CODE"), false},
+	}
+
+	for _, tt := range tests {
+		name := string(tt.from) + "→" + string(tt.to)
+		t.Run(name, func(t *testing.T) {
+			got := tt.from.CanPipelineTransition(tt.to, transitions)
+			if got != tt.want {
+				t.Errorf("CanPipelineTransition(%s, %s) = %v, want %v", tt.from, tt.to, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRolePairField(t *testing.T) {
 	task := Task{
 		ID:       "task-1",
