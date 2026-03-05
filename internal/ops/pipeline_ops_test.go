@@ -3,11 +3,11 @@ package ops
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -196,6 +196,58 @@ func TestClaimTask_LegacyGoalStillWorks(t *testing.T) {
 	}
 }
 
+func TestClaimTask_PipelineRejectedIterationLimit(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Config.MaxCoderIterations = 3
+
+	agent := "coder-1"
+	worktree := ".worktrees/task-1"
+	baseCommit := "abc1234"
+	task := models.Task{
+		ID:          "task-1",
+		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
+		Description: "Pipeline coding task at iteration limit",
+		Status:      models.TaskStatus("CODE_REJECTED"),
+		Priority:    1,
+		AssignedTo:  &agent,
+		BaseCommit:  &baseCommit,
+		Worktree:    &worktree,
+		Iteration:   3, // at limit
+		Created:     now,
+		SpecRef:     "README.md",
+		DoneWhen:    "done",
+		Scope:       "scope",
+		History:     []models.TaskHistoryEntry{},
+	}
+	state.Tasks = []models.Task{task}
+	state.Sprint.Scope.Planned = []string{"task-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err == nil {
+		t.Fatal("Expected error for iteration limit exceeded")
+	}
+
+	// Verify the task was transitioned to BLOCKED (not stuck in CODE_REJECTED)
+	bb := db.For(stateFile)
+	readState, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("Failed to read state: %v", readErr)
+	}
+	readTask := readState.FindTask("task-1")
+	if readTask == nil {
+		t.Fatal("Task not found")
+	}
+	if readTask.Status != models.TaskStatusBlocked {
+		t.Errorf("Task status = %v, want BLOCKED", readTask.Status)
+	}
+}
+
 // --- AddTask pipeline tests ---
 
 func TestInitialTaskStatus_PipelineGoal(t *testing.T) {
@@ -234,10 +286,27 @@ func TestInitialTaskStatus_LegacyGoal(t *testing.T) {
 }
 
 // --- SubmitForReview pipeline tests ---
-// (These require git worktrees, so we test the status resolution logic)
 
-func TestSubmitForReview_PipelineCodingPairStatusCheck(t *testing.T) {
+func TestSubmitForReview_PipelineCodingPairTransition(t *testing.T) {
 	tmpDir, stateFile := setupPipelineTest(t)
+
+	// Create a real git worktree so SubmitForReview can complete the full flow
+	g := gitpkg.New(tmpDir)
+	if _, err := g.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+	wtPath := g.GetWorktreePath("task-1")
+
+	// Add a test file to satisfy TDD enforcement, then commit
+	testFile := filepath.Join(wtPath, "feature_test.go")
+	if err := os.WriteFile(testFile, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "feature_test.go")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Add feature with test")
+
+	commitSHA := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
+	baseCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -245,7 +314,6 @@ func TestSubmitForReview_PipelineCodingPairStatusCheck(t *testing.T) {
 
 	agent := "coder-1"
 	leaseExpires := now.Add(30 * time.Minute)
-	baseCommit := "abc1234"
 	worktree := ".worktrees/task-1"
 	task := models.Task{
 		ID:           "task-1",
@@ -268,17 +336,37 @@ func TestSubmitForReview_PipelineCodingPairStatusCheck(t *testing.T) {
 	}
 	state.Tasks = []models.Task{task}
 	state.Sprint.Scope.Planned = []string{"task-1"}
+	state.Agents = map[string]models.Agent{
+		"coder-1": {
+			Role:         "coder",
+			Status:       models.AgentStatusWorking,
+			CurrentTask:  &task.ID,
+			LeaseExpires: &leaseExpires,
+			Heartbeat:    now,
+		},
+	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	// SubmitForReview will fail because worktree doesn't exist as git worktree,
-	// but the status check should pass (it checks IMPLEMENTING_CODE, not IMPLEMENTING)
-	_, err := SubmitForReview(tmpDir, "task-1", "abc1234", "coder-1")
-	if err == nil {
-		t.Fatal("Expected error (worktree not real git worktree)")
+	result, err := SubmitForReview(tmpDir, "task-1", commitSHA, "coder-1")
+	if err != nil {
+		t.Fatalf("SubmitForReview() error: %v", err)
 	}
-	// The error should be about the worktree, not about wrong status
-	if strings.Contains(err.Error(), "not IMPLEMENTING") {
-		t.Errorf("Should accept IMPLEMENTING_CODE as valid executing status, got: %v", err)
+	if result.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+
+	// Verify the task transitioned to the pipeline submitted state
+	bb := db.For(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	readTask := readState.FindTask("task-1")
+	if readTask == nil {
+		t.Fatal("Task not found")
+	}
+	if readTask.Status != models.TaskStatus("CODE_READY_FOR_REVIEW") {
+		t.Errorf("Task status = %v, want CODE_READY_FOR_REVIEW", readTask.Status)
 	}
 }
 

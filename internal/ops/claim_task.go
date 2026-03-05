@@ -190,7 +190,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	// Enforce coder iteration limits before doing any filesystem work.
 	// A REJECTED task at/over the limit is escalated to BLOCKED for orchestrator action.
 	if isRejectionClaim && task.Iteration >= maxCoderIterations {
-		blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus)
+		blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus, pipelineTransitions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to enforce iteration limit: %w", err)
 		}
@@ -516,6 +516,7 @@ func enforceRejectedIterationLimit(
 	bb *db.Blackboard,
 	taskID, agentID string,
 	expectedStatus models.TaskStatus,
+	pipelineTransitions map[models.TaskStatus][]models.TaskStatus,
 ) (int, int, error) {
 	now := time.Now().UTC()
 	blockedIteration := 0
@@ -543,7 +544,13 @@ func enforceRejectedIterationLimit(
 		blockedReason := iterationLimitBlockedReason(task.Iteration, blockedLimit)
 		questions := defaultIterationLimitBlockedQuestions()
 
-		if err := task.Transition(models.TaskStatusBlocked); err != nil {
+		transitionToBlocked := func() error {
+			if pipelineTransitions != nil {
+				return task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions)
+			}
+			return task.Transition(models.TaskStatusBlocked)
+		}
+		if err := transitionToBlocked(); err != nil {
 			return err
 		}
 		task.BlockedReason = &blockedReason
