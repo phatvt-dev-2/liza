@@ -87,6 +87,8 @@ BASH CONSTRAINTS (CLI sandboxes may block these patterns):
 - NEVER use sed/awk for file editing. Use your IDE's file-edit tools instead.
 - NEVER use $() command substitution, backticks, or ANSI-C quoting ($'...') in Bash commands.
 - For file content: use file-edit tools. For git ops: use git -C {{.WorktreePath}}.
+- NEVER run bare git commands without -C {{.WorktreePath}}. Bare git targets the integration branch and corrupts shared state.
+- NEVER use "git add -A" or "git add .". Always stage specific files by name.
 
 COMMIT WORKFLOW:
 1. Stage files: git -C {{.WorktreePath}} add <files>
