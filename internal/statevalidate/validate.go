@@ -47,7 +47,9 @@ func ValidateStateFile(statePath string, skipSpecFileCheck bool, warnWriter io.W
 		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 			return validateTaskInvariants(state, projectRoot, skipSpecFileCheck, resolver, cfg)
 		},
-		validateDependencies,
+		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+			return validateDependencies(state, projectRoot, skipSpecFileCheck, resolver, cfg)
+		},
 		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 			return validateAgentInvariants(state, projectRoot, skipSpecFileCheck, warnWriter)
 		},
@@ -414,8 +416,23 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 	return nil
 }
 
-func validateDependencies(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+func validateDependencies(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) error {
 	taskIDs := buildTaskIDSet(state.Tasks)
+
+	// Build pipeline executing statuses for dependency enforcement
+	isExecuting := func(s models.TaskStatus) bool {
+		if s == models.TaskStatusImplementing || s == models.TaskStatusCodePlanning {
+			return true
+		}
+		if resolver != nil && cfg != nil {
+			for rpName := range cfg.Pipeline.RolePairs {
+				if es, err := resolver.ExecutingStatus(rpName); err == nil && s == es {
+					return true
+				}
+			}
+		}
+		return false
+	}
 
 	for _, task := range state.Tasks {
 		if len(task.DependsOn) == 0 {
@@ -429,8 +446,8 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 			}
 		}
 
-		// IMPLEMENTING tasks must have all dependencies MERGED
-		if task.Status == models.TaskStatusImplementing {
+		// Executing tasks must have all dependencies MERGED
+		if isExecuting(task.Status) {
 			var unmet []string
 			for _, depID := range task.DependsOn {
 				depTask := state.FindTask(depID)
@@ -439,7 +456,7 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 				}
 			}
 			if len(unmet) > 0 {
-				return fmt.Errorf("IMPLEMENTING task %s has unmet dependencies: %s (must be MERGED)", task.ID, strings.Join(unmet, ", "))
+				return fmt.Errorf("executing task %s has unmet dependencies: %s (must be MERGED)", task.ID, strings.Join(unmet, ", "))
 			}
 		}
 	}

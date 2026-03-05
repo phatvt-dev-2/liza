@@ -31,8 +31,8 @@ func findRepoRoot(t *testing.T) string {
 	}
 }
 
-// loadTestResolver loads a pipeline resolver from the test fixture YAML.
-func loadTestResolver(t *testing.T) *pipeline.Resolver {
+// loadTestConfig loads the pipeline config from the test fixture YAML.
+func loadTestConfig(t *testing.T) *pipeline.PipelineConfig {
 	t.Helper()
 	repoRoot := findRepoRoot(t)
 	yamlPath := filepath.Join(repoRoot, "internal", "pipeline", "testdata", "valid-coding-subpipeline.yaml")
@@ -40,6 +40,13 @@ func loadTestResolver(t *testing.T) *pipeline.Resolver {
 	if err != nil {
 		t.Fatalf("Failed to load test pipeline config: %v", err)
 	}
+	return cfg
+}
+
+// loadTestResolver loads a pipeline resolver from the test fixture YAML.
+func loadTestResolver(t *testing.T) *pipeline.Resolver {
+	t.Helper()
+	cfg := loadTestConfig(t)
 	return pipeline.NewResolver(cfg)
 }
 
@@ -219,5 +226,136 @@ func TestValidateTaskStates_LegacyGoalNoRolePairRequired(t *testing.T) {
 	err := validateTaskStates(state, "", true, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error for legacy goal task without role_pair: %v", err)
+	}
+}
+
+func TestValidateDependencies_PipelineExecutingUnmetDeps(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	assignee := "coder-1"
+	worktree := ".worktrees/task-exec"
+	baseCommit := "abc123"
+	leaseExpires := now.Add(30 * time.Minute)
+
+	// dep-task is NOT merged — it's still DRAFT_CODE
+	state.Tasks = []models.Task{
+		{
+			ID:          "dep-task",
+			Description: "Dependency task",
+			Status:      models.TaskStatus("DRAFT_CODE"),
+			Priority:    1,
+			Created:     now,
+			RolePair:    "coding-pair",
+		},
+		{
+			ID:           "task-exec",
+			Description:  "Executing pipeline task with unmet dep",
+			Status:       models.TaskStatus("IMPLEMENTING_CODE"), // pipeline executing status
+			Priority:     1,
+			Created:      now,
+			RolePair:     "coding-pair",
+			AssignedTo:   &assignee,
+			Worktree:     &worktree,
+			BaseCommit:   &baseCommit,
+			LeaseExpires: &leaseExpires,
+			DependsOn:    []string{"dep-task"},
+		},
+	}
+	state.Sprint.Scope.Planned = []string{"dep-task", "task-exec"}
+
+	err := validateDependencies(state, "", true, resolver, cfg)
+	if err == nil {
+		t.Fatal("Expected error for pipeline executing task with unmet dependencies")
+	}
+	if !strings.Contains(err.Error(), "unmet dependencies") {
+		t.Errorf("Error = %q, want to contain 'unmet dependencies'", err.Error())
+	}
+	if !strings.Contains(err.Error(), "task-exec") {
+		t.Errorf("Error = %q, want to contain task ID 'task-exec'", err.Error())
+	}
+}
+
+func TestValidateDependencies_PipelineExecutingMetDeps(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	assignee := "coder-1"
+	worktree := ".worktrees/task-exec"
+	baseCommit := "abc123"
+	leaseExpires := now.Add(30 * time.Minute)
+
+	// dep-task IS merged
+	state.Tasks = []models.Task{
+		{
+			ID:          "dep-task",
+			Description: "Dependency task",
+			Status:      models.TaskStatusMerged,
+			Priority:    1,
+			Created:     now,
+			RolePair:    "coding-pair",
+		},
+		{
+			ID:           "task-exec",
+			Description:  "Executing pipeline task with met dep",
+			Status:       models.TaskStatus("IMPLEMENTING_CODE"),
+			Priority:     1,
+			Created:      now,
+			RolePair:     "coding-pair",
+			AssignedTo:   &assignee,
+			Worktree:     &worktree,
+			BaseCommit:   &baseCommit,
+			LeaseExpires: &leaseExpires,
+			DependsOn:    []string{"dep-task"},
+		},
+	}
+	state.Sprint.Scope.Planned = []string{"dep-task", "task-exec"}
+
+	err := validateDependencies(state, "", true, resolver, cfg)
+	if err != nil {
+		t.Fatalf("Unexpected error for pipeline executing task with met dependencies: %v", err)
+	}
+}
+
+func TestValidateDependencies_LegacyExecutingUnmetDeps(t *testing.T) {
+	// Legacy (no resolver) — IMPLEMENTING with unmet deps should still fail
+	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	assignee := "coder-1"
+	worktree := ".worktrees/task-impl"
+	baseCommit := "abc123"
+	leaseExpires := now.Add(30 * time.Minute)
+
+	state.Tasks = []models.Task{
+		{
+			ID:          "dep-task",
+			Description: "Dependency task",
+			Status:      models.TaskStatusDraft,
+			Priority:    1,
+			Created:     now,
+		},
+		{
+			ID:           "task-impl",
+			Description:  "Legacy implementing task with unmet dep",
+			Status:       models.TaskStatusImplementing,
+			Priority:     1,
+			Created:      now,
+			AssignedTo:   &assignee,
+			Worktree:     &worktree,
+			BaseCommit:   &baseCommit,
+			LeaseExpires: &leaseExpires,
+			DependsOn:    []string{"dep-task"},
+		},
+	}
+	state.Sprint.Scope.Planned = []string{"dep-task", "task-impl"}
+
+	err := validateDependencies(state, "", true, nil, nil)
+	if err == nil {
+		t.Fatal("Expected error for legacy IMPLEMENTING task with unmet dependencies")
+	}
+	if !strings.Contains(err.Error(), "unmet dependencies") {
+		t.Errorf("Error = %q, want to contain 'unmet dependencies'", err.Error())
 	}
 }
