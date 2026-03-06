@@ -42,7 +42,7 @@ Any non destructive tool by default.
 |-------------------------------------------|--------------|----------|
 | Exact keyword ("TODO") | Grep | — |
 | Find files by name | JetBrains `find_files_by_name_keyword` | Glob |
-| Semantic code search ("how does X work?") | Warp Grep (`mcp__morph-mcp__warpgrep_codebase_search`) | Task(Explore) if synthesis needed |
+| Semantic code search ("how does X work?") | **Warp Grep** (`mcp__morph-mcp__warpgrep_codebase_search`) | Task(Explore) only if WarpGrep insufficient |
 | Symbol info at position | JetBrains `get_symbol_info` | LSP `hover` |
 | Find references | LSP `findReferences` | Grep |
 | Call hierarchy (callers/callees) | LSP `incomingCalls`/`outgoingCalls` | Task(Explore) if LSP not configured |
@@ -51,10 +51,10 @@ Any non destructive tool by default.
 
 **Tool characteristics:**
 - **Grep**: Fastest, exact matches only, no synthesis
-- **Warp Grep**: Multi-turn search subagent, finds relevant code and returns file contents
+- **Warp Grep**: **first choice** for codebase understanding: targeted semantic discovery ("how does X work?"), especially when file paths are unknown. Fallback to native tools (Task Explore, rg) only if insufficient.
 - **JetBrains** (when IDE available): Indexed, fast, includes docstrings and IDE diagnostics. Prefer over LSP for symbol info and workspace search
 - **LSP**: Precise type info, references, call hierarchy (requires language server configured)
-- **Task(Explore)**: Subagent for broad exploration, synthesizes across many files, keeps intermediate noise out of main context
+- **Task(Explore)**: Use for broad synthesis across many files, architectural relationship mapping, or when Warp Grep returns incomplete/ambiguous results.
 
 **LSP prerequisite:** Language must have LSP configured (Python: `[tool.pyright]` in pyproject.toml; TS: tsconfig.json). If not configured, use Task(Explore) for call hierarchy and definitions.
 
