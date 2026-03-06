@@ -1,6 +1,8 @@
 package prompts
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -165,7 +167,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				"liza_supersede_task",
 				"liza_wt_delete",
 				"This is initial planning",
-				"Create exactly one task for the Code Planner",
+				"Create exactly one task for the appropriate planner",
 				"role_pair\": \"code-planning-pair\"",
 				"Exactly one task is created",
 			},
@@ -304,6 +306,176 @@ func TestBuildOrchestratorContext(t *testing.T) {
 			for _, want := range tt.wantContains {
 				if !strings.Contains(result, want) {
 					t.Errorf("BuildOrchestratorContext() missing expected content:\n%q", want)
+				}
+			}
+		})
+	}
+}
+
+func setupPipelineConfig(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	lizaDir := filepath.Join(dir, ".liza")
+	if err := os.MkdirAll(lizaDir, 0o755); err != nil {
+		t.Fatalf("mkdir .liza: %v", err)
+	}
+	yaml := `pipeline:
+  agent-roles:
+    epic-planner: "Epic Planner"
+    epic-plan-reviewer: "Epic Plan Reviewer"
+    us-writer: "US Writer"
+    us-reviewer: "US Reviewer"
+    code-planner: "Code Planner"
+    code-plan-reviewer: "Code Plan Reviewer"
+    coder: "Coder"
+    code-reviewer: "Code Reviewer"
+  role-pairs:
+    epic-planning-pair:
+      doer: epic-planner
+      reviewer: epic-plan-reviewer
+      states:
+        initial: DRAFT_EPIC_PLAN
+        executing: EPIC_PLANNING
+        submitted: EPIC_PLAN_TO_REVIEW
+        reviewing: REVIEWING_EPIC_PLAN
+        approved: EPIC_PLAN_APPROVED
+        rejected: EPIC_PLAN_REJECTED
+    us-writing-pair:
+      doer: us-writer
+      reviewer: us-reviewer
+      states:
+        initial: DRAFT_US
+        executing: WRITING_US
+        submitted: US_READY_FOR_REVIEW
+        reviewing: REVIEWING_US
+        approved: US_APPROVED
+        rejected: US_REJECTED
+    code-planning-pair:
+      doer: code-planner
+      reviewer: code-plan-reviewer
+      states:
+        initial: DRAFT_CODING_PLAN
+        executing: CODE_PLANNING
+        submitted: CODING_PLAN_TO_REVIEW
+        reviewing: REVIEWING_CODING_PLAN
+        approved: CODING_PLAN_APPROVED
+        rejected: CODING_PLAN_REJECTED
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    epic-spec-subpipeline:
+      steps:
+        - epic-planning-pair
+        - us-writing-pair
+      transitions:
+        - name: epic-to-us
+          from: epic-planning-pair.approved
+          to: us-writing-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+    coding-subpipeline:
+      steps:
+        - code-planning-pair
+        - coding-pair
+      transitions:
+        - name: code-plan-to-coding
+          from: code-planning-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+  pipeline-transitions:
+    - name: us-to-coding
+      from: epic-spec-subpipeline.us-writing-pair.approved
+      to: coding-subpipeline.code-planning-pair.initial
+      trigger: manual
+      cardinality: one-to-one
+  entry-points:
+    general-objective: epic-spec-subpipeline.epic-planning-pair
+    detailed-spec: coding-subpipeline.code-planning-pair
+`
+	if err := os.WriteFile(filepath.Join(lizaDir, "pipeline.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("write pipeline.yaml: %v", err)
+	}
+	return dir
+}
+
+func TestBuildOrchestratorContext_EntryPoints(t *testing.T) {
+	tests := []struct {
+		name           string
+		entryPoint     string
+		wantContains   []string
+		wantNotContain []string
+	}{
+		{
+			name:       "explicit entry-point general-objective dispatches to epic-planning-pair",
+			entryPoint: "general-objective",
+			wantContains: []string{
+				"WAKE TRIGGER: INITIAL_PLANNING",
+				"role_pair\": \"epic-planning-pair\"",
+				"Epic Planner",
+			},
+			wantNotContain: []string{
+				"classify",
+				"code-planning-pair",
+			},
+		},
+		{
+			name:       "explicit entry-point detailed-spec dispatches to code-planning-pair",
+			entryPoint: "detailed-spec",
+			wantContains: []string{
+				"WAKE TRIGGER: INITIAL_PLANNING",
+				"role_pair\": \"code-planning-pair\"",
+				"Code Planner",
+			},
+			wantNotContain: []string{
+				"classify",
+				"epic-planning-pair",
+			},
+		},
+		{
+			name:       "no entry-point shows classification instructions",
+			entryPoint: "",
+			wantContains: []string{
+				"WAKE TRIGGER: INITIAL_PLANNING",
+				"general-objective",
+				"detailed-spec",
+				"epic-planning-pair",
+				"code-planning-pair",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectRoot := setupPipelineConfig(t)
+
+			state := testhelpers.CreateValidState()
+			state.Tasks = []models.Task{}
+			state.Goal.EntryPoint = tt.entryPoint
+
+			result, err := BuildOrchestratorContext(state, OrchestratorContextConfig{
+				ProjectRoot: projectRoot,
+			})
+			if err != nil {
+				t.Fatalf("BuildOrchestratorContext() error: %v", err)
+			}
+
+			for _, want := range tt.wantContains {
+				if !strings.Contains(result, want) {
+					t.Errorf("missing expected content: %q\n\nFull output:\n%s", want, result)
+				}
+			}
+			for _, notWant := range tt.wantNotContain {
+				if strings.Contains(result, notWant) {
+					t.Errorf("unexpected content found: %q", notWant)
 				}
 			}
 		})

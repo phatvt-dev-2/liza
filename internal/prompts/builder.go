@@ -2,9 +2,12 @@ package prompts
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 // BasePromptConfig contains configuration for building the base prompt
@@ -142,7 +145,9 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 
 	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, sprintComplete, planningTasks)
 
-	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, state.Goal.SpecRef, planningTasks)
+	wakeData := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, config.ProjectRoot)
+
+	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, wakeData, planningTasks)
 	if err != nil {
 		return "", fmt.Errorf("building wake instructions: %w", err)
 	}
@@ -377,9 +382,81 @@ func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExha
 	return "UNKNOWN"
 }
 
+// wakeEntryPointData describes an available entry-point for the orchestrator template.
+type wakeEntryPointData struct {
+	Name        string // e.g., "general-objective"
+	RolePair    string // e.g., "epic-planning-pair"
+	DisplayName string // doer's display name, e.g., "Epic Planner"
+}
+
 // wakeTemplateData is used by wake trigger templates that need GoalSpecRef
 type wakeTemplateData struct {
-	GoalSpecRef string
+	GoalSpecRef          string
+	GoalEntryPoint       string               // set if --entry-point was specified
+	ResolvedRolePair     string               // role-pair resolved from GoalEntryPoint
+	ResolvedDisplayName  string               // display name of the resolved role-pair's doer
+	ResolvedTaskIDPrefix string               // task ID prefix, e.g., "epic-planning" (role-pair without "-pair" suffix)
+	EntryPoints          []wakeEntryPointData // available entry-points for LLM classification
+}
+
+// buildWakeTemplateData constructs entry-point-aware template data for the
+// INITIAL_PLANNING wake trigger. When a pipeline config exists, it resolves
+// entry-points to role-pairs and display names. Without a pipeline config
+// (legacy goals), the template falls back to hardcoded code-planning-pair.
+func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) wakeTemplateData {
+	data := wakeTemplateData{
+		GoalSpecRef:    goalSpecRef,
+		GoalEntryPoint: goalEntryPoint,
+	}
+
+	cfg, err := pipeline.LoadFrozen(projectRoot)
+	if err != nil || cfg == nil {
+		return data // legacy goal — no pipeline config
+	}
+
+	// Build sorted entry-point list for deterministic template output.
+	var eps []wakeEntryPointData
+	for epName, epValue := range cfg.Pipeline.EntryPoints {
+		parts := strings.SplitN(epValue, ".", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		rolePair := parts[1]
+		displayName := resolveDoerDisplayName(cfg, rolePair)
+		eps = append(eps, wakeEntryPointData{
+			Name:        epName,
+			RolePair:    rolePair,
+			DisplayName: displayName,
+		})
+	}
+	sort.Slice(eps, func(i, j int) bool { return eps[i].Name < eps[j].Name })
+	data.EntryPoints = eps
+
+	// If entry-point is explicitly set, resolve it.
+	if goalEntryPoint != "" {
+		if epValue, ok := cfg.Pipeline.EntryPoints[goalEntryPoint]; ok {
+			parts := strings.SplitN(epValue, ".", 2)
+			if len(parts) == 2 {
+				data.ResolvedRolePair = parts[1]
+				data.ResolvedDisplayName = resolveDoerDisplayName(cfg, parts[1])
+				data.ResolvedTaskIDPrefix = strings.TrimSuffix(parts[1], "-pair")
+			}
+		}
+	}
+
+	return data
+}
+
+// resolveDoerDisplayName looks up the doer's display name for a role-pair.
+func resolveDoerDisplayName(cfg *pipeline.PipelineConfig, rolePair string) string {
+	rp, ok := cfg.Pipeline.RolePairs[rolePair]
+	if !ok {
+		return rolePair
+	}
+	if name, ok := cfg.Pipeline.AgentRoles[rp.Doer]; ok {
+		return name
+	}
+	return rp.Doer
 }
 
 // wakePlanningCompleteData is used by the PLANNING_COMPLETE wake template
@@ -388,10 +465,10 @@ type wakePlanningCompleteData struct {
 }
 
 // buildInstructionsForWakeTrigger returns trigger-specific instructions
-func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string, planningTasks []planningTaskData) (string, error) {
+func buildInstructionsForWakeTrigger(wakeTrigger string, wakeData wakeTemplateData, planningTasks []planningTaskData) (string, error) {
 	switch wakeTrigger {
 	case "INITIAL_PLANNING":
-		return executeTemplate("wake_initial_planning", wakeTemplateData{GoalSpecRef: goalSpecRef})
+		return executeTemplate("wake_initial_planning", wakeData)
 	case "BLOCKED_TASKS":
 		return executeTemplate("wake_blocked_tasks", nil)
 	case "INTEGRATION_FAILED":
