@@ -55,7 +55,7 @@ func InitCommandWithConfig(params InitParams) error {
 
 	// --entry-point requires --config
 	if entryPoint != "" && configPath == "" {
-		return fmt.Errorf("--entry-point requires --config")
+		return fmt.Errorf("--entry-point requires a pipeline config (provide --config or run 'liza setup')")
 	}
 
 	// Validate and load pipeline config early (before creating .liza dir)

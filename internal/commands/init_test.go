@@ -933,5 +933,5 @@ func TestInitCommandWithConfig_EntryPointWithoutConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for --entry-point without --config, got nil")
 	}
-	testhelpers.AssertErrorContains(t, err, "--entry-point requires --config")
+	testhelpers.AssertErrorContains(t, err, "--entry-point requires a pipeline config")
 }
