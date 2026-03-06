@@ -182,6 +182,11 @@ writable_roots = ["/home/<USER>/.codex", "/home/<USER>/.liza", "/home/<USER>/.ca
 [mcp_servers.filesystem]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/<USER>/.claude", "/home/<USER>/.codex", "/home/<USER>/Workspace", "/home/<USER>/.liza"]
+
+[mcp_servers.liza]
+type = "stdio"
+command = "liza-mcp"
+args = ["--project-root", "/home/<USER>/Workspace/liza"]
 ```
 
 ## Gemini
