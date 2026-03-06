@@ -1760,3 +1760,83 @@ func TestBuildUSWriterContext(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildUSReviewerContext(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("us-review-1", models.TaskStatusImplementing, now)
+	task.Description = "Review user stories for authentication capability"
+	task.DoneWhen = "User stories meet quality gates and SMARC criteria"
+	task.Iteration = 1
+	worktree := ".worktrees/us-review-1"
+	task.Worktree = &worktree
+	reviewCommit := "def456"
+	task.ReviewCommit = &reviewCommit
+	assignedTo := "us-writer-1"
+	task.AssignedTo = &assignedTo
+
+	cfg := USReviewerContextConfig{
+		ProjectRoot: "/project",
+		AgentID:     "us-reviewer-1",
+	}
+
+	prompt, err := BuildUSReviewerContext(&task, cfg)
+	if err != nil {
+		t.Fatalf("BuildUSReviewerContext() error: %v", err)
+	}
+
+	wantContains := []string{
+		// Task details
+		"ASSIGNED US REVIEW TASK",
+		"TASK ID: us-review-1",
+		"WORKTREE: /project/.worktrees/us-review-1",
+		"REVIEW COMMIT: def456",
+		"AUTHOR: us-writer-1",
+		"ITERATION: 1",
+		"DESCRIPTION: Review user stories for authentication capability",
+		// State transitions
+		"REVIEWING_US",
+		"US_APPROVED",
+		"US_REJECTED",
+		// Tool
+		"liza_submit_verdict",
+		"us-review-1",
+		"us-reviewer-1",
+		// spec-review skill reference
+		"spec-review",
+		"~/.liza/skills/spec-review/SKILL.md",
+		// user-story-writing skill reference
+		"user-story-writing",
+		"~/.liza/skills/user-story-writing/SKILL.md",
+		// Anti-patterns
+		"Persona Laundering",
+		"Giant Story",
+		"Wishful Story",
+		"Hidden Coupling",
+		"Assumption Burial",
+		"Scope Absorption",
+		"Premature Solutioning",
+		"Generic Persona",
+		"Valueless Story",
+		// Quality gates
+		"SMARC",
+		"Acceptance criteria",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("BuildUSReviewerContext() missing %q", want)
+		}
+	}
+
+	// Should NOT contain tools that don't apply to US Reviewer
+	wantNotContain := []string{
+		"liza_submit_for_review", // not a doer
+		"liza_write_checkpoint",  // not a doer
+		"liza_set_task_output",   // not a doer
+		"liza_mark_blocked",      // not a doer
+	}
+	for _, notWant := range wantNotContain {
+		if strings.Contains(prompt, notWant) {
+			t.Errorf("BuildUSReviewerContext() should not contain %q", notWant)
+		}
+	}
+}

@@ -1,0 +1,63 @@
+{{- define "us_reviewer_context" -}}
+
+=== ASSIGNED US REVIEW TASK ===
+TASK ID: {{.Task.ID}}
+WORKTREE: {{.WorktreePath}}
+REVIEW COMMIT: {{.ReviewCommit}}
+AUTHOR: {{.AssignedTo}}
+ITERATION: {{.Task.Iteration}}
+DESCRIPTION: {{.Task.Description}}
+
+DONE WHEN:
+{{.Task.DoneWhen}}
+
+US REVIEWER STATE TRANSITIONS:
+- REVIEWING_US → US_APPROVED
+- REVIEWING_US → US_REJECTED
+
+US REVIEWER TOOLS:
+- liza_get — Query task state to inspect output[] entries
+  {"query": "tasks/{{.Task.ID}}"}
+- liza_submit_verdict — Submit review verdict
+  APPROVED: {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
+  REJECTED: {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
+
+SPEC-REVIEW SKILL:
+You MUST read and follow the spec-review skill for reviewing specifications:
+  ~/.liza/skills/spec-review/SKILL.md
+
+USER-STORY ANTI-PATTERNS (from user-story-writing skill):
+You MUST also read the user-story-writing skill for anti-pattern awareness:
+  ~/.liza/skills/user-story-writing/SKILL.md
+
+Reject any user story exhibiting these anti-patterns:
+
+| Anti-pattern | Symptom |
+|-------------|---------|
+| Persona Laundering | Persona is a fig leaf on a technical task — no real user need |
+| Giant Story | Cannot be implemented in a single focused session |
+| Wishful Story | No testable acceptance criteria — hand-waving outcomes |
+| Hidden Coupling | References other components without declaring dependency |
+| Assumption Burial | Assumptions embedded in stories instead of surfaced explicitly |
+| Scope Absorption | Writing stories beyond what the task scopes |
+| Premature Solutioning | Acceptance criteria prescribe implementation instead of behavior |
+| Generic Persona | "As a User" where "User" could be any noun — lacks specificity |
+| Valueless Story | Hand-waving the "so that" clause — no clear value proposition |
+
+QUALITY GATES:
+- SMARC criteria: Specific, Measurable, Achievable, Relevant, Context-bound
+- Every story uses canonical form: "As a <persona>, I want to <action>, so that <outcome>"
+- Personas must be specific (environment, skill level) — not generic "User"
+- Acceptance criteria are contracts — they define done
+- Acceptance criteria must be user-observable
+- Assumptions are first-class outputs that resolve behavioral ambiguity
+
+REVIEW PHASE:
+1. Inspect worktree changes for this review commit.
+2. Read both skills before evaluating: spec-review and user-story-writing.
+3. Validate done_when criteria are satisfied.
+4. Check each user story against the anti-pattern checklist above.
+5. Verify SMARC criteria compliance for every story.
+6. Verify acceptance criteria are testable and user-observable.
+7. Submit verdict with liza_submit_verdict.
+{{- end -}}

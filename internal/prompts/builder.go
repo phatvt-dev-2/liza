@@ -79,6 +79,12 @@ type USWriterContextConfig struct {
 	AgentID     string
 }
 
+// USReviewerContextConfig contains configuration for building us-reviewer context
+type USReviewerContextConfig struct {
+	ProjectRoot string
+	AgentID     string
+}
+
 // BuildBasePrompt creates the base bootstrap prompt for all agents
 func BuildBasePrompt(config BasePromptConfig) (string, error) {
 	return executeTemplate("base_prompt", config)
@@ -256,6 +262,15 @@ type usWriterContextData struct {
 	WorktreePath string
 }
 
+// usReviewerContextData is the template data for us_reviewer_context.tmpl
+type usReviewerContextData struct {
+	Task         *models.Task
+	Config       USReviewerContextConfig
+	WorktreePath string
+	ReviewCommit string
+	AssignedTo   string
+}
+
 // BuildReviewerContext creates reviewer-specific context with review details
 func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (string, error) {
 	worktreePath := ""
@@ -358,6 +373,23 @@ func BuildUSWriterContext(task *models.Task, config USWriterContextConfig) (stri
 		WorktreePath: worktreePath,
 	}
 	return executeTemplate("us_writer_context", data)
+}
+
+// BuildUSReviewerContext creates us-reviewer-specific context with review details
+func BuildUSReviewerContext(task *models.Task, config USReviewerContextConfig) (string, error) {
+	worktreePath := ""
+	if task.Worktree != nil {
+		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
+	}
+
+	data := usReviewerContextData{
+		Task:         task,
+		Config:       config,
+		WorktreePath: worktreePath,
+		ReviewCommit: derefString(task.ReviewCommit),
+		AssignedTo:   derefString(task.AssignedTo),
+	}
+	return executeTemplate("us_reviewer_context", data)
 }
 
 // derefString returns the value pointed to by s, or "" if s is nil.
