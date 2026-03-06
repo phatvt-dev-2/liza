@@ -70,6 +70,12 @@ type EpicPlannerContextConfig struct {
 	AgentID     string
 }
 
+// USWriterContextConfig contains configuration for building us-writer context
+type USWriterContextConfig struct {
+	ProjectRoot string
+	AgentID     string
+}
+
 // BuildBasePrompt creates the base bootstrap prompt for all agents
 func BuildBasePrompt(config BasePromptConfig) (string, error) {
 	return executeTemplate("base_prompt", config)
@@ -238,6 +244,13 @@ type epicPlanReviewerContextData struct {
 	AssignedTo   string
 }
 
+// usWriterContextData is the template data for us_writer_context.tmpl
+type usWriterContextData struct {
+	Task         *models.Task
+	Config       USWriterContextConfig
+	WorktreePath string
+}
+
 // BuildReviewerContext creates reviewer-specific context with review details
 func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (string, error) {
 	worktreePath := ""
@@ -325,6 +338,21 @@ func BuildEpicPlannerContext(task *models.Task, config EpicPlannerContextConfig)
 		WorktreePath: worktreePath,
 	}
 	return executeTemplate("epic_planner_context", data)
+}
+
+// BuildUSWriterContext creates us-writer-specific context with task details
+func BuildUSWriterContext(task *models.Task, config USWriterContextConfig) (string, error) {
+	worktreePath := ""
+	if task.Worktree != nil {
+		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
+	}
+
+	data := usWriterContextData{
+		Task:         task,
+		Config:       config,
+		WorktreePath: worktreePath,
+	}
+	return executeTemplate("us_writer_context", data)
 }
 
 // derefString returns the value pointed to by s, or "" if s is nil.

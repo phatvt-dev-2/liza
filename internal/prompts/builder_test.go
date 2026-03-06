@@ -1526,3 +1526,65 @@ func TestBuildEpicPlannerContext(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildUSWriterContext(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("us-task-1", models.TaskStatusImplementing, now)
+	task.Description = "Write user stories for authentication capability"
+	task.DoneWhen = "User stories cover all authentication requirements"
+	task.Scope = "Authentication capability"
+	task.Iteration = 1
+	worktree := ".worktrees/us-task-1"
+	task.Worktree = &worktree
+
+	cfg := USWriterContextConfig{
+		ProjectRoot: "/project",
+		AgentID:     "us-writer-1",
+	}
+
+	prompt, err := BuildUSWriterContext(&task, cfg)
+	if err != nil {
+		t.Fatalf("BuildUSWriterContext() error: %v", err)
+	}
+
+	wantContains := []string{
+		"ASSIGNED US WRITING TASK",
+		"TASK ID: us-task-1",
+		"WORKTREE: /project/.worktrees/us-task-1",
+		"ITERATION: 1",
+		"DESCRIPTION: Write user stories for authentication capability",
+		// State transitions
+		"WRITING_US",
+		"US_READY_FOR_REVIEW",
+		"US_REJECTED",
+		"DRAFT_US",
+		// Tools
+		"liza_submit_for_review",
+		"liza_write_checkpoint",
+		"liza_mark_blocked",
+		// user-story-writing skill reference
+		"user-story-writing",
+		"~/.liza/skills/user-story-writing/SKILL.md",
+		// SMARC criteria
+		"SMARC",
+		// Bash constraints
+		"BASH CONSTRAINTS",
+		"git -C",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("BuildUSWriterContext() missing %q", want)
+		}
+	}
+
+	// Should NOT contain tools that don't apply to US Writer
+	wantNotContain := []string{
+		"liza_set_task_output", // one-to-one cardinality, no output[] needed
+		"liza_submit_verdict",  // not a reviewer
+	}
+	for _, notWant := range wantNotContain {
+		if strings.Contains(prompt, notWant) {
+			t.Errorf("BuildUSWriterContext() should not contain %q", notWant)
+		}
+	}
+}
