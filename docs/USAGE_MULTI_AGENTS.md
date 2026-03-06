@@ -183,24 +183,104 @@ To start a new sprint:
 
 The planner does not auto-detect changes to `vision.md` between sprints. Each sprint starts fresh from `liza init`.
 
+### Sprint Lifecycle & Human Gates
+
+Liza runs in sprints. Each sprint has a planning phase and an execution phase,
+with human checkpoints between them.
+
+#### Sprint Phases
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Planning Sprint                                      │
+│                                                      │
+│  1. Orchestrator creates code-planning task          │
+│  2. Code Planner writes plan + populates output[]    │
+│  3. Code Plan Reviewer approves                      │
+│  4. Task merges → PLANNING_COMPLETE                  │
+│  5. Orchestrator creates coding tasks from output[]  │
+│  6. Sprint checkpoints → HUMAN GATE                  │
+│                                                      │
+│  Human reviews tasks, then: liza resume              │
+│                                                      │
+├─────────────────────────────────────────────────────┤
+│ Coding Sprint                                        │
+│                                                      │
+│  1. Coders claim and implement tasks                 │
+│  2. Code Reviewers approve                           │
+│  3. Tasks merge to integration branch                │
+│  4. All tasks done → SPRINT_COMPLETE                 │
+│  5. Sprint checkpoints → HUMAN GATE                  │
+│                                                      │
+│  Human reviews results, then: liza resume            │
+│                                                      │
+└─────────────────────────────────────────────────────┘
+```
+
+#### What Humans Do at Checkpoints
+
+When a sprint checkpoints (status: CHECKPOINT), all agents pause.
+The human reviews the sprint summary and decides:
+
+| Action | Command | When |
+|--------|---------|------|
+| Resume (next sprint) | `liza resume` | Satisfied with results, ready for next sprint |
+| Manual transition | `liza proceed <task-id> <transition>` | Expand planning output into coding tasks manually |
+| Pause for manual work | (no command) | Want to make manual changes before continuing |
+| Abort | `liza stop` | Want to stop entirely |
+
+**`liza proceed`** is an alternative to the automated PLANNING_COMPLETE flow. It reads a task's `output[]` entries and creates child coding tasks. Use it when you want manual control over the planning-to-coding transition (e.g., to edit output entries before expansion).
+
+#### Sprint Status Flow
+
+```
+IN_PROGRESS → CHECKPOINT → COMPLETED → (next sprint) IN_PROGRESS
+                  ↑              ↑
+                  │              └── liza resume (when all tasks terminal)
+                  └── orchestrator calls liza_sprint_checkpoint
+```
+
 ### CLI Commands
 
 The `liza` binary provides all system operations. Key commands:
 
 | Command | Purpose |
 |---------|---------|
-| `liza init <goal> --spec <spec_ref>` | Initialize .liza/ directory with blackboard (spec_ref defaults to specs/vision.md) |
+| **Setup & Init** | |
+| `liza setup` | One-time global setup of contracts and skills to `~/.liza/` |
+| `liza init <goal> --spec <spec_ref>` | Initialize `.liza/` directory with blackboard (spec_ref defaults to specs/vision.md) |
+| **Agents & Monitoring** | |
 | `liza agent <role> --agent-id <id>` | Agent supervisor (start, restart, backoff loop) |
+| `liza watch` | Monitor blackboard, alert on anomalies, auto-checkpoint on circuit-breaker |
+| `liza status` | Show system and task status at a glance |
+| **System Control** | |
+| `liza pause` / `liza resume` | Pause/resume system (resume also handles CHECKPOINT → next sprint) |
+| `liza stop` / `liza start` | Stop/start system |
+| `liza sprint-checkpoint` | Create a checkpoint (halt + summary) |
+| **Task Operations** | |
+| `liza add-task` | Add a new task to the state |
 | `liza claim-task <task-id> <agent-id>` | Atomically claim a task for a coder (creates worktree, updates state) |
-| `liza validate [state.yaml]` | Validate blackboard state against schema invariants |
-| `liza watch` | Monitor blackboard, alert on anomalies, and auto-checkpoint on circuit-breaker trigger or sprint stall |
-| `liza recover-task <task-id>` | Recover by task ID (release claims + remove worktree/branch + recover agent) |
+| `liza submit-for-review <task-id>` | Submit a task for review |
+| `liza submit-verdict <task-id>` | Submit a review verdict (APPROVED/REJECTED) |
+| `liza mark-blocked <task-id>` | Mark a task as BLOCKED with reason and questions |
+| `liza handoff <task-id>` | Context-exhaustion handoff for a claimed task |
+| `liza supersede-task <task-id>` | Mark a task as SUPERSEDED by replacements |
+| `liza proceed <task-id> <transition>` | Execute inter-pair transition (e.g., code-plan-to-coding) |
+| **Worktree Management** | |
+| `liza wt-create <task-id>` | Create a worktree for an IMPLEMENTING task |
+| `liza wt-merge <task-id>` | Merge an approved task into the integration branch |
+| `liza wt-delete <task-id>` | Delete a worktree for a completed/abandoned task |
+| **Recovery** | |
+| `liza recover-task <task-id>` | Recover by task ID (release claims + remove worktree/branch) |
 | `liza recover-agent <agent-id>` | Recover by agent ID (release claim + remove worktree + delete agent) |
 | `liza release-claim <task-id> [--role R]` | Release claim on a task (manual, granular recovery) |
-| `liza sprint-checkpoint` | Create a checkpoint (halt + summary) |
-| `liza status` | Show system status |
-| `liza pause` / `liza resume` | Pause/resume system |
-| `liza stop` / `liza start` | Stop/start system |
+| `liza delete agent <id>` / `liza delete task <id>` | Delete an agent or task from state |
+| **Analysis** | |
+| `liza validate` | Validate blackboard state against schema invariants |
+| `liza analyze` | Run circuit breaker pattern detection |
+| `liza update-sprint-metrics` | Recompute sprint metrics from current state |
+| `liza clear-stale-review-claims` | Clear expired review leases |
+| `liza get <query>` | Query state data (tasks, agents, etc.) |
 
 **Important:** The supervisor claims tasks *before* starting the Claude agent. This avoids interactive permission prompts in `-p` (non-interactive) mode. Agents receive their assigned task in the bootstrap prompt and should NOT call claim commands directly.
 
