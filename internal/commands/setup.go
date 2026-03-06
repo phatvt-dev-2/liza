@@ -110,10 +110,15 @@ func SetupCommand(targetDir string, force bool, stdin io.Reader) error {
 		return fmt.Errorf("failed to write global files: %w", err)
 	}
 
-	fmt.Printf("Liza global config written to %s (%d files):\n", targetDir, len(written))
+	if err := embedded.WritePipelineConfig(targetDir); err != nil {
+		return fmt.Errorf("failed to write pipeline.yaml: %w", err)
+	}
+
+	fmt.Printf("Liza global config written to %s (%d files + pipeline.yaml):\n", targetDir, len(written))
 	for _, p := range written {
 		fmt.Printf("  %s\n", relDisplay(targetDir, p))
 	}
+	fmt.Printf("  %s (pipeline config)\n", relDisplay(targetDir, filepath.Join(targetDir, "pipeline.yaml")))
 	if len(skipFiles) > 0 {
 		fmt.Printf("Skipped %d user-customized files (kept existing).\n", len(skipFiles))
 	}

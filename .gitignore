@@ -32,6 +32,7 @@ coverage.out
 internal/embedded/*
 !internal/embedded/*.go
 !internal/embedded/guardrails-template.md
+!internal/embedded/pipeline.yaml
 /liza
 /liza-mcp
 dist/

@@ -39,6 +39,9 @@ var mcpSettingsContent []byte
 //go:embed "guardrails-template.md"
 var guardrailsTemplateContent []byte
 
+//go:embed "pipeline.yaml"
+var pipelineConfigContent []byte
+
 // PlanGlobalFiles returns the list of absolute paths that WriteGlobalFiles would create,
 // without actually writing anything. Useful for pre-flight checks and verbose output.
 func PlanGlobalFiles(targetDir string) []string {
@@ -435,6 +438,21 @@ func WriteMCPSettings(projectRoot string, stdin io.Reader) error {
 		return fmt.Errorf("failed to write .mcp.json: %w", err)
 	}
 
+	return nil
+}
+
+// WritePipelineConfig writes the embedded pipeline.yaml to the target directory.
+// Only writes if the file doesn't already exist.
+func WritePipelineConfig(targetDir string) error {
+	pipelinePath := filepath.Join(targetDir, "pipeline.yaml")
+	if _, err := os.Stat(pipelinePath); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("checking pipeline.yaml: %w", err)
+	}
+	if err := os.WriteFile(pipelinePath, pipelineConfigContent, 0644); err != nil {
+		return fmt.Errorf("failed to write pipeline.yaml: %w", err)
+	}
 	return nil
 }
 

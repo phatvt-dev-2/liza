@@ -1345,7 +1345,7 @@ func init() {
 
 	// Init command flags
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")
-	initCmd.Flags().String("config", "", "path to pipeline YAML config file")
+	initCmd.Flags().String("config", defaultPipelineConfigPath(), "path to pipeline YAML config file")
 	initCmd.Flags().String("entry-point", "", "entry-point name from pipeline config (requires --config)")
 	initCmd.Flags().String("post-worktree-cmd", "", "shell command to run after worktree creation (e.g. 'make setup')")
 
@@ -1430,6 +1430,20 @@ func init() {
 	rootCmd.PersistentFlags().String("state", "", "path to state.yaml (default: .liza/state.yaml)")
 	rootCmd.PersistentFlags().String("agent-id", "", "agent identifier (overrides LIZA_AGENT_ID env var)")
 	rootCmd.PersistentFlags().String("changed-by", "", "identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')")
+}
+
+// defaultPipelineConfigPath returns ~/.liza/pipeline.yaml if it exists,
+// or empty string otherwise (no global setup, or home dir unresolvable).
+func defaultPipelineConfigPath() string {
+	globalDir, err := paths.GlobalLizaDir()
+	if err != nil {
+		return ""
+	}
+	p := filepath.Join(globalDir, "pipeline.yaml")
+	if _, err := os.Stat(p); err != nil {
+		return ""
+	}
+	return p
 }
 
 func main() {

@@ -82,10 +82,10 @@ liza init "[Goal description]" --spec [spec_ref]
 #   liza init "Add auth" --spec specs/auth-feature.md        # uses custom spec
 #
 # With a pipeline config (code-planning-pair → coding-pair):
+# --config defaults to ~/.liza/pipeline.yaml (installed by liza setup)
 #   liza init "Sub-pipelines phase 2" \
 #     --post-worktree-cmd "make sync-embedded" \
-#     --spec specs/build/2\ -\ Sub-pipelines\ and\ spec\ writing.md \
-#     --config pipeline-phase1.yaml
+#     --spec specs/build/2\ -\ Sub-pipelines\ and\ spec\ writing.md
 
 # Verify
 cat .liza/state.yaml
