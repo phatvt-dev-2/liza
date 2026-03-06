@@ -164,6 +164,70 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 			return "", fmt.Errorf("building code-plan-reviewer context: %w", err)
 		}
 		prompt += context
+
+	case roles.RuntimeEpicPlanner:
+		task := state.FindTask(taskID)
+		if task == nil {
+			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+
+		epicPlannerConfig := prompts.EpicPlannerContextConfig{
+			ProjectRoot: config.ProjectRoot,
+			AgentID:     config.AgentID,
+		}
+		context, err := prompts.BuildEpicPlannerContext(task, epicPlannerConfig)
+		if err != nil {
+			return "", fmt.Errorf("building epic-planner context: %w", err)
+		}
+		prompt += context
+
+	case roles.RuntimeEpicPlanReviewer:
+		task := state.FindTask(taskID)
+		if task == nil {
+			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+
+		epicPlanReviewerConfig := prompts.EpicPlanReviewerContextConfig{
+			ProjectRoot: config.ProjectRoot,
+			AgentID:     config.AgentID,
+		}
+		context, err := prompts.BuildEpicPlanReviewerContext(task, epicPlanReviewerConfig)
+		if err != nil {
+			return "", fmt.Errorf("building epic-plan-reviewer context: %w", err)
+		}
+		prompt += context
+
+	case roles.RuntimeUSWriter:
+		task := state.FindTask(taskID)
+		if task == nil {
+			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+
+		usWriterConfig := prompts.USWriterContextConfig{
+			ProjectRoot: config.ProjectRoot,
+			AgentID:     config.AgentID,
+		}
+		context, err := prompts.BuildUSWriterContext(task, usWriterConfig)
+		if err != nil {
+			return "", fmt.Errorf("building us-writer context: %w", err)
+		}
+		prompt += context
+
+	case roles.RuntimeUSReviewer:
+		task := state.FindTask(taskID)
+		if task == nil {
+			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+
+		usReviewerConfig := prompts.USReviewerContextConfig{
+			ProjectRoot: config.ProjectRoot,
+			AgentID:     config.AgentID,
+		}
+		context, err := prompts.BuildUSReviewerContext(task, usReviewerConfig)
+		if err != nil {
+			return "", fmt.Errorf("building us-reviewer context: %w", err)
+		}
+		prompt += context
 	}
 
 	// Add resume context if initial task

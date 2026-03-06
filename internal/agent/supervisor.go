@@ -222,6 +222,26 @@ func exit42TaskProgressSignature(task *models.Task) string {
 	return string(payload)
 }
 
+// isDoerRuntime returns true if the runtime role is a doer (task implementer) role.
+func isDoerRuntime(role string) bool {
+	switch role {
+	case roles.RuntimeCoder, roles.RuntimeCodePlanner,
+		roles.RuntimeEpicPlanner, roles.RuntimeUSWriter:
+		return true
+	}
+	return false
+}
+
+// isReviewerRuntime returns true if the runtime role is a reviewer role.
+func isReviewerRuntime(role string) bool {
+	switch role {
+	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer,
+		roles.RuntimeEpicPlanReviewer, roles.RuntimeUSReviewer:
+		return true
+	}
+	return false
+}
+
 // CLIExecutor interface for testing (mock vs real CLI)
 type CLIExecutor interface {
 	Execute(ctx context.Context, cliName string, agentID string, prompt string, projectRoot string) (exitCode int, err error)
@@ -394,13 +414,13 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 	// Set execution timeout if not configured
 	if config.ExecutionTimeout == 0 {
-		// Default timeouts based on role
-		switch config.Role {
-		case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
+		// Default timeouts based on role category
+		switch {
+		case isReviewerRuntime(config.Role):
 			config.ExecutionTimeout = 30 * time.Minute
-		case roles.RuntimeCoder, roles.RuntimeCodePlanner:
+		case isDoerRuntime(config.Role):
 			config.ExecutionTimeout = 2 * time.Hour
-		case roles.RuntimeOrchestrator:
+		case config.Role == roles.RuntimeOrchestrator:
 			config.ExecutionTimeout = 4 * time.Hour
 		default:
 			config.ExecutionTimeout = 2 * time.Hour
@@ -430,7 +450,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 
 		// Handle approved merges (reviewer only)
-		if config.Role == roles.RuntimeCodeReviewer || config.Role == roles.RuntimeCodePlanReviewer {
+		if isReviewerRuntime(config.Role) {
 			if err := handleApprovedMerges(config.ProjectRoot, config.AgentID, bb); err != nil {
 				GetLogger().Warn("Merge handler error", "error", err)
 			}
@@ -470,29 +490,27 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		// Claim task (doer/reviewer roles only)
 		var taskID string
 		var claimedTaskID string // Track claimed task for completion logging
-		if config.Role == roles.RuntimeCoder || config.Role == roles.RuntimeCodePlanner {
-			workflowRole := models.RoleCoder
-			if config.Role == roles.RuntimeCodePlanner {
-				workflowRole = models.RoleCodePlanner
+		if isDoerRuntime(config.Role) {
+			workflowRole, convErr := roles.ToWorkflow(config.Role)
+			if convErr != nil {
+				return fmt.Errorf("unknown doer role: %s", config.Role)
 			}
 
 			taskID, _, err = claimDoerTask(config.ProjectRoot, config.AgentID, workflowRole, bb)
 			if err != nil {
-				// Error already logged in claimCoderTask
 				time.Sleep(5 * time.Second)
 				continue
 			}
 			claimedTaskID = taskID
-		} else if config.Role == roles.RuntimeCodeReviewer || config.Role == roles.RuntimeCodePlanReviewer {
-			workflowRole := models.RoleCodeReviewer
-			if config.Role == roles.RuntimeCodePlanReviewer {
-				workflowRole = models.RoleCodePlanReviewer
+		} else if isReviewerRuntime(config.Role) {
+			workflowRole, convErr := roles.ToWorkflow(config.Role)
+			if convErr != nil {
+				return fmt.Errorf("unknown reviewer role: %s", config.Role)
 			}
 
 			var reviewCommit string
 			taskID, _, reviewCommit, err = claimReviewerTaskForRole(config.ProjectRoot, config.AgentID, workflowRole, 1800, bb)
 			if err != nil {
-				// Error already logged in claimReviewerTask
 				time.Sleep(5 * time.Second)
 				continue // Race condition, retry
 			}
@@ -545,8 +563,8 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		case 0:
 			GetLogger().Info("Agent completed, checking for more work")
 
-			// Log task submission if it happened (coder role only)
-			if (config.Role == roles.RuntimeCoder || config.Role == roles.RuntimeCodePlanner) && claimedTaskID != "" {
+			// Log task submission if it happened (doer roles only)
+			if isDoerRuntime(config.Role) && claimedTaskID != "" {
 				if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID, config.ProjectRoot); err != nil {
 					GetLogger().Warn("Failed to log task submission", "error", err, "task_id", claimedTaskID)
 				}

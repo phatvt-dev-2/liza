@@ -28,7 +28,8 @@ func getRoleWaitConfig(state *models.State, role string) (pollInterval, maxWait 
 	case roles.RuntimeOrchestrator:
 		pollSeconds = nonZeroOr(state.Config.OrchestratorPollInterval, models.DefaultOrchestratorPollInterval)
 		maxWaitSeconds = nonZeroOr(state.Config.OrchestratorMaxWait, models.DefaultOrchestratorMaxWait)
-	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
+	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer,
+		roles.RuntimeEpicPlanReviewer, roles.RuntimeUSReviewer:
 		pollSeconds = nonZeroOr(state.Config.ReviewerPollInterval, models.DefaultReviewerPollInterval)
 		maxWaitSeconds = nonZeroOr(state.Config.ReviewerMaxWait, models.DefaultReviewerMaxWait)
 	default:
@@ -57,6 +58,14 @@ func waitForWork(ctx context.Context, bb *db.Blackboard, projectRoot string, rol
 		return waitForReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	case roles.RuntimeCodePlanReviewer:
 		return waitForCodePlanReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
+	case roles.RuntimeEpicPlanner:
+		return waitForEpicPlannerWork(ctx, bb, projectRoot, config.AgentID, pollInterval, maxWait)
+	case roles.RuntimeEpicPlanReviewer:
+		return waitForEpicPlanReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
+	case roles.RuntimeUSWriter:
+		return waitForUSWriterWork(ctx, bb, projectRoot, config.AgentID, pollInterval, maxWait)
+	case roles.RuntimeUSReviewer:
+		return waitForUSReviewerWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	case roles.RuntimeOrchestrator:
 		return waitForOrchestratorWork(ctx, bb, projectRoot, pollInterval, maxWait)
 	default:
@@ -325,6 +334,64 @@ func waitForCodePlanReviewerWork(ctx context.Context, bb *db.Blackboard, project
 				return true, fmt.Sprintf("Found %d code-plan-reviewable task(s)", count)
 			}
 			return false, "No code-plan-reviewable tasks"
+		})
+}
+
+func waitForEpicPlannerWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
+	pr := ops.LoadResolverForModels(projectRoot)
+	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
+		func(s *models.State) (bool, string) {
+			claimable := models.CountClaimableTasks(s, models.RoleEpicPlanner, pr)
+			resumableHandoffs := countResumableHandoffTasks(s, agentID, pr)
+			logMsg := fmt.Sprintf("epic-planner: %d claimable, %d resumable handoffs", claimable, resumableHandoffs)
+			return claimable > 0 || resumableHandoffs > 0, logMsg
+		})
+}
+
+func waitForEpicPlanReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
+	if cleared, err := ops.ClearStaleReviewClaims(projectRoot); err != nil {
+		GetLogger().Warn("Failed to clear stale review claims before epic-plan-reviewer wait", "error", err)
+	} else if cleared > 0 {
+		GetLogger().Info("Cleared stale review claims before epic-plan-reviewer wait", "count", cleared)
+	}
+
+	pr := ops.LoadResolverForModels(projectRoot)
+	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
+		func(s *models.State) (bool, string) {
+			count := models.CountReviewableTasks(s, models.RoleEpicPlanReviewer, pr)
+			if count > 0 {
+				return true, fmt.Sprintf("Found %d epic-plan-reviewable task(s)", count)
+			}
+			return false, "No epic-plan-reviewable tasks"
+		})
+}
+
+func waitForUSWriterWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
+	pr := ops.LoadResolverForModels(projectRoot)
+	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
+		func(s *models.State) (bool, string) {
+			claimable := models.CountClaimableTasks(s, models.RoleUSWriter, pr)
+			resumableHandoffs := countResumableHandoffTasks(s, agentID, pr)
+			logMsg := fmt.Sprintf("us-writer: %d claimable, %d resumable handoffs", claimable, resumableHandoffs)
+			return claimable > 0 || resumableHandoffs > 0, logMsg
+		})
+}
+
+func waitForUSReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
+	if cleared, err := ops.ClearStaleReviewClaims(projectRoot); err != nil {
+		GetLogger().Warn("Failed to clear stale review claims before us-reviewer wait", "error", err)
+	} else if cleared > 0 {
+		GetLogger().Info("Cleared stale review claims before us-reviewer wait", "count", cleared)
+	}
+
+	pr := ops.LoadResolverForModels(projectRoot)
+	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
+		func(s *models.State) (bool, string) {
+			count := models.CountReviewableTasks(s, models.RoleUSReviewer, pr)
+			if count > 0 {
+				return true, fmt.Sprintf("Found %d us-reviewable task(s)", count)
+			}
+			return false, "No us-reviewable tasks"
 		})
 }
 
