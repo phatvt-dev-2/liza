@@ -22,7 +22,7 @@ Each task has a `type` field that determines which roles participate in its life
 
 When the `type` field is empty, it defaults to `"coding"` for backward compatibility. Unknown types are rejected by `liza validate`.
 
-The task type is set by the Planner during task creation (via `liza_add_task` or `liza add-task --type`). Coders and Code Reviewers can only claim tasks whose type includes their role in the workflow.
+The task type is set by the Planner during task creation (via `liza_add_tasks` or `liza add-task --type`). Coders and Code Reviewers can only claim tasks whose type includes their role in the workflow.
 
 See [State Machines — Type-Aware Claimability](../architecture/state-machines.md#type-aware-claimability) for the formal claimability rule.
 

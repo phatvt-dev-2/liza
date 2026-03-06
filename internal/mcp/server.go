@@ -398,50 +398,16 @@ func (s *Server) registerReadOnlyResources() {
 
 // registerMutationTools registers Phase 2 mutation tools
 func (s *Server) registerMutationTools() {
-	// liza_add_task tool
+	// liza_add_tasks tool (batch endpoint)
 	s.registerTool(protocol.Tool{
-		Name:        "liza_add_task",
-		Description: "Add a new task to the workspace. Requires orchestrator role.",
+		Name:        "liza_add_tasks",
+		Description: "Add one or more tasks to the workspace. Requires orchestrator role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
-				"id": {
-					Type:        "string",
-					Description: "Unique task ID",
-				},
-				"desc": {
-					Type:        "string",
-					Description: "Task description",
-				},
-				"spec": {
-					Type:        "string",
-					Description: "Reference to specification file",
-				},
-				"done": {
-					Type:        "string",
-					Description: "Completion criteria",
-				},
-				"scope": {
-					Type:        "string",
-					Description: "Task scope description",
-				},
-				"priority": {
-					Type:        "number",
-					Description: "Task priority (default: 1)",
-					Default:     1,
-				},
-				"depends": {
+				"tasks": {
 					Type:        "array",
-					Description: "List of task IDs this task depends on",
-				},
-				"type": {
-					Type:        "string",
-					Description: "Task type determining role workflow (default: coding)",
-					Default:     "coding",
-				},
-				"role_pair": {
-					Type:        "string",
-					Description: "Optional role-pair key (e.g. code-planning-pair) to select initial status",
+					Description: "Array of task objects. Each object has: id (string, required), desc (string, required), spec (string, required), done (string, required), scope (string, required), priority (number, default 1), depends (array of strings), type (string, default 'coding'), role_pair (string)",
 				},
 				"agent_id": {
 					Type:        "string",
@@ -449,9 +415,31 @@ func (s *Server) registerMutationTools() {
 					Default:     "orchestrator-1",
 				},
 			},
+			Required: []string{"tasks"},
+		},
+	}, s.handleAddTasks)
+
+	// liza_add_task (deprecated compatibility alias — remove after one release)
+	s.registerTool(protocol.Tool{
+		Name:        "liza_add_task",
+		Description: "DEPRECATED: Use liza_add_tasks instead. Add a single task to the workspace.",
+		InputSchema: protocol.InputSchema{
+			Type: "object",
+			Properties: map[string]protocol.Property{
+				"id":        {Type: "string", Description: "Unique task ID"},
+				"desc":      {Type: "string", Description: "Task description"},
+				"spec":      {Type: "string", Description: "Reference to specification file"},
+				"done":      {Type: "string", Description: "Completion criteria"},
+				"scope":     {Type: "string", Description: "Task scope description"},
+				"priority":  {Type: "number", Description: "Task priority (default: 1)", Default: 1},
+				"depends":   {Type: "array", Description: "List of task IDs this task depends on"},
+				"type":      {Type: "string", Description: "Task type (default: coding)", Default: "coding"},
+				"role_pair": {Type: "string", Description: "Role pair for the task (e.g. 'code-planning-pair')"},
+				"agent_id":  {Type: "string", Description: "Agent ID performing the action (default: orchestrator-1)", Default: "orchestrator-1"},
+			},
 			Required: []string{"id", "desc", "spec", "done", "scope"},
 		},
-	}, s.handleAddTask)
+	}, s.handleAddTaskCompat)
 
 	// liza_claim_task tool
 	s.registerTool(protocol.Tool{

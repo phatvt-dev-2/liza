@@ -390,7 +390,7 @@ Bottlenecks that emerge under load.
 **Category:** STRESS POINT
 **Status:** RESOLVED (`6fe5bcc`)
 
-**Issue:** Equivalent task-creation mutations do not share equivalent validation pressure by interface. CLI `add-task` executes post-mutation `ValidateCommand`, while MCP `liza_add_task` persists through `ops.AddTask` and returns without that same immediate full-state validation pass.
+**Issue:** Equivalent task-creation mutations do not share equivalent validation pressure by interface. CLI `add-task` executes post-mutation `ValidateCommand`, while MCP `liza_add_tasks` persists through `ops.AddTask` and returns without that same immediate full-state validation pass.
 
 **Fix:** Validation logic extracted from `commands/validate.go` (now a 28 LOC thin wrapper) into a shared `internal/statevalidate` package. `ops.AddTask` now runs `statevalidate.ValidateStateFile()` after every successful write and returns a typed `PostWriteValidationError` when mutation succeeds but validation fails. MCP classifies this as `ValidationError`. Both CLI and MCP ingress paths now share identical validation pressure at the ops layer.
 

@@ -52,7 +52,7 @@ For global settings setup and provider-specific config (Claude, Codex, Gemini), 
 - Ensure `.liza/` directory exists
 
 **Permission denied:**
-- Verify `settings.json` includes MCP tool permissions (e.g., `"mcp__liza__liza_add_task"`)
+- Verify `settings.json` includes MCP tool permissions (e.g., `"mcp__liza__liza_add_tasks"`)
 - Ensure `enableAllProjectMcpServers: true` is set
 - Ensure `enabledMcpjsonServers: ["liza"]` is set
 
@@ -64,7 +64,7 @@ For global settings setup and provider-specific config (Claude, Codex, Gemini), 
 
 Both interfaces operate on the same `state.yaml` with proper locking.
 
-| | CLI (`liza add-task`) | MCP (`liza_add_task`) |
+| | CLI (`liza add-task`) | MCP (`liza_add_tasks`) |
 |---|---|---|
 | Use case | Manual / interactive | Programmatic / agent |
 | Output | Human-readable text | Structured JSON |

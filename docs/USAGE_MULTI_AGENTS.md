@@ -313,7 +313,7 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
       "Read(~/.liza/**)",
       "mcp__liza__liza_get",
       "mcp__liza__liza_status",
-      "mcp__liza__liza_add_task",
+      "mcp__liza__liza_add_tasks",
       "mcp__liza__liza_submit_for_review",
       "mcp__liza__liza_submit_verdict",
       "Bash(git add:*)",
@@ -326,7 +326,7 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
 }
 ```
 
-Both CLI commands (e.g., `liza add-task`) and MCP tools (e.g., `liza_add_task`) operate on the same `.liza/state.yaml` file. Claude Code agents use MCP tools for better error handling; the CLI is for manual use.
+Both CLI commands (e.g., `liza add-task`) and MCP tools (e.g., `liza_add_tasks`) operate on the same `.liza/state.yaml` file. Claude Code agents use MCP tools for better error handling; the CLI is for manual use.
 
 The root-level `claude-settings.json` and `mcp.json` are templates embedded into the binary. `liza init` writes the active copies to `.claude/settings.json` and `.mcp.json` in the project directory.
 

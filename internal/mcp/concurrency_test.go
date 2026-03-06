@@ -3,6 +3,7 @@ package mcp
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -102,13 +103,17 @@ func TestConcurrentAddTask(t *testing.T) {
 		i := i // capture loop variable
 		go func() {
 			defer wg.Done()
-			_, errors[i] = server.handleAddTask(map[string]any{
-				"id":       fmt.Sprintf("task-concurrent-%d", i),
-				"desc":     fmt.Sprintf("Concurrent task %d", i),
-				"spec":     "specs/test-spec.md",
-				"done":     "Task is complete",
-				"scope":    "Test concurrent adds",
-				"priority": 1,
+			_, errors[i] = server.handleAddTasks(map[string]any{
+				"tasks": []any{
+					map[string]any{
+						"id":       fmt.Sprintf("task-concurrent-%d", i),
+						"desc":     fmt.Sprintf("Concurrent task %d", i),
+						"spec":     "specs/test-spec.md",
+						"done":     "Task is complete",
+						"scope":    "Test concurrent adds",
+						"priority": 1,
+					},
+				},
 				"agent_id": "orchestrator-1",
 			})
 		}()
@@ -153,55 +158,72 @@ func TestConcurrentAddTaskSameID(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
+	var result1, result2 any
 	var err1, err2 error
 
 	// Two goroutines try to add the same task ID simultaneously
 	go func() {
 		defer wg.Done()
-		_, err1 = server.handleAddTask(map[string]any{
-			"id":       "task-duplicate",
-			"desc":     "Duplicate task from goroutine 1",
-			"spec":     "specs/test-spec.md",
-			"done":     "Task is complete",
-			"scope":    "Test duplicate",
-			"priority": 1,
+		result1, err1 = server.handleAddTasks(map[string]any{
+			"tasks": []any{
+				map[string]any{
+					"id":       "task-duplicate",
+					"desc":     "Duplicate task from goroutine 1",
+					"spec":     "specs/test-spec.md",
+					"done":     "Task is complete",
+					"scope":    "Test duplicate",
+					"priority": 1,
+				},
+			},
 			"agent_id": "orchestrator-1",
 		})
 	}()
 
 	go func() {
 		defer wg.Done()
-		_, err2 = server.handleAddTask(map[string]any{
-			"id":       "task-duplicate",
-			"desc":     "Duplicate task from goroutine 2",
-			"spec":     "specs/test-spec.md",
-			"done":     "Task is complete",
-			"scope":    "Test duplicate",
-			"priority": 1,
+		result2, err2 = server.handleAddTasks(map[string]any{
+			"tasks": []any{
+				map[string]any{
+					"id":       "task-duplicate",
+					"desc":     "Duplicate task from goroutine 2",
+					"spec":     "specs/test-spec.md",
+					"done":     "Task is complete",
+					"scope":    "Test duplicate",
+					"priority": 1,
+				},
+			},
 			"agent_id": "orchestrator-1",
 		})
 	}()
 
 	wg.Wait()
 
-	// Exactly one should succeed
-	successCount := 0
-	if err1 == nil {
-		successCount++
-		t.Log("Goroutine 1 succeeded")
-	} else {
-		t.Logf("Goroutine 1 failed: %v", err1)
+	// Both calls should return no handler-level error (batch wraps per-task errors)
+	if err1 != nil {
+		t.Fatalf("Goroutine 1 handler error: %v", err1)
+	}
+	if err2 != nil {
+		t.Fatalf("Goroutine 2 handler error: %v", err2)
 	}
 
-	if err2 == nil {
+	// Exactly one should have "Added 1/1" (success), the other "Added 0/1" (per-task error)
+	getText := func(r any) string {
+		content := r.(map[string]any)["content"].([]any)
+		return content[0].(map[string]any)["text"].(string)
+	}
+	text1 := getText(result1)
+	text2 := getText(result2)
+
+	successCount := 0
+	if strings.Contains(text1, "Added 1/1") {
 		successCount++
-		t.Log("Goroutine 2 succeeded")
-	} else {
-		t.Logf("Goroutine 2 failed: %v", err2)
+	}
+	if strings.Contains(text2, "Added 1/1") {
+		successCount++
 	}
 
 	if successCount != 1 {
-		t.Errorf("Expected exactly 1 success for duplicate task ID, got %d", successCount)
+		t.Errorf("Expected exactly 1 success for duplicate task ID, got %d\n  result1: %s\n  result2: %s", successCount, text1, text2)
 	}
 
 	// Verify only one task exists with that ID

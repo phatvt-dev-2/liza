@@ -92,10 +92,20 @@ func TestToolSchemaRequiredMatchesHandlerExtraction(t *testing.T) {
 		t.Fatalf("expected ~20 tools, got %d (%v)", len(toolNames), toolNames)
 	}
 
+	// Deprecated compatibility wrappers delegate to the real handler and don't
+	// extract params directly, so AST-based analysis doesn't apply.
+	deprecatedCompat := map[string]bool{
+		"liza_add_task": true, // delegates to handleAddTasks
+	}
+
 	for _, toolName := range toolNames {
 		tool, ok := server.GetTool(toolName)
 		if !ok {
 			t.Fatalf("tool %q not found", toolName)
+		}
+
+		if deprecatedCompat[toolName] {
+			continue
 		}
 
 		handlerName, ok := toolHandlers[toolName]
@@ -157,9 +167,9 @@ func TestHandlerParamExtractionKnownPatterns(t *testing.T) {
 			extractedMustHave: []string{"format"},
 		},
 		{
-			handler:           "handleAddTask",
-			required:          []string{"id", "desc", "spec", "done", "scope"},
-			extractedMustHave: []string{"agent_id", "priority", "depends", "type"},
+			handler:           "handleAddTasks",
+			required:          []string{"tasks"},
+			extractedMustHave: []string{"agent_id", "tasks"},
 		},
 		{
 			handler:           "handleClaimTask",

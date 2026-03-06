@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -180,6 +181,60 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 		return nil, &PostWriteValidationError{Err: err}
 	}
 
+	return result, nil
+}
+
+// AddTasksInput represents the input for batch task creation.
+type AddTasksInput struct {
+	Tasks          []AddTaskInput
+	OrchestratorID string
+}
+
+// AddTasksResult contains the outcome of batch task creation.
+type AddTasksResult struct {
+	Results []AddTaskItemResult
+}
+
+// AddTaskItemResult contains the outcome of adding a single task in a batch.
+type AddTaskItemResult struct {
+	TaskID   string
+	Success  bool
+	Error    string // empty on success
+	Warnings []string
+}
+
+// AddTasks adds multiple tasks in a single call. Each task is added
+// independently; failed tasks don't block subsequent ones.
+func AddTasks(statePath, logPath string, input *AddTasksInput) (*AddTasksResult, error) {
+	if len(input.Tasks) == 0 {
+		return nil, fmt.Errorf("at least one task is required")
+	}
+	orchestratorID := input.OrchestratorID
+	if orchestratorID == "" {
+		orchestratorID = "orchestrator-1"
+	}
+	result := &AddTasksResult{Results: make([]AddTaskItemResult, 0, len(input.Tasks))}
+	for i := range input.Tasks {
+		r, err := AddTask(statePath, logPath, &input.Tasks[i], orchestratorID)
+		item := AddTaskItemResult{TaskID: input.Tasks[i].ID}
+		if err != nil {
+			// PostWriteValidationError means the task was persisted but state
+			// validation failed. State is suspect — halt the batch and propagate
+			// as a top-level error so the MCP layer can classify it properly.
+			var postWriteErr *PostWriteValidationError
+			if errors.As(err, &postWriteErr) {
+				item.Error = err.Error()
+				result.Results = append(result.Results, item)
+				return result, err
+			}
+			item.Error = err.Error()
+		} else {
+			item.Success = true
+			item.TaskID = r.TaskID
+			item.Warnings = r.Warnings
+		}
+		result.Results = append(result.Results, item)
+	}
 	return result, nil
 }
 

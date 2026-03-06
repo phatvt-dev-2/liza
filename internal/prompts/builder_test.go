@@ -65,7 +65,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			},
 			wantNotContain: []string{
 				// Role-specific tools should NOT be in base prompt
-				"liza_add_task",
+				"liza_add_tasks",
 				"liza_submit_for_review",
 				"liza_submit_verdict",
 				// shared_reference content should NOT be in base prompt
@@ -162,7 +162,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				"- Hypothesis exhausted: 0",
 				"- Immediate discoveries: 0",
 				"ORCHESTRATOR COMMANDS:",
-				"liza_add_task",
+				"liza_add_tasks",
 				"liza_supersede_task",
 				"liza_wt_delete",
 				"This is initial planning",
@@ -1069,7 +1069,7 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 
 	// --- NEGATIVE: role-specific content must NOT leak into base ---
 	assertAbsent("no-role-leak", []string{
-		"liza_add_task",
+		"liza_add_tasks",
 		"liza_submit_for_review",
 		"liza_submit_verdict",
 		"WORKTREE GIT RULES",
@@ -1464,7 +1464,7 @@ func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 			wantTrigger: "BLOCKED_TASKS",
 			wantContains: []string{
 				"Analyze and resolve immediately",
-				"execute liza_add_task tool NOW",
+				"execute liza_add_tasks tool NOW",
 				"fallback state edit + liza_validate",
 				"execute tools NOW",
 				"Execute all state-modifying tools in this session",
@@ -1533,7 +1533,7 @@ func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 			wantContains: []string{
 				"Urgent discoveries need immediate action",
 				"execute decision NOW",
-				"execute liza_add_task tool NOW",
+				"execute liza_add_tasks tool NOW",
 				"fallback state edit + liza_validate",
 				"All discovered items must be processed and all tools executed in this session",
 			},

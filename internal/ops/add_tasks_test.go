@@ -431,3 +431,94 @@ func TestAddTask_PostWriteValidationFailure(t *testing.T) {
 		t.Fatalf("error = %q, want to contain %q", err.Error(), "state validation failed")
 	}
 }
+
+func TestAddTasks_PartialSuccess(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	logFile := filepath.Join(tmpDir, ".liza", "log.jsonl")
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	testhelpers.CreateSpecFile(t, tmpDir, "feature.md", "# Feature\n")
+
+	state := testhelpers.CreateValidState()
+	// Pre-seed a task so the second input is a duplicate
+	state.Tasks = append(state.Tasks, models.Task{
+		ID:          "dup-task",
+		Description: "Existing task",
+		Status:      models.TaskStatusReady,
+		Priority:    1,
+		SpecRef:     "specs/vision.md",
+		DoneWhen:    "done",
+		Scope:       "scope",
+		Created:     time.Now().UTC(),
+		History:     []models.TaskHistoryEntry{},
+	})
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	input := &AddTasksInput{
+		OrchestratorID: "orchestrator-1",
+		Tasks: []AddTaskInput{
+			{
+				ID:          "new-task",
+				Description: "A new task",
+				SpecRef:     "specs/feature.md",
+				DoneWhen:    "Tests pass",
+				Scope:       "internal/ops",
+				Priority:    1,
+			},
+			{
+				ID:          "dup-task",
+				Description: "Duplicate task",
+				SpecRef:     "specs/vision.md",
+				DoneWhen:    "done",
+				Scope:       "scope",
+				Priority:    1,
+			},
+		},
+	}
+
+	result, err := AddTasks(stateFile, logFile, input)
+	if err != nil {
+		t.Fatalf("AddTasks() returned error: %v", err)
+	}
+
+	if len(result.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(result.Results))
+	}
+
+	// First task should succeed
+	if !result.Results[0].Success {
+		t.Errorf("first task should succeed, got error: %s", result.Results[0].Error)
+	}
+	if result.Results[0].TaskID != "new-task" {
+		t.Errorf("first task ID = %q, want %q", result.Results[0].TaskID, "new-task")
+	}
+
+	// Second task should fail (duplicate)
+	if result.Results[1].Success {
+		t.Error("second task should fail (duplicate ID)")
+	}
+	if !strings.Contains(result.Results[1].Error, "already exists") {
+		t.Errorf("second task error = %q, want to contain 'already exists'", result.Results[1].Error)
+	}
+
+	// Verify the first task was actually added
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.FindTask("new-task") == nil {
+		t.Error("new-task should exist in state")
+	}
+}
+
+func TestAddTasks_EmptyInput(t *testing.T) {
+	input := &AddTasksInput{Tasks: []AddTaskInput{}}
+	_, err := AddTasks("/nonexistent", "/dev/null", input)
+	if err == nil {
+		t.Fatal("expected error for empty tasks")
+	}
+	if !strings.Contains(err.Error(), "at least one task") {
+		t.Errorf("error = %q, want 'at least one task'", err.Error())
+	}
+}

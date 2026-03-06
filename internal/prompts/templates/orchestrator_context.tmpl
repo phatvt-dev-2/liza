@@ -23,8 +23,8 @@ SPRINT STATE:
 - Immediate discoveries: {{.ImmediateDiscoveries}}
 
 ORCHESTRATOR COMMANDS:
-- liza_add_task — Add task to blackboard (atomic, with validation)
-  Tool parameters: {"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...], "agent_id": "orchestrator-1"}
+- liza_add_tasks — Add one or more tasks to blackboard (atomic per task, with validation)
+  Tool parameters: {"tasks": [{"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...]}], "agent_id": "orchestrator-1"}
 - liza_supersede_task — Supersede task
   Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "orchestrator-1"}
 - liza_wt_delete — Delete worktree for abandoned/superseded/blocked tasks
@@ -58,7 +58,7 @@ FIELD FORMAT GUIDELINES:
 - spec: path to spec optionally with #anchor
 
 TASK CREATION ORDER:
-When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. liza_add_task validates that all `depends` IDs already exist; creating a task that references a not-yet-created dependency will fail.
+When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. liza_add_tasks validates that all `depends` IDs already exist; creating a task that references a not-yet-created dependency will fail.
 
 ERROR RECOVERY:
 On MCP tool errors, diagnose the root cause before retrying. Read the error message, investigate the constraint that failed (e.g. missing dependency, invalid state), and fix the underlying issue. Do NOT retry the same call blindly.

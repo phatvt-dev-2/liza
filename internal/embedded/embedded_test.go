@@ -743,14 +743,14 @@ func TestWriteClaudeSettings_NewFile(t *testing.T) {
 		if !ok {
 			continue
 		}
-		// Check for explicit tool format: mcp__liza__liza_add_task
+		// Check for explicit tool format: mcp__liza__liza_add_tasks
 		if strings.HasPrefix(permStr, "mcp__liza__") {
 			foundLizaMCP = true
 			break
 		}
 	}
 	if !foundLizaMCP {
-		t.Errorf("Expected liza MCP tools in allow array (e.g., mcp__liza__liza_add_task)")
+		t.Errorf("Expected liza MCP tools in allow array (e.g., mcp__liza__liza_add_tasks)")
 	}
 }
 

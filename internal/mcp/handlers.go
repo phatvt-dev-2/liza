@@ -265,34 +265,8 @@ func (s *Server) readStateResource() (any, error) {
 	return resourceContent("liza://state", "application/x-yaml", string(data)), nil
 }
 
-// handleAddTask implements the liza_add_task tool
-// Maps to: liza add-task
-func (s *Server) handleAddTask(params map[string]any) (any, error) {
-	id, err := requireString(params, "id")
-	if err != nil {
-		return nil, err
-	}
-
-	description, err := requireString(params, "desc")
-	if err != nil {
-		return nil, err
-	}
-
-	specRef, err := requireString(params, "spec")
-	if err != nil {
-		return nil, err
-	}
-
-	doneWhen, err := requireString(params, "done")
-	if err != nil {
-		return nil, err
-	}
-
-	scope, err := requireString(params, "scope")
-	if err != nil {
-		return nil, err
-	}
-
+// handleAddTasks implements the liza_add_tasks tool (batch endpoint).
+func (s *Server) handleAddTasks(params map[string]any) (any, error) {
 	agentID, _ := params["agent_id"].(string)
 	if agentID == "" {
 		agentID = "orchestrator-1"
@@ -302,41 +276,125 @@ func (s *Server) handleAddTask(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	priority := 1
-	if p, ok := params["priority"].(float64); ok {
-		priority = int(p)
-	} else if p, ok := params["priority"].(int); ok {
-		priority = p
+	rawTasks, ok := params["tasks"].([]any)
+	if !ok {
+		return nil, fmt.Errorf("tasks parameter must be an array")
+	}
+	if len(rawTasks) == 0 {
+		return nil, fmt.Errorf("tasks array must not be empty")
 	}
 
-	dependsOn := extractStringSlice(params, "depends")
-
-	taskType, _ := params["type"].(string)
-	rolePair, _ := params["role_pair"].(string)
-
-	input := &ops.AddTaskInput{
-		ID:          id,
-		Type:        taskType,
-		RolePair:    rolePair,
-		Description: description,
-		SpecRef:     specRef,
-		DoneWhen:    doneWhen,
-		Scope:       scope,
-		Priority:    priority,
-		DependsOn:   dependsOn,
-	}
-
-	statePath := paths.New(s.projectRoot).StatePath()
-	result, err := ops.AddTask(statePath, s.logPath, input, agentID)
+	tasks, err := extractTaskInputs(rawTasks)
 	if err != nil {
-		return nil, fmt.Errorf("add task failed: %w", err)
+		return nil, err
 	}
 
-	msg := fmt.Sprintf("Task %s added successfully", id)
-	for _, w := range result.Warnings {
-		msg += fmt.Sprintf("\nwarning: %s", w)
+	input := &ops.AddTasksInput{Tasks: tasks, OrchestratorID: agentID}
+	statePath := paths.New(s.projectRoot).StatePath()
+	result, err := ops.AddTasks(statePath, s.logPath, input)
+	if err != nil {
+		return nil, fmt.Errorf("add tasks failed: %w", err)
 	}
-	return textResult(msg)
+
+	return textResult(formatAddTasksResult(result))
+}
+
+// extractTaskInputs converts a raw JSON array into []ops.AddTaskInput.
+// Returns indexed errors for malformed elements.
+func extractTaskInputs(raw []any) ([]ops.AddTaskInput, error) {
+	out := make([]ops.AddTaskInput, 0, len(raw))
+	for i, v := range raw {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("tasks[%d]: must be an object, got %T", i, v)
+		}
+
+		id := stringFromMap(m, "id")
+		if id == "" {
+			return nil, fmt.Errorf("tasks[%d]: missing required field 'id'", i)
+		}
+		desc := stringFromMap(m, "desc")
+		if desc == "" {
+			return nil, fmt.Errorf("tasks[%d]: missing required field 'desc'", i)
+		}
+		spec := stringFromMap(m, "spec")
+		if spec == "" {
+			return nil, fmt.Errorf("tasks[%d]: missing required field 'spec'", i)
+		}
+		done := stringFromMap(m, "done")
+		if done == "" {
+			return nil, fmt.Errorf("tasks[%d]: missing required field 'done'", i)
+		}
+		scope := stringFromMap(m, "scope")
+		if scope == "" {
+			return nil, fmt.Errorf("tasks[%d]: missing required field 'scope'", i)
+		}
+
+		priority := 1
+		if p, ok := m["priority"].(float64); ok {
+			priority = int(p)
+		} else if p, ok := m["priority"].(int); ok {
+			priority = p
+		}
+
+		depends := extractStringSlice(m, "depends")
+		taskType := stringFromMap(m, "type")
+		rolePair := stringFromMap(m, "role_pair")
+
+		out = append(out, ops.AddTaskInput{
+			ID:          id,
+			Type:        taskType,
+			RolePair:    rolePair,
+			Description: desc,
+			SpecRef:     spec,
+			DoneWhen:    done,
+			Scope:       scope,
+			Priority:    priority,
+			DependsOn:   depends,
+		})
+	}
+	return out, nil
+}
+
+// formatAddTasksResult builds a human-readable summary of batch results.
+func formatAddTasksResult(result *ops.AddTasksResult) string {
+	succeeded := 0
+	for _, r := range result.Results {
+		if r.Success {
+			succeeded++
+		}
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Added %d/%d tasks", succeeded, len(result.Results))
+	for _, r := range result.Results {
+		if r.Success {
+			line := fmt.Sprintf("\n  %s: added", r.TaskID)
+			for _, w := range r.Warnings {
+				line += fmt.Sprintf(" (warning: %s)", w)
+			}
+			b.WriteString(line)
+		} else {
+			fmt.Fprintf(&b, "\n  %s: error: %s", r.TaskID, r.Error)
+		}
+	}
+	return b.String()
+}
+
+// handleAddTaskCompat is a deprecated compatibility wrapper for liza_add_task.
+// It wraps the single-task params into a batch call to handleAddTasks.
+func (s *Server) handleAddTaskCompat(params map[string]any) (any, error) {
+	agentID, _ := params["agent_id"].(string)
+	task := make(map[string]any, len(params))
+	for k, v := range params {
+		if k != "agent_id" {
+			task[k] = v
+		}
+	}
+	return s.handleAddTasks(map[string]any{
+		"tasks":    []any{task},
+		"agent_id": agentID,
+	})
 }
 
 // handleClaimTask implements the liza_claim_task tool

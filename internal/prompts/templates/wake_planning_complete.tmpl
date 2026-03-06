@@ -15,13 +15,9 @@ Do NOT wait for permission.
      {{- end }}
 {{- end }}
 
-2. For EACH output entry, create a coding task using liza_add_task:
-   - id: derive from parent task (e.g., {parent-id}-code-{N})
-   - desc: from output entry desc
-   - done: from output entry done_when
-   - scope: from output entry scope
-   - spec: from output entry spec_ref (or parent task spec)
-   - type: "coding"
+2. Create coding tasks using liza_add_tasks (batch all in one call):
+   - tasks: array of task objects, one per output entry
+   - Each task: id (derive from parent, e.g., {parent-id}-code-{N}), desc, done, scope, spec, type: "coding"
    - depends: respect ordering — later tasks may depend on earlier ones
 
 3. After all tasks are created, run liza_update_sprint_metrics.

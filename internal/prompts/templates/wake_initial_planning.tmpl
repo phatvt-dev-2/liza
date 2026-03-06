@@ -16,17 +16,19 @@ Do NOT wait for permission.
 
 Entry-point "{{.GoalEntryPoint}}" was specified. Dispatch to {{.ResolvedDisplayName}}.
 
-Use liza_add_task once with:
+Use liza_add_tasks once with:
 {
-  "id": "{{.ResolvedTaskIDPrefix}}-1",
-  "desc": "Create implementation plan for goal: <goal summary>",
-  "spec": "{{.GoalSpecRef}}",
-  "done": "Implementation plan is complete, reviewable, and submitted for review",
-  "scope": "Planning only: analyze goal and produce actionable plan/output. No implementation.",
-  "priority": 1,
-  "depends": [],
-  "type": "coding",
-  "role_pair": "{{.ResolvedRolePair}}",
+  "tasks": [{
+    "id": "{{.ResolvedTaskIDPrefix}}-1",
+    "desc": "Create implementation plan for goal: <goal summary>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "Implementation plan is complete, reviewable, and submitted for review",
+    "scope": "Planning only: analyze goal and produce actionable plan/output. No implementation.",
+    "priority": 1,
+    "depends": [],
+    "type": "coding",
+    "role_pair": "{{.ResolvedRolePair}}"
+  }],
   "agent_id": "orchestrator-1"
 }
 
@@ -49,17 +51,19 @@ CLASSIFICATION GUIDANCE:
 - Choose "general-objective" for vision documents, broad objectives, or when uncertain.
   Default to "general-objective" — skipping the spec phase is riskier than redundant refinement.
 
-After classifying, use liza_add_task once with the chosen role_pair:
+After classifying, use liza_add_tasks once with the chosen role_pair:
 {
-  "id": "<chosen-role-pair-without-pair-suffix>-1",
-  "desc": "Create implementation plan for goal: <goal summary>",
-  "spec": "{{.GoalSpecRef}}",
-  "done": "Implementation plan is complete, reviewable, and submitted for review",
-  "scope": "Planning only: analyze goal and produce actionable plan/output. No implementation.",
-  "priority": 1,
-  "depends": [],
-  "type": "coding",
-  "role_pair": "<chosen-role-pair>",
+  "tasks": [{
+    "id": "<chosen-role-pair-without-pair-suffix>-1",
+    "desc": "Create implementation plan for goal: <goal summary>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "Implementation plan is complete, reviewable, and submitted for review",
+    "scope": "Planning only: analyze goal and produce actionable plan/output. No implementation.",
+    "priority": 1,
+    "depends": [],
+    "type": "coding",
+    "role_pair": "<chosen-role-pair>"
+  }],
   "agent_id": "orchestrator-1"
 }
 
@@ -69,17 +73,19 @@ SUCCESS CRITERIA:
 - Classification reasoning is stated before creating the task.
 {{- else }}
 
-Use liza_add_task once with:
+Use liza_add_tasks once with:
 {
-  "id": "code-planning-1",
-  "desc": "Create implementation plan for goal: <goal summary>",
-  "spec": "{{.GoalSpecRef}}",
-  "done": "Implementation plan is complete, reviewable, and submitted for code-plan-review",
-  "scope": "Planning only: analyze goal and produce actionable coding plan/output. No implementation.",
-  "priority": 1,
-  "depends": [],
-  "type": "coding",
-  "role_pair": "code-planning-pair",
+  "tasks": [{
+    "id": "code-planning-1",
+    "desc": "Create implementation plan for goal: <goal summary>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "Implementation plan is complete, reviewable, and submitted for code-plan-review",
+    "scope": "Planning only: analyze goal and produce actionable coding plan/output. No implementation.",
+    "priority": 1,
+    "depends": [],
+    "type": "coding",
+    "role_pair": "code-planning-pair"
+  }],
   "agent_id": "orchestrator-1"
 }
 
@@ -94,6 +100,6 @@ EXPECTED BEHAVIOR EXAMPLES:
 ❌ Decompose into multiple downstream tasks during initial planning.
 
 ❌ INCORRECT (DO NOT DO THIS):
-1. Plan but do not execute liza_add_task
+1. Plan but do not execute liza_add_tasks
 2. Exit without creating the task
 {{- end -}}

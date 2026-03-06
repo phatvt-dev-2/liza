@@ -69,7 +69,7 @@ These are workflow actions that only the agent can trigger — they represent th
 | Submit review verdict | `liza_submit_verdict` | task: -> APPROVED or -> IMPLEMENTING (rejection), agent: REVIEWING -> IDLE |
 | Initiate handoff | `liza_handoff` | task: sets `handoff_pending`, agent: WORKING -> HANDOFF |
 | Mark task blocked | `liza_mark_blocked` | task: -> BLOCKED |
-| Add task | `liza_add_task` | Creates new task (orchestrator) |
+| Add task(s) | `liza_add_tasks` | Creates new task(s) (orchestrator) |
 | Supersede task | `liza_supersede_task` | task: -> SUPERSEDED (orchestrator) |
 | Release claim | `liza_release_claim` | task: -> READY, agent: -> IDLE |
 

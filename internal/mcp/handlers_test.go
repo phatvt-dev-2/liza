@@ -365,25 +365,29 @@ func setupTestWorkspaceWithGit(t *testing.T) (string, func()) {
 	return tmpDir, cleanup
 }
 
-// TestHandleAddTask verifies liza_add_task tool
-func TestHandleAddTask(t *testing.T) {
+// TestHandleAddTasks verifies liza_add_tasks tool (single task)
+func TestHandleAddTasks(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
 	defer cleanup()
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	result, err := server.handleAddTask(map[string]any{
-		"id":       "task-new",
-		"desc":     "New test task",
-		"spec":     "specs/test-spec.md",
-		"done":     "Task is complete",
-		"scope":    "Add new feature",
-		"priority": 1,
+	result, err := server.handleAddTasks(map[string]any{
+		"tasks": []any{
+			map[string]any{
+				"id":       "task-new",
+				"desc":     "New test task",
+				"spec":     "specs/test-spec.md",
+				"done":     "Task is complete",
+				"scope":    "Add new feature",
+				"priority": 1,
+			},
+		},
 		"agent_id": "orchestrator-1",
 	})
 
 	if err != nil {
-		t.Fatalf("handleAddTask failed: %v", err)
+		t.Fatalf("handleAddTasks failed: %v", err)
 	}
 
 	// Verify result format
@@ -419,21 +423,189 @@ func TestHandleAddTask(t *testing.T) {
 	}
 }
 
-// TestHandleAddTaskWithInvalidParams verifies error handling
-func TestHandleAddTaskWithInvalidParams(t *testing.T) {
+// TestHandleAddTasksWithInvalidParams verifies error handling
+func TestHandleAddTasksWithInvalidParams(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
 	defer cleanup()
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	// Missing required field
-	_, err := server.handleAddTask(map[string]any{
-		"id": "task-new",
-		// missing description
+	// Missing required field in task
+	_, err := server.handleAddTasks(map[string]any{
+		"tasks": []any{
+			map[string]any{
+				"id": "task-new",
+				// missing desc
+			},
+		},
+		"agent_id": "orchestrator-1",
 	})
 
 	if err == nil {
 		t.Error("Expected error for missing required field")
+	}
+}
+
+// TestHandleAddTasksBatch verifies adding multiple tasks in one call
+func TestHandleAddTasksBatch(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	result, err := server.handleAddTasks(map[string]any{
+		"tasks": []any{
+			map[string]any{
+				"id":    "batch-1",
+				"desc":  "First batch task",
+				"spec":  "specs/test-spec.md",
+				"done":  "Done",
+				"scope": "scope",
+			},
+			map[string]any{
+				"id":    "batch-2",
+				"desc":  "Second batch task",
+				"spec":  "specs/test-spec.md",
+				"done":  "Done",
+				"scope": "scope",
+			},
+		},
+		"agent_id": "orchestrator-1",
+	})
+
+	if err != nil {
+		t.Fatalf("handleAddTasks failed: %v", err)
+	}
+
+	// Verify result format
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+	contentArr, ok := content["content"].([]any)
+	if !ok || len(contentArr) == 0 {
+		t.Fatal("Expected content array")
+	}
+	textMap, ok := contentArr[0].(map[string]any)
+	if !ok {
+		t.Fatal("Expected text content map")
+	}
+	text, ok := textMap["text"].(string)
+	if !ok {
+		t.Fatal("Expected text string")
+	}
+	if !strings.Contains(text, "Added 2/2 tasks") {
+		t.Errorf("Expected 'Added 2/2 tasks' in result, got %q", text)
+	}
+
+	// Verify both tasks exist in state
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.FindTask("batch-1") == nil {
+		t.Error("batch-1 not found in state")
+	}
+	if state.FindTask("batch-2") == nil {
+		t.Error("batch-2 not found in state")
+	}
+}
+
+// TestHandleAddTasksBatchPartialFailure verifies partial failure reporting
+func TestHandleAddTasksBatchPartialFailure(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	// First add a task to create a duplicate
+	_, err := server.handleAddTasks(map[string]any{
+		"tasks": []any{
+			map[string]any{
+				"id":    "existing-task",
+				"desc":  "Pre-existing",
+				"spec":  "specs/test-spec.md",
+				"done":  "Done",
+				"scope": "scope",
+			},
+		},
+		"agent_id": "orchestrator-1",
+	})
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	// Now batch with a good task and a duplicate
+	result, err := server.handleAddTasks(map[string]any{
+		"tasks": []any{
+			map[string]any{
+				"id":    "new-task",
+				"desc":  "A new task",
+				"spec":  "specs/test-spec.md",
+				"done":  "Done",
+				"scope": "scope",
+			},
+			map[string]any{
+				"id":    "existing-task",
+				"desc":  "Duplicate",
+				"spec":  "specs/test-spec.md",
+				"done":  "Done",
+				"scope": "scope",
+			},
+		},
+		"agent_id": "orchestrator-1",
+	})
+	if err != nil {
+		t.Fatalf("handleAddTasks failed: %v", err)
+	}
+
+	content := result.(map[string]any)
+	text := content["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "Added 1/2 tasks") {
+		t.Errorf("Expected 'Added 1/2 tasks', got %q", text)
+	}
+	if !strings.Contains(text, "error:") {
+		t.Errorf("Expected error line for duplicate, got %q", text)
+	}
+}
+
+// TestHandleAddTasksEmptyArray verifies empty tasks array is rejected
+func TestHandleAddTasksEmptyArray(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	_, err := server.handleAddTasks(map[string]any{
+		"tasks":    []any{},
+		"agent_id": "orchestrator-1",
+	})
+	if err == nil {
+		t.Fatal("Expected error for empty tasks array")
+	}
+	if !strings.Contains(err.Error(), "must not be empty") {
+		t.Errorf("Expected 'must not be empty' error, got: %v", err)
+	}
+}
+
+// TestHandleAddTasksMalformedEntry verifies non-object in array produces indexed error
+func TestHandleAddTasksMalformedEntry(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	_, err := server.handleAddTasks(map[string]any{
+		"tasks":    []any{"not-an-object"},
+		"agent_id": "orchestrator-1",
+	})
+	if err == nil {
+		t.Fatal("Expected error for malformed entry")
+	}
+	if !strings.Contains(err.Error(), "tasks[0]") {
+		t.Errorf("Expected indexed error 'tasks[0]', got: %v", err)
 	}
 }
 
@@ -1055,18 +1227,22 @@ func TestMutationsLoggedCorrectly(t *testing.T) {
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
 	// Perform an add task operation
-	_, err := server.handleAddTask(map[string]any{
-		"id":       "task-logged",
-		"desc":     "Task for log test",
-		"spec":     "specs/test-spec.md",
-		"done":     "Task is complete",
-		"scope":    "Test logging",
-		"priority": 1,
+	_, err := server.handleAddTasks(map[string]any{
+		"tasks": []any{
+			map[string]any{
+				"id":       "task-logged",
+				"desc":     "Task for log test",
+				"spec":     "specs/test-spec.md",
+				"done":     "Task is complete",
+				"scope":    "Test logging",
+				"priority": 1,
+			},
+		},
 		"agent_id": "orchestrator-1",
 	})
 
 	if err != nil {
-		t.Fatalf("handleAddTask failed: %v", err)
+		t.Fatalf("handleAddTasks failed: %v", err)
 	}
 
 	// Read log file
@@ -1850,9 +2026,9 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			wantErr: "requires one of [code-reviewer code-plan-reviewer] roles",
 		},
 		{
-			name:    "add_task rejects coder",
-			handler: server.handleAddTask,
-			params:  map[string]any{"id": "t-new", "desc": "d", "spec": "specs/test-spec.md", "done": "d", "scope": "s", "agent_id": "coder-1"},
+			name:    "add_tasks rejects coder",
+			handler: server.handleAddTasks,
+			params:  map[string]any{"tasks": []any{map[string]any{"id": "t-new", "desc": "d", "spec": "specs/test-spec.md", "done": "d", "scope": "s"}}, "agent_id": "coder-1"},
 			wantErr: "requires orchestrator role",
 		},
 		{

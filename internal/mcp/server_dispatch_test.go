@@ -292,25 +292,31 @@ func TestHandleRequest_ToolCall_AddTaskPostWriteValidationFailure(t *testing.T) 
 		ID:      reqID(1),
 		Method:  "tools/call",
 		Params: map[string]any{
-			"name": "liza_add_task",
+			"name": "liza_add_tasks",
 			"arguments": map[string]any{
-				"id":       "task-post-write-validation",
-				"desc":     "Task should trigger post-write validation failure",
-				"spec":     "specs/test-spec.md",
-				"done":     "done",
-				"scope":    "scope",
-				"priority": 1,
+				"tasks": []any{
+					map[string]any{
+						"id":       "task-post-write-validation",
+						"desc":     "Task should trigger post-write validation failure",
+						"spec":     "specs/test-spec.md",
+						"done":     "done",
+						"scope":    "scope",
+						"priority": 1,
+					},
+				},
 				"agent_id": "orchestrator-1",
 			},
 		},
 	}
 
 	resp := server.HandleRequest(req)
+	// PostWriteValidationError halts the batch and propagates as a top-level
+	// error, which classifyError maps to a ValidationError RPC code.
 	if resp.Error == nil {
-		t.Fatalf("expected validation error, got result: %#v", resp.Result)
+		t.Fatal("expected RPC error for post-write validation failure")
 	}
 	if resp.Error.Code != protocol.ValidationError {
-		t.Fatalf("error code = %d, want %d; error=%v", resp.Error.Code, protocol.ValidationError, resp.Error)
+		t.Errorf("expected ValidationError code %d, got %d", protocol.ValidationError, resp.Error.Code)
 	}
 }
 
