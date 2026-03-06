@@ -349,6 +349,7 @@ func analyzeHandlerParamUsage(fn *ast.FuncDecl, helperRequired map[string]fieldS
 		switch node := n.(type) {
 		case *ast.AssignStmt:
 			recordExtractStringSliceAssignment(node, usage.extracted, optionalSliceVars)
+			recordParamsTypeAssertAssignment(node, optionalSliceVars)
 
 		case *ast.CallExpr:
 			callName, args, ok := extractCall(node)
@@ -423,6 +424,39 @@ func recordExtractStringSliceAssignment(assign *ast.AssignStmt, extracted fieldS
 		return
 	}
 	extracted.add(key)
+
+	ident, ok := assign.Lhs[0].(*ast.Ident)
+	if !ok || ident.Name == "_" {
+		return
+	}
+	optionalSliceVars[ident.Name] = key
+}
+
+// recordParamsTypeAssertAssignment detects patterns like:
+//
+//	v, _ := params["key"].([]any)
+//
+// and records the variable name → key in optionalSliceVars so that a subsequent
+// len(v) == 0 check marks the field as required.
+func recordParamsTypeAssertAssignment(assign *ast.AssignStmt, optionalSliceVars map[string]string) {
+	if assign == nil || len(assign.Rhs) != 1 || len(assign.Lhs) == 0 {
+		return
+	}
+
+	typeAssert, ok := assign.Rhs[0].(*ast.TypeAssertExpr)
+	if !ok {
+		return
+	}
+
+	indexExpr, ok := typeAssert.X.(*ast.IndexExpr)
+	if !ok || !isParamsIdent(indexExpr.X) {
+		return
+	}
+
+	key, ok := stringLiteral(indexExpr.Index)
+	if !ok {
+		return
+	}
 
 	ident, ok := assign.Lhs[0].(*ast.Ident)
 	if !ok || ident.Name == "_" {

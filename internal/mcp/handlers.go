@@ -6,6 +6,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/identity"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/roles"
@@ -732,6 +733,67 @@ func (s *Server) handleWriteCheckpoint(params map[string]any) (any, error) {
 	}
 
 	return textResult(fmt.Sprintf("Pre-execution checkpoint written for task %s", taskID))
+}
+
+// handleSetTaskOutput implements the liza_set_task_output tool
+func (s *Server) handleSetTaskOutput(params map[string]any) (any, error) {
+	taskID, agentID, err := requireTaskAndAgent(params)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
+		return nil, err
+	}
+
+	rawOutput, _ := params["output"].([]any)
+	if len(rawOutput) == 0 {
+		return nil, fmt.Errorf("output parameter required (array of {desc, done_when, scope, spec_ref})")
+	}
+	output, err := extractOutputEntries(rawOutput)
+	if err != nil {
+		return nil, err
+	}
+
+	input := &ops.SetTaskOutputInput{
+		TaskID:  taskID,
+		AgentID: agentID,
+		Output:  output,
+	}
+
+	if err := ops.SetTaskOutput(s.projectRoot, input); err != nil {
+		return nil, fmt.Errorf("set task output failed: %w", err)
+	}
+
+	return textResult(fmt.Sprintf("Output set on task %s (%d entries)", taskID, len(output)))
+}
+
+// extractOutputEntries converts a raw JSON array into []models.OutputEntry.
+// Returns an error if any element is not an object (strict — no silent drops).
+func extractOutputEntries(raw []any) ([]models.OutputEntry, error) {
+	out := make([]models.OutputEntry, 0, len(raw))
+	for i, v := range raw {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("output[%d] must be an object, got %T", i, v)
+		}
+		entry := models.OutputEntry{
+			Desc:     stringFromMap(m, "desc"),
+			DoneWhen: stringFromMap(m, "done_when"),
+			Scope:    stringFromMap(m, "scope"),
+			SpecRef:  stringFromMap(m, "spec_ref"),
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+// stringFromMap extracts a string value from a map, returning "" if absent or wrong type.
+func stringFromMap(m map[string]any, key string) string {
+	v, ok := m[key].(string)
+	if !ok {
+		return ""
+	}
+	return v
 }
 
 // handleDeleteAgent implements the liza_delete_agent tool

@@ -787,6 +787,30 @@ func (s *Server) registerComplexOperations() {
 		},
 	}, s.handleWriteCheckpoint)
 
+	// liza_set_task_output tool
+	s.registerTool(protocol.Tool{
+		Name:        "liza_set_task_output",
+		Description: "Persist structured task definitions for downstream transition. Requires coder or code-planner role.",
+		InputSchema: protocol.InputSchema{
+			Type: "object",
+			Properties: map[string]protocol.Property{
+				"task_id": {
+					Type:        "string",
+					Description: "Task ID to set output on",
+				},
+				"agent_id": {
+					Type:        "string",
+					Description: "Agent ID setting the output (must be assigned to the task)",
+				},
+				"output": {
+					Type:        "array",
+					Description: "Array of output entries, each with: desc (string), done_when (string), scope (string), spec_ref (string, optional)",
+				},
+			},
+			Required: []string{"task_id", "agent_id", "output"},
+		},
+	}, s.handleSetTaskOutput)
+
 	// liza_delete_agent tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_delete_agent",
