@@ -314,6 +314,7 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
       "mcp__liza__liza_get",
       "mcp__liza__liza_status",
       "mcp__liza__liza_add_tasks",
+      "mcp__liza__liza_set_task_output",
       "mcp__liza__liza_submit_for_review",
       "mcp__liza__liza_submit_verdict",
       "Bash(git add:*)",
