@@ -154,15 +154,27 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 		}
 	}
 
-	sprintComplete := state.AllPlannedTasksTerminalWith(ops.SprintTerminalStates(config.ProjectRoot))
+	detCtx := ops.LoadDetectionContext(config.ProjectRoot)
+	var sprintTerminals []models.TaskStatus
+	var planningPairs map[string]bool
+	if detCtx != nil {
+		sprintTerminals = detCtx.SprintTerminals
+		planningPairs = detCtx.PlanningPairs
+	}
+
+	sprintComplete := state.AllPlannedTasksTerminalWith(sprintTerminals)
 
 	// Collect merged planning tasks with output[] for PLANNING_COMPLETE detection.
-	// Only code-planning-pair tasks qualify — coding tasks with output[] are ignored.
+	// Only transition-source role-pairs qualify — coding tasks with output[] are ignored.
+	// Uses the same IsPlanningPair predicate as workdetection to avoid classification drift.
 	var planningTasks []planningTaskData
 	if sprintComplete {
 		for _, taskID := range state.Sprint.Scope.Planned {
 			task := state.FindTask(taskID)
-			if task != nil && task.Status == models.TaskStatusMerged && len(task.Output) > 0 && task.RolePair == "code-planning-pair" {
+			if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
+				continue
+			}
+			if ops.IsPlanningPair(task.RolePair, planningPairs) {
 				planningTasks = append(planningTasks, planningTaskData{
 					TaskID: task.ID,
 					Output: task.Output,

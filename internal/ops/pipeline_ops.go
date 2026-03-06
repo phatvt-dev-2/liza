@@ -92,19 +92,59 @@ func BuildPipelineTransitions(r *pipeline.Resolver) map[models.TaskStatus][]mode
 	return tm
 }
 
-// SprintTerminalStates returns pipeline-defined sprint-terminal states for a project.
-// Returns nil for legacy projects (no pipeline config). On config load error, logs a
-// warning and returns nil (falls back to universal terminal states).
-func SprintTerminalStates(projectRoot string) []models.TaskStatus {
+// PipelineDetectionContext holds pipeline-derived data needed for orchestrator
+// wake detection. Computed once from a single config load via LoadDetectionContext.
+type PipelineDetectionContext struct {
+	SprintTerminals []models.TaskStatus
+	PlanningPairs   map[string]bool
+}
+
+// LoadDetectionContext loads pipeline config once and returns both sprint-terminal
+// states and transition-source pairs. Returns nil for legacy projects.
+func LoadDetectionContext(projectRoot string) *PipelineDetectionContext {
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
-		log.Printf("WARNING: failed to load pipeline config for sprint-terminal states: %v", err)
+		log.Printf("WARNING: failed to load pipeline config for detection context: %v", err)
 		return nil
 	}
 	if resolver == nil {
 		return nil // Legacy project — no pipeline config
 	}
-	return resolver.SprintTerminalStates()
+	return &PipelineDetectionContext{
+		SprintTerminals: resolver.SprintTerminalStates(),
+		PlanningPairs:   resolver.TransitionSourcePairs(),
+	}
+}
+
+// SprintTerminalStates returns pipeline-defined sprint-terminal states for a project.
+// Returns nil for legacy projects (no pipeline config). On config load error, logs a
+// warning and returns nil (falls back to universal terminal states).
+func SprintTerminalStates(projectRoot string) []models.TaskStatus {
+	ctx := LoadDetectionContext(projectRoot)
+	if ctx == nil {
+		return nil
+	}
+	return ctx.SprintTerminals
+}
+
+// TransitionSourcePairs returns the set of role-pair names that are transition
+// sources in the pipeline config. Returns nil for legacy projects (no pipeline config).
+func TransitionSourcePairs(projectRoot string) map[string]bool {
+	ctx := LoadDetectionContext(projectRoot)
+	if ctx == nil {
+		return nil
+	}
+	return ctx.PlanningPairs
+}
+
+// IsPlanningPair reports whether a role-pair is a transition source ("planning pair").
+// planningPairs is the set from TransitionSourcePairs / LoadDetectionContext.
+// When nil (legacy), falls back to hardcoded "code-planning-pair".
+func IsPlanningPair(rolePair string, planningPairs map[string]bool) bool {
+	if planningPairs != nil {
+		return planningPairs[rolePair]
+	}
+	return rolePair == "code-planning-pair"
 }
 
 // allPlannedTasksTerminalForProject checks if all planned tasks are sprint-terminal,

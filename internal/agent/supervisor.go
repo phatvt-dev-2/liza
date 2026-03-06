@@ -574,8 +574,14 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 			// Verify expected state changes for orchestrator
 			if config.Role == roles.RuntimeOrchestrator {
-				pipelineTerminals := ops.SprintTerminalStates(config.ProjectRoot)
-				if err := verifyOrchestratorStateChanges(bb, state, pipelineTerminals); err != nil {
+				detCtx := ops.LoadDetectionContext(config.ProjectRoot)
+				var pipelineTerminals []models.TaskStatus
+				var planningPairs map[string]bool
+				if detCtx != nil {
+					pipelineTerminals = detCtx.SprintTerminals
+					planningPairs = detCtx.PlanningPairs
+				}
+				if err := verifyOrchestratorStateChanges(bb, state, pipelineTerminals, planningPairs); err != nil {
 					GetLogger().Warn("Orchestrator state verification failed",
 						"error", err,
 						"hint", "Agent may not have executed required commands - check prompt file")

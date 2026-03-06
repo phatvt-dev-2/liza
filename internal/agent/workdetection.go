@@ -2,6 +2,7 @@ package agent
 
 import (
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 )
 
 // OrchestratorWakeTrigger represents what triggered the orchestrator to wake
@@ -71,7 +72,8 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 
 // DetectOrchestratorWakeTriggers detects conditions that should wake the orchestrator.
 // pipelineTerminals provides pipeline-defined sprint-terminal states (from ops.SprintTerminalStates).
-// Pass nil for legacy projects.
+// planningPairs provides role-pairs that are transition sources (from ops.TransitionSourcePairs).
+// Pass nil for either to use legacy fallback behavior.
 //
 // Returns the highest-priority trigger and count of items for that trigger.
 // Priority order:
@@ -82,7 +84,7 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // 5. Immediate discoveries (not yet converted to tasks)
 // 6. Planning complete (all planned tasks terminal, merged tasks have output[])
 // 7. Sprint complete (all planned tasks terminal)
-func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus) OrchestratorWakeResult {
+func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool) OrchestratorWakeResult {
 	for _, triggerSpec := range orchestratorWakeTriggerSpecs {
 		if count := triggerSpec.Count(state); count > 0 {
 			return OrchestratorWakeResult{
@@ -103,7 +105,7 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 		}
 		// Distinguish planning completion (merged tasks with output[]) from sprint completion.
-		if n := countMergedPlanningTasksWithOutput(state); n > 0 {
+		if n := countMergedPlanningTasksWithOutput(state, planningPairs); n > 0 {
 			return OrchestratorWakeResult{
 				Trigger: WakeTriggerPlanningComplete,
 				Count:   n,
@@ -152,15 +154,21 @@ func countImmediateDiscoveries(state *models.State) int {
 }
 
 // countMergedPlanningTasksWithOutput counts planned tasks that are MERGED,
-// have the code-planning-pair role pair, and have non-empty Output[] entries,
+// belong to a transition-source role-pair, and have non-empty Output[] entries,
 // indicating a planning task whose output is ready to be expanded into coding tasks.
 // Only planning tasks qualify — coding tasks with output[] are ignored to prevent
 // misclassification as PLANNING_COMPLETE during normal coding sprints.
-func countMergedPlanningTasksWithOutput(state *models.State) int {
+//
+// planningPairs provides the set of role-pairs that are transition sources.
+// When nil (legacy projects), falls back to hardcoded "code-planning-pair".
+func countMergedPlanningTasksWithOutput(state *models.State, planningPairs map[string]bool) int {
 	count := 0
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if task != nil && task.Status == models.TaskStatusMerged && len(task.Output) > 0 && task.RolePair == "code-planning-pair" {
+		if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
+			continue
+		}
+		if ops.IsPlanningPair(task.RolePair, planningPairs) {
 			count++
 		}
 	}

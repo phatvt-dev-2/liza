@@ -581,7 +581,7 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectOrchestratorWakeTriggers(tt.state, nil)
+			result := DetectOrchestratorWakeTriggers(tt.state, nil, nil)
 			if result.Trigger != tt.wantTrigger {
 				t.Errorf("DetectOrchestratorWakeTriggers() trigger = %v, want %v", result.Trigger, tt.wantTrigger)
 			}
@@ -599,6 +599,7 @@ func TestDetectOrchestratorWakeTriggers_PipelineTerminals(t *testing.T) {
 		name              string
 		state             *models.State
 		pipelineTerminals []models.TaskStatus
+		planningPairs     map[string]bool
 		wantTrigger       OrchestratorWakeTrigger
 		wantCount         int
 	}{
@@ -660,11 +661,45 @@ func TestDetectOrchestratorWakeTriggers_PipelineTerminals(t *testing.T) {
 			wantTrigger:       WakeTriggerNone,
 			wantCount:         0,
 		},
+		{
+			name: "epic-planning-pair with planningPairs triggers PLANNING_COMPLETE",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				task.RolePair = "epic-planning-pair"
+				task.Output = []models.OutputEntry{
+					{Desc: "user story 1", DoneWhen: "accepted", Scope: "feature/x"},
+				}
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				state.Tasks = []models.Task{task}
+				return state
+			}(),
+			planningPairs: map[string]bool{"epic-planning-pair": true, "code-planning-pair": true},
+			wantTrigger:   WakeTriggerPlanningComplete,
+			wantCount:     1,
+		},
+		{
+			name: "epic-planning-pair without planningPairs falls back to SPRINT_COMPLETE",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				task.RolePair = "epic-planning-pair"
+				task.Output = []models.OutputEntry{
+					{Desc: "user story 1", DoneWhen: "accepted", Scope: "feature/x"},
+				}
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				state.Tasks = []models.Task{task}
+				return state
+			}(),
+			planningPairs: nil,
+			wantTrigger:   WakeTriggerSprintComplete,
+			wantCount:     1,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectOrchestratorWakeTriggers(tt.state, tt.pipelineTerminals)
+			result := DetectOrchestratorWakeTriggers(tt.state, tt.pipelineTerminals, tt.planningPairs)
 			if result.Trigger != tt.wantTrigger {
 				t.Errorf("DetectOrchestratorWakeTriggers() trigger = %v, want %v", result.Trigger, tt.wantTrigger)
 			}
@@ -833,7 +868,7 @@ func TestHasOrchestratorWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectOrchestratorWakeTriggers(tt.state, nil)
+			result := DetectOrchestratorWakeTriggers(tt.state, nil, nil)
 			got := result.Trigger != WakeTriggerNone
 			if got != tt.want {
 				t.Errorf("HasOrchestratorWork() = %v, want %v", got, tt.want)

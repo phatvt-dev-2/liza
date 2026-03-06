@@ -9,7 +9,8 @@ import (
 
 // Resolver wraps a PipelineConfig for state resolution queries.
 type Resolver struct {
-	config *PipelineConfig
+	config            *PipelineConfig
+	transitionSources map[string]bool // lazy-init cache for TransitionSourcePairs
 }
 
 // NewResolver creates a Resolver from a validated PipelineConfig.
@@ -308,4 +309,34 @@ func (r *Resolver) resolve3PartPhase(ref string) models.TaskStatus {
 // IsDeclaredState checks if a status is declared in the pipeline config.
 func (r *Resolver) IsDeclaredState(status models.TaskStatus) bool {
 	return slices.Contains(r.AllDeclaredStates(), status)
+}
+
+// IsTransitionSourcePair checks if a role-pair is the "from" side of any
+// transition (sub-pipeline or pipeline-transitions). Such role-pairs produce
+// output that feeds the next pipeline stage (e.g. planning → coding).
+func (r *Resolver) IsTransitionSourcePair(rolePair string) bool {
+	return r.TransitionSourcePairs()[rolePair]
+}
+
+// TransitionSourcePairs returns the set of role-pair names that are
+// the "from" side of any transition. The result is cached after the first call.
+func (r *Resolver) TransitionSourcePairs() map[string]bool {
+	if r.transitionSources != nil {
+		return r.transitionSources
+	}
+	sources := make(map[string]bool)
+	for _, sp := range r.config.Pipeline.SubPipelines {
+		for _, t := range sp.Transitions {
+			fromPair, _, _ := parseRef(t.From)
+			sources[fromPair] = true
+		}
+	}
+	for _, t := range r.config.Pipeline.PipelineTransitions {
+		_, fromPair, _, err := parse3PartRef(t.From)
+		if err == nil {
+			sources[fromPair] = true
+		}
+	}
+	r.transitionSources = sources
+	return sources
 }

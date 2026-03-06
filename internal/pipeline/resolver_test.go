@@ -140,6 +140,44 @@ func TestResolver_RolePairNames(t *testing.T) {
 	}
 }
 
+func TestResolver_TransitionSourcePairs_Phase2(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+	got := r.TransitionSourcePairs()
+
+	// Sub-pipeline transition sources: epic-planning-pair, code-planning-pair
+	// Pipeline-transition sources: us-writing-pair
+	want := map[string]bool{
+		"epic-planning-pair": true,
+		"code-planning-pair": true,
+		"us-writing-pair":    true,
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("TransitionSourcePairs() = %v, want %v", got, want)
+	}
+	for k := range want {
+		if !got[k] {
+			t.Errorf("TransitionSourcePairs() missing %q", k)
+		}
+	}
+}
+
+func TestResolver_IsTransitionSourcePair_Phase2(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+
+	sources := []string{"epic-planning-pair", "code-planning-pair", "us-writing-pair"}
+	for _, rp := range sources {
+		if !r.IsTransitionSourcePair(rp) {
+			t.Errorf("IsTransitionSourcePair(%q) = false, want true", rp)
+		}
+	}
+
+	// coding-pair is a terminal pair, not a transition source
+	if r.IsTransitionSourcePair("coding-pair") {
+		t.Error("IsTransitionSourcePair(coding-pair) = true, want false")
+	}
+}
+
 func TestResolver_TransitionTargetRolePair_PipelineTransition(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 

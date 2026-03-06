@@ -298,7 +298,14 @@ func buildAgentStatuses(state *models.State) []agentStatus {
 
 // buildOrchestratorStatus determines orchestrator state
 func buildOrchestratorStatus(state *models.State, projectRoot string) orchestratorStatus {
-	result := agent.DetectOrchestratorWakeTriggers(state, ops.SprintTerminalStates(projectRoot))
+	detCtx := ops.LoadDetectionContext(projectRoot)
+	var pipelineTerminals []models.TaskStatus
+	var planningPairs map[string]bool
+	if detCtx != nil {
+		pipelineTerminals = detCtx.SprintTerminals
+		planningPairs = detCtx.PlanningPairs
+	}
+	result := agent.DetectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs)
 	trigger := string(result.Trigger)
 	count := result.Count
 

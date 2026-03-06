@@ -32,6 +32,30 @@ func setupPipelineTest(t *testing.T) (string, string) {
 	return tmpDir, stateFile
 }
 
+func TestLoadDetectionContext_PipelineGoal(t *testing.T) {
+	tmpDir, _ := setupPipelineTest(t)
+	ctx := LoadDetectionContext(tmpDir)
+	if ctx == nil {
+		t.Fatal("expected non-nil detection context for pipeline goal")
+	}
+	if len(ctx.SprintTerminals) == 0 {
+		t.Error("expected non-empty SprintTerminals")
+	}
+	if len(ctx.PlanningPairs) == 0 {
+		t.Error("expected non-empty PlanningPairs")
+	}
+}
+
+func TestLoadDetectionContext_LegacyGoal(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.SetupLizaDir(t, tmpDir)
+	ctx := LoadDetectionContext(tmpDir)
+	if ctx != nil {
+		t.Fatal("expected nil detection context for legacy goal")
+	}
+}
+
 func TestLoadResolver_PipelineGoal(t *testing.T) {
 	tmpDir, _ := setupPipelineTest(t)
 
@@ -41,6 +65,58 @@ func TestLoadResolver_PipelineGoal(t *testing.T) {
 	}
 	if resolver == nil {
 		t.Fatal("expected non-nil resolver for pipeline goal")
+	}
+}
+
+func TestTransitionSourcePairs_PipelineGoal(t *testing.T) {
+	tmpDir, _ := setupPipelineTest(t)
+
+	pairs := TransitionSourcePairs(tmpDir)
+	if pairs == nil {
+		t.Fatal("expected non-nil transition source pairs for pipeline goal")
+	}
+	// valid-coding-subpipeline.yaml has code-planning-pair as a transition source
+	if !pairs["code-planning-pair"] {
+		t.Error("expected code-planning-pair to be a transition source")
+	}
+	// coding-pair is not a transition source (it's the terminal pair)
+	if pairs["coding-pair"] {
+		t.Error("coding-pair should not be a transition source")
+	}
+}
+
+func TestIsPlanningPair(t *testing.T) {
+	pairs := map[string]bool{"code-planning-pair": true, "epic-planning-pair": true}
+
+	// With explicit pairs map
+	if !IsPlanningPair("code-planning-pair", pairs) {
+		t.Error("IsPlanningPair(code-planning-pair, pairs) = false, want true")
+	}
+	if !IsPlanningPair("epic-planning-pair", pairs) {
+		t.Error("IsPlanningPair(epic-planning-pair, pairs) = false, want true")
+	}
+	if IsPlanningPair("coding-pair", pairs) {
+		t.Error("IsPlanningPair(coding-pair, pairs) = true, want false")
+	}
+
+	// With nil (legacy fallback)
+	if !IsPlanningPair("code-planning-pair", nil) {
+		t.Error("IsPlanningPair(code-planning-pair, nil) = false, want true")
+	}
+	if IsPlanningPair("epic-planning-pair", nil) {
+		t.Error("IsPlanningPair(epic-planning-pair, nil) should be false in legacy mode")
+	}
+}
+
+func TestTransitionSourcePairs_LegacyGoal(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.SetupLizaDir(t, tmpDir)
+	// No pipeline.yaml → legacy goal
+
+	pairs := TransitionSourcePairs(tmpDir)
+	if pairs != nil {
+		t.Fatalf("expected nil transition source pairs for legacy goal, got %v", pairs)
 	}
 }
 
