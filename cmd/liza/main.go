@@ -78,9 +78,9 @@ generating initial state.yaml, and setting up the integration branch.
 The description argument is required and describes the goal.
 The spec file (default: specs/vision.md) must exist before initialization.
 
-Use --config to provide a pipeline YAML file. The config is validated and frozen
-into .liza/pipeline.yaml. Use --entry-point with --config to specify which
-entry-point to use (must be defined in the config).
+Use --config to provide a pipeline YAML file (defaults to ~/.liza/pipeline.yaml).
+The config is validated and frozen into .liza/pipeline.yaml. Use --entry-point to
+specify which entry-point to use (must be defined in the config).
 
 Use --post-worktree-cmd to specify a shell command that runs after every worktree
 creation (e.g. 'make setup', 'npm install'). This ensures worktrees are
@@ -1346,7 +1346,7 @@ func init() {
 	// Init command flags
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")
 	initCmd.Flags().String("config", defaultPipelineConfigPath(), "path to pipeline YAML config file")
-	initCmd.Flags().String("entry-point", "", "entry-point name from pipeline config (requires --config)")
+	initCmd.Flags().String("entry-point", "", `entry-point name: "general-objective" or "detailed-spec" in default pipeline (default: auto-classified by orchestrator)`)
 	initCmd.Flags().String("post-worktree-cmd", "", "shell command to run after worktree creation (e.g. 'make setup')")
 
 	// Validate command flags
