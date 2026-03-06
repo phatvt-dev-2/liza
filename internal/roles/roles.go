@@ -12,6 +12,10 @@ const (
 	RuntimeOrchestrator     = "orchestrator"
 	RuntimeCodePlanner      = "code-planner"
 	RuntimeCodePlanReviewer = "code-plan-reviewer"
+	RuntimeEpicPlanner      = "epic-planner"
+	RuntimeEpicPlanReviewer = "epic-plan-reviewer"
+	RuntimeUSWriter         = "us-writer"
+	RuntimeUSReviewer       = "us-reviewer"
 )
 
 // Workflow role names used in task workflow definitions.
@@ -22,6 +26,10 @@ const (
 	WorkflowOrchestrator     = "orchestrator"
 	WorkflowCodePlanner      = "code_planner"
 	WorkflowCodePlanReviewer = "code_plan_reviewer"
+	WorkflowEpicPlanner      = "epic_planner"
+	WorkflowEpicPlanReviewer = "epic_plan_reviewer"
+	WorkflowUSWriter         = "us_writer"
+	WorkflowUSReviewer       = "us_reviewer"
 )
 
 // runtimeToWorkflow maps runtime role names to workflow role names.
@@ -31,6 +39,10 @@ var runtimeToWorkflow = map[string]string{
 	RuntimeOrchestrator:     WorkflowOrchestrator,
 	RuntimeCodePlanner:      WorkflowCodePlanner,
 	RuntimeCodePlanReviewer: WorkflowCodePlanReviewer,
+	RuntimeEpicPlanner:      WorkflowEpicPlanner,
+	RuntimeEpicPlanReviewer: WorkflowEpicPlanReviewer,
+	RuntimeUSWriter:         WorkflowUSWriter,
+	RuntimeUSReviewer:       WorkflowUSReviewer,
 }
 
 // workflowToRuntime maps workflow role names to runtime role names.
@@ -40,6 +52,10 @@ var workflowToRuntime = map[string]string{
 	WorkflowOrchestrator:     RuntimeOrchestrator,
 	WorkflowCodePlanner:      RuntimeCodePlanner,
 	WorkflowCodePlanReviewer: RuntimeCodePlanReviewer,
+	WorkflowEpicPlanner:      RuntimeEpicPlanner,
+	WorkflowEpicPlanReviewer: RuntimeEpicPlanReviewer,
+	WorkflowUSWriter:         RuntimeUSWriter,
+	WorkflowUSReviewer:       RuntimeUSReviewer,
 }
 
 // ToWorkflow converts a runtime role name to its workflow equivalent.
@@ -74,10 +90,20 @@ func IsValidWorkflow(role string) bool {
 
 // AllRuntime returns all valid runtime role names.
 func AllRuntime() []string {
-	return []string{RuntimeCoder, RuntimeCodeReviewer, RuntimeOrchestrator, RuntimeCodePlanner, RuntimeCodePlanReviewer}
+	return []string{
+		RuntimeCoder, RuntimeCodeReviewer, RuntimeOrchestrator,
+		RuntimeCodePlanner, RuntimeCodePlanReviewer,
+		RuntimeEpicPlanner, RuntimeEpicPlanReviewer,
+		RuntimeUSWriter, RuntimeUSReviewer,
+	}
 }
 
 // AllWorkflow returns all valid workflow role names.
 func AllWorkflow() []string {
-	return []string{WorkflowCoder, WorkflowCodeReviewer, WorkflowOrchestrator, WorkflowCodePlanner, WorkflowCodePlanReviewer}
+	return []string{
+		WorkflowCoder, WorkflowCodeReviewer, WorkflowOrchestrator,
+		WorkflowCodePlanner, WorkflowCodePlanReviewer,
+		WorkflowEpicPlanner, WorkflowEpicPlanReviewer,
+		WorkflowUSWriter, WorkflowUSReviewer,
+	}
 }
