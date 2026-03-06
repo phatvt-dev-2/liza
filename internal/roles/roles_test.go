@@ -18,11 +18,19 @@ func TestConstants(t *testing.T) {
 		{"RuntimeOrchestrator", RuntimeOrchestrator, "orchestrator"},
 		{"RuntimeCodePlanner", RuntimeCodePlanner, "code-planner"},
 		{"RuntimeCodePlanReviewer", RuntimeCodePlanReviewer, "code-plan-reviewer"},
+		{"RuntimeEpicPlanner", RuntimeEpicPlanner, "epic-planner"},
+		{"RuntimeEpicPlanReviewer", RuntimeEpicPlanReviewer, "epic-plan-reviewer"},
+		{"RuntimeUSWriter", RuntimeUSWriter, "us-writer"},
+		{"RuntimeUSReviewer", RuntimeUSReviewer, "us-reviewer"},
 		{"WorkflowCoder", WorkflowCoder, "coder"},
 		{"WorkflowCodeReviewer", WorkflowCodeReviewer, "code_reviewer"},
 		{"WorkflowOrchestrator", WorkflowOrchestrator, "orchestrator"},
 		{"WorkflowCodePlanner", WorkflowCodePlanner, "code_planner"},
 		{"WorkflowCodePlanReviewer", WorkflowCodePlanReviewer, "code_plan_reviewer"},
+		{"WorkflowEpicPlanner", WorkflowEpicPlanner, "epic_planner"},
+		{"WorkflowEpicPlanReviewer", WorkflowEpicPlanReviewer, "epic_plan_reviewer"},
+		{"WorkflowUSWriter", WorkflowUSWriter, "us_writer"},
+		{"WorkflowUSReviewer", WorkflowUSReviewer, "us_reviewer"},
 	}
 
 	for _, tt := range tests {
@@ -71,6 +79,30 @@ func TestToWorkflow(t *testing.T) {
 			name:        "code-plan-reviewer maps to code_plan_reviewer",
 			runtimeRole: RuntimeCodePlanReviewer,
 			want:        WorkflowCodePlanReviewer,
+			wantErr:     false,
+		},
+		{
+			name:        "epic-planner maps to epic_planner",
+			runtimeRole: RuntimeEpicPlanner,
+			want:        WorkflowEpicPlanner,
+			wantErr:     false,
+		},
+		{
+			name:        "epic-plan-reviewer maps to epic_plan_reviewer",
+			runtimeRole: RuntimeEpicPlanReviewer,
+			want:        WorkflowEpicPlanReviewer,
+			wantErr:     false,
+		},
+		{
+			name:        "us-writer maps to us_writer",
+			runtimeRole: RuntimeUSWriter,
+			want:        WorkflowUSWriter,
+			wantErr:     false,
+		},
+		{
+			name:        "us-reviewer maps to us_reviewer",
+			runtimeRole: RuntimeUSReviewer,
+			want:        WorkflowUSReviewer,
 			wantErr:     false,
 		},
 		{
@@ -141,6 +173,30 @@ func TestToRuntime(t *testing.T) {
 			wantErr:      false,
 		},
 		{
+			name:         "epic_planner maps to epic-planner",
+			workflowRole: WorkflowEpicPlanner,
+			want:         RuntimeEpicPlanner,
+			wantErr:      false,
+		},
+		{
+			name:         "epic_plan_reviewer maps to epic-plan-reviewer",
+			workflowRole: WorkflowEpicPlanReviewer,
+			want:         RuntimeEpicPlanReviewer,
+			wantErr:      false,
+		},
+		{
+			name:         "us_writer maps to us-writer",
+			workflowRole: WorkflowUSWriter,
+			want:         RuntimeUSWriter,
+			wantErr:      false,
+		},
+		{
+			name:         "us_reviewer maps to us-reviewer",
+			workflowRole: WorkflowUSReviewer,
+			want:         RuntimeUSReviewer,
+			wantErr:      false,
+		},
+		{
 			name:         "unknown role returns error",
 			workflowRole: "unknown_role",
 			want:         "",
@@ -181,6 +237,10 @@ func TestIsValidRuntime(t *testing.T) {
 		{RuntimeOrchestrator, RuntimeOrchestrator, true},
 		{RuntimeCodePlanner, RuntimeCodePlanner, true},
 		{RuntimeCodePlanReviewer, RuntimeCodePlanReviewer, true},
+		{RuntimeEpicPlanner, RuntimeEpicPlanner, true},
+		{RuntimeEpicPlanReviewer, RuntimeEpicPlanReviewer, true},
+		{RuntimeUSWriter, RuntimeUSWriter, true},
+		{RuntimeUSReviewer, RuntimeUSReviewer, true},
 		{"code_reviewer", "code_reviewer", false},
 		{"unknown", "unknown", false},
 		{"", "", false},
@@ -208,6 +268,10 @@ func TestIsValidWorkflow(t *testing.T) {
 		{WorkflowOrchestrator, WorkflowOrchestrator, true},
 		{WorkflowCodePlanner, WorkflowCodePlanner, true},
 		{WorkflowCodePlanReviewer, WorkflowCodePlanReviewer, true},
+		{WorkflowEpicPlanner, WorkflowEpicPlanner, true},
+		{WorkflowEpicPlanReviewer, WorkflowEpicPlanReviewer, true},
+		{WorkflowUSWriter, WorkflowUSWriter, true},
+		{WorkflowUSReviewer, WorkflowUSReviewer, true},
 		{"code-reviewer", "code-reviewer", false},
 		{"unknown", "unknown", false},
 		{"", "", false},
@@ -226,7 +290,12 @@ func TestAllRuntime(t *testing.T) {
 	t.Parallel()
 
 	got := AllRuntime()
-	want := []string{RuntimeCoder, RuntimeCodeReviewer, RuntimeOrchestrator, RuntimeCodePlanner, RuntimeCodePlanReviewer}
+	want := []string{
+		RuntimeCoder, RuntimeCodeReviewer, RuntimeOrchestrator,
+		RuntimeCodePlanner, RuntimeCodePlanReviewer,
+		RuntimeEpicPlanner, RuntimeEpicPlanReviewer,
+		RuntimeUSWriter, RuntimeUSReviewer,
+	}
 
 	if len(got) != len(want) {
 		t.Errorf("AllRuntime() returned %d roles, want %d", len(got), len(want))
@@ -243,7 +312,12 @@ func TestAllWorkflow(t *testing.T) {
 	t.Parallel()
 
 	got := AllWorkflow()
-	want := []string{WorkflowCoder, WorkflowCodeReviewer, WorkflowOrchestrator, WorkflowCodePlanner, WorkflowCodePlanReviewer}
+	want := []string{
+		WorkflowCoder, WorkflowCodeReviewer, WorkflowOrchestrator,
+		WorkflowCodePlanner, WorkflowCodePlanReviewer,
+		WorkflowEpicPlanner, WorkflowEpicPlanReviewer,
+		WorkflowUSWriter, WorkflowUSReviewer,
+	}
 
 	if len(got) != len(want) {
 		t.Errorf("AllWorkflow() returned %d roles, want %d", len(got), len(want))

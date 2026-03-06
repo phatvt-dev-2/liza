@@ -42,6 +42,10 @@ const (
 	RoleOrchestrator     = roles.WorkflowOrchestrator
 	RoleCodePlanner      = roles.WorkflowCodePlanner
 	RoleCodePlanReviewer = roles.WorkflowCodePlanReviewer
+	RoleEpicPlanner      = roles.WorkflowEpicPlanner
+	RoleEpicPlanReviewer = roles.WorkflowEpicPlanReviewer
+	RoleUSWriter         = roles.WorkflowUSWriter
+	RoleUSReviewer       = roles.WorkflowUSReviewer
 )
 
 // taskWorkflows maps each TaskType to its ordered role sequence.
