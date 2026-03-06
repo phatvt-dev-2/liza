@@ -74,7 +74,7 @@ func BuildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig
 
 		// Cross-cutting additions per lifecycle phase:
 		tm[initial] = append(tm[initial], models.TaskStatusAbandoned)
-		tm[executing] = append(tm[executing], models.TaskStatusBlocked, initial)
+		tm[executing] = append(tm[executing], models.TaskStatusBlocked, initial, models.TaskStatusIntegrationFailed)
 		tm[reviewing] = append(tm[reviewing], submitted)
 		tm[rejected] = append(tm[rejected], models.TaskStatusBlocked, models.TaskStatusSuperseded, models.TaskStatusAbandoned)
 		tm[approved] = append(tm[approved], models.TaskStatusMerged, models.TaskStatusIntegrationFailed)

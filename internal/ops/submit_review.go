@@ -1,13 +1,15 @@
 package ops
 
 import (
+	stderrors "errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
-	"github.com/liza-mas/liza/internal/git"
+	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -94,7 +96,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	}
 
 	// Phase 2: Execute git operations outside the lock
-	g := git.New(projectRoot)
+	g := gitpkg.New(projectRoot)
 	wtPath := g.GetWorktreePath(taskID)
 
 	if _, err := os.Stat(wtPath); os.IsNotExist(err) {
@@ -147,23 +149,28 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	}
 
 	if err := g.RebaseOnto(wtPath, "FETCH_HEAD"); err != nil {
-		return nil, fmt.Errorf(`failed to submit task for review: rebase conflict detected
+		// Abort rebase to restore clean worktree state — don't leave agents
+		// in a mid-rebase state where they struggle with --continue/--abort.
+		if abortErr := g.AbortRebase(wtPath); abortErr != nil {
+			log.Printf("WARNING: failed to abort rebase in %s: %v", wtPath, abortErr)
+		}
 
-Your task branch has conflicts with the latest integration branch.
+		// Only transition to INTEGRATION_FAILED for true merge conflicts.
+		// Generic rebase failures (tool/env issues) are returned as-is so the
+		// agent can retry without a state transition.
+		var rebaseConflict *gitpkg.RebaseConflictError
+		if !stderrors.As(err, &rebaseConflict) {
+			return nil, fmt.Errorf("failed to rebase onto integration: %w", err)
+		}
 
-Worktree location: %s
-
-To resolve:
-  1. cd %s
-  2. git status (see conflicting files)
-  3. Edit files to resolve conflict markers
-  4. git add <resolved-files>
-  5. git rebase --continue
-  6. COMMIT=$(git -C %s rev-parse HEAD)
-  7. Return to project root and retry: liza submit-for-review %s $COMMIT
-
-Alternatively, abort the rebase and ask for help:
-  git rebase --abort`, wtPath, wtPath, wtPath, taskID)
+		// Transition to INTEGRATION_FAILED so the orchestrator re-queues the task.
+		// This catches conflicts early (before review), avoiding a wasted review cycle.
+		// See also: markIntegrationFailed in wt_merge.go (sibling for post-review merge path).
+		markErr := markSubmitRebaseConflict(bb, taskID, agentID, pipelineTransitions)
+		if markErr != nil {
+			return nil, fmt.Errorf("rebase conflict on %s (also failed to transition to INTEGRATION_FAILED: %w)", taskID, markErr)
+		}
+		return nil, &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
 	}
 
 	postRebaseCommit, err := g.GetWorktreeHEAD(taskID)
@@ -233,4 +240,52 @@ Alternatively, abort the rebase and ask for help:
 		ReviewCommit: postRebaseCommit,
 		AgentID:      agentID,
 	}, nil
+}
+
+// markSubmitRebaseConflict transitions a task from IMPLEMENTING (or pipeline executing
+// state) to INTEGRATION_FAILED when a rebase conflict is detected during submission.
+// Releases the agent so the orchestrator can re-assign a coder for conflict resolution.
+//
+// Sibling: markIntegrationFailed in wt_merge.go handles the post-review merge path.
+// Both share the pattern: transition → append FailedBy → write history entry.
+// They differ in pre-conditions (approved vs implementing) and post-actions (agent release).
+func markSubmitRebaseConflict(bb *db.Blackboard, taskID, agentID string, pipelineTransitions map[models.TaskStatus][]models.TaskStatus) error {
+	reason := IntegrationReasonMergeConflict
+	return bb.Modify(func(s *models.State) error {
+		t := s.FindTask(taskID)
+		if t == nil {
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if pipelineTransitions != nil {
+			if err := t.TransitionWith(models.TaskStatusIntegrationFailed, pipelineTransitions); err != nil {
+				return err
+			}
+		} else {
+			if err := t.Transition(models.TaskStatusIntegrationFailed); err != nil {
+				return err
+			}
+		}
+		t.FailedBy = appendUniqueAgentID(t.FailedBy, agentID)
+		t.IntegrationFix = false
+		t.AssignedTo = nil
+		t.LeaseExpires = nil
+
+		entry := models.TaskHistoryEntry{
+			Time:   time.Now().UTC(),
+			Event:  "integration_failed",
+			Agent:  &agentID,
+			Reason: &reason,
+		}
+		t.History = append(t.History, entry)
+
+		// Release the agent so it can pick up other work
+		if agent, ok := s.Agents[agentID]; ok {
+			agent.Status = models.AgentStatusWaiting
+			agent.CurrentTask = nil
+			agent.LeaseExpires = nil
+			s.Agents[agentID] = agent
+		}
+
+		return nil
+	})
 }

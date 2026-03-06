@@ -378,25 +378,27 @@ func TestSubmitForReview_RebaseConflict(t *testing.T) {
 	}
 
 	// Verify error message contains conflict information
-	if !strings.Contains(err.Error(), "rebase conflict") {
-		t.Errorf("expected error to mention rebase conflict, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), wtPath) {
-		t.Errorf("expected error to include worktree path, got: %v", err)
+	if !strings.Contains(err.Error(), "merge conflict") {
+		t.Errorf("expected error to mention merge conflict, got: %v", err)
 	}
 
-	// Verify task remains in IMPLEMENTING status
+	// Verify task transitions to INTEGRATION_FAILED (conflict caught early, before review)
 	state, err := bb.Read()
 	testhelpers.AssertNoError(t, err)
 
 	task := &state.Tasks[0]
-	if task.Status != models.TaskStatusImplementing {
-		t.Errorf("expected task to remain IMPLEMENTING after conflict, got %s", task.Status)
+	if task.Status != models.TaskStatusIntegrationFailed {
+		t.Errorf("expected task to be INTEGRATION_FAILED after rebase conflict, got %s", task.Status)
 	}
 
 	// Verify review_commit is NOT set
 	if task.ReviewCommit != nil {
 		t.Errorf("expected review_commit to be nil after failed submission, got %v", task.ReviewCommit)
+	}
+
+	// Verify agent is released (no longer assigned)
+	if task.AssignedTo != nil {
+		t.Errorf("expected agent to be released after integration failure, got %v", *task.AssignedTo)
 	}
 }
 

@@ -1,6 +1,7 @@
 package git
 
 import (
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,13 +139,18 @@ func TestRebaseOnto_Conflict(t *testing.T) {
 		t.Fatalf("FetchFromLocal() error = %v", err)
 	}
 
-	// Try to rebase - should detect conflict
+	// Try to rebase - should detect conflict and return typed error
 	err := git.RebaseOnto(wtPath, "FETCH_HEAD")
 	if err == nil {
-		t.Error("Expected rebase conflict error, got nil")
+		t.Fatal("Expected rebase conflict error, got nil")
 	}
-	if !strings.Contains(err.Error(), "rebase conflict") && !strings.Contains(err.Error(), "conflict") {
-		t.Errorf("Expected conflict error, got: %v", err)
+
+	var rebaseConflict *RebaseConflictError
+	if !stderrors.As(err, &rebaseConflict) {
+		t.Fatalf("Expected *RebaseConflictError, got %T: %v", err, err)
+	}
+	if rebaseConflict.Output == "" {
+		t.Error("Expected non-empty Output in RebaseConflictError")
 	}
 
 	// Verify rebase left repository in conflict state
@@ -282,10 +288,19 @@ func TestRebaseOnto_AlreadyInProgress(t *testing.T) {
 	}
 	_ = git.RebaseOnto(wtPath, "FETCH_HEAD") // Expected to fail
 
-	// Try another rebase while one is in progress
+	// Try another rebase while one is in progress — this is a generic failure,
+	// NOT a merge conflict, so it must NOT return *RebaseConflictError.
 	err := git.RebaseOnto(wtPath, "FETCH_HEAD")
 	if err == nil {
-		t.Error("Expected error when rebase already in progress, got nil")
+		t.Fatal("Expected error when rebase already in progress, got nil")
+	}
+
+	var rebaseConflict *RebaseConflictError
+	if stderrors.As(err, &rebaseConflict) {
+		t.Errorf("Expected generic rebase error, got *RebaseConflictError: %v", err)
+	}
+	if !strings.Contains(err.Error(), "rebase failed") {
+		t.Errorf("Expected wrapped 'rebase failed' error, got: %v", err)
 	}
 
 	// Clean up

@@ -133,7 +133,7 @@ func (ts TaskStatus) IsTerminal() bool {
 var taskTransitions = map[TaskStatus][]TaskStatus{
 	TaskStatusDraft:             {TaskStatusReady, TaskStatusAbandoned},
 	TaskStatusReady:             {TaskStatusImplementing, TaskStatusSuperseded, TaskStatusAbandoned},
-	TaskStatusImplementing:      {TaskStatusReadyForReview, TaskStatusBlocked, TaskStatusReady},
+	TaskStatusImplementing:      {TaskStatusReadyForReview, TaskStatusBlocked, TaskStatusReady, TaskStatusIntegrationFailed},
 	TaskStatusReadyForReview:    {TaskStatusReviewing},
 	TaskStatusReviewing:         {TaskStatusApproved, TaskStatusRejected, TaskStatusReadyForReview},
 	TaskStatusRejected:          {TaskStatusImplementing, TaskStatusBlocked, TaskStatusSuperseded, TaskStatusAbandoned},
@@ -146,7 +146,7 @@ var taskTransitions = map[TaskStatus][]TaskStatus{
 
 	// Code-planning pair transitions
 	TaskStatusDraftCodingPlan:     {TaskStatusCodePlanning, TaskStatusAbandoned},
-	TaskStatusCodePlanning:        {TaskStatusCodingPlanToReview, TaskStatusBlocked, TaskStatusDraftCodingPlan},
+	TaskStatusCodePlanning:        {TaskStatusCodingPlanToReview, TaskStatusBlocked, TaskStatusDraftCodingPlan, TaskStatusIntegrationFailed},
 	TaskStatusCodingPlanToReview:  {TaskStatusReviewingCodingPlan},
 	TaskStatusReviewingCodingPlan: {TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected, TaskStatusCodingPlanToReview},
 	TaskStatusCodingPlanRejected:  {TaskStatusDraftCodingPlan, TaskStatusBlocked, TaskStatusSuperseded, TaskStatusAbandoned},

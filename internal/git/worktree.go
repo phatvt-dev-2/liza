@@ -24,6 +24,15 @@ func (e *RefConflictError) Error() string {
 	return fmt.Sprintf("ref conflict on %s: expected %s, got %s", e.Ref, e.Expected, e.Actual)
 }
 
+// RebaseConflictError indicates a merge conflict during git rebase.
+type RebaseConflictError struct {
+	Output string // raw git output containing conflict details
+}
+
+func (e *RebaseConflictError) Error() string {
+	return fmt.Sprintf("rebase conflict: %s", e.Output)
+}
+
 // Git provides git operations for worktree management
 type Git struct {
 	projectRoot string
@@ -327,19 +336,22 @@ func (g *Git) FetchFromLocal(wtPath string, branch string) error {
 	return nil
 }
 
-// RebaseOnto rebases the current branch in a worktree onto the specified base branch
-// Must be called from within a worktree context
-// Returns error if rebase conflicts occur
+// RebaseOnto rebases the current branch in a worktree onto the specified base branch.
+// Must be called from within a worktree context.
+// Returns *RebaseConflictError for merge conflicts, generic error for other failures.
 func (g *Git) RebaseOnto(wtPath string, baseBranch string) error {
-	output, err := g.execInDir(wtPath, "rebase", baseBranch)
+	cmd := exec.Command("git", "rebase", baseBranch)
+	cmd.Dir = wtPath
+	rawOutput, err := cmd.CombinedOutput()
 	if err != nil {
-		// Check if it's a rebase conflict
-		if strings.Contains(string(output), "CONFLICT") ||
-			strings.Contains(string(output), "could not apply") ||
-			strings.Contains(err.Error(), "conflict") {
-			return fmt.Errorf("rebase conflict: %w", err)
+		out := string(rawOutput)
+		// Classify using canonical git conflict markers from command output only,
+		// not from the exec error wrapper, to avoid false positives.
+		if strings.Contains(out, "CONFLICT") ||
+			strings.Contains(out, "could not apply") {
+			return &RebaseConflictError{Output: out}
 		}
-		return fmt.Errorf("rebase failed: %w", err)
+		return fmt.Errorf("rebase failed: %w\nOutput: %s", err, out)
 	}
 	return nil
 }
