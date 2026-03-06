@@ -1,5 +1,5 @@
 {{- define "wake_initial_planning" -}}
-This is initial planning. Create exactly one task for the Code Planner.
+This is initial planning. Create exactly one task for the appropriate planner.
 
 ⚠️  AUTONOMY NOTICE ⚠️
 You have FULL autonomy to execute MCP tools immediately.
@@ -8,10 +8,67 @@ Do NOT wait for permission.
 --- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
 
 1. Read the goal spec ({{.GoalSpecRef}}) thoroughly.
-2. Create a single code-planning task that captures the full goal context.
-3. Do not decompose into coder tasks in this phase.
+2. Create a single planning task that captures the full goal context.
+3. Do not decompose into downstream tasks in this phase.
 
 --- EXECUTION PHASE (MANDATORY - DO NOT SKIP) ---
+{{- if .GoalEntryPoint }}
+
+Entry-point "{{.GoalEntryPoint}}" was specified. Dispatch to {{.ResolvedDisplayName}}.
+
+Use liza_add_task once with:
+{
+  "id": "{{.ResolvedTaskIDPrefix}}-1",
+  "desc": "Create implementation plan for goal: <goal summary>",
+  "spec": "{{.GoalSpecRef}}",
+  "done": "Implementation plan is complete, reviewable, and submitted for review",
+  "scope": "Planning only: analyze goal and produce actionable plan/output. No implementation.",
+  "priority": 1,
+  "depends": [],
+  "type": "coding",
+  "role_pair": "{{.ResolvedRolePair}}",
+  "agent_id": "orchestrator-1"
+}
+
+SUCCESS CRITERIA:
+- Exactly one task is created.
+- Task role_pair is {{.ResolvedRolePair}}.
+- Task is claimable by the {{.ResolvedDisplayName}}.
+{{- else if .EntryPoints }}
+
+No entry-point was specified. Classify the input document and choose the appropriate entry-point.
+
+AVAILABLE ENTRY-POINTS:
+{{- range .EntryPoints }}
+- "{{.Name}}" → role_pair: "{{.RolePair}}" (dispatches to {{.DisplayName}})
+{{- end }}
+
+CLASSIFICATION GUIDANCE:
+- Choose "detailed-spec" if the document is already a detailed specification with structured
+  requirements or a list of user stories. The document must be unambiguously implementation-ready.
+- Choose "general-objective" for vision documents, broad objectives, or when uncertain.
+  Default to "general-objective" — skipping the spec phase is riskier than redundant refinement.
+
+After classifying, use liza_add_task once with the chosen role_pair:
+{
+  "id": "<chosen-role-pair-without-pair-suffix>-1",
+  "desc": "Create implementation plan for goal: <goal summary>",
+  "spec": "{{.GoalSpecRef}}",
+  "done": "Implementation plan is complete, reviewable, and submitted for review",
+  "scope": "Planning only: analyze goal and produce actionable plan/output. No implementation.",
+  "priority": 1,
+  "depends": [],
+  "type": "coding",
+  "role_pair": "<chosen-role-pair>",
+  "agent_id": "orchestrator-1"
+}
+
+SUCCESS CRITERIA:
+- Exactly one task is created.
+- Task role_pair matches the chosen entry-point.
+- Classification reasoning is stated before creating the task.
+{{- else }}
+
 Use liza_add_task once with:
 {
   "id": "code-planning-1",
@@ -30,10 +87,11 @@ SUCCESS CRITERIA:
 - Exactly one task is created.
 - Task role_pair is code-planning-pair.
 - Task enters DRAFT_CODING_PLAN and is claimable by code-planner.
+{{- end }}
 
 EXPECTED BEHAVIOR EXAMPLES:
-✅ Analyze goal, add one code-planning task, confirm success, exit.
-❌ Decompose into multiple coder tasks during initial planning.
+✅ Analyze goal, add one planning task, confirm success, exit.
+❌ Decompose into multiple downstream tasks during initial planning.
 
 ❌ INCORRECT (DO NOT DO THIS):
 1. Plan but do not execute liza_add_task
