@@ -1406,3 +1406,58 @@ func TestBuildCodePlanReviewerContext(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildEpicPlanReviewerContext(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-epic-review-1", "REVIEWING_EPIC_PLAN", now)
+	task.Description = "Review epic decomposition for auth system"
+	task.Iteration = 1
+	reviewCommit := "def456"
+	task.ReviewCommit = &reviewCommit
+	worktree := ".worktrees/task-epic-review-1"
+	task.Worktree = &worktree
+	assigned := "epic-planner-1"
+	task.AssignedTo = &assigned
+
+	cfg := EpicPlanReviewerContextConfig{
+		ProjectRoot: "/project",
+		AgentID:     "epic-plan-reviewer-1",
+	}
+
+	prompt, err := BuildEpicPlanReviewerContext(&task, cfg)
+	if err != nil {
+		t.Fatalf("BuildEpicPlanReviewerContext() error: %v", err)
+	}
+
+	wantContains := []string{
+		// Header fields
+		"ASSIGNED EPIC PLAN REVIEW TASK",
+		"TASK ID: task-epic-review-1",
+		"WORKTREE: /project/.worktrees/task-epic-review-1",
+		"REVIEW COMMIT: def456",
+		"AUTHOR: epic-planner-1",
+
+		// State transitions
+		"REVIEWING_EPIC_PLAN",
+		"EPIC_PLAN_APPROVED",
+		"EPIC_PLAN_REJECTED",
+
+		// Tool
+		"liza_submit_verdict",
+		`"task_id": "task-epic-review-1"`,
+		`"agent_id": "epic-plan-reviewer-1"`,
+
+		// All 6 review gates from spec
+		"Cohesive capability",
+		"Right-sized scope",
+		"Falsifiable done_when",
+		"Persona coherence",
+		"Independence",
+		"Vision coverage",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("BuildEpicPlanReviewerContext() missing %q", want)
+		}
+	}
+}

@@ -210,6 +210,21 @@ type codePlanReviewerContextData struct {
 	AssignedTo   string
 }
 
+// EpicPlanReviewerContextConfig contains configuration for building epic-plan-reviewer context
+type EpicPlanReviewerContextConfig struct {
+	ProjectRoot string
+	AgentID     string
+}
+
+// epicPlanReviewerContextData is the template data for epic_plan_reviewer_context.tmpl
+type epicPlanReviewerContextData struct {
+	Task         *models.Task
+	Config       EpicPlanReviewerContextConfig
+	WorktreePath string
+	ReviewCommit string
+	AssignedTo   string
+}
+
 // BuildReviewerContext creates reviewer-specific context with review details
 func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (string, error) {
 	worktreePath := ""
@@ -265,6 +280,23 @@ func BuildCodePlanReviewerContext(task *models.Task, config CodePlanReviewerCont
 		AssignedTo:   derefString(task.AssignedTo),
 	}
 	return executeTemplate("code_plan_reviewer_context", data)
+}
+
+// BuildEpicPlanReviewerContext creates epic-plan-reviewer-specific context with review details
+func BuildEpicPlanReviewerContext(task *models.Task, config EpicPlanReviewerContextConfig) (string, error) {
+	worktreePath := ""
+	if task.Worktree != nil {
+		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
+	}
+
+	data := epicPlanReviewerContextData{
+		Task:         task,
+		Config:       config,
+		WorktreePath: worktreePath,
+		ReviewCommit: derefString(task.ReviewCommit),
+		AssignedTo:   derefString(task.AssignedTo),
+	}
+	return executeTemplate("epic_plan_reviewer_context", data)
 }
 
 // derefString returns the value pointed to by s, or "" if s is nil.
