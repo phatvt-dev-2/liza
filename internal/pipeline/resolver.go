@@ -126,11 +126,19 @@ func (r *Resolver) AllDeclaredStates() []models.TaskStatus {
 // is sprint-terminal. MERGED is always included as the universal terminal for
 // role-pairs at the end of the pipeline.
 func (r *Resolver) SprintTerminalStates() []models.TaskStatus {
-	// Collect all approved states that are sources of transitions.
+	// Collect all role-pairs that are sources of transitions.
 	transitionSources := make(map[string]bool)
+	// From sub-pipeline transitions (2-part refs).
 	for _, sp := range r.config.Pipeline.SubPipelines {
 		for _, t := range sp.Transitions {
 			fromPair, _, _ := parseRef(t.From)
+			transitionSources[fromPair] = true
+		}
+	}
+	// From pipeline-transitions (3-part refs).
+	for _, t := range r.config.Pipeline.PipelineTransitions {
+		_, fromPair, _, err := parse3PartRef(t.From)
+		if err == nil {
 			transitionSources[fromPair] = true
 		}
 	}
@@ -177,13 +185,18 @@ func (r *Resolver) ReviewerRole(rolePair string) (string, error) {
 }
 
 // Transition returns the transition definition for the given name.
-// It searches across all sub-pipelines.
+// It searches across all sub-pipelines and pipeline-transitions.
 func (r *Resolver) Transition(name string) (*TransitionDef, error) {
 	for _, sp := range r.config.Pipeline.SubPipelines {
 		for i := range sp.Transitions {
 			if sp.Transitions[i].Name == name {
 				return &sp.Transitions[i], nil
 			}
+		}
+	}
+	for i := range r.config.Pipeline.PipelineTransitions {
+		if r.config.Pipeline.PipelineTransitions[i].Name == name {
+			return &r.config.Pipeline.PipelineTransitions[i], nil
 		}
 	}
 	return nil, fmt.Errorf("unknown transition %q", name)
@@ -193,6 +206,7 @@ func (r *Resolver) Transition(name string) (*TransitionDef, error) {
 // status, excluding transitions already executed.
 func (r *Resolver) AvailableTransitions(status models.TaskStatus, transitionsExecuted map[string]bool) []string {
 	var available []string
+	// Check sub-pipeline transitions.
 	for _, sp := range r.config.Pipeline.SubPipelines {
 		for _, t := range sp.Transitions {
 			if t.Trigger != "manual" {
@@ -201,15 +215,25 @@ func (r *Resolver) AvailableTransitions(status models.TaskStatus, transitionsExe
 			if transitionsExecuted[t.Name] {
 				continue
 			}
-			// Resolve the "from" reference to a concrete status.
 			fromPair, fromPhase, err := parseRef(t.From)
 			if err != nil {
 				continue
 			}
-			fromStatus := r.resolvePhase(fromPair, fromPhase)
-			if fromStatus == status {
+			if r.resolvePhase(fromPair, fromPhase) == status {
 				available = append(available, t.Name)
 			}
+		}
+	}
+	// Check pipeline-transitions (3-part refs).
+	for _, t := range r.config.Pipeline.PipelineTransitions {
+		if t.Trigger != "manual" {
+			continue
+		}
+		if transitionsExecuted[t.Name] {
+			continue
+		}
+		if r.resolve3PartPhase(t.From) == status {
+			available = append(available, t.Name)
 		}
 	}
 	slices.Sort(available)
@@ -217,16 +241,23 @@ func (r *Resolver) AvailableTransitions(status models.TaskStatus, transitionsExe
 }
 
 // TransitionTargetRolePair returns the target role-pair name for a transition.
+// Handles both 2-part refs (sub-pipeline transitions) and 3-part refs (pipeline-transitions).
 func (r *Resolver) TransitionTargetRolePair(transitionName string) (string, error) {
 	t, err := r.Transition(transitionName)
 	if err != nil {
 		return "", err
 	}
-	toPair, _, err := parseRef(t.To)
-	if err != nil {
-		return "", fmt.Errorf("transition %q: invalid to reference: %w", transitionName, err)
+	// Try 3-part ref first (pipeline-transitions use sub-pipeline.role-pair.phase).
+	_, toPair, _, err3 := parse3PartRef(t.To)
+	if err3 == nil {
+		return toPair, nil
 	}
-	return toPair, nil
+	// Fall back to 2-part ref (sub-pipeline transitions use role-pair.phase).
+	toPair2, _, err2 := parseRef(t.To)
+	if err2 != nil {
+		return "", fmt.Errorf("transition %q: invalid to reference: %w", transitionName, err2)
+	}
+	return toPair2, nil
 }
 
 // resolvePhase returns the concrete status for a role-pair + phase combination.
@@ -251,6 +282,17 @@ func (r *Resolver) resolvePhase(rolePair, phase string) models.TaskStatus {
 	default:
 		return ""
 	}
+}
+
+// resolve3PartPhase parses a 3-part ref (sub-pipeline.role-pair.phase) and
+// returns the concrete status. The sub-pipeline prefix is stripped since
+// role-pair names are globally unique.
+func (r *Resolver) resolve3PartPhase(ref string) models.TaskStatus {
+	_, rolePair, phase, err := parse3PartRef(ref)
+	if err != nil {
+		return ""
+	}
+	return r.resolvePhase(rolePair, phase)
 }
 
 // IsDeclaredState checks if a status is declared in the pipeline config.
