@@ -713,14 +713,19 @@ var proceedCmd = &cobra.Command{
 	Short: "Execute a manual inter-pair transition on a task",
 	Long: `Execute a manual transition between role pairs.
 
-This command creates child tasks from a source task's output[] entries.
-The source task must be at the transition's required status and the
-preceding sprint must be COMPLETED.
+This command creates child tasks from a source task based on the transition's
+cardinality. The source task must be at the transition's required status
+and the preceding sprint must be COMPLETED.
 
-Available transitions:
-  code-plan-to-coding  CODING_PLAN_APPROVED → DRAFT (per-subtask)
+Cardinality modes:
+  per-subtask  Creates one child per entry in the source task's output[].
+               Child IDs: <parent-id>-<transition-name>-<index>
+  one-to-one   Creates a single child task. The parent task itself is the input.
+               Child ID: <parent-id>-<transition-name>
 
-Child task IDs follow the pattern: <parent-id>-<transition-name>-<index>.
+Available transitions are defined in the frozen pipeline config (.liza/pipeline.yaml).
+Use 'liza status' to see available transitions for tasks at terminal states.
+
 After running proceed, use 'liza resume' to start a new sprint with
 the child tasks.
 

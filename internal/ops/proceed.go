@@ -29,6 +29,9 @@ type transitionDef struct {
 	cardinality string
 	// targetRolePair is the role-pair set on child tasks (pipeline goals only).
 	targetRolePair string
+	// doerDisplayName is the display name of the target role-pair's doer (pipeline only).
+	// Used for generating child task descriptions in one-to-one transitions.
+	doerDisplayName string
 }
 
 // knownTransitions is the hardcoded transition registry.
@@ -90,8 +93,9 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 		alreadyExecuted := task.TransitionsExecuted[transitionName]
 
 		if alreadyExecuted {
-			// Crash recovery: check if some children are missing
-			if tDef.cardinality == "per-subtask" {
+			switch tDef.cardinality {
+			case "per-subtask":
+				// Crash recovery: check if some children are missing
 				var missingChildren []int
 				for i := range task.Output {
 					childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
@@ -100,17 +104,14 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 					}
 				}
 				if len(missingChildren) == 0 {
-					// All children exist — transition fully completed
 					return fmt.Errorf("transition %q already executed on task %q", transitionName, taskID)
 				}
-				// Create only missing children (crash recovery)
 				for _, idx := range missingChildren {
 					childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, idx)
 					child := buildChildTask(childID, taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, now)
 					s.Tasks = append(s.Tasks, child)
 					result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 				}
-				// Record crash recovery in history
 				task.History = append(task.History, models.TaskHistoryEntry{
 					Time:  now,
 					Event: "transition_crash_recovery",
@@ -120,12 +121,34 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 					},
 				})
 				return nil
+
+			case "one-to-one":
+				// Crash recovery: check if child is missing
+				childID := fmt.Sprintf("%s-%s", taskID, transitionName)
+				if s.FindTask(childID) != nil {
+					return fmt.Errorf("transition %q already executed on task %q", transitionName, taskID)
+				}
+				child := buildOneToOneChild(childID, taskID, task, tDef, now)
+				s.Tasks = append(s.Tasks, child)
+				result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+				task.History = append(task.History, models.TaskHistoryEntry{
+					Time:  now,
+					Event: "transition_crash_recovery",
+					Extra: map[string]any{
+						"transition":         transitionName,
+						"recovered_children": 1,
+					},
+				})
+				return nil
+
+			default:
+				return fmt.Errorf("transition %q already executed on task %q", transitionName, taskID)
 			}
-			return fmt.Errorf("transition %q already executed on task %q", transitionName, taskID)
 		}
 
-		// Validate output for per-subtask cardinality
-		if tDef.cardinality == "per-subtask" {
+		// Validate and create children based on cardinality
+		switch tDef.cardinality {
+		case "per-subtask":
 			if len(task.Output) == 0 {
 				return fmt.Errorf("task %q has no output[] entries for per-subtask transition %q", taskID, transitionName)
 			}
@@ -134,22 +157,34 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 					return err
 				}
 			}
-		}
 
-		// Mark transition as executed (write this first for crash recovery)
-		if task.TransitionsExecuted == nil {
-			task.TransitionsExecuted = make(map[string]bool)
-		}
-		task.TransitionsExecuted[transitionName] = true
+			// Mark transition as executed (write this first for crash recovery)
+			if task.TransitionsExecuted == nil {
+				task.TransitionsExecuted = make(map[string]bool)
+			}
+			task.TransitionsExecuted[transitionName] = true
 
-		// Create child tasks
-		if tDef.cardinality == "per-subtask" {
 			for i, entry := range task.Output {
 				childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
 				child := buildChildTask(childID, taskID, entry, tDef.targetStatus, tDef.targetRolePair, now)
 				s.Tasks = append(s.Tasks, child)
 				result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 			}
+
+		case "one-to-one":
+			// Mark transition as executed (write this first for crash recovery)
+			if task.TransitionsExecuted == nil {
+				task.TransitionsExecuted = make(map[string]bool)
+			}
+			task.TransitionsExecuted[transitionName] = true
+
+			childID := fmt.Sprintf("%s-%s", taskID, transitionName)
+			child := buildOneToOneChild(childID, taskID, task, tDef, now)
+			s.Tasks = append(s.Tasks, child)
+			result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+
+		default:
+			return fmt.Errorf("unsupported cardinality %q for transition %q", tDef.cardinality, transitionName)
 		}
 
 		// Add history entry to source task
@@ -185,6 +220,31 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 		SpecRef:     entry.SpecRef,
 		DoneWhen:    entry.DoneWhen,
 		Scope:       entry.Scope,
+		Created:     now,
+		History:     []models.TaskHistoryEntry{},
+	}
+}
+
+// buildOneToOneChild creates a child task for a one-to-one transition.
+// The parent task itself is the input — no output[] needed. The child's fields
+// describe the next phase's work, with spec_ref pointing to the parent's artifact.
+func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef transitionDef, now time.Time) models.Task {
+	doerName := tDef.doerDisplayName
+	if doerName == "" {
+		doerName = tDef.targetRolePair
+	}
+
+	return models.Task{
+		ID:          childID,
+		Type:        models.TaskTypeCoding,
+		RolePair:    tDef.targetRolePair,
+		Description: fmt.Sprintf("%s task for: %s", doerName, parent.Description),
+		Status:      tDef.targetStatus,
+		Priority:    parent.Priority,
+		ParentTask:  &parentID,
+		SpecRef:     parent.SpecRef,
+		DoneWhen:    fmt.Sprintf("Complete %s work based on parent task %s", doerName, parentID),
+		Scope:       fmt.Sprintf("Based on parent task %s", parentID),
 		Created:     now,
 		History:     []models.TaskHistoryEntry{},
 	}
@@ -261,11 +321,19 @@ func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, er
 			return transitionDef{}, fmt.Errorf("invalid target role-pair in transition %q: %w", transitionName, err)
 		}
 
+		// Resolve doer display name for one-to-one child task descriptions.
+		var doerDisplay string
+		rp, rpErr := resolver.RolePair(targetPair)
+		if rpErr == nil {
+			doerDisplay = cfg.Pipeline.AgentRoles[rp.Doer]
+		}
+
 		return transitionDef{
-			requiredStatus: fromStatus,
-			targetStatus:   toStatus,
-			cardinality:    td.Cardinality,
-			targetRolePair: targetPair,
+			requiredStatus:  fromStatus,
+			targetStatus:    toStatus,
+			cardinality:     td.Cardinality,
+			targetRolePair:  targetPair,
+			doerDisplayName: doerDisplay,
 		}, nil
 	}
 
@@ -282,14 +350,26 @@ func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, er
 	return td, nil
 }
 
-// resolvePhaseRef resolves a "pair.phase" reference (e.g., "code-planning-pair.approved")
-// to a concrete TaskStatus using the resolver's public API.
+// resolvePhaseRef resolves a phase reference to a concrete TaskStatus.
+// Handles both 2-part refs ("role-pair.phase") and 3-part refs
+// ("sub-pipeline.role-pair.phase"). For 3-part refs, the sub-pipeline
+// prefix is stripped since role-pair names are globally unique.
 func resolvePhaseRef(resolver *pipeline.Resolver, ref string) (models.TaskStatus, error) {
-	parts := strings.SplitN(ref, ".", 2)
-	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid transition reference %q (expected pair.phase)", ref)
+	parts := strings.Split(ref, ".")
+	var pair, phase string
+	switch len(parts) {
+	case 2:
+		pair, phase = parts[0], parts[1]
+	case 3:
+		// 3-part ref: sub-pipeline.role-pair.phase — strip sub-pipeline prefix
+		pair, phase = parts[1], parts[2]
+	default:
+		return "", fmt.Errorf("invalid transition reference %q (expected pair.phase or sub-pipeline.pair.phase)", ref)
 	}
-	pair, phase := parts[0], parts[1]
+
+	if pair == "" || phase == "" {
+		return "", fmt.Errorf("invalid transition reference %q: empty components", ref)
+	}
 
 	switch phase {
 	case "initial":
@@ -309,13 +389,17 @@ func resolvePhaseRef(resolver *pipeline.Resolver, ref string) (models.TaskStatus
 	}
 }
 
-// allTransitionNames collects all transition names from the pipeline config.
+// allTransitionNames collects all transition names from the pipeline config,
+// including both sub-pipeline transitions and pipeline-transitions.
 func allTransitionNames(cfg *pipeline.PipelineConfig) []string {
 	var names []string
 	for _, sp := range cfg.Pipeline.SubPipelines {
 		for _, t := range sp.Transitions {
 			names = append(names, t.Name)
 		}
+	}
+	for _, t := range cfg.Pipeline.PipelineTransitions {
+		names = append(names, t.Name)
 	}
 	slices.Sort(names)
 	return names
