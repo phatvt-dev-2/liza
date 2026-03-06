@@ -20,10 +20,11 @@ type PipelineConfig struct {
 
 // Pipeline defines agent roles, role-pairs, sub-pipelines, and entry-points.
 type Pipeline struct {
-	AgentRoles   map[string]string      `yaml:"agent-roles"`
-	RolePairs    map[string]RolePairDef `yaml:"role-pairs"`
-	SubPipelines map[string]SubPipeline `yaml:"sub-pipelines"`
-	EntryPoints  map[string]string      `yaml:"entry-points"`
+	AgentRoles          map[string]string      `yaml:"agent-roles"`
+	RolePairs           map[string]RolePairDef `yaml:"role-pairs"`
+	SubPipelines        map[string]SubPipeline `yaml:"sub-pipelines"`
+	PipelineTransitions []TransitionDef        `yaml:"pipeline-transitions"`
+	EntryPoints         map[string]string      `yaml:"entry-points"`
 }
 
 // RolePairDef defines a doer-reviewer pair and its state names.
@@ -162,6 +163,17 @@ func validate(cfg *PipelineConfig) error {
 		}
 	}
 
+	// Validate pipeline-transitions.
+	for _, t := range p.PipelineTransitions {
+		if err := validatePipelineTransition(t, p); err != nil {
+			return fmt.Errorf("pipeline-transition %q: %w", t.Name, err)
+		}
+		if owner, exists := transitionOwner[t.Name]; exists {
+			return fmt.Errorf("duplicate transition name %q: used by %q and pipeline-transitions", t.Name, owner)
+		}
+		transitionOwner[t.Name] = "pipeline-transitions"
+	}
+
 	// Validate entry-points.
 	for epName, epValue := range p.EntryPoints {
 		if err := validateEntryPoint(epName, epValue, p); err != nil {
@@ -179,6 +191,16 @@ func parseRef(ref string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid reference %q: expected format <name>.<phase>", ref)
 	}
 	return parts[0], parts[1], nil
+}
+
+// parse3PartRef splits a dotted reference like "sub-pipeline.role-pair.phase" into its components.
+// Used for pipeline-transitions that reference states across sub-pipeline boundaries.
+func parse3PartRef(ref string) (subPipeline, rolePair, phase string, err error) {
+	parts := strings.SplitN(ref, ".", 3)
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return "", "", "", fmt.Errorf("invalid 3-part reference %q: expected format <sub-pipeline>.<role-pair>.<phase>", ref)
+	}
+	return parts[0], parts[1], parts[2], nil
 }
 
 // validPhases lists the allowed phase names for role-pair state references.
@@ -243,6 +265,63 @@ func validateTransition(t TransitionDef, p *Pipeline, steps []string) error {
 	}
 	if !toInSteps {
 		return fmt.Errorf("to role-pair %q is not a step of this sub-pipeline", toPair)
+	}
+
+	return nil
+}
+
+// validatePipelineTransition checks a single pipeline-transition definition.
+// Pipeline-transitions use 3-part refs and must reference different sub-pipelines.
+func validatePipelineTransition(t TransitionDef, p *Pipeline) error {
+	if t.Name == "" {
+		return fmt.Errorf("transition name is empty")
+	}
+
+	// Validate trigger.
+	if t.Trigger != "manual" && t.Trigger != "auto" {
+		return fmt.Errorf("trigger must be %q or %q, got %q", "manual", "auto", t.Trigger)
+	}
+
+	// Validate cardinality.
+	if t.Cardinality != "per-subtask" && t.Cardinality != "one-to-one" {
+		return fmt.Errorf("cardinality must be %q or %q, got %q", "per-subtask", "one-to-one", t.Cardinality)
+	}
+
+	// Validate from reference (3-part).
+	fromSP, fromPair, fromPhase, err := parse3PartRef(t.From)
+	if err != nil {
+		return fmt.Errorf("from: %w", err)
+	}
+	sp, ok := p.SubPipelines[fromSP]
+	if !ok {
+		return fmt.Errorf("from: sub-pipeline %q not found", fromSP)
+	}
+	if !slices.Contains(sp.Steps, fromPair) {
+		return fmt.Errorf("from: role-pair %q is not a step of sub-pipeline %q", fromPair, fromSP)
+	}
+	if !validPhases[fromPhase] {
+		return fmt.Errorf("from: invalid phase %q", fromPhase)
+	}
+
+	// Validate to reference (3-part).
+	toSP, toPair, toPhase, err := parse3PartRef(t.To)
+	if err != nil {
+		return fmt.Errorf("to: %w", err)
+	}
+	sp, ok = p.SubPipelines[toSP]
+	if !ok {
+		return fmt.Errorf("to: sub-pipeline %q not found", toSP)
+	}
+	if !slices.Contains(sp.Steps, toPair) {
+		return fmt.Errorf("to: role-pair %q is not a step of sub-pipeline %q", toPair, toSP)
+	}
+	if !validPhases[toPhase] {
+		return fmt.Errorf("to: invalid phase %q", toPhase)
+	}
+
+	// Cross-sub-pipeline constraint: from and to must reference different sub-pipelines.
+	if fromSP == toSP {
+		return fmt.Errorf("from and to must reference different sub-pipelines (both reference %q)", fromSP)
 	}
 
 	return nil
