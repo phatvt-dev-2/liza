@@ -57,14 +57,22 @@ type ReviewerContextConfig struct {
 
 // CodePlannerContextConfig contains configuration for building code-planner context
 type CodePlannerContextConfig struct {
-	ProjectRoot string
-	AgentID     string
+	ProjectRoot    string
+	AgentID        string
+	GoalSpecRef    string
+	SiblingTasks   []SiblingTaskSummary
+	TotalPlanTasks int
+	TaskOrdinal    int
 }
 
 // CodePlanReviewerContextConfig contains configuration for building code-plan-reviewer context
 type CodePlanReviewerContextConfig struct {
-	ProjectRoot string
-	AgentID     string
+	ProjectRoot    string
+	AgentID        string
+	GoalSpecRef    string
+	SiblingTasks   []SiblingTaskSummary
+	TotalPlanTasks int
+	TaskOrdinal    int
 }
 
 // EpicPlannerContextConfig contains configuration for building epic-planner context
@@ -75,14 +83,22 @@ type EpicPlannerContextConfig struct {
 
 // USWriterContextConfig contains configuration for building us-writer context
 type USWriterContextConfig struct {
-	ProjectRoot string
-	AgentID     string
+	ProjectRoot    string
+	AgentID        string
+	GoalSpecRef    string
+	SiblingTasks   []SiblingTaskSummary
+	TotalPlanTasks int
+	TaskOrdinal    int
 }
 
 // USReviewerContextConfig contains configuration for building us-reviewer context
 type USReviewerContextConfig struct {
-	ProjectRoot string
-	AgentID     string
+	ProjectRoot    string
+	AgentID        string
+	GoalSpecRef    string
+	SiblingTasks   []SiblingTaskSummary
+	TotalPlanTasks int
+	TaskOrdinal    int
 }
 
 // BuildBasePrompt creates the base bootstrap prompt for all agents
@@ -205,7 +221,7 @@ func BuildCoderContext(task *models.Task, config CoderContextConfig) (string, er
 	return executeTemplate("coder_context", data)
 }
 
-// reviewerContextData is the template data for reviewer_context.tmpl
+// reviewerContextData is the template data for code_reviewer_context.tmpl
 type reviewerContextData struct {
 	Task              *models.Task
 	Config            ReviewerContextConfig
@@ -219,25 +235,29 @@ type reviewerContextData struct {
 
 // codePlannerContextData is the template data for code_planner_context.tmpl
 type codePlannerContextData struct {
-	Task         *models.Task
-	Config       CodePlannerContextConfig
-	WorktreePath string
+	Task              *models.Task
+	Config            CodePlannerContextConfig
+	WorktreePath      string
+	HasPriorRejection bool
 }
 
 // epicPlannerContextData is the template data for epic_planner_context.tmpl
 type epicPlannerContextData struct {
-	Task         *models.Task
-	Config       EpicPlannerContextConfig
-	WorktreePath string
+	Task              *models.Task
+	Config            EpicPlannerContextConfig
+	WorktreePath      string
+	HasPriorRejection bool
 }
 
 // codePlanReviewerContextData is the template data for code_plan_reviewer_context.tmpl
 type codePlanReviewerContextData struct {
-	Task         *models.Task
-	Config       CodePlanReviewerContextConfig
-	WorktreePath string
-	ReviewCommit string
-	AssignedTo   string
+	Task              *models.Task
+	Config            CodePlanReviewerContextConfig
+	WorktreePath      string
+	BaseCommit        string
+	ReviewCommit      string
+	AssignedTo        string
+	HasPriorRejection bool
 }
 
 // EpicPlanReviewerContextConfig contains configuration for building epic-plan-reviewer context
@@ -248,27 +268,32 @@ type EpicPlanReviewerContextConfig struct {
 
 // epicPlanReviewerContextData is the template data for epic_plan_reviewer_context.tmpl
 type epicPlanReviewerContextData struct {
-	Task         *models.Task
-	Config       EpicPlanReviewerContextConfig
-	WorktreePath string
-	ReviewCommit string
-	AssignedTo   string
+	Task              *models.Task
+	Config            EpicPlanReviewerContextConfig
+	WorktreePath      string
+	BaseCommit        string
+	ReviewCommit      string
+	AssignedTo        string
+	HasPriorRejection bool
 }
 
 // usWriterContextData is the template data for us_writer_context.tmpl
 type usWriterContextData struct {
-	Task         *models.Task
-	Config       USWriterContextConfig
-	WorktreePath string
+	Task              *models.Task
+	Config            USWriterContextConfig
+	WorktreePath      string
+	HasPriorRejection bool
 }
 
 // usReviewerContextData is the template data for us_reviewer_context.tmpl
 type usReviewerContextData struct {
-	Task         *models.Task
-	Config       USReviewerContextConfig
-	WorktreePath string
-	ReviewCommit string
-	AssignedTo   string
+	Task              *models.Task
+	Config            USReviewerContextConfig
+	WorktreePath      string
+	BaseCommit        string
+	ReviewCommit      string
+	AssignedTo        string
+	HasPriorRejection bool
 }
 
 // BuildReviewerContext creates reviewer-specific context with review details
@@ -293,7 +318,7 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (stri
 		HasPriorRejection: hasPriorRejection(task),
 		ScopeExtensions:   scopeExtensions,
 	}
-	return executeTemplate("reviewer_context", data)
+	return executeTemplate("code_reviewer_context", data)
 }
 
 // BuildCodePlannerContext creates code-planner-specific context with task details
@@ -304,9 +329,10 @@ func BuildCodePlannerContext(task *models.Task, config CodePlannerContextConfig)
 	}
 
 	data := codePlannerContextData{
-		Task:         task,
-		Config:       config,
-		WorktreePath: worktreePath,
+		Task:              task,
+		Config:            config,
+		WorktreePath:      worktreePath,
+		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("code_planner_context", data)
 }
@@ -319,11 +345,13 @@ func BuildCodePlanReviewerContext(task *models.Task, config CodePlanReviewerCont
 	}
 
 	data := codePlanReviewerContextData{
-		Task:         task,
-		Config:       config,
-		WorktreePath: worktreePath,
-		ReviewCommit: derefString(task.ReviewCommit),
-		AssignedTo:   derefString(task.AssignedTo),
+		Task:              task,
+		Config:            config,
+		WorktreePath:      worktreePath,
+		BaseCommit:        derefString(task.BaseCommit),
+		ReviewCommit:      derefString(task.ReviewCommit),
+		AssignedTo:        derefString(task.AssignedTo),
+		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("code_plan_reviewer_context", data)
 }
@@ -336,11 +364,13 @@ func BuildEpicPlanReviewerContext(task *models.Task, config EpicPlanReviewerCont
 	}
 
 	data := epicPlanReviewerContextData{
-		Task:         task,
-		Config:       config,
-		WorktreePath: worktreePath,
-		ReviewCommit: derefString(task.ReviewCommit),
-		AssignedTo:   derefString(task.AssignedTo),
+		Task:              task,
+		Config:            config,
+		WorktreePath:      worktreePath,
+		BaseCommit:        derefString(task.BaseCommit),
+		ReviewCommit:      derefString(task.ReviewCommit),
+		AssignedTo:        derefString(task.AssignedTo),
+		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("epic_plan_reviewer_context", data)
 }
@@ -353,9 +383,10 @@ func BuildEpicPlannerContext(task *models.Task, config EpicPlannerContextConfig)
 	}
 
 	data := epicPlannerContextData{
-		Task:         task,
-		Config:       config,
-		WorktreePath: worktreePath,
+		Task:              task,
+		Config:            config,
+		WorktreePath:      worktreePath,
+		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("epic_planner_context", data)
 }
@@ -368,9 +399,10 @@ func BuildUSWriterContext(task *models.Task, config USWriterContextConfig) (stri
 	}
 
 	data := usWriterContextData{
-		Task:         task,
-		Config:       config,
-		WorktreePath: worktreePath,
+		Task:              task,
+		Config:            config,
+		WorktreePath:      worktreePath,
+		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("us_writer_context", data)
 }
@@ -383,11 +415,13 @@ func BuildUSReviewerContext(task *models.Task, config USReviewerContextConfig) (
 	}
 
 	data := usReviewerContextData{
-		Task:         task,
-		Config:       config,
-		WorktreePath: worktreePath,
-		ReviewCommit: derefString(task.ReviewCommit),
-		AssignedTo:   derefString(task.AssignedTo),
+		Task:              task,
+		Config:            config,
+		WorktreePath:      worktreePath,
+		BaseCommit:        derefString(task.BaseCommit),
+		ReviewCommit:      derefString(task.ReviewCommit),
+		AssignedTo:        derefString(task.AssignedTo),
+		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("us_reviewer_context", data)
 }

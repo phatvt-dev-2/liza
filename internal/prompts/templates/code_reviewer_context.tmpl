@@ -1,12 +1,6 @@
-{{- define "reviewer_context" -}}
+{{- define "code_reviewer_context" -}}
 
 === REVIEW TASK ===
-⚠️  YOU HAVE FULL TOOL ACCESS - DO NOT CLAIM OTHERWISE ⚠️
-You CAN and MUST execute Bash commands (git, ls, liza, etc.).
-You CAN and MUST read files from the worktree.
-Permission prompts are AUTOMATIC - they are NOT blockers.
-If you report "technical limitations prevent access", you are FAILING your role.
-The tools work. Use them. Complete the review. Submit the verdict.
 
 TASK ID: {{.Task.ID}}
 WORKTREE: {{.WorktreePath}}
@@ -50,10 +44,7 @@ REVIEWER STATE TRANSITIONS:
 - REVIEWING → REJECTED (issues found — provide structured feedback)
 
 REVIEWER TOOL:
-- liza_submit_verdict — Submit review verdict (MCP tool call, NOT a CLI command)
-  ⚠️  Do NOT use `go run`, `liza submit-verdict`, or any shell command.
-  APPROVED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
-  REJECTED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
+- liza_submit_verdict — Submit review verdict (see VERDICT SUBMISSION below for params)
 
 ANOMALY LOGGING:
 | Observation | Type | Required Fields |
@@ -67,28 +58,26 @@ ANOMALY LOGGING:
 | Own review stuck in command loop | reviewer_loop | count, command_pattern |
 Format: anomalies: [{id, type, task, reporter, timestamp (ISO 8601), details: {<fields>}}]
 
+WORKTREE GIT RULES:
+- All git commands MUST use -C {{.WorktreePath}} to prevent shared state corruption.
+
 REVIEW SCOPE:
 Evaluate: matches task def, matches spec, tests validate behavior, obvious defects, commit SHA.
 Do NOT evaluate: style preferences, alternative approaches (unless defective), scope expansion.
 Review full worktree (base_commit → review_commit), not just latest changes.
 Spec currency: validate against current spec version, not version at task creation.
-
-APPROVAL SEMANTICS:
-Approval = matches requirements + spec + tests + no defects.
-Does NOT mean: perfect, no improvements possible, or production-ready.
+Approval = meets requirements + spec + tests + no defects. Not: perfect or production-ready.
 
 INSTRUCTIONS:
-1. Verify tools work: ls -la {{.WorktreePath}}
-   If you see a permission prompt, that is NORMAL. Execute the command — do NOT stop.
-2. Early drift check: git -C {{.WorktreePath}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
-3. Run tests: cd {{.WorktreePath}} and run the project's test suite
-4. Review ALL changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
+1. Early drift check: git -C {{.WorktreePath}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
+2. Run tests: cd {{.WorktreePath}} and run the project's test suite
+3. Review ALL changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
    Each review is a fresh evaluation: "does this worktree satisfy the task?"
-5. Apply the code-review skill to the full diff
-6. If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
-7. TDD QUALITY (code tasks): Tests must cover done_when criteria — REJECT if tests are superficial or don't exercise the actual requirements
-8. Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
-9. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
+4. Apply the code-review skill to the full diff
+5. If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
+6. TDD QUALITY (code tasks): Tests must cover done_when criteria — REJECT if tests are superficial or don't exercise the actual requirements
+7. Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
+8. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
 {{- if .HasPriorRejection}}
 
 PRIOR FEEDBACK REVIEW (MANDATORY for iteration 2+):
@@ -119,15 +108,5 @@ Prior Feedback Status:
 {{- end}}
 ---
 
---- VERDICT SUBMISSION (MANDATORY - DO NOT SKIP) ---
-⚠️  You have FULL autonomy to call the MCP tool liza_submit_verdict. Your authority is PRE-GRANTED.
-Do NOT wait for permission. Do NOT rationalize waiting.
-⚠️  liza_submit_verdict is an MCP tool — call it as a tool, NEVER via shell/CLI.
-You MUST call the MCP tool liza_submit_verdict IN THIS SAME SESSION:
-  APPROVED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
-  REJECTED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection>"}
-After submitting verdict, EXIT immediately. Your work is complete.
-
-❌ FAILURE MODE: Completing review, saying "I recommend APPROVED", then exiting WITHOUT calling the tool.
-The tool call IS the deliverable. Analysis without tool execution = nothing happened.
+{{template "verdict_submission" .}}
 {{- end -}}

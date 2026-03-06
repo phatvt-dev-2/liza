@@ -42,12 +42,12 @@ func TestBuildBasePrompt(t *testing.T) {
 				"~/.liza/ = installed contracts & skills",
 				"/project/.liza/ = runtime state & blackboard",
 				"You have FULL read access to both .liza/ directories",
-				"For READING state: use liza_get MCP tool",
+				"For READING state: use liza_get with targeted queries",
 				"For MODIFYING state: use role-specific MCP tools",
 				"Prefer MCP tools for atomicity and validation",
 				"If a required operation has no MCP tool",
-				"Execute all commands immediately",
-				"DO NOT ask \"should I proceed?\"",
+				"Execute commands immediately",
+				"DO proceed with tool execution",
 				"QUERY TOOLS",
 				"liza_get",
 				"liza_status",
@@ -58,8 +58,7 @@ func TestBuildBasePrompt(t *testing.T) {
 				"EXIT CODES:",
 				"TIMESTAMPS:",
 				"FIRST ACTIONS:",
-				"Read the current blackboard state",
-				"Read your assigned task's FULL entry",
+				"Query your assigned task: liza_get",
 				"Read the goal spec: specs/vision.md",
 				"lessons/agents/README.md",
 				"GUARDRAILS.md",
@@ -527,15 +526,9 @@ func TestBuildCoderContext(t *testing.T) {
 				"ANOMALY LOGGING:",
 				"If context exhaustion is near (~90%)",
 				"--- IMPLEMENTATION PHASE ---",
-				"The task is already IMPLEMENTING for you",
-				"Do NOT run liza claim-task",
 				"Work ONLY in the worktree directory. Use git -C /project/.worktrees/task-1 for all git commands.",
-				"BASH CONSTRAINTS (CLI sandboxes may block these patterns):",
-				"NEVER combine cd and git in one command",
-				"NEVER use sed/awk for file editing",
-				"NEVER use $() command substitution",
-				"NEVER run bare git commands without -C",
-				"NEVER use \"git add -A\"",
+				"WORKTREE GIT RULES:",
+				"MUST use -C /project/.worktrees/task-1",
 				"COMMIT WORKFLOW:",
 				"files were modified by this hook",
 				"TDD (code tasks): Write tests FIRST",
@@ -642,14 +635,14 @@ func TestBuildCoderContext(t *testing.T) {
 				"worktree is clean",
 				"WORKFLOW:",
 				"1. FETCH AND REBASE",
-				"git fetch /project integration",
-				"git rebase FETCH_HEAD",
+				"git -C /project/.worktrees/task-1 fetch /project integration",
+				"git -C /project/.worktrees/task-1 rebase FETCH_HEAD",
 				"2. RESOLVE CONFLICTS",
 				"conflict markers (<<<<<<<, =======, >>>>>>>)",
-				"git add <resolved-file>",
-				"git rebase --continue",
+				"git -C /project/.worktrees/task-1 add <resolved-file>",
+				"git -C /project/.worktrees/task-1 rebase --continue",
 				"3. IF UNRESOLVABLE",
-				"git rebase --abort",
+				"git -C /project/.worktrees/task-1 rebase --abort",
 				"liza_mark_blocked",
 				"4. VALIDATE",
 				"5. SUBMIT",
@@ -775,7 +768,6 @@ func TestBuildReviewerContext(t *testing.T) {
 				"Blockers:",
 				"Concerns:",
 				"--- VERDICT SUBMISSION (MANDATORY - DO NOT SKIP) ---",
-				"You have FULL autonomy to call the MCP tool liza_submit_verdict",
 				"You MUST call the MCP tool liza_submit_verdict IN THIS SAME SESSION",
 				"{\"task_id\": \"task-1\", \"verdict\": \"APPROVED\", \"agent_id\": \"code-reviewer-1\"}",
 				"{\"task_id\": \"task-1\", \"verdict\": \"REJECTED\", \"agent_id\": \"code-reviewer-1\"",
@@ -930,15 +922,19 @@ func TestOrchestratorPromptHasAutonomyGuidance(t *testing.T) {
 	}
 }
 
-func TestBasePromptHasStrongAutonomy(t *testing.T) {
+// TestBasePromptRegressionGuard is a comprehensive regression test for the base prompt.
+// The base prompt is the foundation for ALL agent roles. A regression here silently
+// degrades every agent in the system. Each section is tested independently so failures
+// pinpoint exactly what broke.
+func TestBasePromptRegressionGuard(t *testing.T) {
 	config := BasePromptConfig{
-		Role:        "orchestrator",
-		AgentID:     "test-agent",
-		SpecsDir:    ".liza/specs",
-		ProjectRoot: "/tmp/test",
-		StatePath:   ".liza/state.yaml",
-		GoalDesc:    "test goal",
-		GoalSpecRef: ".liza/specs/goal.md",
+		Role:        "code-coder",
+		AgentID:     "coder-1",
+		SpecsDir:    "/project/specs",
+		ProjectRoot: "/project",
+		StatePath:   "/project/.liza/state.yaml",
+		GoalDesc:    "Build a web API",
+		GoalSpecRef: "specs/vision.md",
 	}
 
 	prompt, err := BuildBasePrompt(config)
@@ -946,18 +942,141 @@ func TestBasePromptHasStrongAutonomy(t *testing.T) {
 		t.Fatalf("BuildBasePrompt() error: %v", err)
 	}
 
-	// Verify strong autonomy language
-	requiredPhrases := []string{
-		"Execute all commands immediately",
-		"Your authority is pre-approved",
-		"DO NOT ask \"should I proceed?\"",
-	}
-
-	for _, phrase := range requiredPhrases {
-		if !strings.Contains(prompt, phrase) {
-			t.Errorf("Expected autonomy phrase not found: %s", phrase)
+	// Helper to check a batch of required phrases with a section label
+	assertSection := func(section string, phrases []string) {
+		t.Helper()
+		for _, phrase := range phrases {
+			if !strings.Contains(prompt, phrase) {
+				t.Errorf("[%s] missing: %q", section, phrase)
+			}
 		}
 	}
+
+	// Helper to check phrases that must NOT appear
+	assertAbsent := func(section string, phrases []string) {
+		t.Helper()
+		for _, phrase := range phrases {
+			if strings.Contains(prompt, phrase) {
+				t.Errorf("[%s] must not contain: %q", section, phrase)
+			}
+		}
+	}
+
+	// --- BOOTSTRAP CONTEXT: template variables resolve correctly ---
+	assertSection("bootstrap", []string{
+		"You are a Liza code-coder agent",
+		"Agent ID: coder-1",
+		"ROLE: code-coder",
+		"PROJECT_SPECS: /project/specs",
+		"PROJECT: /project",
+		"BLACKBOARD: /project/.liza/state.yaml",
+		"GOAL: Build a web API",
+	})
+
+	// --- OPERATIONAL RULES: .liza/ directory disambiguation ---
+	assertSection("liza-dirs", []string{
+		"TWO .liza/ directories exist",
+		"~/.liza/ = installed contracts & skills",
+		"/project/.liza/ = runtime state & blackboard",
+		"FULL read access to both .liza/ directories",
+	})
+
+	// --- STATE ACCESS: liza_get over state.yaml ---
+	assertSection("state-access", []string{
+		"use liza_get with targeted queries",
+		"NEVER read state.yaml directly",
+		"liza_get returns only the requested slice",
+		"Prefer MCP tools for atomicity and validation",
+	})
+
+	// --- AUTONOMY: agents must not hesitate ---
+	assertSection("autonomy", []string{
+		"Your authority is pre-approved",
+		"Execute commands immediately",
+		"DO proceed with tool execution",
+	})
+
+	// --- BASH CONSTRAINTS: universal safety rules ---
+	assertSection("bash-constraints", []string{
+		"BASH CONSTRAINTS",
+		"NEVER combine cd and git in one command",
+		"git -C <path> <cmd>",
+		"NEVER use sed/awk for file editing",
+		"AGENT_TOOLS.md",
+		"NEVER use $() command substitution",
+		"ANSI-C quoting",
+		"NEVER attempt to install, bootstrap, or fix system-level tooling",
+		`NEVER use "git add -A" or "git add ."`,
+		"stage specific files by name",
+		"liza_* operations are MCP tool calls",
+		"NEVER via shell commands",
+	})
+
+	// --- QUERY TOOLS: available to all roles ---
+	assertSection("query-tools", []string{
+		"QUERY TOOLS",
+		"liza_get",
+		"liza_status",
+		"liza_validate",
+	})
+
+	// --- COMMUNICATION: blackboard-only ---
+	assertSection("communication", []string{
+		"Agents communicate via blackboard only",
+		"MCP tools",
+		"not direct interaction",
+	})
+
+	// --- FORBIDDEN: hard prohibitions ---
+	assertSection("forbidden", []string{
+		"FORBIDDEN:",
+		"Do NOT attempt to claim tasks",
+		"Do NOT manually modify task status",
+		"Do NOT skip worktrees",
+		"Do NOT make architecture decisions",
+	})
+
+	// --- EXIT CODES: supervisor protocol ---
+	assertSection("exit-codes", []string{
+		"EXIT CODES:",
+		"Role complete",
+		"Graceful abort",
+		"Restart with backoff",
+	})
+
+	// --- FIRST ACTIONS: boot sequence ---
+	assertSection("first-actions", []string{
+		"FIRST ACTIONS:",
+		"Query your assigned task: liza_get",
+		"Read the goal spec: specs/vision.md",
+		"lessons/agents/README.md",
+		"GUARDRAILS.md",
+		"Execute your role's protocol",
+	})
+
+	// --- ENVIRONMENT LESSONS ---
+	assertSection("env-lessons", []string{
+		"ENVIRONMENT LESSONS",
+		"lesson-capture skill",
+	})
+
+	// --- CODEBASE EXPLORATION: context-saving delegation ---
+	assertSection("codebase-exploration", []string{
+		"CODEBASE EXPLORATION",
+		"delegated exploration tool/subagent",
+		"targeted local search",
+	})
+
+	// --- NEGATIVE: role-specific content must NOT leak into base ---
+	assertAbsent("no-role-leak", []string{
+		"liza_add_task",
+		"liza_submit_for_review",
+		"liza_submit_verdict",
+		"WORKTREE GIT RULES",
+		"IMPLEMENTATION PHASE",
+		"REVIEW CHECKLIST",
+		"VERDICT SUBMISSION",
+	})
 }
 
 func TestReviewerPromptHasAutonomyGuidance(t *testing.T) {
@@ -984,18 +1103,10 @@ func TestReviewerPromptHasAutonomyGuidance(t *testing.T) {
 		t.Fatalf("BuildReviewerContext() error: %v", err)
 	}
 
-	// Verify strong autonomy language — preamble and verdict section
+	// Verify verdict submission section (factorized partial template)
 	requiredPhrases := []string{
-		// Preamble: tool access assertion
-		"YOU HAVE FULL TOOL ACCESS",
-		"You CAN and MUST execute Bash commands",
-		"Permission prompts are AUTOMATIC",
-		// Verdict section: mandatory submission
 		"--- VERDICT SUBMISSION (MANDATORY - DO NOT SKIP) ---",
-		"You have FULL autonomy to call the MCP tool liza_submit_verdict",
-		"Your authority is PRE-GRANTED",
-		"Do NOT wait for permission",
-		"Do NOT rationalize waiting",
+		"liza_submit_verdict is an MCP tool",
 		"You MUST call the MCP tool liza_submit_verdict IN THIS SAME SESSION",
 		"After submitting verdict, EXIT immediately",
 		"FAILURE MODE:",
@@ -1628,9 +1739,9 @@ func TestBuildEpicPlannerContext(t *testing.T) {
 		"one cohesive capability area",
 		"3–8 user stories",
 
-		// Bash constraints
-		"BASH CONSTRAINTS",
-		"NEVER combine cd and git",
+		// Worktree git rules
+		"WORKTREE GIT RULES",
+		"MUST use -C",
 
 		// Implementation phase
 		"IMPLEMENTATION PHASE",
@@ -1682,9 +1793,9 @@ func TestBuildUSWriterContext(t *testing.T) {
 		"~/.liza/skills/user-story-writing/SKILL.md",
 		// SMARC criteria
 		"SMARC",
-		// Bash constraints
-		"BASH CONSTRAINTS",
-		"git -C",
+		// Worktree git rules
+		"WORKTREE GIT RULES",
+		"MUST use -C",
 	}
 	for _, want := range wantContains {
 		if !strings.Contains(prompt, want) {

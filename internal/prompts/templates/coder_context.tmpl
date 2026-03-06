@@ -82,15 +82,9 @@ ENVIRONMENT CONSTRAINT:
 If a required tool or dependency is missing (e.g., pip, npm, cargo):
 - Try at most 2 alternatives (e.g., pip3, python3 -m pip)
 - If still unavailable: mark BLOCKED immediately via liza_mark_blocked
-- NEVER attempt to install, bootstrap, or fix system-level tooling
 
-BASH CONSTRAINTS (CLI sandboxes may block these patterns):
-- NEVER combine cd and git in one command. Use: git -C <path> <cmd>
-- NEVER use sed/awk for file editing. Use your IDE's file-edit tools instead.
-- NEVER use $() command substitution, backticks, or ANSI-C quoting ($'...') in Bash commands.
-- For file content: use file-edit tools. For git ops: use git -C {{.WorktreePath}}.
-- NEVER run bare git commands without -C {{.WorktreePath}}. Bare git targets the integration branch and corrupts shared state.
-- NEVER use "git add -A" or "git add .". Always stage specific files by name.
+WORKTREE GIT RULES:
+- All git commands MUST use -C {{.WorktreePath}} to prevent shared state corruption.
 
 COMMIT WORKFLOW:
 1. Stage files: git -C {{.WorktreePath}} add <files>
@@ -99,15 +93,15 @@ COMMIT WORKFLOW:
 4. If pre-commit exits 1 with actual errors: fix the code, re-stage, retry.
 
 --- IMPLEMENTATION PHASE ---
-1. The task is already IMPLEMENTING for you. Do NOT run liza claim-task.
-2. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
-3. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
-4. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.
-5. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
-6. TDD waiver: For cosmetic-only changes (comment fixes, formatting), set tdd_not_required in checkpoint with justification
-7. Use the clean-code skill at the end of the implementation
-8. Validate ALL done_when criteria are met
-9. If context exhaustion is near (~90%): run liza_handoff with summary + next_action, then exit with code 42
+1. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
+2. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
+3. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.
+   Tests must be discoverable via standard runners (e.g. pytest, go test) — not just runnable when explicitly named.
+4. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
+5. TDD waiver: For cosmetic-only changes (comment fixes, formatting), set tdd_not_required in checkpoint with justification
+6. Use the clean-code skill at the end of the implementation
+7. Validate ALL done_when criteria are met
+8. If context exhaustion is near (~90%): run liza_handoff with summary + next_action, then exit with code 42
 
 --- SUBMISSION (MANDATORY - DO NOT SKIP) ---
 After implementation and tests pass, you MUST submit for review:

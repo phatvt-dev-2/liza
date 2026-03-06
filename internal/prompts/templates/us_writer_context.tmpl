@@ -11,6 +11,25 @@ DONE WHEN:
 
 SCOPE:
 {{.Task.Scope}}
+{{- if gt .Config.TotalPlanTasks 1}}
+
+=== COLLECTIVE PLAN SCOPING ===
+This task is {{.Config.TaskOrdinal}} of {{.Config.TotalPlanTasks}} in the current sprint plan.
+Read the full goal spec ({{.Config.GoalSpecRef}}) to understand how your work integrates.
+Your scope is LIMITED to what is described in SCOPE above.
+Do NOT write stories that belong to a sibling task's scope — this is Scope Absorption.
+
+SIBLING TASKS (for scope boundary awareness):
+{{- range .Config.SiblingTasks}}
+- {{.ID}}: {{.Description}} [{{.Status}}]
+{{- end}}
+{{- end}}
+
+{{- if .HasPriorRejection}}
+
+=== PRIOR REJECTION FEEDBACK (MUST ADDRESS) ===
+{{deref .Task.RejectionReason}}
+{{- end}}
 
 US WRITER STATE TRANSITIONS:
 - WRITING_US → US_READY_FOR_REVIEW (submit for review)
@@ -51,19 +70,15 @@ Anti-patterns to avoid:
 - Generic Persona: "As a User" where "User" could be any noun
 - Valueless Story: hand-waving the "so that" clause
 
-BASH CONSTRAINTS (CLI sandboxes may block these patterns):
-- NEVER combine cd and git in one command. Use: git -C <path> <cmd>
-- NEVER use sed/awk for file editing. Use your IDE's file-edit tools instead.
-- NEVER use $() command substitution, backticks, or ANSI-C quoting ($'...') in Bash commands.
-- For file content: use file-edit tools. For git ops: use git -C {{.WorktreePath}}.
+WORKTREE GIT RULES:
+- All git commands MUST use -C {{.WorktreePath}} to prevent shared state corruption.
 
 IMPLEMENTATION PHASE:
-1. The task is already WRITING_US for you. Do NOT run liza claim-task.
-2. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
-3. Read the user-story-writing skill FIRST: ~/.liza/skills/user-story-writing/SKILL.md
-4. Read the source material referenced by this task (parent epic, vision doc, spec).
-5. Follow the skill protocol: Parse → Write → Self-Review.
-6. Write user stories to the output file path specified by the task.
-7. Validate done_when criteria with concrete checks.
-8. Submit using liza_submit_for_review when complete.
+1. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
+2. Read the user-story-writing skill FIRST: ~/.liza/skills/user-story-writing/SKILL.md
+3. Read the source material referenced by this task (parent epic, vision doc, spec).
+4. Follow the skill protocol: Parse → Write → Self-Review.
+5. Write user stories to the output file path specified by the task.
+6. Validate done_when criteria with concrete checks.
+7. Submit using liza_submit_for_review when complete.
 {{- end -}}

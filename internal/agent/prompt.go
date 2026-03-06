@@ -139,9 +139,15 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
+		siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
+
 		plannerConfig := prompts.CodePlannerContextConfig{
-			ProjectRoot: config.ProjectRoot,
-			AgentID:     config.AgentID,
+			ProjectRoot:    config.ProjectRoot,
+			AgentID:        config.AgentID,
+			GoalSpecRef:    state.Goal.SpecRef,
+			SiblingTasks:   siblingTasks,
+			TotalPlanTasks: totalPlanTasks,
+			TaskOrdinal:    taskOrdinal,
 		}
 		context, err := prompts.BuildCodePlannerContext(task, plannerConfig)
 		if err != nil {
@@ -155,9 +161,15 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
+		siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
+
 		reviewerConfig := prompts.CodePlanReviewerContextConfig{
-			ProjectRoot: config.ProjectRoot,
-			AgentID:     config.AgentID,
+			ProjectRoot:    config.ProjectRoot,
+			AgentID:        config.AgentID,
+			GoalSpecRef:    state.Goal.SpecRef,
+			SiblingTasks:   siblingTasks,
+			TotalPlanTasks: totalPlanTasks,
+			TaskOrdinal:    taskOrdinal,
 		}
 		context, err := prompts.BuildCodePlanReviewerContext(task, reviewerConfig)
 		if err != nil {
@@ -203,9 +215,15 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
+		siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
+
 		usWriterConfig := prompts.USWriterContextConfig{
-			ProjectRoot: config.ProjectRoot,
-			AgentID:     config.AgentID,
+			ProjectRoot:    config.ProjectRoot,
+			AgentID:        config.AgentID,
+			GoalSpecRef:    state.Goal.SpecRef,
+			SiblingTasks:   siblingTasks,
+			TotalPlanTasks: totalPlanTasks,
+			TaskOrdinal:    taskOrdinal,
 		}
 		context, err := prompts.BuildUSWriterContext(task, usWriterConfig)
 		if err != nil {
@@ -219,9 +237,15 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 			return "", &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
+		siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
+
 		usReviewerConfig := prompts.USReviewerContextConfig{
-			ProjectRoot: config.ProjectRoot,
-			AgentID:     config.AgentID,
+			ProjectRoot:    config.ProjectRoot,
+			AgentID:        config.AgentID,
+			GoalSpecRef:    state.Goal.SpecRef,
+			SiblingTasks:   siblingTasks,
+			TotalPlanTasks: totalPlanTasks,
+			TaskOrdinal:    taskOrdinal,
 		}
 		context, err := prompts.BuildUSReviewerContext(task, usReviewerConfig)
 		if err != nil {

@@ -10,6 +10,11 @@ DESCRIPTION: {{.Task.Description}}
 
 DONE WHEN:
 {{.Task.DoneWhen}}
+{{- if .HasPriorRejection}}
+
+=== PRIOR REJECTION (iteration {{sub .Task.Iteration 1}}) ===
+{{deref .Task.RejectionReason}}
+{{- end}}
 
 EPIC PLAN REVIEWER STATE TRANSITIONS:
 - REVIEWING_EPIC_PLAN → EPIC_PLAN_APPROVED
@@ -18,9 +23,13 @@ EPIC PLAN REVIEWER STATE TRANSITIONS:
 EPIC PLAN REVIEWER TOOLS:
 - liza_get — Query task state to inspect output[] entries
   {"query": "tasks/{{.Task.ID}}"}
-- liza_submit_verdict — Submit review verdict
-  APPROVED: {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
-  REJECTED: {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
+- liza_submit_verdict — Submit review verdict (MCP tool call, NOT a CLI command)
+  ⚠️  Do NOT use `go run`, `liza submit-verdict`, or any shell command.
+  APPROVED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
+  REJECTED: call tool liza_submit_verdict with params {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
+
+WORKTREE GIT RULES:
+- All git commands MUST use -C {{.WorktreePath}} to prevent shared state corruption.
 
 REVIEW CHECKLIST:
 | Gate | Reject if |
@@ -31,12 +40,24 @@ REVIEW CHECKLIST:
 | Persona coherence | Epic mixes unrelated persona clusters — US Writer would need to context-switch |
 | Independence | Epic has unnecessary coupling to other epics — verify cross-epic dependencies are true ordering constraints |
 | Vision coverage | Epics collectively miss or exceed vision scope — reject with gap/scope-absorption note |
+{{- if .HasPriorRejection}}
+
+PRIOR FEEDBACK REVIEW (MANDATORY for iteration 2+):
+Before submitting verdict, compare this iteration against prior rejection:
+- Which prior issues are now RESOLVED?
+- Which prior issues are STILL PRESENT?
+- Which prior issues are PARTIALLY ADDRESSED?
+Include this assessment in your rejection reason if rejecting.
+{{- end}}
 
 REVIEW PHASE:
-1. Inspect worktree changes for this review commit.
-2. Validate done_when criteria are satisfied.
-3. Verify output[] entries: run liza_get with {"query": "tasks/{{.Task.ID}}"} and confirm
+1. Early drift check: git -C {{.WorktreePath}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
+2. Inspect worktree changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
+3. Validate done_when criteria are satisfied.
+4. Verify output[] entries: run liza_get with {"query": "tasks/{{.Task.ID}}"} and confirm
    output[] has one entry per planned epic with valid desc, done_when, scope, spec_ref.
-4. Verify each proposed epic passes the review checklist above.
-5. Submit verdict with liza_submit_verdict.
+5. Verify each proposed epic passes the review checklist above.
+6. Submit verdict with liza_submit_verdict.
+
+{{template "verdict_submission" .}}
 {{- end -}}

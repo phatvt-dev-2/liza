@@ -12,6 +12,25 @@ DONE WHEN:
 SCOPE:
 {{.Task.Scope}}
 
+{{- if gt .Config.TotalPlanTasks 1}}
+
+=== COLLECTIVE PLAN SCOPING ===
+This task is {{.Config.TaskOrdinal}} of {{.Config.TotalPlanTasks}} in the current sprint plan.
+Read the full goal spec ({{.Config.GoalSpecRef}}) to understand the complete picture.
+Your planning scope is LIMITED to what is described in SCOPE above.
+Do NOT plan work that belongs to a sibling task's scope.
+
+SIBLING TASKS (for scope boundary awareness):
+{{- range .Config.SiblingTasks}}
+- {{.ID}}: {{.Description}} [{{.Status}}]
+{{- end}}
+{{- end}}
+{{- if .HasPriorRejection}}
+
+=== PRIOR REJECTION FEEDBACK (MUST ADDRESS) ===
+{{deref .Task.RejectionReason}}
+{{- end}}
+
 CODE PLANNER STATE TRANSITIONS:
 - CODE_PLANNING → CODING_PLAN_TO_REVIEW (submit for review)
 - CODE_PLANNING → BLOCKED (spec ambiguity or dependency blocker)
@@ -30,29 +49,27 @@ CODE PLANNER TOOLS:
 - liza_mark_blocked — Cannot proceed
   {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
 
-BASH CONSTRAINTS (CLI sandboxes may block these patterns):
-- NEVER combine cd and git in one command. Use: git -C <path> <cmd>
-- NEVER use sed/awk for file editing. Use your IDE's file-edit tools instead.
-- NEVER use $() command substitution, backticks, or ANSI-C quoting ($'...') in Bash commands.
-- For file content: use file-edit tools. For git ops: use git -C {{.WorktreePath}}.
+WORKTREE GIT RULES:
+- All git commands MUST use -C {{.WorktreePath}} to prevent shared state corruption.
 
 TASK DECOMPOSITION PRINCIPLE:
 Each coding task MUST have a single intent — one observable behavior change.
 Smell: if the task description contains conjunctions ("X and Y and Z"), it is composite.
-Smell: if done_when lists assertions across more than 2 packages, the task is too broad.
+Smell: if done_when lists assertions across more than 2 packages or >4 conditions, the task is too broad.
 Atomic exceptions exist (e.g., "add model field and update serializer") — use judgment.
 When a spec step is too large for one task, split it. When two spec steps are small and
 tightly coupled, combining them is acceptable — but the intent must still be singular.
 Prefer more smaller tasks over fewer larger ones: each additional review cycle on a
 large task costs more than a review cycle on a small, focused task.
+Declare dependency order between tasks — no circular or missing dependencies.
+Verify the plan covers ALL spec requirements — gaps will be rejected.
 
 IMPLEMENTATION PHASE:
-1. The task is already CODE_PLANNING for you. Do NOT run liza claim-task.
-2. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
-3. For EACH coding task in your plan, call liza_set_task_output with structured entries.
+1. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
+2. For EACH coding task in your plan, call liza_set_task_output with structured entries.
    Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
    Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source).
-4. Update worktree artifacts required by DONE WHEN.
-5. Validate done_when criteria with concrete checks.
-6. Submit using liza_submit_for_review when complete.
+3. Update worktree artifacts required by DONE WHEN.
+4. Validate done_when criteria with concrete checks.
+5. Submit using liza_submit_for_review when complete.
 {{- end -}}
