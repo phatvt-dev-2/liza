@@ -1,89 +1,32 @@
 {{- define "coder_integration_fix" -}}
 
 === INTEGRATION FIX MODE ===
-This task previously failed to merge into the integration branch.
-Your PRIMARY objective is to resolve the merge conflict and ensure the implementation still works.
+This task failed to merge due to conflicts with the integration branch.
+Your worktree is clean (any prior failed rebase was aborted).
+Resolve the conflicts, verify tests pass, then submit.
 
-CRITICAL UNDERSTANDING - How Rebase Solves Commit History Issues:
-- Git automatically SKIPS commits that already exist in integration (same commit SHA)
-- After rebasing onto integration, your branch will contain ONLY commits unique to your task
-- Example: If your branch has [A, B, C] and integration already has [A, B], rebase leaves only [C]
-- Verify this with: git log --oneline {{.Config.IntegrationBranch}}..HEAD (shows commits unique to your branch)
-- If you see the wrong number of commits after rebase, your commits have different SHAs than integration
+WORKFLOW:
 
-INTEGRATION FIX WORKFLOW:
-
-1. ASSESS THE CONFLICT
+1. FETCH AND REBASE
    cd {{.WorktreePath}}
-   git status
-   # Review conflicted files and understand what changed on integration branch
-
-2. UPDATE LOCAL BRANCH
    git fetch {{.Config.ProjectRoot}} {{.Config.IntegrationBranch}}
-   # Note: This is a local-only repository, so we fetch from project root, not 'origin'
+   git rebase FETCH_HEAD
 
-3. REBASE ONTO INTEGRATION BRANCH
-   git rebase {{.Config.IntegrationBranch}}
-   # Git will pause at conflicts. Proceed to step 4.
-   # Git automatically skips commits that already exist in integration (same SHA)
+2. RESOLVE CONFLICTS (git pauses at each conflict)
+   For each conflicted file:
+     a. Read the file — resolve conflict markers (<<<<<<<, =======, >>>>>>>)
+     b. Preserve both your changes and integration branch changes
+     c. git add <resolved-file>
+   Then: git rebase --continue
+   Repeat until rebase completes.
 
-3.5. VERIFY COMMIT HISTORY
-   # After rebase completes successfully, verify your branch state:
-   git log --oneline {{.Config.IntegrationBranch}}..HEAD
-
-   Expected result: Should show ONLY commits unique to your task
-   - If you see commits that should be in integration already, continue to step 3.6
-   - If commit count looks correct, skip to step 4
-
-3.6. IF AUTO-SKIP DIDN'T WORK (Different SHAs)
-   # This means they're different commit objects with similar content
-   # Use interactive rebase to manually drop out-of-scope commits:
-   git rebase -i {{.Config.IntegrationBranch}}
-
-   # In the editor:
-   #   - Mark out-of-scope commits as "drop" (commits already in integration)
-   #   - Keep only your task's commits as "pick"
-   git log --oneline {{.Config.IntegrationBranch}}..HEAD  # Verify again
-
-4. RESOLVE CONFLICTS
-   # For each conflicted file:
-   #   a. Open the file and resolve conflict markers (<<<<<<<, =======, >>>>>>>)
-   #   b. Ensure the merged code preserves both your changes and integration branch changes
-   #   c. Mark resolved: git add <file>
-   # After all conflicts resolved:
-   git rebase --continue
-
-5. IF CONFLICTS ARE UNRESOLVABLE OR HISTORY IS CORRUPTED
-
-   Option A: Mark as blocked if design conflict
-   # If you cannot resolve conflicts without breaking the implementation:
+3. IF UNRESOLVABLE
    git rebase --abort
-   # Use liza_mark_blocked tool with parameters:
-   {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "reason": "Merge conflicts cannot be resolved without redesigning: <explain>", "questions": ["What is the intended behavior when...", "Should we..."]}
+   Use liza_mark_blocked: {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "reason": "Merge conflicts require redesign: <explain>", "questions": ["..."]}
 
-   Option B: Start completely fresh if commit history is wrong
-   # If commit history is corrupted and can't be fixed with interactive rebase:
-   git diff HEAD > /tmp/my-changes.patch
-   # Delete and recreate worktree using MCP tools:
-   # Use liza_wt_delete tool with parameters:
-   {"task_id": "{{.Task.ID}}"}
-   # Use liza_wt_create tool with parameters (creates from integration branch automatically):
-   {"task_id": "{{.Task.ID}}"}
-   cd {{.WorktreePath}}
-   git apply /tmp/my-changes.patch
+4. VALIDATE
+   Run tests. Verify done_when criteria still met.
 
-6. VALIDATE IMPLEMENTATION
-   # After successful rebase:
-   #   - Run all tests to ensure they still pass
-   #   - Verify all done_when criteria still met
-   #   - Check that your changes work with integration branch updates
-
-7. SUBMIT FOR REVIEW (SAME AS NORMAL)
-   # Once conflicts resolved and tests passing:
-   # Get commit: git -C {{.WorktreePath}} rev-parse HEAD
-   # Use liza_submit_for_review tool with: {"task_id": "{{.Task.ID}}", "commit_sha": "...", "agent_id": "{{.Config.AgentID}}"}
-
-CRITICAL: Do not skip the rebase step. Merge conflicts mean the integration branch has diverged.
-Simply re-running tests without rebasing will not fix the integration failure.
-
+5. SUBMIT
+   Use liza_submit_for_review: {"task_id": "{{.Task.ID}}", "commit_sha": "<git rev-parse HEAD>", "agent_id": "{{.Config.AgentID}}"}
 {{- end -}}

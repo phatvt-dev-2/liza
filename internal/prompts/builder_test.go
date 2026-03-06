@@ -638,79 +638,24 @@ func TestBuildCoderContext(t *testing.T) {
 			},
 			wantContains: []string{
 				"=== INTEGRATION FIX MODE ===",
-				"This task previously failed to merge into the integration branch",
-				"Your PRIMARY objective is to resolve the merge conflict",
-				"INTEGRATION FIX WORKFLOW:",
-				"1. ASSESS THE CONFLICT",
-				"git status",
-				"2. UPDATE LOCAL BRANCH",
+				"failed to merge due to conflicts",
+				"worktree is clean",
+				"WORKFLOW:",
+				"1. FETCH AND REBASE",
 				"git fetch /project integration",
-				"3. REBASE ONTO INTEGRATION BRANCH",
-				"git rebase integration",
-				"4. RESOLVE CONFLICTS",
+				"git rebase FETCH_HEAD",
+				"2. RESOLVE CONFLICTS",
 				"conflict markers (<<<<<<<, =======, >>>>>>>)",
-				"git add <file>",
+				"git add <resolved-file>",
 				"git rebase --continue",
-				"5. IF CONFLICTS ARE UNRESOLVABLE",
+				"3. IF UNRESOLVABLE",
 				"git rebase --abort",
-				"liza_mark_blocked tool",
-				"6. VALIDATE IMPLEMENTATION",
-				"Run all tests to ensure they still pass",
-				"7. SUBMIT FOR REVIEW (SAME AS NORMAL)",
-				"Use liza_submit_for_review tool with:",
+				"liza_mark_blocked",
+				"4. VALIDATE",
+				"5. SUBMIT",
+				"liza_submit_for_review",
 				"\"task_id\": \"task-1\"",
 				"\"agent_id\": \"coder-1\"",
-				"CRITICAL: Do not skip the rebase step",
-				"Merge conflicts mean the integration branch has diverged",
-			},
-		},
-		{
-			name: "integration fix with enhanced rebase instructions",
-			task: func() *models.Task {
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
-				task.Description = "Fix merge conflicts"
-				task.DoneWhen = "Clean merge"
-				task.Scope = "Resolve conflicts"
-				task.Iteration = 1
-				task.IntegrationFix = true
-				worktree := ".worktrees/task-1"
-				task.Worktree = &worktree
-				return &task
-			}(),
-			config: CoderContextConfig{
-				ProjectRoot:       "/project",
-				AgentID:           "coder-1",
-				IntegrationBranch: "integration",
-			},
-			wantContains: []string{
-				// Existing checks
-				"=== INTEGRATION FIX MODE ===",
-
-				// NEW: Critical understanding section
-				"CRITICAL UNDERSTANDING - How Rebase Solves Commit History Issues:",
-				"Git automatically SKIPS commits that already exist in integration (same commit SHA)",
-				"After rebasing onto integration, your branch will contain ONLY commits unique to your task",
-				"Example: If your branch has [A, B, C] and integration already has [A, B], rebase leaves only [C]",
-				"Verify this with: git log --oneline integration..HEAD",
-
-				// NEW: Verification step after rebase
-				"After rebase completes successfully, verify your branch state:",
-				"git log --oneline integration..HEAD",
-				"Expected result: Should show ONLY commits unique to your task",
-
-				// NEW: Fallback for different SHAs
-				"IF AUTO-SKIP DIDN'T WORK",
-				"This means they're different commit objects with similar content",
-				"git rebase -i integration",
-				"Mark out-of-scope commits as \"drop\"",
-				"Keep only your task's commits as \"pick\"",
-
-				// NEW: Nuclear option
-				"Option A: Mark as blocked if design conflict",
-				"Option B: Start completely fresh if commit history is wrong",
-				"git diff HEAD > /tmp/my-changes.patch",
-				"liza_wt_delete tool",
-				"git apply /tmp/my-changes.patch",
 			},
 		},
 		{
@@ -729,14 +674,12 @@ func TestBuildCoderContext(t *testing.T) {
 			},
 			wantContains: []string{
 				// JSON params syntax for mark-blocked
-				"liza_mark_blocked tool",
+				"liza_mark_blocked",
 				"\"task_id\":",
 				"\"agent_id\":",
 				"\"reason\":",
-				"\"questions\":",
-				// JSON params syntax for worktree operations
-				"liza_wt_delete tool",
-				"liza_wt_create tool",
+				// Submit tool reference
+				"liza_submit_for_review",
 			},
 		},
 	}
