@@ -883,6 +883,420 @@ func TestResolver_IsDeclaredState(t *testing.T) {
 	}
 }
 
+// --- Phase 2: pipeline-transitions tests ---
+
+func TestLoad_Phase2ValidConfig(t *testing.T) {
+	cfg, err := Load("testdata/valid-phase2-full.yaml")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("expected non-nil config")
+	}
+
+	// Verify 4 role-pairs parsed.
+	if len(cfg.Pipeline.RolePairs) != 4 {
+		t.Fatalf("expected 4 role-pairs, got %d", len(cfg.Pipeline.RolePairs))
+	}
+	for _, name := range []string{"epic-planning-pair", "us-writing-pair", "code-planning-pair", "coding-pair"} {
+		if _, ok := cfg.Pipeline.RolePairs[name]; !ok {
+			t.Errorf("missing role-pair %s", name)
+		}
+	}
+
+	// Verify 8 agent-roles.
+	if len(cfg.Pipeline.AgentRoles) != 8 {
+		t.Fatalf("expected 8 agent-roles, got %d", len(cfg.Pipeline.AgentRoles))
+	}
+
+	// Verify 2 sub-pipelines.
+	if len(cfg.Pipeline.SubPipelines) != 2 {
+		t.Fatalf("expected 2 sub-pipelines, got %d", len(cfg.Pipeline.SubPipelines))
+	}
+
+	// Verify pipeline-transitions parsed.
+	if len(cfg.Pipeline.PipelineTransitions) != 1 {
+		t.Fatalf("expected 1 pipeline-transition, got %d", len(cfg.Pipeline.PipelineTransitions))
+	}
+	pt := cfg.Pipeline.PipelineTransitions[0]
+	if pt.Name != "us-to-coding" {
+		t.Errorf("pipeline-transition name = %q, want %q", pt.Name, "us-to-coding")
+	}
+	if pt.From != "epic-spec-subpipeline.us-writing-pair.approved" {
+		t.Errorf("pipeline-transition from = %q, want 3-part ref", pt.From)
+	}
+	if pt.To != "coding-subpipeline.code-planning-pair.initial" {
+		t.Errorf("pipeline-transition to = %q, want 3-part ref", pt.To)
+	}
+	if pt.Trigger != "manual" {
+		t.Errorf("pipeline-transition trigger = %q, want %q", pt.Trigger, "manual")
+	}
+	if pt.Cardinality != "one-to-one" {
+		t.Errorf("pipeline-transition cardinality = %q, want %q", pt.Cardinality, "one-to-one")
+	}
+
+	// Verify 2 entry-points.
+	if len(cfg.Pipeline.EntryPoints) != 2 {
+		t.Fatalf("expected 2 entry-points, got %d", len(cfg.Pipeline.EntryPoints))
+	}
+	if ep := cfg.Pipeline.EntryPoints["general-objective"]; ep != "epic-spec-subpipeline.epic-planning-pair" {
+		t.Errorf("entry-point general-objective = %q", ep)
+	}
+	if ep := cfg.Pipeline.EntryPoints["detailed-spec"]; ep != "coding-subpipeline.code-planning-pair" {
+		t.Errorf("entry-point detailed-spec = %q", ep)
+	}
+}
+
+func TestParse3PartRef(t *testing.T) {
+	tests := []struct {
+		ref                       string
+		wantSP, wantRP, wantPhase string
+		wantErr                   bool
+	}{
+		{"epic-spec-subpipeline.us-writing-pair.approved", "epic-spec-subpipeline", "us-writing-pair", "approved", false},
+		{"coding-subpipeline.code-planning-pair.initial", "coding-subpipeline", "code-planning-pair", "initial", false},
+		// Invalid: only 2 parts.
+		{"role-pair.approved", "", "", "", true},
+		// Invalid: only 1 part.
+		{"single", "", "", "", true},
+		// Invalid: empty component.
+		{".role-pair.approved", "", "", "", true},
+		{"sp..approved", "", "", "", true},
+		{"sp.rp.", "", "", "", true},
+	}
+	for _, tt := range tests {
+		sp, rp, phase, err := parse3PartRef(tt.ref)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("parse3PartRef(%q): expected error, got (%q, %q, %q)", tt.ref, sp, rp, phase)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parse3PartRef(%q): unexpected error: %v", tt.ref, err)
+			continue
+		}
+		if sp != tt.wantSP || rp != tt.wantRP || phase != tt.wantPhase {
+			t.Errorf("parse3PartRef(%q) = (%q, %q, %q), want (%q, %q, %q)",
+				tt.ref, sp, rp, phase, tt.wantSP, tt.wantRP, tt.wantPhase)
+		}
+	}
+}
+
+func TestLoad_PipelineTransition_Invalid3PartRef(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    a: "A"
+    b: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: T1
+        executing: T2
+        submitted: T3
+        reviewing: T4
+        approved: T5
+        rejected: T6
+  sub-pipelines:
+    sp1:
+      steps: [pair-a]
+      transitions: []
+    sp2:
+      steps: [pair-b]
+      transitions: []
+  pipeline-transitions:
+    - name: bad-ref
+      from: pair-a.approved
+      to: sp2.pair-b.initial
+      trigger: manual
+      cardinality: one-to-one
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for 2-part ref in pipeline-transition from")
+	}
+	assertContains(t, err.Error(), "3-part")
+}
+
+func TestLoad_PipelineTransition_SameSubPipeline(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    a: "A"
+    b: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: T1
+        executing: T2
+        submitted: T3
+        reviewing: T4
+        approved: T5
+        rejected: T6
+  sub-pipelines:
+    sp1:
+      steps: [pair-a, pair-b]
+      transitions: []
+  pipeline-transitions:
+    - name: same-sp
+      from: sp1.pair-a.approved
+      to: sp1.pair-b.initial
+      trigger: manual
+      cardinality: one-to-one
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for pipeline-transition within same sub-pipeline")
+	}
+	assertContains(t, err.Error(), "different sub-pipelines")
+}
+
+func TestLoad_PipelineTransition_NonexistentSubPipeline(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    a: "A"
+    b: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: T1
+        executing: T2
+        submitted: T3
+        reviewing: T4
+        approved: T5
+        rejected: T6
+  sub-pipelines:
+    sp1:
+      steps: [pair-a]
+      transitions: []
+    sp2:
+      steps: [pair-b]
+      transitions: []
+  pipeline-transitions:
+    - name: bad-sp
+      from: nonexistent.pair-a.approved
+      to: sp2.pair-b.initial
+      trigger: manual
+      cardinality: one-to-one
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for nonexistent sub-pipeline in pipeline-transition")
+	}
+	assertContains(t, err.Error(), "nonexistent")
+	assertContains(t, err.Error(), "not found")
+}
+
+func TestLoad_PipelineTransition_RolePairNotInSubPipeline(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    a: "A"
+    b: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: T1
+        executing: T2
+        submitted: T3
+        reviewing: T4
+        approved: T5
+        rejected: T6
+  sub-pipelines:
+    sp1:
+      steps: [pair-a]
+      transitions: []
+    sp2:
+      steps: [pair-b]
+      transitions: []
+  pipeline-transitions:
+    - name: wrong-membership
+      from: sp1.pair-b.approved
+      to: sp2.pair-a.initial
+      trigger: manual
+      cardinality: one-to-one
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for role-pair not in referenced sub-pipeline")
+	}
+	assertContains(t, err.Error(), "not a step")
+}
+
+func TestLoad_PipelineTransition_InvalidPhase(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    a: "A"
+    b: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: T1
+        executing: T2
+        submitted: T3
+        reviewing: T4
+        approved: T5
+        rejected: T6
+  sub-pipelines:
+    sp1:
+      steps: [pair-a]
+      transitions: []
+    sp2:
+      steps: [pair-b]
+      transitions: []
+  pipeline-transitions:
+    - name: bad-phase
+      from: sp1.pair-a.nonexistent
+      to: sp2.pair-b.initial
+      trigger: manual
+      cardinality: one-to-one
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for invalid phase in pipeline-transition")
+	}
+	assertContains(t, err.Error(), "invalid phase")
+}
+
+func TestLoad_DuplicateTransitionNames_PipelineAndSubPipeline(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    a: "A"
+    b: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: T1
+        executing: T2
+        submitted: T3
+        reviewing: T4
+        approved: T5
+        rejected: T6
+    pair-c:
+      doer: a
+      reviewer: b
+      states:
+        initial: U1
+        executing: U2
+        submitted: U3
+        reviewing: U4
+        approved: U5
+        rejected: U6
+  sub-pipelines:
+    sp1:
+      steps: [pair-a, pair-b]
+      transitions:
+        - name: advance
+          from: pair-a.approved
+          to: pair-b.initial
+          trigger: manual
+          cardinality: per-subtask
+    sp2:
+      steps: [pair-c]
+      transitions: []
+  pipeline-transitions:
+    - name: advance
+      from: sp1.pair-b.approved
+      to: sp2.pair-c.initial
+      trigger: manual
+      cardinality: one-to-one
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for duplicate transition name across sub-pipeline and pipeline-transitions")
+	}
+	assertContains(t, err.Error(), "duplicate transition name")
+	assertContains(t, err.Error(), "advance")
+}
+
 func TestLoad_UnknownFieldRejected(t *testing.T) {
 	yaml := `
 pipeline:
