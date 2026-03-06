@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -297,7 +298,9 @@ func buildAgentStatuses(state *models.State) []agentStatus {
 
 // buildOrchestratorStatus determines orchestrator state
 func buildOrchestratorStatus(state *models.State, projectRoot string) orchestratorStatus {
-	trigger, count := detectOrchestratorWakeTriggers(state, projectRoot)
+	result := agent.DetectOrchestratorWakeTriggers(state, ops.SprintTerminalStates(projectRoot))
+	trigger := string(result.Trigger)
+	count := result.Count
 
 	ps := orchestratorStatus{
 		Trigger:      trigger,
@@ -319,6 +322,8 @@ func buildOrchestratorStatus(state *models.State, projectRoot string) orchestrat
 		ps.Reason = fmt.Sprintf("%d task(s) exhausted hypotheses (2+ failures)", count)
 	case "IMMEDIATE_DISCOVERY":
 		ps.Reason = fmt.Sprintf("%d immediate discovery(ies) need to be converted to tasks", count)
+	case "PLANNING_COMPLETE":
+		ps.Reason = fmt.Sprintf("%d planning task(s) merged with output[]; ready for coding task expansion", count)
 	case "SPRINT_COMPLETE":
 		ps.Reason = fmt.Sprintf("All %d planned task(s) reached terminal state; sprint complete", count)
 	case "NONE":
@@ -328,52 +333,6 @@ func buildOrchestratorStatus(state *models.State, projectRoot string) orchestrat
 	}
 
 	return ps
-}
-
-// detectOrchestratorWakeTriggers detects conditions that should wake the orchestrator
-func detectOrchestratorWakeTriggers(state *models.State, projectRoot string) (trigger string, count int) {
-	if len(state.Tasks) == 0 {
-		return "INITIAL_PLANNING", 1
-	}
-
-	var blocked, integrationFailed, hypothesisExhausted int
-	for _, task := range state.Tasks {
-		switch task.Status {
-		case models.TaskStatusBlocked:
-			blocked++
-		case models.TaskStatusIntegrationFailed:
-			integrationFailed++
-		}
-		if len(task.FailedBy) >= 2 && !task.Status.IsTerminal() {
-			hypothesisExhausted++
-		}
-	}
-
-	// Return in priority order
-	switch {
-	case blocked > 0:
-		return "BLOCKED_TASKS", blocked
-	case integrationFailed > 0:
-		return "INTEGRATION_FAILED", integrationFailed
-	case hypothesisExhausted > 0:
-		return "HYPOTHESIS_EXHAUSTED", hypothesisExhausted
-	}
-
-	immediateDiscoveries := 0
-	for _, disc := range state.Discovered {
-		if disc.Urgency == "immediate" && disc.ConvertedToTask == nil {
-			immediateDiscoveries++
-		}
-	}
-	if immediateDiscoveries > 0 {
-		return "IMMEDIATE_DISCOVERY", immediateDiscoveries
-	}
-
-	if state.AllPlannedTasksTerminalWith(ops.SprintTerminalStates(projectRoot)) {
-		return "SPRINT_COMPLETE", len(state.Sprint.Scope.Planned)
-	}
-
-	return "NONE", 0
 }
 
 // buildWorkQueuesStatus calculates work queue availability

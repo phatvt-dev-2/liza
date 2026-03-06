@@ -103,7 +103,7 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 		}
 		// Distinguish planning completion (merged tasks with output[]) from sprint completion.
-		if n := countMergedTasksWithOutput(state); n > 0 {
+		if n := countMergedPlanningTasksWithOutput(state); n > 0 {
 			return OrchestratorWakeResult{
 				Trigger: WakeTriggerPlanningComplete,
 				Count:   n,
@@ -151,14 +151,16 @@ func countImmediateDiscoveries(state *models.State) int {
 	return count
 }
 
-// countMergedTasksWithOutput counts planned tasks that are MERGED and have
-// non-empty Output[] entries, indicating a planning task whose output is
-// ready to be expanded into coding tasks.
-func countMergedTasksWithOutput(state *models.State) int {
+// countMergedPlanningTasksWithOutput counts planned tasks that are MERGED,
+// have the code-planning-pair role pair, and have non-empty Output[] entries,
+// indicating a planning task whose output is ready to be expanded into coding tasks.
+// Only planning tasks qualify — coding tasks with output[] are ignored to prevent
+// misclassification as PLANNING_COMPLETE during normal coding sprints.
+func countMergedPlanningTasksWithOutput(state *models.State) int {
 	count := 0
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if task != nil && task.Status == models.TaskStatusMerged && len(task.Output) > 0 {
+		if task != nil && task.Status == models.TaskStatusMerged && len(task.Output) > 0 && task.RolePair == "code-planning-pair" {
 			count++
 		}
 	}

@@ -486,10 +486,11 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			wantCount:   0,
 		},
 		{
-			name: "planning complete (merged task with output[])",
+			name: "planning complete (merged planning task with output[])",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				task.RolePair = "code-planning-pair"
 				task.Output = []models.OutputEntry{
 					{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
 					{Desc: "implement Y", DoneWhen: "linter green", Scope: "pkg/y"},
@@ -499,6 +500,22 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				return state
 			}(),
 			wantTrigger: WakeTriggerPlanningComplete,
+			wantCount:   1,
+		},
+		{
+			name: "merged coding task with output[] triggers sprint complete not planning complete",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				// No RolePair or non-planning role pair — coding task
+				task.Output = []models.OutputEntry{
+					{Desc: "something", DoneWhen: "done", Scope: "pkg/x"},
+				}
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				state.Tasks = []models.Task{task}
+				return state
+			}(),
+			wantTrigger: WakeTriggerSprintComplete,
 			wantCount:   1,
 		},
 		{
@@ -535,6 +552,7 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				state := testhelpers.CreateValidState()
 				state.Sprint.Status = models.SprintStatusCheckpoint
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				task.RolePair = "code-planning-pair"
 				task.Output = []models.OutputEntry{
 					{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
 				}

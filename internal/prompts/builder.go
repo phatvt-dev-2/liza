@@ -120,11 +120,12 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 	sprintComplete := state.AllPlannedTasksTerminalWith(ops.SprintTerminalStates(config.ProjectRoot))
 
 	// Collect merged planning tasks with output[] for PLANNING_COMPLETE detection.
+	// Only code-planning-pair tasks qualify — coding tasks with output[] are ignored.
 	var planningTasks []planningTaskData
 	if sprintComplete {
 		for _, taskID := range state.Sprint.Scope.Planned {
 			task := state.FindTask(taskID)
-			if task != nil && task.Status == models.TaskStatusMerged && len(task.Output) > 0 {
+			if task != nil && task.Status == models.TaskStatusMerged && len(task.Output) > 0 && task.RolePair == "code-planning-pair" {
 				planningTasks = append(planningTasks, planningTaskData{
 					TaskID: task.ID,
 					Output: task.Output,
