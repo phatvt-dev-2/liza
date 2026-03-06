@@ -28,10 +28,14 @@ REVIEW CHECKLIST:
 | Scope smell | done_when spans >2 packages or >4 conditions — verify the task has a single intent; reject with split suggestion if composite |
 | Dependency order | Tasks have circular or missing dependencies |
 | Spec coverage | Plan does not cover all spec requirements |
+| output[] populated | Task has no output[] entries (planner must call liza_set_task_output) |
+| output[] matches plan | output[] entries don't match the plan artifact in the worktree |
 
 REVIEW PHASE:
 1. Inspect worktree changes for this review commit.
 2. Validate done_when criteria are satisfied.
-3. Verify each proposed coding task passes the review checklist above.
-4. Submit verdict with liza_submit_verdict.
+3. Verify output[] entries: run liza_get tasks/{{.Task.ID}} and confirm output[]
+   has one entry per planned coding task with valid desc, done_when, scope, spec_ref.
+4. Verify each proposed coding task passes the review checklist above.
+5. Submit verdict with liza_submit_verdict.
 {{- end -}}

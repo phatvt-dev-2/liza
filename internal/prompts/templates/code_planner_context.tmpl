@@ -23,6 +23,10 @@ CODE PLANNER TOOLS:
   Get SHA first: git -C {{.WorktreePath}} rev-parse HEAD
 - liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
   {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
+- liza_set_task_output — Persist structured task definitions for downstream task creation
+  {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "output": [
+    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "..."}
+  ]}
 - liza_mark_blocked — Cannot proceed
   {"task_id": "{{.Task.ID}}", "agent_id": "{{.Config.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
 
@@ -45,7 +49,10 @@ large task costs more than a review cycle on a small, focused task.
 IMPLEMENTATION PHASE:
 1. The task is already CODE_PLANNING for you. Do NOT run liza claim-task.
 2. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
-3. Update task output and artifacts required by DONE WHEN.
-4. Validate done_when criteria with concrete checks.
-5. Submit using liza_submit_for_review when complete.
+3. For EACH coding task in your plan, call liza_set_task_output with structured entries.
+   Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
+   Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source).
+4. Update worktree artifacts required by DONE WHEN.
+5. Validate done_when criteria with concrete checks.
+6. Submit using liza_submit_for_review when complete.
 {{- end -}}
