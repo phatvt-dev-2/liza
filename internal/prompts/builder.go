@@ -64,6 +64,12 @@ type CodePlanReviewerContextConfig struct {
 	AgentID     string
 }
 
+// EpicPlannerContextConfig contains configuration for building epic-planner context
+type EpicPlannerContextConfig struct {
+	ProjectRoot string
+	AgentID     string
+}
+
 // BuildBasePrompt creates the base bootstrap prompt for all agents
 func BuildBasePrompt(config BasePromptConfig) (string, error) {
 	return executeTemplate("base_prompt", config)
@@ -201,6 +207,13 @@ type codePlannerContextData struct {
 	WorktreePath string
 }
 
+// epicPlannerContextData is the template data for epic_planner_context.tmpl
+type epicPlannerContextData struct {
+	Task         *models.Task
+	Config       EpicPlannerContextConfig
+	WorktreePath string
+}
+
 // codePlanReviewerContextData is the template data for code_plan_reviewer_context.tmpl
 type codePlanReviewerContextData struct {
 	Task         *models.Task
@@ -297,6 +310,21 @@ func BuildEpicPlanReviewerContext(task *models.Task, config EpicPlanReviewerCont
 		AssignedTo:   derefString(task.AssignedTo),
 	}
 	return executeTemplate("epic_plan_reviewer_context", data)
+}
+
+// BuildEpicPlannerContext creates epic-planner-specific context with task details and decomposition guidance
+func BuildEpicPlannerContext(task *models.Task, config EpicPlannerContextConfig) (string, error) {
+	worktreePath := ""
+	if task.Worktree != nil {
+		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
+	}
+
+	data := epicPlannerContextData{
+		Task:         task,
+		Config:       config,
+		WorktreePath: worktreePath,
+	}
+	return executeTemplate("epic_planner_context", data)
 }
 
 // derefString returns the value pointed to by s, or "" if s is nil.

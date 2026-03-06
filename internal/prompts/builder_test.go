@@ -1461,3 +1461,68 @@ func TestBuildEpicPlanReviewerContext(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildEpicPlannerContext(t *testing.T) {
+	now := time.Now().UTC()
+	task := testhelpers.BuildTaskByStatus("task-epic-1", models.TaskStatusImplementing, now)
+	task.Description = "Decompose vision into epics"
+	task.DoneWhen = "Epics cover all vision capabilities"
+	task.Scope = "Epic decomposition"
+	task.Iteration = 1
+	worktree := ".worktrees/task-epic-1"
+	task.Worktree = &worktree
+
+	cfg := EpicPlannerContextConfig{
+		ProjectRoot: "/project",
+		AgentID:     "epic-planner-1",
+	}
+
+	prompt, err := BuildEpicPlannerContext(&task, cfg)
+	if err != nil {
+		t.Fatalf("BuildEpicPlannerContext() error: %v", err)
+	}
+
+	wantContains := []string{
+		// Task details
+		"ASSIGNED EPIC PLANNING TASK",
+		"TASK ID: task-epic-1",
+		"WORKTREE: /project/.worktrees/task-epic-1",
+		"ITERATION: 1",
+		"DESCRIPTION: Decompose vision into epics",
+
+		// State transitions
+		"EPIC_PLANNING → EPIC_PLAN_TO_REVIEW",
+		"EPIC_PLAN_REJECTED → DRAFT_EPIC_PLAN",
+
+		// Tools
+		"liza_submit_for_review",
+		"liza_write_checkpoint",
+		"liza_set_task_output",
+		"liza_mark_blocked",
+
+		// All 7 granularity signals from spec
+		"Epic spans multiple independent capabilities",
+		"Epic would produce >8 user stories",
+		"done_when requires outcomes across unrelated subsystems",
+		"Epic description contains conjunctions joining unrelated capabilities",
+		"Epic is a single user action with one acceptance criterion",
+		"Epic can be implemented in a single coding task",
+		"Epic would produce <2 meaningful user stories",
+
+		// Right-sized epic criteria
+		"one cohesive capability area",
+		"3–8 user stories",
+
+		// Bash constraints
+		"BASH CONSTRAINTS",
+		"NEVER combine cd and git",
+
+		// Implementation phase
+		"IMPLEMENTATION PHASE",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("BuildEpicPlannerContext() missing %q", want)
+		}
+	}
+}
