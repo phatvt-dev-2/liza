@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -124,7 +125,7 @@ func TestHasPendingMerges(t *testing.T) {
 			bb := db.New(statePath)
 
 			// Test hasPendingMerges (legacy — no pipeline.yaml)
-			result := hasPendingMerges(bb, tt.agentID, tmpDir)
+			result := hasPendingMerges(bb, tt.agentID, nil)
 			if result != tt.expected {
 				t.Errorf("hasPendingMerges() = %v, expected %v", result, tt.expected)
 			}
@@ -205,6 +206,7 @@ func TestHasPendingMerges_Pipeline(t *testing.T) {
 		},
 	}
 
+	pr := ops.LoadResolverForModels(tmpDir)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
@@ -212,7 +214,7 @@ func TestHasPendingMerges_Pipeline(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			bb := db.New(statePath)
-			result := hasPendingMerges(bb, tt.agentID, tmpDir)
+			result := hasPendingMerges(bb, tt.agentID, pr)
 			if result != tt.expected {
 				t.Errorf("hasPendingMerges() = %v, expected %v", result, tt.expected)
 			}
@@ -321,6 +323,7 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 		},
 	}
 
+	pr := ops.LoadResolverForModels(tmpDir)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
@@ -328,7 +331,7 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			bb := db.New(statePath)
-			result := hasPendingMerges(bb, tt.agentID, tmpDir)
+			result := hasPendingMerges(bb, tt.agentID, pr)
 			if result != tt.expected {
 				t.Errorf("hasPendingMerges() = %v, expected %v", result, tt.expected)
 			}
@@ -397,6 +400,7 @@ func TestLogTaskSubmissionIfCompleted_Phase2Pipeline(t *testing.T) {
 		},
 	}
 
+	pr := ops.LoadResolverForModels(tmpDir)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
@@ -404,7 +408,7 @@ func TestLogTaskSubmissionIfCompleted_Phase2Pipeline(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			bb := db.New(statePath)
-			err := logTaskSubmissionIfCompleted(bb, tt.task.ID, "agent-1", tmpDir)
+			err := logTaskSubmissionIfCompleted(bb, tt.task.ID, "agent-1", pr)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("logTaskSubmissionIfCompleted() error = %v, wantErr %v", err, tt.wantErr)
 			}

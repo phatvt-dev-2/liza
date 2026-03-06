@@ -173,7 +173,10 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 
 	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, sprintComplete, planningTasks)
 
-	wakeData := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, config.ProjectRoot)
+	wakeData, err := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, config.ProjectRoot)
+	if err != nil {
+		return "", fmt.Errorf("building wake template data: %w", err)
+	}
 
 	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, wakeData, planningTasks)
 	if err != nil {
@@ -497,15 +500,21 @@ type wakeTemplateData struct {
 // INITIAL_PLANNING wake trigger. When a pipeline config exists, it resolves
 // entry-points to role-pairs and display names. Without a pipeline config
 // (legacy goals), the template falls back to hardcoded code-planning-pair.
-func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) wakeTemplateData {
+//
+// Returns an error if the pipeline config exists but is malformed, or if an
+// explicit entry-point was specified but not found in the config.
+func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) (wakeTemplateData, error) {
 	data := wakeTemplateData{
 		GoalSpecRef:    goalSpecRef,
 		GoalEntryPoint: goalEntryPoint,
 	}
 
 	cfg, err := pipeline.LoadFrozen(projectRoot)
-	if err != nil || cfg == nil {
-		return data // legacy goal — no pipeline config
+	if err != nil {
+		return data, err
+	}
+	if cfg == nil {
+		return data, nil // legacy goal — no pipeline config
 	}
 
 	// Build sorted entry-point list for deterministic template output.
@@ -528,17 +537,29 @@ func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) wake
 
 	// If entry-point is explicitly set, resolve it.
 	if goalEntryPoint != "" {
-		if epValue, ok := cfg.Pipeline.EntryPoints[goalEntryPoint]; ok {
-			parts := strings.SplitN(epValue, ".", 2)
-			if len(parts) == 2 {
-				data.ResolvedRolePair = parts[1]
-				data.ResolvedDisplayName = resolveDoerDisplayName(cfg, parts[1])
-				data.ResolvedTaskIDPrefix = strings.TrimSuffix(parts[1], "-pair")
-			}
+		epValue, ok := cfg.Pipeline.EntryPoints[goalEntryPoint]
+		if !ok {
+			return data, fmt.Errorf("unknown entry-point %q; available: %v", goalEntryPoint, entryPointNames(cfg))
+		}
+		parts := strings.SplitN(epValue, ".", 2)
+		if len(parts) == 2 {
+			data.ResolvedRolePair = parts[1]
+			data.ResolvedDisplayName = resolveDoerDisplayName(cfg, parts[1])
+			data.ResolvedTaskIDPrefix = strings.TrimSuffix(parts[1], "-pair")
 		}
 	}
 
-	return data
+	return data, nil
+}
+
+// entryPointNames returns sorted entry-point names from a pipeline config for error messages.
+func entryPointNames(cfg *pipeline.PipelineConfig) []string {
+	names := make([]string, 0, len(cfg.Pipeline.EntryPoints))
+	for name := range cfg.Pipeline.EntryPoints {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // resolveDoerDisplayName looks up the doer's display name for a role-pair.

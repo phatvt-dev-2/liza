@@ -451,13 +451,14 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		// Handle approved merges (reviewer only)
 		if isReviewerRuntime(config.Role) {
-			if err := handleApprovedMerges(config.ProjectRoot, config.AgentID, bb); err != nil {
+			pr := ops.LoadResolverForModels(config.ProjectRoot)
+			if err := handleApprovedMerges(config.ProjectRoot, config.AgentID, bb, pr); err != nil {
 				GetLogger().Warn("Merge handler error", "error", err)
 			}
 
 			// If there are still pending merges (transient errors), retry with
 			// backoff up to a max count, then proceed to waitForWork
-			if hasPendingMerges(bb, config.AgentID, config.ProjectRoot) {
+			if hasPendingMerges(bb, config.AgentID, pr) {
 				mergeRetries++
 				if mergeRetries <= maxMergeRetries {
 					delay := time.Duration(mergeRetries) * time.Second
@@ -565,7 +566,8 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 			// Log task submission if it happened (doer roles only)
 			if isDoerRuntime(config.Role) && claimedTaskID != "" {
-				if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID, config.ProjectRoot); err != nil {
+				doerPR := ops.LoadResolverForModels(config.ProjectRoot)
+				if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID, doerPR); err != nil {
 					GetLogger().Warn("Failed to log task submission", "error", err, "task_id", claimedTaskID)
 				}
 			}

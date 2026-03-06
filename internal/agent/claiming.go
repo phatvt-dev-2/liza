@@ -101,14 +101,12 @@ func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Bl
 }
 
 // handleApprovedMerges handles merging approved tasks
-func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard) error {
+func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr models.PipelineResolver) error {
 	logger := GetLogger()
 	state, err := bb.Read()
 	if err != nil {
 		return err
 	}
-
-	pr := ops.LoadResolverForModels(projectRoot)
 
 	// Find approved tasks where approved_by = agentID and merge_commit = null
 	for i := range state.Tasks {
@@ -160,13 +158,11 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard) error 
 }
 
 // hasPendingMerges checks if there are approved tasks awaiting merge by this agent
-func hasPendingMerges(bb *db.Blackboard, agentID, projectRoot string) bool {
+func hasPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResolver) bool {
 	state, err := bb.ReadCached()
 	if err != nil {
 		return false // Safe default: proceed to normal wait
 	}
-
-	pr := ops.LoadResolverForModels(projectRoot)
 
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
@@ -181,13 +177,11 @@ func hasPendingMerges(bb *db.Blackboard, agentID, projectRoot string) bool {
 
 // logTaskSubmissionIfCompleted checks if a claimed task was submitted for review
 // and logs this transition for visibility in agent logs
-func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID, projectRoot string) error {
+func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string, pr models.PipelineResolver) error {
 	state, err := bb.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
-
-	pr := ops.LoadResolverForModels(projectRoot)
 
 	// Find the task
 	if task := state.FindTask(taskID); task != nil {

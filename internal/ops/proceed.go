@@ -157,34 +157,34 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 					return err
 				}
 			}
-
-			// Mark transition as executed (write this first for crash recovery)
-			if task.TransitionsExecuted == nil {
-				task.TransitionsExecuted = make(map[string]bool)
+		case "one-to-one":
+			if task.SpecRef == "" {
+				return fmt.Errorf("task %q has empty spec_ref for one-to-one transition %q", taskID, transitionName)
 			}
-			task.TransitionsExecuted[transitionName] = true
+		default:
+			return fmt.Errorf("unsupported cardinality %q for transition %q", tDef.cardinality, transitionName)
+		}
 
+		// Mark transition as executed (write this first for crash recovery)
+		if task.TransitionsExecuted == nil {
+			task.TransitionsExecuted = make(map[string]bool)
+		}
+		task.TransitionsExecuted[transitionName] = true
+
+		// Create child tasks based on cardinality
+		switch tDef.cardinality {
+		case "per-subtask":
 			for i, entry := range task.Output {
 				childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
 				child := buildChildTask(childID, taskID, entry, tDef.targetStatus, tDef.targetRolePair, now)
 				s.Tasks = append(s.Tasks, child)
 				result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 			}
-
 		case "one-to-one":
-			// Mark transition as executed (write this first for crash recovery)
-			if task.TransitionsExecuted == nil {
-				task.TransitionsExecuted = make(map[string]bool)
-			}
-			task.TransitionsExecuted[transitionName] = true
-
 			childID := fmt.Sprintf("%s-%s", taskID, transitionName)
 			child := buildOneToOneChild(childID, taskID, task, tDef, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-
-		default:
-			return fmt.Errorf("unsupported cardinality %q for transition %q", tDef.cardinality, transitionName)
 		}
 
 		// Add history entry to source task
