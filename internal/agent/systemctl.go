@@ -259,6 +259,19 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 		}
 		logger.Info("Orchestrator handled immediate discoveries", "before", immediateBefore, "after", immediateAfter)
 
+	case WakeTriggerPlanningComplete:
+		// PLANNING_COMPLETE: expect new coding tasks created from output[] + sprint checkpointed
+		if len(stateAfter.Tasks) <= len(stateBefore.Tasks) {
+			return fmt.Errorf("orchestrator completed with PLANNING_COMPLETE trigger but no new tasks were created (before: %d, after: %d)", len(stateBefore.Tasks), len(stateAfter.Tasks))
+		}
+		if stateAfter.Sprint.Status != models.SprintStatusCheckpoint && stateAfter.Sprint.Status != models.SprintStatusCompleted {
+			return fmt.Errorf("orchestrator completed with PLANNING_COMPLETE trigger but sprint status is %s (expected CHECKPOINT or COMPLETED)", stateAfter.Sprint.Status)
+		}
+		if stateAfter.Sprint.Timeline.CheckpointAt == nil {
+			return fmt.Errorf("orchestrator completed with PLANNING_COMPLETE trigger but checkpoint_at is not set")
+		}
+		logger.Info("Orchestrator expanded planning tasks", "tasks_before", len(stateBefore.Tasks), "tasks_after", len(stateAfter.Tasks))
+
 	case WakeTriggerSprintComplete:
 		// SPRINT_COMPLETE: expect sprint status to be CHECKPOINT (or COMPLETED)
 		if stateAfter.Sprint.Status != models.SprintStatusCheckpoint && stateAfter.Sprint.Status != models.SprintStatusCompleted {

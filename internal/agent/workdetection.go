@@ -13,6 +13,7 @@ const (
 	WakeTriggerIntegrationFailed   OrchestratorWakeTrigger = "INTEGRATION_FAILED"
 	WakeTriggerHypothesisExhausted OrchestratorWakeTrigger = "HYPOTHESIS_EXHAUSTED"
 	WakeTriggerImmediateDiscovery  OrchestratorWakeTrigger = "IMMEDIATE_DISCOVERY"
+	WakeTriggerPlanningComplete    OrchestratorWakeTrigger = "PLANNING_COMPLETE"
 	WakeTriggerSprintComplete      OrchestratorWakeTrigger = "SPRINT_COMPLETE"
 	WakeTriggerNone                OrchestratorWakeTrigger = "NONE"
 )
@@ -79,7 +80,8 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // 3. Integration failed
 // 4. Hypothesis exhausted (2+ failed_by)
 // 5. Immediate discoveries (not yet converted to tasks)
-// 6. Sprint complete (all planned tasks terminal)
+// 6. Planning complete (all planned tasks terminal, merged tasks have output[])
+// 7. Sprint complete (all planned tasks terminal)
 func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus) OrchestratorWakeResult {
 	for _, triggerSpec := range orchestratorWakeTriggerSpecs {
 		if count := triggerSpec.Count(state); count > 0 {
@@ -99,6 +101,13 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 		if state.Sprint.Status == models.SprintStatusCheckpoint ||
 			state.Sprint.Status == models.SprintStatusCompleted {
 			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
+		}
+		// Distinguish planning completion (merged tasks with output[]) from sprint completion.
+		if n := countMergedTasksWithOutput(state); n > 0 {
+			return OrchestratorWakeResult{
+				Trigger: WakeTriggerPlanningComplete,
+				Count:   n,
+			}
 		}
 		return OrchestratorWakeResult{
 			Trigger: WakeTriggerSprintComplete,
@@ -136,6 +145,20 @@ func countImmediateDiscoveries(state *models.State) int {
 	count := 0
 	for _, disc := range state.Discovered {
 		if disc.Urgency == "immediate" && disc.ConvertedToTask == nil {
+			count++
+		}
+	}
+	return count
+}
+
+// countMergedTasksWithOutput counts planned tasks that are MERGED and have
+// non-empty Output[] entries, indicating a planning task whose output is
+// ready to be expanded into coding tasks.
+func countMergedTasksWithOutput(state *models.State) int {
+	count := 0
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if task != nil && task.Status == models.TaskStatusMerged && len(task.Output) > 0 {
 			count++
 		}
 	}

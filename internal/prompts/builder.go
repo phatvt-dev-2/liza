@@ -69,6 +69,12 @@ func BuildBasePrompt(config BasePromptConfig) (string, error) {
 	return executeTemplate("base_prompt", config)
 }
 
+// planningTaskData holds a merged planning task's output for the PLANNING_COMPLETE template.
+type planningTaskData struct {
+	TaskID string
+	Output []models.OutputEntry
+}
+
 // orchestratorContextData is the template data for orchestrator_context.tmpl
 type orchestratorContextData struct {
 	WakeTrigger          string
@@ -112,9 +118,24 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 	}
 
 	sprintComplete := state.AllPlannedTasksTerminalWith(ops.SprintTerminalStates(config.ProjectRoot))
-	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, sprintComplete)
 
-	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, state.Goal.SpecRef)
+	// Collect merged planning tasks with output[] for PLANNING_COMPLETE detection.
+	var planningTasks []planningTaskData
+	if sprintComplete {
+		for _, taskID := range state.Sprint.Scope.Planned {
+			task := state.FindTask(taskID)
+			if task != nil && task.Status == models.TaskStatusMerged && len(task.Output) > 0 {
+				planningTasks = append(planningTasks, planningTaskData{
+					TaskID: task.ID,
+					Output: task.Output,
+				})
+			}
+		}
+	}
+
+	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, sprintComplete, planningTasks)
+
+	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, state.Goal.SpecRef, planningTasks)
 	if err != nil {
 		return "", fmt.Errorf("building wake instructions: %w", err)
 	}
@@ -270,7 +291,7 @@ func countTasksByStatus(tasks []models.Task, status models.TaskStatus) int {
 }
 
 // determineWakeTrigger determines what triggered the orchestrator to wake
-func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries int, sprintComplete bool) string {
+func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries int, sprintComplete bool, planningTasks []planningTaskData) string {
 	if totalTasks == 0 {
 		return "INITIAL_PLANNING"
 	}
@@ -286,6 +307,9 @@ func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExha
 	if immediateDiscoveries > 0 {
 		return "IMMEDIATE_DISCOVERY"
 	}
+	if sprintComplete && len(planningTasks) > 0 {
+		return "PLANNING_COMPLETE"
+	}
 	if sprintComplete {
 		return "SPRINT_COMPLETE"
 	}
@@ -297,8 +321,13 @@ type wakeTemplateData struct {
 	GoalSpecRef string
 }
 
+// wakePlanningCompleteData is used by the PLANNING_COMPLETE wake template
+type wakePlanningCompleteData struct {
+	PlanningTasks []planningTaskData
+}
+
 // buildInstructionsForWakeTrigger returns trigger-specific instructions
-func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string) (string, error) {
+func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string, planningTasks []planningTaskData) (string, error) {
 	switch wakeTrigger {
 	case "INITIAL_PLANNING":
 		return executeTemplate("wake_initial_planning", wakeTemplateData{GoalSpecRef: goalSpecRef})
@@ -310,6 +339,10 @@ func buildInstructionsForWakeTrigger(wakeTrigger, goalSpecRef string) (string, e
 		return executeTemplate("wake_hypothesis_exhausted", nil)
 	case "IMMEDIATE_DISCOVERY":
 		return executeTemplate("wake_immediate_discovery", nil)
+	case "PLANNING_COMPLETE":
+		return executeTemplate("wake_planning_complete", wakePlanningCompleteData{
+			PlanningTasks: planningTasks,
+		})
 	case "SPRINT_COMPLETE":
 		return executeTemplate("wake_sprint_complete", nil)
 	default:

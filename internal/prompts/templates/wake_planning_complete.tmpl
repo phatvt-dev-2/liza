@@ -1,0 +1,41 @@
+{{- define "wake_planning_complete" -}}
+Planning sprint tasks have been merged with output[] entries ready for expansion.
+
+⚠️  AUTONOMY NOTICE ⚠️
+You have FULL autonomy to execute MCP tools immediately.
+Do NOT wait for permission.
+
+--- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
+
+1. Read the merged planning task(s) using liza_get to inspect their output[] entries.
+{{- range .PlanningTasks }}
+   - Task {{.TaskID}}: {{len .Output}} output entries
+     {{- range $i, $entry := .Output }}
+     [{{$i}}] desc={{$entry.Desc}} scope={{$entry.Scope}}
+     {{- end }}
+{{- end }}
+
+2. For EACH output entry, create a coding task using liza_add_task:
+   - id: derive from parent task (e.g., {parent-id}-code-{N})
+   - desc: from output entry desc
+   - done: from output entry done_when
+   - scope: from output entry scope
+   - spec: from output entry spec_ref (or parent task spec)
+   - type: "coding"
+   - depends: respect ordering — later tasks may depend on earlier ones
+
+3. After all tasks are created, run liza_update_sprint_metrics.
+
+4. Create checkpoint for human review: execute liza_sprint_checkpoint tool.
+   The checkpoint will pause all agents and generate a sprint summary.
+
+SUCCESS CRITERIA:
+- One coding task created per output[] entry.
+- All tasks have type "coding" and valid deps.
+- Sprint checkpointed for human review.
+
+❌ INCORRECT (DO NOT DO THIS):
+1. Skip creating tasks and go straight to checkpoint.
+2. Create tasks that don't match the output[] entries.
+3. Exit without checkpointing.
+{{- end -}}

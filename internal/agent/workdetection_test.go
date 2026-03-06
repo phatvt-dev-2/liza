@@ -486,6 +486,35 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			wantCount:   0,
 		},
 		{
+			name: "planning complete (merged task with output[])",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				task.Output = []models.OutputEntry{
+					{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
+					{Desc: "implement Y", DoneWhen: "linter green", Scope: "pkg/y"},
+				}
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				state.Tasks = []models.Task{task}
+				return state
+			}(),
+			wantTrigger: WakeTriggerPlanningComplete,
+			wantCount:   1,
+		},
+		{
+			name: "merged task without output[] triggers sprint complete not planning complete",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerSprintComplete,
+			wantCount:   1,
+		},
+		{
 			name: "sprint CHECKPOINT suppresses re-wake",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
@@ -495,6 +524,22 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
 					testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
 				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
+		},
+		{
+			name: "sprint CHECKPOINT suppresses planning complete re-wake",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Status = models.SprintStatusCheckpoint
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				task.Output = []models.OutputEntry{
+					{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
+				}
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				state.Tasks = []models.Task{task}
 				return state
 			}(),
 			wantTrigger: WakeTriggerNone,
