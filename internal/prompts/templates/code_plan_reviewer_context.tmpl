@@ -15,7 +15,9 @@ CODE PLAN REVIEWER STATE TRANSITIONS:
 - REVIEWING_CODING_PLAN → CODING_PLAN_APPROVED
 - REVIEWING_CODING_PLAN → CODING_PLAN_REJECTED
 
-CODE PLAN REVIEWER TOOL:
+CODE PLAN REVIEWER TOOLS:
+- liza_get — Query task state to inspect output[] entries
+  {"query": "tasks/{{.Task.ID}}"}
 - liza_submit_verdict — Submit review verdict
   APPROVED: {"task_id": "{{.Task.ID}}", "verdict": "APPROVED", "agent_id": "{{.Config.AgentID}}"}
   REJECTED: {"task_id": "{{.Task.ID}}", "verdict": "REJECTED", "agent_id": "{{.Config.AgentID}}", "reason": "<detailed rejection reason>"}
@@ -34,8 +36,8 @@ REVIEW CHECKLIST:
 REVIEW PHASE:
 1. Inspect worktree changes for this review commit.
 2. Validate done_when criteria are satisfied.
-3. Verify output[] entries: run liza_get tasks/{{.Task.ID}} and confirm output[]
-   has one entry per planned coding task with valid desc, done_when, scope, spec_ref.
+3. Verify output[] entries: run liza_get with {"query": "tasks/{{.Task.ID}}"} and confirm
+   output[] has one entry per planned coding task with valid desc, done_when, scope, spec_ref.
 4. Verify each proposed coding task passes the review checklist above.
 5. Submit verdict with liza_submit_verdict.
 {{- end -}}
