@@ -196,37 +196,37 @@ to dispatch based on entry-points.
 
 ### Task 5: Generalize approved/submitted status checks to pipeline-aware
 
-**Intent:** Merge handling and submission logging work for any pipeline role-pair without hardcoded status lists.
+**Intent:** Merge handling, submission logging, and worktree merge work for any pipeline role-pair without hardcoded status lists.
 
 **Files to modify:**
+- `internal/models/state.go`
 - `internal/agent/claiming.go`
-- `internal/agent/claiming_test.go` (if exists)
+- `internal/agent/claiming_test.go`
+- `internal/agent/supervisor.go`
+- `internal/ops/wt_merge.go`
+- `internal/ops/wt_merge_test.go`
+- `internal/integration/sprint_and_merge_test.go`
 
 **Changes:**
-- `handleApprovedMerges()`: Replace hardcoded `task.Status == TaskStatusApproved || task.Status == TaskStatusCodingPlanApproved` with pipeline-aware check:
-  ```go
-  isApproved := false
-  if task.RolePair != "" && pr != nil {
-      approvedStatus, err := pr.ApprovedStatus(task.RolePair)
-      if err == nil && task.Status == approvedStatus {
-          isApproved = true
-      }
-  } else {
-      // Legacy fallback
-      isApproved = task.Status == TaskStatusApproved || task.Status == TaskStatusCodingPlanApproved
-  }
-  ```
-- `hasPendingMerges()`: Same generalization pattern
-- `logTaskSubmissionIfCompleted()`: Generalize submitted status check using `pr.SubmittedStatus(task.RolePair)`
-- Load pipeline resolver once at the top of each function (or pass as parameter)
-- Tests with pipeline-configured tasks using Phase 2 role-pairs
+- `state.go`: Add `ApprovedStatus(rolePair string) (TaskStatus, error)` to `PipelineResolver` interface
+- `claiming.go`:
+  - Add `isApprovedForMerge(task, pr)` helper for pipeline-aware approved status check
+  - `handleApprovedMerges()`: Load resolver, use `isApprovedForMerge`
+  - `hasPendingMerges()`: Add `projectRoot` parameter, load resolver, use `isApprovedForMerge`
+  - `logTaskSubmissionIfCompleted()`: Add `projectRoot` parameter, pipeline-aware submitted/executing checks
+- `supervisor.go`: Thread `config.ProjectRoot` to `hasPendingMerges` and `logTaskSubmissionIfCompleted`
+- `wt_merge.go`:
+  - Add `isApprovedStatus(task, pb)` helper using `pipelineBundle`
+  - `MergeWorktree()`: Load `pipelineBundle`, use pipeline-aware precondition and MERGED transition via `TransitionWith`
+  - `markIntegrationFailed()`: Accept `*pipelineBundle`, pipeline-aware re-validation and `TransitionWith`
+- Tests: pipeline-aware test cases for `hasPendingMerges` and `MergeWorktree` with `coding-pair`/`CODE_APPROVED`
 
 **Done when:**
-- A task with `role_pair: "us-writing-pair"` and status `US_APPROVED` is picked up by `handleApprovedMerges`
+- A task with `role_pair: "coding-pair"` and status `CODE_APPROVED` is picked up by `handleApprovedMerges` and merged successfully
 - Legacy tasks (no role_pair) still work via fallback
-- Tests pass
+- All tests pass
 
-**Scope:** `internal/agent/claiming.go`
+**Scope:** `internal/models/state.go`, `internal/agent/claiming.go`, `internal/agent/supervisor.go`, `internal/ops/wt_merge.go`
 
 **Depends:** Tasks 2, 3
 

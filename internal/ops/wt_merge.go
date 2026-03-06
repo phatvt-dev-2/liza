@@ -67,19 +67,33 @@ func appendUniqueAgentID(failedBy []string, agentID string) []string {
 	return append(failedBy, agentID)
 }
 
+// pipelineTransition applies a status transition using the pipeline transition map
+// when the task has a role-pair and a pipeline bundle is available; otherwise falls
+// back to the hardcoded transition map.
+func pipelineTransition(t *models.Task, to models.TaskStatus, pb *pipelineBundle) error {
+	if t.RolePair != "" && pb != nil {
+		return t.TransitionWith(to, pb.transitions)
+	}
+	return t.Transition(to)
+}
+
 // markIntegrationFailed transitions a task to INTEGRATION_FAILED under lock.
-// Re-validates the task is still APPROVED to prevent concurrent transitions.
+// Re-validates the task is still in an approved state to prevent concurrent transitions.
 // If mergeCommit is non-empty, it's recorded on both the task and the history entry.
-func markIntegrationFailed(bb *db.Blackboard, taskID, agentID, reason, mergeCommit string) error {
+func markIntegrationFailed(bb *db.Blackboard, taskID, agentID, reason, mergeCommit string, pb *pipelineBundle) error {
+	var pr models.PipelineResolver
+	if pb != nil {
+		pr = pb.pr
+	}
 	return bb.Modify(func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
 			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
 		}
-		if t.Status != models.TaskStatusApproved {
+		if !models.IsApprovedForMerge(t, pr) {
 			return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
 		}
-		if err := t.Transition(models.TaskStatusIntegrationFailed); err != nil {
+		if err := pipelineTransition(t, models.TaskStatusIntegrationFailed, pb); err != nil {
 			return err
 		}
 		t.FailedBy = appendUniqueAgentID(t.FailedBy, agentID)
@@ -123,8 +137,16 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		return nil, err
 	}
 
-	if task.Status != models.TaskStatusApproved && task.Status != models.TaskStatusCodingPlanApproved {
-		return nil, fmt.Errorf("task must be APPROVED or CODING_PLAN_APPROVED to merge (current status: %s)", task.Status)
+	// Load pipeline bundle once for all pipeline-aware checks
+	pb := loadPipelineBundle(projectRoot)
+
+	var pr models.PipelineResolver
+	if pb != nil {
+		pr = pb.pr
+	}
+
+	if !models.IsApprovedForMerge(task, pr) {
+		return nil, fmt.Errorf("task must be in an approved state to merge (current status: %s)", task.Status)
 	}
 
 	if task.Worktree == nil {
@@ -162,7 +184,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 			shortReviewCommit = expectedCommit[:7]
 		}
 		reason := fmt.Sprintf("worktree HEAD (%s) does not match approved commit (%s)", shortWtHEAD, shortReviewCommit)
-		if err := markIntegrationFailed(bb, taskID, agentID, reason, ""); err != nil {
+		if err := markIntegrationFailed(bb, taskID, agentID, reason, "", pb); err != nil {
 			return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", err)
 		}
 
@@ -239,7 +261,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		}
 		if !clean {
 			// Merge conflicts - mark as integration failed (no retry)
-			if updateErr := markIntegrationFailed(bb, taskID, agentID, "merge conflict", ""); updateErr != nil {
+			if updateErr := markIntegrationFailed(bb, taskID, agentID, "merge conflict", "", pb); updateErr != nil {
 				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
 			}
 			return nil, &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
@@ -311,7 +333,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 				}
 			}
 
-			if updateErr := markIntegrationFailed(bb, taskID, agentID, "integration tests failed", mergeCommit); updateErr != nil {
+			if updateErr := markIntegrationFailed(bb, taskID, agentID, "integration tests failed", mergeCommit, pb); updateErr != nil {
 				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
 			}
 
@@ -341,10 +363,10 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
 		}
 		// Re-validate status under lock to prevent concurrent transition
-		if t.Status != models.TaskStatusApproved && t.Status != models.TaskStatusCodingPlanApproved {
+		if !models.IsApprovedForMerge(t, pr) {
 			return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
 		}
-		if err := t.Transition(models.TaskStatusMerged); err != nil {
+		if err := pipelineTransition(t, models.TaskStatusMerged, pb); err != nil {
 			return err
 		}
 		t.Worktree = nil

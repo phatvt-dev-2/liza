@@ -437,7 +437,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 			// If there are still pending merges (transient errors), retry with
 			// backoff up to a max count, then proceed to waitForWork
-			if hasPendingMerges(bb, config.AgentID) {
+			if hasPendingMerges(bb, config.AgentID, config.ProjectRoot) {
 				mergeRetries++
 				if mergeRetries <= maxMergeRetries {
 					delay := time.Duration(mergeRetries) * time.Second
@@ -547,7 +547,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 			// Log task submission if it happened (coder role only)
 			if (config.Role == roles.RuntimeCoder || config.Role == roles.RuntimeCodePlanner) && claimedTaskID != "" {
-				if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID); err != nil {
+				if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID, config.ProjectRoot); err != nil {
 					GetLogger().Warn("Failed to log task submission", "error", err, "task_id", claimedTaskID)
 				}
 			}

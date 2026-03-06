@@ -108,10 +108,12 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard) error 
 		return err
 	}
 
-	// Find APPROVED/CODING_PLAN_APPROVED tasks where approved_by = agentID and merge_commit = null
+	pr := ops.LoadResolverForModels(projectRoot)
+
+	// Find approved tasks where approved_by = agentID and merge_commit = null
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		if (task.Status == models.TaskStatusApproved || task.Status == models.TaskStatusCodingPlanApproved) &&
+		if models.IsApprovedForMerge(task, pr) &&
 			task.ApprovedBy != nil && *task.ApprovedBy == agentID &&
 			task.MergeCommit == nil {
 
@@ -157,16 +159,18 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard) error 
 	return nil
 }
 
-// hasPendingMerges checks if there are APPROVED tasks awaiting merge by this agent
-func hasPendingMerges(bb *db.Blackboard, agentID string) bool {
+// hasPendingMerges checks if there are approved tasks awaiting merge by this agent
+func hasPendingMerges(bb *db.Blackboard, agentID, projectRoot string) bool {
 	state, err := bb.ReadCached()
 	if err != nil {
 		return false // Safe default: proceed to normal wait
 	}
 
+	pr := ops.LoadResolverForModels(projectRoot)
+
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		if (task.Status == models.TaskStatusApproved || task.Status == models.TaskStatusCodingPlanApproved) &&
+		if models.IsApprovedForMerge(task, pr) &&
 			task.ApprovedBy != nil && *task.ApprovedBy == agentID &&
 			task.MergeCommit == nil {
 			return true
@@ -177,16 +181,18 @@ func hasPendingMerges(bb *db.Blackboard, agentID string) bool {
 
 // logTaskSubmissionIfCompleted checks if a claimed task was submitted for review
 // and logs this transition for visibility in agent logs
-func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string) error {
+func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID, projectRoot string) error {
 	state, err := bb.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
+	pr := ops.LoadResolverForModels(projectRoot)
+
 	// Find the task
 	if task := state.FindTask(taskID); task != nil {
 		// Check if it's now in a submitted state
-		if task.Status == models.TaskStatusReadyForReview || task.Status == models.TaskStatusCodingPlanToReview {
+		if models.IsSubmittedStatus(task, pr) {
 			// Log the successful submission
 			reviewCommit := "unknown"
 			if task.ReviewCommit != nil {
@@ -202,8 +208,8 @@ func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string) err
 			return nil
 		}
 
-		// If task is still IMPLEMENTING, agent may have exited without completing
-		if task.Status == models.TaskStatusImplementing {
+		// If task is still executing, agent may have exited without completing
+		if models.IsExecutingStatus(task, pr) {
 			GetLogger().Warn("Agent exited with task still claimed",
 				"task_id", task.ID,
 				"agent_id", agentID,

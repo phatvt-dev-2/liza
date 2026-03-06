@@ -555,17 +555,28 @@ resolve target states: from hardcoded values to pipeline config lookups.
 | `submit_for_review` | → READY_FOR_REVIEW | → role-pair.`submitted` |
 | `submit_verdict(APPROVED)` | → APPROVED | → role-pair.`approved` |
 | `submit_verdict(REJECTED)` | → REJECTED | → role-pair.`rejected` |
-| `wt_merge` | → MERGED | unchanged (all role-pairs) |
+| `wt_merge` | precondition: APPROVED ∨ CODING_PLAN_APPROVED | precondition: role-pair.`approved` via resolver (legacy fallback preserved) |
 
 The agent calls the same tool regardless of role. The supervisor resolves the target
 state from the task's role-pair in the pipeline config (e.g., `submit_for_review` on a
 Code Planner task resolves to CODING_PLAN_TO_REVIEW).
+
+**Implementation note on `wt_merge` pipeline-awareness:** While `wt_merge` always produces
+MERGED as output status (universal for all role-pairs), its precondition and internal
+re-validation checks must be pipeline-aware. The approved status check (`isApprovedStatus`)
+uses the pipeline resolver for pipeline tasks and falls back to legacy statuses
+(APPROVED, CODING_PLAN_APPROVED) for legacy tasks. This also applies to
+`markIntegrationFailed` (re-validates approved state under lock) and `handleApprovedMerges`/
+`hasPendingMerges` in the supervisor (detect mergeable tasks). The `PipelineResolver`
+interface includes `ApprovedStatus(rolePair)` for this purpose.
 
 **Implemented in Phase 1:**
 - Bootstrap prompt templates for Code Planner and Code Plan Reviewer roles
 - `liza status` shows available manual transitions for tasks at sprint-terminal states
 - `AvailableTransitions()` filters to manual-only, excludes already-executed transitions
 - `release_claim` is pipeline-aware with role authorization
+- `wt_merge` precondition and `handleApprovedMerges`/`hasPendingMerges` are pipeline-aware
+- `logTaskSubmissionIfCompleted` uses pipeline resolver for submitted/executing status checks
 
 **Deferred to follow-up spec:**
 - Bootstrap prompt templates for Phase 2 roles, including:

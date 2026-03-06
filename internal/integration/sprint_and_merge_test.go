@@ -359,7 +359,7 @@ func TestMergeWithoutApproval(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error when merging task that is not APPROVED")
 	}
-	testhelpers.AssertErrorContains(t, err, "must be APPROVED")
+	testhelpers.AssertErrorContains(t, err, "must be in an approved state")
 
 	t.Log("✓ Merge without approval test passed")
 }

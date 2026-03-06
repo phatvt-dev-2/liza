@@ -541,7 +541,7 @@ func setupPipelineProceedTest(t *testing.T) (string, string) {
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
 	// Copy the valid pipeline YAML to .liza/pipeline.yaml (frozen config).
-	src, err := os.ReadFile(filepath.Join(findRepoRoot(t), "internal", "pipeline", "testdata", "valid-coding-subpipeline.yaml"))
+	src, err := os.ReadFile(filepath.Join(testhelpers.FindRepoRoot(t), "internal", "pipeline", "testdata", "valid-coding-subpipeline.yaml"))
 	if err != nil {
 		t.Fatalf("Failed to read pipeline testdata: %v", err)
 	}

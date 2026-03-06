@@ -70,7 +70,7 @@ func TestWtMergeCommand(t *testing.T) {
 			agentID:       "coder-4",
 			setupWorktree: true,
 			wantErr:       true,
-			errContains:   "task must be APPROVED",
+			errContains:   "task must be in an approved state",
 			wantStatus:    models.TaskStatusReadyForReview,
 		},
 		{

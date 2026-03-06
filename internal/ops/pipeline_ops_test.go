@@ -21,7 +21,7 @@ func setupPipelineTest(t *testing.T) (string, string) {
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
 	// Copy the valid pipeline YAML to .liza/pipeline.yaml (frozen config).
-	src, err := os.ReadFile(filepath.Join(findRepoRoot(t), "internal", "pipeline", "testdata", "valid-coding-subpipeline.yaml"))
+	src, err := os.ReadFile(filepath.Join(testhelpers.FindRepoRoot(t), "internal", "pipeline", "testdata", "valid-coding-subpipeline.yaml"))
 	if err != nil {
 		t.Fatalf("Failed to read pipeline testdata: %v", err)
 	}
@@ -30,25 +30,6 @@ func setupPipelineTest(t *testing.T) (string, string) {
 	}
 
 	return tmpDir, stateFile
-}
-
-// findRepoRoot walks up from the current working dir to find the repo root.
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("could not find repo root (go.mod)")
-		}
-		dir = parent
-	}
 }
 
 func TestLoadResolver_PipelineGoal(t *testing.T) {

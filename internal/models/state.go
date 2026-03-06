@@ -197,6 +197,36 @@ type PipelineResolver interface {
 	SubmittedStatus(rolePair string) (TaskStatus, error)
 	ReviewingStatus(rolePair string) (TaskStatus, error)
 	ExecutingStatus(rolePair string) (TaskStatus, error)
+	ApprovedStatus(rolePair string) (TaskStatus, error)
+}
+
+// IsApprovedForMerge checks if a task is in an approved state eligible for merge.
+// Uses the pipeline resolver for pipeline tasks (non-empty RolePair); falls back
+// to legacy statuses (APPROVED, CODING_PLAN_APPROVED) otherwise.
+func IsApprovedForMerge(task *Task, pr PipelineResolver) bool {
+	if task.RolePair != "" && pr != nil {
+		approved, err := pr.ApprovedStatus(task.RolePair)
+		return err == nil && task.Status == approved
+	}
+	return task.Status == TaskStatusApproved || task.Status == TaskStatusCodingPlanApproved
+}
+
+// IsSubmittedStatus checks if a task is in a submitted state (pipeline-aware).
+func IsSubmittedStatus(task *Task, pr PipelineResolver) bool {
+	if task.RolePair != "" && pr != nil {
+		submitted, err := pr.SubmittedStatus(task.RolePair)
+		return err == nil && task.Status == submitted
+	}
+	return task.Status == TaskStatusReadyForReview || task.Status == TaskStatusCodingPlanToReview
+}
+
+// IsExecutingStatus checks if a task is in an executing state (pipeline-aware).
+func IsExecutingStatus(task *Task, pr PipelineResolver) bool {
+	if task.RolePair != "" && pr != nil {
+		executing, err := pr.ExecutingStatus(task.RolePair)
+		return err == nil && task.Status == executing
+	}
+	return task.Status == TaskStatusImplementing
 }
 
 // Task represents a single task in the Liza system

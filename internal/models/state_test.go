@@ -1461,6 +1461,7 @@ type mockPipelineResolver struct {
 	submitted TaskStatus
 	reviewing TaskStatus
 	executing TaskStatus
+	approved  TaskStatus
 }
 
 func (m *mockPipelineResolver) DoerRole(string) (string, error)            { return m.doer, nil }
@@ -1470,6 +1471,7 @@ func (m *mockPipelineResolver) RejectedStatus(string) (TaskStatus, error)  { ret
 func (m *mockPipelineResolver) SubmittedStatus(string) (TaskStatus, error) { return m.submitted, nil }
 func (m *mockPipelineResolver) ReviewingStatus(string) (TaskStatus, error) { return m.reviewing, nil }
 func (m *mockPipelineResolver) ExecutingStatus(string) (TaskStatus, error) { return m.executing, nil }
+func (m *mockPipelineResolver) ApprovedStatus(string) (TaskStatus, error)  { return m.approved, nil }
 
 func TestIsClaimable_Pipeline(t *testing.T) {
 	pr := &mockPipelineResolver{

@@ -1,7 +1,6 @@
 package statevalidate
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,29 +11,10 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-// findRepoRoot walks up from the current working dir to find the repo root.
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("could not find repo root (go.mod)")
-		}
-		dir = parent
-	}
-}
-
 // loadTestConfig loads the pipeline config from the test fixture YAML.
 func loadTestConfig(t *testing.T) *pipeline.PipelineConfig {
 	t.Helper()
-	repoRoot := findRepoRoot(t)
+	repoRoot := testhelpers.FindRepoRoot(t)
 	yamlPath := filepath.Join(repoRoot, "internal", "pipeline", "testdata", "valid-coding-subpipeline.yaml")
 	cfg, err := pipeline.Load(yamlPath)
 	if err != nil {
