@@ -20,15 +20,6 @@ func loadResolver(projectRoot string) (*pipeline.Resolver, *pipeline.PipelineCon
 	return pipeline.NewResolver(cfg), cfg, nil
 }
 
-// rolePairNames extracts role-pair names from a pipeline config.
-func rolePairNames(cfg *pipeline.PipelineConfig) []string {
-	names := make([]string, 0, len(cfg.Pipeline.RolePairs))
-	for name := range cfg.Pipeline.RolePairs {
-		names = append(names, name)
-	}
-	return names
-}
-
 // warnSkipRolePair logs a warning when a role-pair is skipped due to a resolver
 // error during transition map construction. Should not happen on validated configs.
 func warnSkipRolePair(rpName string, err error) {
@@ -37,10 +28,10 @@ func warnSkipRolePair(rpName string, err error) {
 
 // BuildPipelineTransitions creates a complete transition map by merging the
 // resolver's intra-pair transitions with cross-cutting meta-state transitions.
-func BuildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig) map[models.TaskStatus][]models.TaskStatus {
+func BuildPipelineTransitions(r *pipeline.Resolver) map[models.TaskStatus][]models.TaskStatus {
 	tm := r.TransitionMap()
 
-	for _, rpName := range rolePairNames(cfg) {
+	for _, rpName := range r.RolePairNames() {
 		initial, err := r.InitialStatus(rpName)
 		if err != nil {
 			warnSkipRolePair(rpName, err)
@@ -84,7 +75,7 @@ func BuildPipelineTransitions(r *pipeline.Resolver, cfg *pipeline.PipelineConfig
 	tm[models.TaskStatusBlocked] = []models.TaskStatus{models.TaskStatusSuperseded, models.TaskStatusAbandoned}
 
 	ifTargets := []models.TaskStatus{models.TaskStatusAbandoned}
-	for _, rpName := range rolePairNames(cfg) {
+	for _, rpName := range r.RolePairNames() {
 		executing, err := r.ExecutingStatus(rpName)
 		if err != nil {
 			log.Printf("WARNING: BuildPipelineTransitions: skipping INTEGRATION_FAILED target for role-pair %q: %v", rpName, err)
@@ -143,13 +134,13 @@ type pipelineBundle struct {
 // loadPipelineBundle loads the pipeline config once and returns the resolver interface
 // and pre-built transition map. Returns nil for legacy projects.
 func loadPipelineBundle(projectRoot string) *pipelineBundle {
-	resolver, cfg, err := loadResolver(projectRoot)
+	resolver, _, err := loadResolver(projectRoot)
 	if err != nil || resolver == nil {
 		return nil
 	}
 	return &pipelineBundle{
 		pr:          resolver,
-		transitions: BuildPipelineTransitions(resolver, cfg),
+		transitions: BuildPipelineTransitions(resolver),
 	}
 }
 

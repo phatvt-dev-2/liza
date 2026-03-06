@@ -136,12 +136,12 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 
 	// Load pipeline resolver for pipeline-aware claim release
 	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
-	resolver, cfg, resolverErr := loadResolver(projectRoot)
+	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("pipeline config: %v", resolverErr))
 	}
-	if resolver != nil && cfg != nil {
-		pipelineTransitions = BuildPipelineTransitions(resolver, cfg)
+	if resolver != nil {
+		pipelineTransitions = BuildPipelineTransitions(resolver)
 	}
 
 	// Phase 3: State cleanup (atomic)

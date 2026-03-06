@@ -46,12 +46,12 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 
 	// Collect pipeline executing statuses (if pipeline config exists)
 	var pipelineExecuting []models.TaskStatus
-	resolver, cfg, err := loadResolver(projectRoot)
+	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
 		return fmt.Errorf("failed to load pipeline config: %w", err)
 	}
 	if resolver != nil {
-		for _, rpName := range rolePairNames(cfg) {
+		for _, rpName := range resolver.RolePairNames() {
 			if es, err := resolver.ExecutingStatus(rpName); err == nil {
 				pipelineExecuting = append(pipelineExecuting, es)
 			}

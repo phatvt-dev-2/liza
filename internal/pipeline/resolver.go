@@ -157,6 +157,16 @@ func (r *Resolver) SprintTerminalStates() []models.TaskStatus {
 	return states
 }
 
+// RolePairNames returns the sorted names of all role-pairs in the config.
+func (r *Resolver) RolePairNames() []string {
+	names := make([]string, 0, len(r.config.Pipeline.RolePairs))
+	for name := range r.config.Pipeline.RolePairs {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
+
 // RolePair returns the definition for the named role-pair.
 func (r *Resolver) RolePair(name string) (*RolePairDef, error) {
 	rp, ok := r.config.Pipeline.RolePairs[name]

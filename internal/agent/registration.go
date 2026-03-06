@@ -197,7 +197,7 @@ func loadPipelineForRelease(projectRoot string) (map[models.TaskStatus][]models.
 		return nil, nil
 	}
 	resolver := pipeline.NewResolver(cfg)
-	return ops.BuildPipelineTransitions(resolver, cfg), resolver
+	return ops.BuildPipelineTransitions(resolver), resolver
 }
 
 // resetAgentToIdle resets an agent's status to IDLE and clears CurrentTask

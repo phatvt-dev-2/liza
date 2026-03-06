@@ -125,6 +125,21 @@ func TestResolver_SprintTerminalStates_Phase2(t *testing.T) {
 	}
 }
 
+func TestResolver_RolePairNames(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+	got := r.RolePairNames()
+
+	want := []string{"code-planning-pair", "coding-pair", "epic-planning-pair", "us-writing-pair"}
+	if len(got) != len(want) {
+		t.Fatalf("RolePairNames() = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("RolePairNames()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestResolver_TransitionTargetRolePair_PipelineTransition(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 

@@ -2,6 +2,7 @@ package ops
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -195,6 +196,169 @@ func TestAddTask_DefaultOrchestratorID(t *testing.T) {
 	}
 	if result.TaskID != "task-1" {
 		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+}
+
+// minimalPipelineYAML is a minimal valid pipeline config for testing role_pair validation.
+const minimalPipelineYAML = `pipeline:
+  agent-roles:
+    code-planner: "Code Planner"
+    code-plan-reviewer: "Code Plan Reviewer"
+    coder: "Coder"
+    code-reviewer: "Code Reviewer"
+  role-pairs:
+    code-planning-pair:
+      doer: code-planner
+      reviewer: code-plan-reviewer
+      states:
+        initial: DRAFT_CODING_PLAN
+        executing: CODE_PLANNING
+        submitted: CODING_PLAN_TO_REVIEW
+        reviewing: REVIEWING_CODING_PLAN
+        approved: CODING_PLAN_APPROVED
+        rejected: CODING_PLAN_REJECTED
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - code-planning-pair
+        - coding-pair
+      transitions:
+        - name: code-plan-to-coding
+          from: code-planning-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+  entry-points:
+    detailed-spec: coding-subpipeline.code-planning-pair
+`
+
+// setupPipelineProject creates a temp dir with .liza/pipeline.yaml, state.yaml, and specs.
+func setupPipelineProject(t *testing.T) (stateFile, logFile string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	stateFile, _ = testhelpers.SetupLizaDir(t, tmpDir)
+	logFile = filepath.Join(tmpDir, ".liza", "log.jsonl")
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	testhelpers.CreateSpecFile(t, tmpDir, "feature.md", "# Feature\n")
+
+	// Write pipeline config
+	pipelinePath := filepath.Join(tmpDir, ".liza", "pipeline.yaml")
+	if err := os.WriteFile(pipelinePath, []byte(minimalPipelineYAML), 0644); err != nil {
+		t.Fatalf("Failed to write pipeline.yaml: %v", err)
+	}
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 1
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	return stateFile, logFile
+}
+
+func TestAddTask_RolePairValidation(t *testing.T) {
+	stateFile, logFile := setupPipelineProject(t)
+
+	tests := []struct {
+		name        string
+		input       AddTaskInput
+		errContains []string
+	}{
+		{
+			name: "role_pair required for pipeline goal",
+			input: AddTaskInput{
+				ID: "t1", Description: "d", SpecRef: "specs/feature.md",
+				DoneWhen: "w", Scope: "sc", Priority: 1,
+				// RolePair intentionally empty
+			},
+			errContains: []string{"role_pair is required", "code-planning-pair", "coding-pair"},
+		},
+		{
+			name: "invalid role_pair for pipeline goal",
+			input: AddTaskInput{
+				ID: "t2", Description: "d", SpecRef: "specs/feature.md",
+				DoneWhen: "w", Scope: "sc", Priority: 1,
+				RolePair: "nonexistent-pair",
+			},
+			errContains: []string{"unknown role_pair", "nonexistent-pair", "code-planning-pair", "coding-pair"},
+		},
+		{
+			name: "unknown task type mentions role_pair",
+			input: AddTaskInput{
+				ID: "t3", Description: "d", SpecRef: "specs/feature.md",
+				DoneWhen: "w", Scope: "sc", Priority: 1,
+				Type: "planning",
+			},
+			errContains: []string{"unknown task type", "planning", "role_pair", "code-planning-pair"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := AddTask(stateFile, logFile, &tt.input, "orchestrator-1")
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+
+			var pe *PreconditionError
+			if !errors.As(err, &pe) {
+				t.Fatalf("expected PreconditionError, got %T: %v", err, err)
+			}
+
+			for _, want := range tt.errContains {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want to contain %q", err.Error(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestAddTask_PipelineSuccess(t *testing.T) {
+	stateFile, logFile := setupPipelineProject(t)
+
+	input := &AddTaskInput{
+		ID:          "pipeline-task-1",
+		Description: "Implement feature via pipeline",
+		SpecRef:     "specs/feature.md",
+		DoneWhen:    "Tests pass",
+		Scope:       "internal/ops",
+		Priority:    1,
+		RolePair:    "code-planning-pair",
+	}
+
+	result, err := AddTask(stateFile, logFile, input, "orchestrator-1")
+	if err != nil {
+		t.Fatalf("AddTask() error: %v", err)
+	}
+	if result.TaskID != "pipeline-task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "pipeline-task-1")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("pipeline-task-1")
+	if task == nil {
+		t.Fatal("Task not found in state")
+	}
+	// Pipeline-derived initial status for code-planning-pair is DRAFT_CODING_PLAN
+	if task.Status != models.TaskStatusDraftCodingPlan {
+		t.Errorf("Task status = %v, want %v", task.Status, models.TaskStatusDraftCodingPlan)
+	}
+	if task.RolePair != "code-planning-pair" {
+		t.Errorf("RolePair = %q, want %q", task.RolePair, "code-planning-pair")
 	}
 }
 

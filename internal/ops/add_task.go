@@ -77,9 +77,36 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 		input.Type = string(models.TaskTypeCoding)
 	}
 
+	// Derive project root from state path (.liza/state.yaml → project root)
+	projectRoot := filepath.Dir(filepath.Dir(statePath))
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+
 	taskType := models.TaskType(input.Type)
 	if !taskType.IsValid() {
-		return nil, fmt.Errorf("unknown task type %q", input.Type)
+		msg := fmt.Sprintf("unknown task type %q; valid types: %s", input.Type, strings.Join(models.ValidTaskTypeNames(), ", "))
+		if resolver != nil {
+			msg += fmt.Sprintf(". For pipeline workflow customization, use role_pair (available: %s)",
+				strings.Join(resolver.RolePairNames(), ", "))
+		}
+		return nil, &PreconditionError{Reason: msg}
+	}
+
+	// Validate role_pair when pipeline config exists.
+	if resolver != nil && input.RolePair != "" {
+		if _, rpErr := resolver.RolePair(input.RolePair); rpErr != nil {
+			return nil, &PreconditionError{
+				Reason: fmt.Sprintf("unknown role_pair %q; available role_pairs: %s",
+					input.RolePair, strings.Join(resolver.RolePairNames(), ", ")),
+			}
+		}
+	} else if resolver != nil && input.RolePair == "" {
+		return nil, &PreconditionError{
+			Reason: fmt.Sprintf("role_pair is required for pipeline-configured goals; available: %s",
+				strings.Join(resolver.RolePairNames(), ", ")),
+		}
 	}
 
 	normalizedDeps := []string{}
@@ -92,13 +119,6 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 
 	now := time.Now().UTC()
 	agentID := orchestratorID
-
-	// Derive project root from state path (.liza/state.yaml → project root)
-	projectRoot := filepath.Dir(filepath.Dir(statePath))
-	resolver, _, err := loadResolver(projectRoot)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
-	}
 
 	bb := db.For(statePath)
 

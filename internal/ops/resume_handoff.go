@@ -35,12 +35,12 @@ func ResumeHandoff(input ResumeHandoffInput) (*ResumeHandoffResult, error) {
 
 	// Collect pipeline executing statuses (if pipeline config exists)
 	var executingStatuses []models.TaskStatus
-	resolver, cfg, err := loadResolver(input.ProjectRoot)
+	resolver, _, err := loadResolver(input.ProjectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
 	if resolver != nil {
-		for _, rpName := range rolePairNames(cfg) {
+		for _, rpName := range resolver.RolePairNames() {
 			if es, err := resolver.ExecutingStatus(rpName); err == nil {
 				executingStatuses = append(executingStatuses, es)
 			}

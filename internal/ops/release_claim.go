@@ -188,12 +188,12 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 
 	// Load pipeline resolver for pipeline-aware status resolution
 	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
-	resolver, cfg, resolverErr := loadResolver(projectRoot)
+	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
-	if resolver != nil && cfg != nil {
-		pipelineTransitions = BuildPipelineTransitions(resolver, cfg)
+	if resolver != nil {
+		pipelineTransitions = BuildPipelineTransitions(resolver)
 	}
 
 	err := bb.Modify(func(state *models.State) error {

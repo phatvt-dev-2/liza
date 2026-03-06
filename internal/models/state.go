@@ -61,6 +61,16 @@ func (tt TaskType) IsValid() bool {
 	return ok
 }
 
+// ValidTaskTypeNames returns sorted names of all valid task types.
+func ValidTaskTypeNames() []string {
+	names := make([]string, 0, len(taskWorkflows))
+	for tt := range taskWorkflows {
+		names = append(names, string(tt))
+	}
+	slices.Sort(names)
+	return names
+}
+
 // RoleWorkflow returns a copy of the ordered role sequence for this task type.
 func (tt TaskType) RoleWorkflow() []string {
 	wf := taskWorkflows[tt]
