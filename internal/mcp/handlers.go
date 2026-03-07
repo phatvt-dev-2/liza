@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/commands"
@@ -110,10 +111,16 @@ func extractScopeExtensions(params map[string]any, key string) []ops.ScopeExtens
 
 // appendWarnings appends warning lines to a message string.
 func appendWarnings(msg string, warnings []string) string {
-	for _, w := range warnings {
-		msg += "\nWarning: " + w
+	if len(warnings) == 0 {
+		return msg
 	}
-	return msg
+	var b strings.Builder
+	b.WriteString(msg)
+	for _, w := range warnings {
+		b.WriteString("\nWarning: ")
+		b.WriteString(w)
+	}
+	return b.String()
 }
 
 // requireTaskAndAgent extracts the common task_id + agent_id pair.
@@ -159,12 +166,10 @@ func requireOneOfRoles(agentID string, expectedRoles ...string) error {
 		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
 	}
 	role, _ := identity.ExtractRole(agentID) // cannot fail after ValidateFormat
-	for _, expected := range expectedRoles {
-		if role == expected {
-			return nil
-		}
+	if !slices.Contains(expectedRoles, role) {
+		return &RoleError{Expected: expectedRoles, Got: role, AgentID: agentID}
 	}
-	return &RoleError{Expected: expectedRoles, Got: role, AgentID: agentID}
+	return nil
 }
 
 // handleGet implements the liza_get tool
@@ -381,11 +386,10 @@ func formatAddTasksResult(result *ops.AddTasksResult) string {
 	fmt.Fprintf(&b, "Added %d/%d tasks", succeeded, len(result.Results))
 	for _, r := range result.Results {
 		if r.Success {
-			line := fmt.Sprintf("\n  %s: added", r.TaskID)
+			fmt.Fprintf(&b, "\n  %s: added", r.TaskID)
 			for _, w := range r.Warnings {
-				line += fmt.Sprintf(" (warning: %s)", w)
+				fmt.Fprintf(&b, " (warning: %s)", w)
 			}
-			b.WriteString(line)
 		} else {
 			fmt.Fprintf(&b, "\n  %s: error: %s", r.TaskID, r.Error)
 		}
@@ -546,6 +550,31 @@ func (s *Server) handleMarkBlocked(params map[string]any) (any, error) {
 	return textResult(fmt.Sprintf("Task %s marked as BLOCKED", taskID))
 }
 
+// authorizeClaimRelease validates that the agent's runtime role is authorized
+// to release the requested claim type. Orchestrator can release any claim;
+// others can only release claims matching their own role category.
+func authorizeClaimRelease(agentID, claimRole string) error {
+	if err := identity.ValidateFormat(agentID); err != nil {
+		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
+	}
+	agentRole, _ := identity.ExtractRole(agentID)
+	switch agentRole {
+	case roles.RuntimeOrchestrator:
+		return nil
+	case roles.RuntimeCoder, roles.RuntimeCodePlanner:
+		if claimRole != "coder" {
+			return fmt.Errorf("agent %s (role %s) can only release coder claims", agentID, agentRole)
+		}
+	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
+		if claimRole != "code-reviewer" {
+			return fmt.Errorf("agent %s (role %s) can only release code-reviewer claims", agentID, agentRole)
+		}
+	default:
+		return fmt.Errorf("agent %s has unrecognized role %q for claim release", agentID, agentRole)
+	}
+	return nil
+}
+
 // handleReleaseClaim implements the liza_release_claim tool
 // Maps to: liza release-claim
 func (s *Server) handleReleaseClaim(params map[string]any) (any, error) {
@@ -564,25 +593,8 @@ func (s *Server) handleReleaseClaim(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Validate agent's role authorizes releasing the requested claim type.
-	// Orchestrator can release any claim; others only their own role category.
-	if err := identity.ValidateFormat(agentID); err != nil {
-		return nil, fmt.Errorf("invalid agent ID %q: %w", agentID, err)
-	}
-	agentRole, _ := identity.ExtractRole(agentID)
-	switch agentRole {
-	case roles.RuntimeOrchestrator:
-		// orchestrator can release any role
-	case roles.RuntimeCoder, roles.RuntimeCodePlanner:
-		if role != "coder" {
-			return nil, fmt.Errorf("agent %s (role %s) can only release coder claims", agentID, agentRole)
-		}
-	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
-		if role != "code-reviewer" {
-			return nil, fmt.Errorf("agent %s (role %s) can only release code-reviewer claims", agentID, agentRole)
-		}
-	default:
-		return nil, fmt.Errorf("agent %s has unrecognized role %q for claim release", agentID, agentRole)
+	if err := authorizeClaimRelease(agentID, role); err != nil {
+		return nil, err
 	}
 
 	reason, _ := params["reason"].(string)
@@ -733,15 +745,17 @@ func (s *Server) handleUpdateSprintMetrics(params map[string]any) (any, error) {
 		return nil, fmt.Errorf("update sprint metrics failed: %w", err)
 	}
 
-	msg := fmt.Sprintf("Sprint metrics updated: %d done, %d in progress, %d blocked",
-		metrics.TasksDone, metrics.TasksInProgress, metrics.TasksBlocked)
-
 	warnings := ops.CheckSuspiciousRates(metrics)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Sprint metrics updated: %d done, %d in progress, %d blocked",
+		metrics.TasksDone, metrics.TasksInProgress, metrics.TasksBlocked)
 	for _, w := range warnings {
-		msg += "\n" + w
+		b.WriteString("\n")
+		b.WriteString(w)
 	}
 
-	return textResult(msg)
+	return textResult(b.String())
 }
 
 // handleClearStaleReviews implements the liza_clear_stale_review_claims tool

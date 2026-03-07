@@ -204,6 +204,47 @@ func (s *Server) handleResourceRead(req *protocol.JSONRPCRequest) *protocol.JSON
 	return rpcResult(req, result)
 }
 
+// stringErrorRules maps error message substrings to MCP error responses.
+// Used as a fallback when typed error checks (errors.As) don't match.
+var stringErrorRules = []struct {
+	patterns []string
+	code     int
+	message  string
+}{
+	{
+		patterns: []string{"not found", "does not exist"},
+		code:     protocol.NotFound,
+		message:  "resource not found",
+	},
+	{
+		patterns: []string{"race condition", "changed concurrently"},
+		code:     protocol.RaceCondition,
+		message:  "state changed concurrently, retry",
+	},
+	{
+		patterns: []string{
+			"not IMPLEMENTING", "not REVIEWING", "not READY_FOR_REVIEW",
+			"not APPROVED", "must be", "is required", "invalid task ID",
+			"validation failed", "must include", "mandatory",
+		},
+		code:    protocol.ValidationError,
+		message: "validation failed: precondition not met",
+	},
+}
+
+// matchStringErrorRule checks error message text against known patterns.
+// Returns nil if no pattern matches.
+func matchStringErrorRule(msg string) *protocol.JSONRPCError {
+	for _, rule := range stringErrorRules {
+		for _, p := range rule.patterns {
+			if strings.Contains(msg, p) {
+				return protocol.NewError(rule.code, rule.message, nil)
+			}
+		}
+	}
+	return nil
+}
+
 // classifyError converts Go errors to MCP error codes.
 // Maps internal error patterns to JSON-RPC error codes for intelligent client handling.
 // All branches use sanitized messages — raw err.Error() is never exposed to clients.
@@ -228,28 +269,14 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 
 	msg := err.Error()
 
-	// String fallback for errors from external packages (git, etc.)
-	if strings.Contains(msg, "not found") || strings.Contains(msg, "does not exist") {
-		return protocol.NewError(protocol.NotFound, "resource not found", nil)
-	}
-
-	// Lock timeout errors
+	// Lock timeout: compound match (requires "lock" AND a timeout indicator)
 	if strings.Contains(msg, "lock") && (strings.Contains(msg, "timeout") || strings.Contains(msg, "timed out")) {
 		return protocol.NewError(protocol.LockTimeout, "lock acquisition timed out", nil)
 	}
 
-	// Race condition errors
-	if strings.Contains(msg, "race condition") || strings.Contains(msg, "changed concurrently") {
-		return protocol.NewError(protocol.RaceCondition, "state changed concurrently, retry", nil)
-	}
-
-	// Validation errors (status checks, preconditions)
-	if strings.Contains(msg, "not IMPLEMENTING") || strings.Contains(msg, "not REVIEWING") || strings.Contains(msg, "not READY_FOR_REVIEW") ||
-		strings.Contains(msg, "not APPROVED") || strings.Contains(msg, "must be") ||
-		strings.Contains(msg, "is required") || strings.Contains(msg, "invalid task ID") ||
-		strings.Contains(msg, "validation failed") ||
-		strings.Contains(msg, "must include") || strings.Contains(msg, "mandatory") {
-		return protocol.NewError(protocol.ValidationError, "validation failed: precondition not met", nil)
+	// String fallback for errors from external packages (git, etc.)
+	if jerr := matchStringErrorRule(msg); jerr != nil {
+		return jerr
 	}
 
 	// Default: internal error without leaking implementation details
@@ -258,14 +285,11 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 
 // handleNotification processes JSON-RPC notifications (no response sent).
 // Per JSON-RPC 2.0 spec, notifications MUST NOT receive a response.
+// Unknown notifications are silently ignored.
 func (s *Server) handleNotification(req *protocol.JSONRPCRequest) {
-	// Known MCP notifications — silently acknowledge
 	switch req.Method {
 	case "notifications/initialized", "notifications/cancelled":
 		// Expected lifecycle notifications, no action needed
-	default:
-		// Unknown notification — log but don't error
-		fmt.Fprintf(io.Discard, "unknown notification: %s\n", req.Method)
 	}
 }
 
