@@ -109,76 +109,20 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 //
 // The result.ChildTaskIDs slice is appended to with created child task IDs.
 func proceedInner(s *models.State, taskID, transitionName string, tDef transitionDef, now time.Time, result *ProceedResult) error {
-	// Find source task
 	task := s.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task %q not found", taskID)
 	}
 
-	// Validate source status
 	if task.Status != tDef.requiredStatus {
 		return fmt.Errorf("task %q must be at %s for transition %q (current: %s)",
 			taskID, tDef.requiredStatus, transitionName, task.Status)
 	}
 
-	// Check if this is a crash recovery scenario
-	alreadyExecuted := task.TransitionsExecuted[transitionName]
-
-	if alreadyExecuted {
-		switch tDef.cardinality {
-		case "per-subtask":
-			// Crash recovery: check if some children are missing
-			var missingChildren []int
-			for i := range task.Output {
-				childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
-				if s.FindTask(childID) == nil {
-					missingChildren = append(missingChildren, i)
-				}
-			}
-			if len(missingChildren) == 0 {
-				return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
-			}
-			for _, idx := range missingChildren {
-				childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, idx)
-				child := buildChildTask(childID, taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, now)
-				s.Tasks = append(s.Tasks, child)
-				result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-			}
-			task.History = append(task.History, models.TaskHistoryEntry{
-				Time:  now,
-				Event: "transition_crash_recovery",
-				Extra: map[string]any{
-					"transition":         transitionName,
-					"recovered_children": len(missingChildren),
-				},
-			})
-			return nil
-
-		case "one-to-one":
-			// Crash recovery: check if child is missing
-			childID := fmt.Sprintf("%s-%s", taskID, transitionName)
-			if s.FindTask(childID) != nil {
-				return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
-			}
-			child := buildOneToOneChild(childID, taskID, task, tDef, now)
-			s.Tasks = append(s.Tasks, child)
-			result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-			task.History = append(task.History, models.TaskHistoryEntry{
-				Time:  now,
-				Event: "transition_crash_recovery",
-				Extra: map[string]any{
-					"transition":         transitionName,
-					"recovered_children": 1,
-				},
-			})
-			return nil
-
-		default:
-			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
-		}
+	if task.TransitionsExecuted[transitionName] {
+		return recoverCrashedTransition(s, task, taskID, transitionName, tDef, now, result)
 	}
 
-	// Validate and create children based on cardinality
 	switch tDef.cardinality {
 	case "per-subtask":
 		if len(task.Output) == 0 {
@@ -197,13 +141,12 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 		return fmt.Errorf("unsupported cardinality %q for transition %q", tDef.cardinality, transitionName)
 	}
 
-	// Mark transition as executed (write this first for crash recovery)
+	// Write this first for crash recovery
 	if task.TransitionsExecuted == nil {
 		task.TransitionsExecuted = make(map[string]bool)
 	}
 	task.TransitionsExecuted[transitionName] = true
 
-	// Create child tasks based on cardinality
 	switch tDef.cardinality {
 	case "per-subtask":
 		for i, entry := range task.Output {
@@ -219,7 +162,6 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 	}
 
-	// Add history entry to source task
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
 		Event: "transition_executed",
@@ -230,6 +172,61 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	})
 
 	return nil
+}
+
+// recoverCrashedTransition handles crash recovery when a transition was already
+// marked as executed but some child tasks are missing. Returns
+// errTransitionAlreadyExecuted if all children already exist.
+func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transitionName string, tDef transitionDef, now time.Time, result *ProceedResult) error {
+	switch tDef.cardinality {
+	case "per-subtask":
+		var missingChildren []int
+		for i := range task.Output {
+			childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
+			if s.FindTask(childID) == nil {
+				missingChildren = append(missingChildren, i)
+			}
+		}
+		if len(missingChildren) == 0 {
+			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
+		}
+		for _, idx := range missingChildren {
+			childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, idx)
+			child := buildChildTask(childID, taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, now)
+			s.Tasks = append(s.Tasks, child)
+			result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+		}
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:  now,
+			Event: "transition_crash_recovery",
+			Extra: map[string]any{
+				"transition":         transitionName,
+				"recovered_children": len(missingChildren),
+			},
+		})
+		return nil
+
+	case "one-to-one":
+		childID := fmt.Sprintf("%s-%s", taskID, transitionName)
+		if s.FindTask(childID) != nil {
+			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
+		}
+		child := buildOneToOneChild(childID, taskID, task, tDef, now)
+		s.Tasks = append(s.Tasks, child)
+		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:  now,
+			Event: "transition_crash_recovery",
+			Extra: map[string]any{
+				"transition":         transitionName,
+				"recovered_children": 1,
+			},
+		})
+		return nil
+
+	default:
+		return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
+	}
 }
 
 // ExecuteAvailableTransitions auto-executes pipeline transitions for merged tasks.

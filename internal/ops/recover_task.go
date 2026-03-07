@@ -72,7 +72,6 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 	if task != nil {
 		result.InState = true
 
-		// Identify all claiming agents and check PID liveness for each
 		if task.AssignedTo != nil {
 			coderAgentID = *task.AssignedTo
 			if agent, exists := state.Agents[coderAgentID]; exists {
@@ -92,7 +91,7 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 			}
 		}
 
-		// Report primary claiming agent (coder takes precedence)
+		// Coder takes precedence for primary claiming agent
 		if coderAgentID != "" {
 			result.AgentID = coderAgentID
 			result.AgentRole = roles.RuntimeCoder
@@ -154,7 +153,7 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 			return nil
 		}
 
-		// Collect agent IDs to recover before claim release clears them
+		// Collect agent IDs before claim release clears them
 		agentsToRecover := map[string]bool{}
 		if task.AssignedTo != nil {
 			agentsToRecover[*task.AssignedTo] = true
@@ -163,10 +162,8 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 			agentsToRecover[*task.ReviewingBy] = true
 		}
 
-		// Resolve pipeline-aware statuses for claim release
 		effectiveCoderRelease, effectiveReviewerRelease := resolveClaimReleaseStatuses(task, resolver)
 
-		// Release coder claim if present
 		if task.AssignedTo != nil {
 			currentCoderID := *task.AssignedTo
 			released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, true, currentCoderID, reason, now)
@@ -178,7 +175,6 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 			}
 		}
 
-		// Release reviewer claim if present
 		if task.ReviewingBy != nil {
 			currentReviewerID := *task.ReviewingBy
 			released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, true, currentReviewerID, reason, now)
@@ -190,10 +186,8 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 			}
 		}
 
-		// Clear worktree reference
 		task.Worktree = nil
 
-		// Recover agents that held claims on this task
 		for agentID := range agentsToRecover {
 			if _, exists := state.Agents[agentID]; exists {
 				delete(state.Agents, agentID)
@@ -201,7 +195,6 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 			}
 		}
 
-		// Audit trail — list all recovered agents
 		var recoveredAgents []string
 		for agentID := range agentsToRecover {
 			recoveredAgents = append(recoveredAgents, agentID)

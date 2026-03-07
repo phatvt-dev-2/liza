@@ -35,14 +35,9 @@ type claimRelease struct {
 }
 
 var reviewerRelease = claimRelease{
-	hasClaimFn:   func(t *models.Task) bool { return t.ReviewingBy != nil || t.ReviewLeaseExpires != nil },
-	agentFieldFn: func(t *models.Task) *string { return t.ReviewingBy },
-	leaseFieldFn: func(t *models.Task) *time.Time {
-		if t.ReviewLeaseExpires == nil {
-			return nil
-		}
-		return t.ReviewLeaseExpires
-	},
+	hasClaimFn:      func(t *models.Task) bool { return t.ReviewingBy != nil || t.ReviewLeaseExpires != nil },
+	agentFieldFn:    func(t *models.Task) *string { return t.ReviewingBy },
+	leaseFieldFn:    func(t *models.Task) *time.Time { return t.ReviewLeaseExpires },
 	activeStatus:    models.TaskStatusReviewing,
 	releasedStatus:  models.TaskStatusReadyForReview,
 	eventName:       "review_claim_released",
@@ -52,14 +47,9 @@ var reviewerRelease = claimRelease{
 }
 
 var coderRelease = claimRelease{
-	hasClaimFn:   func(t *models.Task) bool { return t.AssignedTo != nil || t.LeaseExpires != nil },
-	agentFieldFn: func(t *models.Task) *string { return t.AssignedTo },
-	leaseFieldFn: func(t *models.Task) *time.Time {
-		if t.LeaseExpires == nil {
-			return nil
-		}
-		return t.LeaseExpires
-	},
+	hasClaimFn:     func(t *models.Task) bool { return t.AssignedTo != nil || t.LeaseExpires != nil },
+	agentFieldFn:   func(t *models.Task) *string { return t.AssignedTo },
+	leaseFieldFn:   func(t *models.Task) *time.Time { return t.LeaseExpires },
 	activeStatus:   models.TaskStatusImplementing,
 	releasedStatus: models.TaskStatusReady,
 	eventName:      "coder_claim_released",
