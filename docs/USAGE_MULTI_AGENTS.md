@@ -342,14 +342,22 @@ Logs captured with `--log` are NDJSON files (one JSON object per line) from `cla
 
 Both analysis tools auto-detect the format.
 
-**CLI analyzer** (`scripts/analyze-log.py`) — stdlib-only Python 3.12+, for batch/CI use:
+**LLM-assisted analysis** — use a coding agent to cross-correlate logs, diagnose patterns and propose fixes:
+
+```
+/liza-logs
+```
+
+This works with any coding agent (Claude Code, Codex, etc.) in pairing mode. The agent runs the analyzer, reads the reports, correlates errors across agents, and suggests actionable fixes.
+
+**CLI analyzer** (`~/.liza/skills/liza-logs/scripts/analyze-log.py`) — stdlib-only Python 3.12+, for batch/CI use:
 
 ```bash
 # Single file
-python3 scripts/analyze-log.py .liza/agent-outputs/planner-1-*.txt
+python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/planner-1-*.txt
 
 # Multiple files
-python3 scripts/analyze-log.py .liza/agent-outputs/*.txt
+python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/*.txt
 ```
 
 Report sections: session header, token summary (fresh/cached/output, cache hit rate), content breakdown by type (chars, estimated tokens, share %), top 10 items by size, tool call frequency. Rich format adds per-turn context growth and cost breakdown.
@@ -357,19 +365,10 @@ Report sections: session header, token summary (fresh/cached/output, cache hit r
 **Browser analyzer** (`liza-session-analyzer.html`) — drag-and-drop, visual charts:
 
 ```bash
-open liza-session-analyzer.html   # or xdg-open on Linux
+open ~/.liza/skills/liza-logs/tools/liza-session-analyzer.html   # or xdg-open on Linux
 ```
 
 Drop one or more log files. Produces the same analysis with bar charts for content breakdown and context growth.
-
-**LLM-assisted analysis** — use a coding agent to cross-correlate logs and diagnose patterns:
-
-```
-analyze all the logs in .liza/agent-outputs using scripts/analyze-log.py,
-find recurring error patterns and propose fixes whenever possible.
-```
-
-This works with any coding agent (Claude Code, Codex, etc.) in pairing mode. The agent runs the analyzer, reads the reports, correlates errors across agents, and suggests actionable fixes.
 
 **Raw inspection** with `jq` (no dependencies):
 

@@ -25,8 +25,8 @@ Chose **Option 2**: opt-in logging with standalone analysis tools as a rapid ite
 - Incompatible with `-i` (interactive mode); validated at flag parse time
 
 **Analysis tools:**
-- **`scripts/analyze-log.py`** — stdlib-only Python CLI for batch analysis. Auto-detects rich (Claude Code NDJSON) and sparse (Codex) log formats.
-- **`scripts/liza-session-analyzer.html`** — drag-and-drop browser app with charts for visual exploration.
+- **`skills/liza-logs/scripts/analyze-log.py`** — stdlib-only Python CLI for batch analysis. Auto-detects rich (Claude Code NDJSON) and sparse (Codex) log formats.
+- **`skills/liza-logs/tools/liza-session-analyzer.html`** — drag-and-drop browser app with charts for visual exploration.
 
 **Diagnostics surfaced:**
 - Token usage and per-turn context utilization (including overflow detection)
