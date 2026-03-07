@@ -263,9 +263,7 @@ func (s *Server) handleResourceReadInternal(uri string) (any, error) {
 	case "liza://agents":
 		return s.inspectResource(uri, "agents")
 	default:
-		const taskPrefix = "liza://tasks/"
-		if len(uri) > len(taskPrefix) && uri[:len(taskPrefix)] == taskPrefix {
-			taskID := uri[len(taskPrefix):]
+		if taskID, ok := strings.CutPrefix(uri, "liza://tasks/"); ok {
 			return s.inspectResource(uri, "tasks", taskID)
 		}
 		return nil, fmt.Errorf("unknown resource URI: %s", uri)
@@ -605,13 +603,16 @@ func (s *Server) handleReleaseClaim(params map[string]any) (any, error) {
 		return nil, fmt.Errorf("release claim failed: %w", err)
 	}
 
-	msg := "Claim released for task " + result.TaskID
-	if result.ReleasedReviewer && result.ReleasedCoder {
+	var msg string
+	switch {
+	case result.ReleasedReviewer && result.ReleasedCoder:
 		msg = "Released reviewer and coder claims for task " + result.TaskID
-	} else if result.ReleasedReviewer {
+	case result.ReleasedReviewer:
 		msg = "Released reviewer claim for task " + result.TaskID
-	} else if result.ReleasedCoder {
+	case result.ReleasedCoder:
 		msg = "Released coder claim for task " + result.TaskID
+	default:
+		msg = "Claim released for task " + result.TaskID
 	}
 	return textResult(msg)
 }
