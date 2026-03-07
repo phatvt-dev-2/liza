@@ -114,6 +114,14 @@ func markIntegrationFailed(bb *db.Blackboard, taskID, agentID, reason, mergeComm
 	})
 }
 
+// shortSHA truncates a SHA to 7 characters for log messages.
+func shortSHA(s string) string {
+	if len(s) > 7 {
+		return s[:7]
+	}
+	return s
+}
+
 // MergeWorktree merges an approved task into the integration branch.
 // This is the final step in the task lifecycle, integrating completed work.
 // Returns IntegrationFailedError if merge conflicts or integration tests fail.
@@ -174,15 +182,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 
 		if wtHEAD != expectedCommit {
 			// HEAD mismatch indicates state corruption — stops retry loops, preserves worktree
-			shortWtHEAD := wtHEAD
-			if len(wtHEAD) > 7 {
-				shortWtHEAD = wtHEAD[:7]
-			}
-			shortReviewCommit := expectedCommit
-			if len(expectedCommit) > 7 {
-				shortReviewCommit = expectedCommit[:7]
-			}
-			reason := fmt.Sprintf("worktree HEAD (%s) does not match approved commit (%s)", shortWtHEAD, shortReviewCommit)
+			reason := fmt.Sprintf("worktree HEAD (%s) does not match approved commit (%s)", shortSHA(wtHEAD), shortSHA(expectedCommit))
 			if err := markIntegrationFailed(bb, taskID, agentID, reason, "", pb); err != nil {
 				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", err)
 			}
@@ -190,7 +190,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 			return nil, &IntegrationFailedError{Reason: IntegrationReasonHEADMismatch}
 		}
 	} else {
-		log.Printf("wt-merge %s: WARNING — worktree missing (cleared by recovery?), proceeding with review_commit %s", taskID, expectedCommit[:7])
+		log.Printf("wt-merge %s: WARNING — worktree missing (cleared by recovery?), proceeding with review_commit %s", taskID, shortSHA(expectedCommit))
 	}
 
 	// Get integration branch
@@ -324,7 +324,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 			if err := gitWrapper.UpdateRef(integrationRef, preMergeHEAD, mergeCommit); err != nil {
 				var casErr *git.RefConflictError
 				if errors.As(err, &casErr) {
-					log.Printf("wt-merge %s: skipping rollback — another merge landed on top of %s", taskID, mergeCommit[:7])
+					log.Printf("wt-merge %s: skipping rollback — another merge landed on top of %s", taskID, shortSHA(mergeCommit))
 				} else {
 					rollbackErr = err
 				}
