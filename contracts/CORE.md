@@ -550,9 +550,9 @@ Tiers govern mid-session recovery only. Subagents return partial results on cont
 
 ### Transition Protocol
 
-**Compaction Checkpoint:** Context compaction triggers Working Set transition.
+**Context Reset Triggers:** Context compaction and plan-to-execution transitions trigger Working Set re-read.
 
-**After compaction:** Re-read CORE.md Rule Priority Architecture and Execution State Machine sections before next action.
+**After any context reset:** Re-read CORE.md Rule Priority Architecture, Execution State Machine sections and GUARDRAILS.md if it exists before next action.
 
 **First signal** (recall feels degraded, re-reading known context):
 1. Transition to Working Set

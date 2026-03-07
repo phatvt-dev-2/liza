@@ -33,6 +33,8 @@ Any non destructive tool by default.
 | Repo architecture | `mcp__deepwiki__ask_question` | WebFetch | — |
 | Code quality check | `mcp__jetbrains__get_file_problems` | — | After edits |
 
+**Fallback coherence:** Read and Edit on the same file must use the same tool family (both MCP or both native). Native tools may not recognise files read through MCP, and vice-versa. When an MCP edit tool is unavailable and you fall back to native tools, also read files with the native Read tool before editing them.
+
 ### Codebase Exploration
 
 | Question Type | Primary Tool | Fallback |

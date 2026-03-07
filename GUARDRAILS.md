@@ -25,7 +25,6 @@ Liza is a **stack-agnostic** multi-agent orchestrator. Projects using Liza may b
 **Test:** Before adding any command, path, or tool reference that touches the user's project, ask: "Would this work for a Python project with no Makefile?" If not, it must be behind a config field.
 
 ## Tier 2 (Strong Defaults)
-<!-- Best-effort under pressure. -->
 
 ## Tier 3 (Preferences)
 <!-- Degraded gracefully. -->

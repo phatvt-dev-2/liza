@@ -27,8 +27,6 @@ OPERATIONAL RULES:
   capture a lesson using the lesson-capture skill before moving on.
   Future agents read lessons/agents/README.md at init.
 
-Ensure to have read ~/.liza/AGENT_TOOLS.md for tool guidance.
-
 BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
 - NEVER combine cd and git in one command. Use: git -C <path> <cmd>
 - NEVER use $() command substitution, backticks, or ANSI-C quoting ($'...') in Bash commands.
@@ -43,12 +41,7 @@ QUERY TOOLS (all roles):
 - liza_validate — Validate state consistency (params: skip_spec_check)
 
 CODEBASE EXPLORATION:
-Route exploration by query type:
-- exact text/pattern -> grep/rg
-- symbol/reference/call hierarchy -> LSP
-- targeted semantic "how does X work?" -> Warp Grep MCP
-- broad multi-file synthesis -> delegated exploration tool/subagent
-If delegation is unavailable, do targeted local search and summarize findings as a digest.
+DO comply with the guidance defined in ~/.liza/AGENT_TOOLS.md
 
 COMMUNICATION: Agents communicate via blackboard only through MCP tools, not direct interaction.
 
