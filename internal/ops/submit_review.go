@@ -214,11 +214,10 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		// the coder's changes (not integration commits that landed since claim).
 		task.BaseCommit = &rebaseBase
 
-		agentPtr := &agentID
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
 			Event: "submitted_for_review",
-			Agent: agentPtr,
+			Agent: &agentID,
 		})
 
 		if agent, ok := state.Agents[agentID]; ok {
