@@ -84,12 +84,7 @@ func (tt TaskType) RoleWorkflow() []string {
 
 // HasRole checks if the given role participates in this task type's workflow.
 func (tt TaskType) HasRole(role string) bool {
-	for _, r := range taskWorkflows[tt] {
-		if r == role {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(taskWorkflows[tt], role)
 }
 
 // TaskStatus represents the state of a task
@@ -851,10 +846,8 @@ func (sm SystemMode) ValidateTransition(to SystemMode) error {
 		return fmt.Errorf("%s", msg)
 	}
 
-	for _, allowed := range tr.AllowedFrom {
-		if sm == allowed {
-			return nil
-		}
+	if slices.Contains(tr.AllowedFrom, sm) {
+		return nil
 	}
 
 	return fmt.Errorf("can only transition to %s from %v (current: %s)", to, tr.AllowedFrom, sm)
@@ -901,7 +894,7 @@ type Config struct {
 	CoderPollInterval        int `yaml:"coder_poll_interval"`
 	CoderMaxWait             int `yaml:"coder_max_wait"`
 	OrchestratorPollInterval int `yaml:"orchestrator_poll_interval"`
-	// OrchestratorMaxWait is the maximum time a orchestrator agent will wait for work
+	// OrchestratorMaxWait is the maximum time an orchestrator agent will wait for work
 	// before exiting. When 0, defaults to DefaultOrchestratorMaxWait (30 minutes).
 	// The orchestrator will exit earlier if STOPPED mode is detected or context is cancelled.
 	OrchestratorMaxWait     int            `yaml:"orchestrator_max_wait"`
