@@ -36,7 +36,6 @@ func DetectPatterns(anomalies []models.Anomaly) PatternResult {
 	return PatternResult{Triggered: false}
 }
 
-// checkRetryCluster detects retry_cluster pattern
 func checkRetryCluster(anomalies []models.Anomaly) PatternResult {
 	retryLoops := filterByType(anomalies, "retry_loop")
 	if len(retryLoops) < 3 {
@@ -60,7 +59,6 @@ func checkRetryCluster(anomalies []models.Anomaly) PatternResult {
 	return PatternResult{Triggered: false}
 }
 
-// checkDebtAccumulation detects debt_accumulation pattern
 func checkDebtAccumulation(anomalies []models.Anomaly) PatternResult {
 	tradeOffs := filterByType(anomalies, "trade_off")
 
@@ -83,19 +81,22 @@ func checkDebtAccumulation(anomalies []models.Anomaly) PatternResult {
 	return PatternResult{Triggered: false}
 }
 
-// checkAssumptionCascade detects assumption_cascade pattern
 func checkAssumptionCascade(anomalies []models.Anomaly) PatternResult {
-	return checkGroupedThreshold(anomalies, "assumption_violated", "assumption", 2,
-		"assumption_cascade", "SPEC_FLAW", "Same assumption violated across multiple tasks")
+	return checkGroupedThreshold(anomalies, "assumption_violated", "assumption", 2, PatternResult{
+		Pattern:  "assumption_cascade",
+		Severity: "SPEC_FLAW",
+		Evidence: "Same assumption violated across multiple tasks",
+	})
 }
 
-// checkSpecGapCluster detects spec_gap_cluster pattern
 func checkSpecGapCluster(anomalies []models.Anomaly) PatternResult {
-	return checkGroupedThreshold(anomalies, "spec_ambiguity", "spec_ref", 2,
-		"spec_gap_cluster", "SPEC_FLAW", "Multiple tasks hitting same spec ambiguity")
+	return checkGroupedThreshold(anomalies, "spec_ambiguity", "spec_ref", 2, PatternResult{
+		Pattern:  "spec_gap_cluster",
+		Severity: "SPEC_FLAW",
+		Evidence: "Multiple tasks hitting same spec ambiguity",
+	})
 }
 
-// checkWorkaroundPattern detects workaround_pattern
 func checkWorkaroundPattern(anomalies []models.Anomaly) PatternResult {
 	var workarounds []models.Anomaly
 	for _, a := range anomalies {
@@ -137,7 +138,6 @@ func checkWorkaroundPattern(anomalies []models.Anomaly) PatternResult {
 	return PatternResult{Triggered: false}
 }
 
-// checkExternalServiceOutage detects external_service_outage pattern
 func checkExternalServiceOutage(anomalies []models.Anomaly) PatternResult {
 	externals := filterByType(anomalies, "external_blocker")
 	groups := groupByField(externals, "blocker_service")
@@ -155,24 +155,20 @@ func checkExternalServiceOutage(anomalies []models.Anomaly) PatternResult {
 }
 
 // checkGroupedThreshold detects patterns where anomalies of a given type share a field value
-// at or above a threshold count.
-func checkGroupedThreshold(anomalies []models.Anomaly, anomalyType, field string, threshold int, pattern, severity, evidence string) PatternResult {
+// at or above a threshold count. The result template is returned with Triggered set to true
+// when the threshold is met.
+func checkGroupedThreshold(anomalies []models.Anomaly, anomalyType, field string, threshold int, result PatternResult) PatternResult {
 	filtered := filterByType(anomalies, anomalyType)
 	groups := groupByField(filtered, field)
 	for _, group := range groups {
 		if len(group) >= threshold {
-			return PatternResult{
-				Triggered: true,
-				Pattern:   pattern,
-				Severity:  severity,
-				Evidence:  evidence,
-			}
+			result.Triggered = true
+			return result
 		}
 	}
 	return PatternResult{Triggered: false}
 }
 
-// filterByType returns anomalies of a specific type
 func filterByType(anomalies []models.Anomaly, anomalyType string) []models.Anomaly {
 	var result []models.Anomaly
 	for _, a := range anomalies {
