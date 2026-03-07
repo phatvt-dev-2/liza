@@ -3,7 +3,6 @@ package errors
 import (
 	"errors"
 	"fmt"
-	"os"
 )
 
 // Exit codes used by liza commands
@@ -14,14 +13,6 @@ const (
 	ExitNotFound = 3  // Entity or field not found
 	ExitRestart  = 42 // Agent restart request
 )
-
-// ExitWithCode prints an error message and exits with the specified code
-func ExitWithCode(code int, format string, args ...any) {
-	if code != ExitSuccess {
-		fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
-	}
-	os.Exit(code)
-}
 
 // NotFoundError represents an error where an entity or field was not found
 type NotFoundError struct {
