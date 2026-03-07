@@ -58,18 +58,15 @@ type testingT interface {
 func AssertErrorContains(t testingT, err error, substring string) {
 	t.Helper()
 
-	// If substring is empty, skip the check (allows conditional checking)
 	if substring == "" {
 		return
 	}
 
-	// If we expect a substring but got no error, that's a problem
 	if err == nil {
 		t.Errorf("Expected error containing %q, but got nil error", substring)
 		return
 	}
 
-	// Check if error message contains the expected substring
 	errMsg := err.Error()
 	if !strings.Contains(errMsg, substring) {
 		t.Errorf("Expected error containing %q, got %q", substring, errMsg)

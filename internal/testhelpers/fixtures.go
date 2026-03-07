@@ -186,7 +186,6 @@ func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) m
 
 	switch status {
 	case models.TaskStatusReady:
-		// Basic task, no additional fields needed
 
 	case models.TaskStatusImplementing:
 		agent := "coder-1"
@@ -263,14 +262,12 @@ func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) m
 		task.Worktree = &worktree
 
 	case models.TaskStatusAbandoned:
-		// Abandoned tasks don't need additional fields
 
 	case models.TaskStatusSuperseded:
 		supersededBy := []string{"task-new"}
 		task.SupersededBy = supersededBy
 
 	case models.TaskStatusDraft:
-		// Draft tasks are still being defined
 	}
 
 	return task

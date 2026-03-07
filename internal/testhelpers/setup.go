@@ -25,7 +25,6 @@ package testhelpers
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -44,35 +43,18 @@ import (
 func SetupTestGitRepo(t *testing.T, tmpDir string) {
 	t.Helper()
 
-	// Initialize git repo with "main" as default branch
-	if err := exec.Command("git", "init", "-b", "main", tmpDir).Run(); err != nil {
-		t.Fatalf("Failed to init git repo: %v", err)
-	}
+	MustGit(t, tmpDir, "init", "-b", "main")
+	MustGit(t, tmpDir, "config", "user.email", "test@example.com")
+	MustGit(t, tmpDir, "config", "user.name", "Test User")
 
-	// Configure git user
-	if err := exec.Command("git", "-C", tmpDir, "config", "user.email", "test@example.com").Run(); err != nil {
-		t.Fatalf("Failed to set git email: %v", err)
-	}
-	if err := exec.Command("git", "-C", tmpDir, "config", "user.name", "Test User").Run(); err != nil {
-		t.Fatalf("Failed to set git name: %v", err)
-	}
-
-	// Create initial commit
 	readmePath := filepath.Join(tmpDir, "README.md")
 	if err := os.WriteFile(readmePath, []byte("# Test\n"), 0644); err != nil {
 		t.Fatalf("Failed to create README: %v", err)
 	}
-	if err := exec.Command("git", "-C", tmpDir, "add", "README.md").Run(); err != nil {
-		t.Fatalf("Failed to git add: %v", err)
-	}
-	if err := exec.Command("git", "-C", tmpDir, "commit", "-m", "Initial commit").Run(); err != nil {
-		t.Fatalf("Failed to git commit: %v", err)
-	}
 
-	// Create integration branch
-	if err := exec.Command("git", "-C", tmpDir, "branch", "integration").Run(); err != nil {
-		t.Fatalf("Failed to create integration branch: %v", err)
-	}
+	MustGit(t, tmpDir, "add", "README.md")
+	MustGit(t, tmpDir, "commit", "-m", "Initial commit")
+	MustGit(t, tmpDir, "branch", "integration")
 }
 
 // SetupLizaDir creates the .liza directory structure and returns paths to the state file and lock file.
