@@ -240,11 +240,12 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	worktreeCreated := worktreePhase.created
 	worktreeDeleted := worktreePhase.deleted
 
-	// Run post-worktree command on newly created or integration-fix worktrees.
-	// Skipped for same-coder reclaims to avoid mutating an in-progress worktree.
+	// Run post-worktree command after worktree provisioning.
+	// Runs on: fresh claims, rejection reclaims (including same-coder), integration-fix.
+	// PostWorktreeCmd is idempotent — safe on existing worktrees, catches prior failures.
 	// Non-fatal: warnings are surfaced through ClaimResult for caller visibility.
 	var postCmdWarnings []string
-	if postWorktreeCmd != nil && (worktreeCreated || isIntegrationFixClaim) {
+	if postWorktreeCmd != nil && (worktreeCreated || isRejectionClaim || isIntegrationFixClaim) {
 		if postErr := RunPostWorktreeCmd(*postWorktreeCmd, worktreeDir); postErr != nil {
 			warning := fmt.Sprintf("post-worktree-cmd: %v", postErr)
 			postCmdWarnings = append(postCmdWarnings, warning)

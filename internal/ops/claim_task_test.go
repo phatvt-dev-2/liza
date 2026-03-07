@@ -683,7 +683,7 @@ func TestClaimTask_PostWorktreeCmdFailureProducesWarning(t *testing.T) {
 	}
 }
 
-func TestClaimTask_PostWorktreeCmdSkippedOnSameCoderReclaim(t *testing.T) {
+func TestClaimTask_PostWorktreeCmdRunsOnSameCoderReclaim(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -709,10 +709,12 @@ func TestClaimTask_PostWorktreeCmdSkippedOnSameCoderReclaim(t *testing.T) {
 		t.Fatalf("ClaimTask() error: %v", err)
 	}
 
-	// Post-worktree command should NOT have run on same-coder reclaim.
+	// Post-worktree command MUST run on same-coder reclaim for consistency
+	// with wt_create (which runs it on existing worktrees too). This catches
+	// worktrees that missed bootstrap and ensures build-readiness on reclaim.
 	markerPath := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1", ".post-worktree-ran")
-	if _, err := os.Stat(markerPath); err == nil {
-		t.Error("Post-worktree command should not run on same-coder reclaim")
+	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
+		t.Error("Post-worktree command should run on same-coder reclaim")
 	}
 	if len(result.Warnings) != 0 {
 		t.Errorf("Expected no warnings, got %v", result.Warnings)
