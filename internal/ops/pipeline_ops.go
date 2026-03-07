@@ -26,65 +26,70 @@ func warnSkipRolePair(rpName string, err error) {
 	log.Printf("WARNING: BuildPipelineTransitions: skipping role-pair %q: %v", rpName, err)
 }
 
+// lifecycleStatuses holds the resolved statuses for a single role-pair's lifecycle.
+type lifecycleStatuses struct {
+	initial   models.TaskStatus
+	executing models.TaskStatus
+	submitted models.TaskStatus
+	reviewing models.TaskStatus
+	rejected  models.TaskStatus
+	approved  models.TaskStatus
+}
+
+// resolveLifecycleStatuses resolves all lifecycle statuses for a role-pair in one call.
+func resolveLifecycleStatuses(r *pipeline.Resolver, rpName string) (lifecycleStatuses, error) {
+	initial, err := r.InitialStatus(rpName)
+	if err != nil {
+		return lifecycleStatuses{}, err
+	}
+	executing, err := r.ExecutingStatus(rpName)
+	if err != nil {
+		return lifecycleStatuses{}, err
+	}
+	submitted, err := r.SubmittedStatus(rpName)
+	if err != nil {
+		return lifecycleStatuses{}, err
+	}
+	reviewing, err := r.ReviewingStatus(rpName)
+	if err != nil {
+		return lifecycleStatuses{}, err
+	}
+	rejected, err := r.RejectedStatus(rpName)
+	if err != nil {
+		return lifecycleStatuses{}, err
+	}
+	approved, err := r.ApprovedStatus(rpName)
+	if err != nil {
+		return lifecycleStatuses{}, err
+	}
+	return lifecycleStatuses{initial, executing, submitted, reviewing, rejected, approved}, nil
+}
+
 // BuildPipelineTransitions creates a complete transition map by merging the
 // resolver's intra-pair transitions with cross-cutting meta-state transitions.
 func BuildPipelineTransitions(r *pipeline.Resolver) map[models.TaskStatus][]models.TaskStatus {
 	tm := r.TransitionMap()
 
+	var executingStatuses []models.TaskStatus
 	for _, rpName := range r.RolePairNames() {
-		initial, err := r.InitialStatus(rpName)
+		ls, err := resolveLifecycleStatuses(r, rpName)
 		if err != nil {
 			warnSkipRolePair(rpName, err)
 			continue
 		}
-		executing, err := r.ExecutingStatus(rpName)
-		if err != nil {
-			warnSkipRolePair(rpName, err)
-			continue
-		}
-		submitted, err := r.SubmittedStatus(rpName)
-		if err != nil {
-			warnSkipRolePair(rpName, err)
-			continue
-		}
-		reviewing, err := r.ReviewingStatus(rpName)
-		if err != nil {
-			warnSkipRolePair(rpName, err)
-			continue
-		}
-		rejected, err := r.RejectedStatus(rpName)
-		if err != nil {
-			warnSkipRolePair(rpName, err)
-			continue
-		}
-		approved, err := r.ApprovedStatus(rpName)
-		if err != nil {
-			warnSkipRolePair(rpName, err)
-			continue
-		}
+		executingStatuses = append(executingStatuses, ls.executing)
 
 		// Cross-cutting additions per lifecycle phase:
-		tm[initial] = append(tm[initial], models.TaskStatusAbandoned)
-		tm[executing] = append(tm[executing], models.TaskStatusBlocked, initial, models.TaskStatusIntegrationFailed)
-		tm[reviewing] = append(tm[reviewing], submitted)
-		tm[rejected] = append(tm[rejected], models.TaskStatusBlocked, models.TaskStatusSuperseded, models.TaskStatusAbandoned)
-		tm[approved] = append(tm[approved], models.TaskStatusMerged, models.TaskStatusIntegrationFailed)
+		tm[ls.initial] = append(tm[ls.initial], models.TaskStatusAbandoned)
+		tm[ls.executing] = append(tm[ls.executing], models.TaskStatusBlocked, ls.initial, models.TaskStatusIntegrationFailed)
+		tm[ls.reviewing] = append(tm[ls.reviewing], ls.submitted)
+		tm[ls.rejected] = append(tm[ls.rejected], models.TaskStatusBlocked, models.TaskStatusSuperseded, models.TaskStatusAbandoned)
+		tm[ls.approved] = append(tm[ls.approved], models.TaskStatusMerged, models.TaskStatusIntegrationFailed)
 	}
 
 	// Meta-state transitions
 	tm[models.TaskStatusBlocked] = []models.TaskStatus{models.TaskStatusSuperseded, models.TaskStatusAbandoned}
-
-	ifTargets := []models.TaskStatus{models.TaskStatusAbandoned}
-	for _, rpName := range r.RolePairNames() {
-		executing, err := r.ExecutingStatus(rpName)
-		if err != nil {
-			log.Printf("WARNING: BuildPipelineTransitions: skipping INTEGRATION_FAILED target for role-pair %q: %v", rpName, err)
-			continue
-		}
-		ifTargets = append(ifTargets, executing)
-	}
-	tm[models.TaskStatusIntegrationFailed] = ifTargets
-
+	tm[models.TaskStatusIntegrationFailed] = append([]models.TaskStatus{models.TaskStatusAbandoned}, executingStatuses...)
 	tm[models.TaskStatusMerged] = []models.TaskStatus{}
 	tm[models.TaskStatusAbandoned] = []models.TaskStatus{}
 	tm[models.TaskStatusSuperseded] = []models.TaskStatus{}
