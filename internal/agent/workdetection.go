@@ -117,10 +117,7 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 		}
 	}
 
-	return OrchestratorWakeResult{
-		Trigger: WakeTriggerNone,
-		Count:   0,
-	}
+	return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 }
 
 func countTasksByStatus(state *models.State, status models.TaskStatus) int {

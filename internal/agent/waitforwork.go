@@ -100,7 +100,6 @@ func waitForWorkEventDriven(
 
 	deadline := time.Now().Add(maxWait)
 
-	// Check immediately first
 	state, err := bb.ReadCached()
 	if err != nil {
 		return false, fmt.Errorf("failed to read state: %w", err)
@@ -138,7 +137,6 @@ func waitForWorkEventDriven(
 	deadlineTimer := time.NewTimer(time.Until(deadline))
 	defer deadlineTimer.Stop()
 
-	// Event-driven wait loop
 	for {
 		select {
 		case <-ctx.Done():
@@ -158,7 +156,6 @@ func waitForWorkEventDriven(
 			}
 
 		case <-watcher.Events():
-			// State changed, check for work
 			state, err := bb.ReadCached()
 			if err != nil {
 				return false, fmt.Errorf("failed to read state: %w", err)

@@ -62,11 +62,9 @@ func waitWhilePaused(ctx context.Context, projectRoot string) error {
 		}
 
 		if !isPaused {
-			// Not paused, continue
 			return nil
 		}
 
-		// Wait and check again
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
