@@ -209,20 +209,25 @@ var validPhases = map[string]bool{
 	"reviewing": true, "approved": true, "rejected": true,
 }
 
-// validateTransition checks a single transition definition.
-func validateTransition(t TransitionDef, p *Pipeline, steps []string) error {
+// validateTransitionHeader checks the common fields shared by all transition types:
+// non-empty name, valid trigger, and valid cardinality.
+func validateTransitionHeader(t TransitionDef) error {
 	if t.Name == "" {
 		return fmt.Errorf("transition name is empty")
 	}
-
-	// Validate trigger.
 	if t.Trigger != "manual" && t.Trigger != "auto" {
 		return fmt.Errorf("trigger must be %q or %q, got %q", "manual", "auto", t.Trigger)
 	}
-
-	// Validate cardinality.
 	if t.Cardinality != "per-subtask" && t.Cardinality != "one-to-one" {
 		return fmt.Errorf("cardinality must be %q or %q, got %q", "per-subtask", "one-to-one", t.Cardinality)
+	}
+	return nil
+}
+
+// validateTransition checks a single transition definition.
+func validateTransition(t TransitionDef, p *Pipeline, steps []string) error {
+	if err := validateTransitionHeader(t); err != nil {
+		return err
 	}
 
 	// Validate from reference.
@@ -249,21 +254,10 @@ func validateTransition(t TransitionDef, p *Pipeline, steps []string) error {
 		return fmt.Errorf("to: invalid phase %q", toPhase)
 	}
 
-	// Validate both role-pairs are steps of this sub-pipeline.
-	fromInSteps := false
-	toInSteps := false
-	for _, s := range steps {
-		if s == fromPair {
-			fromInSteps = true
-		}
-		if s == toPair {
-			toInSteps = true
-		}
-	}
-	if !fromInSteps {
+	if !slices.Contains(steps, fromPair) {
 		return fmt.Errorf("from role-pair %q is not a step of this sub-pipeline", fromPair)
 	}
-	if !toInSteps {
+	if !slices.Contains(steps, toPair) {
 		return fmt.Errorf("to role-pair %q is not a step of this sub-pipeline", toPair)
 	}
 
@@ -273,18 +267,8 @@ func validateTransition(t TransitionDef, p *Pipeline, steps []string) error {
 // validatePipelineTransition checks a single pipeline-transition definition.
 // Pipeline-transitions use 3-part refs and must reference different sub-pipelines.
 func validatePipelineTransition(t TransitionDef, p *Pipeline) error {
-	if t.Name == "" {
-		return fmt.Errorf("transition name is empty")
-	}
-
-	// Validate trigger.
-	if t.Trigger != "manual" && t.Trigger != "auto" {
-		return fmt.Errorf("trigger must be %q or %q, got %q", "manual", "auto", t.Trigger)
-	}
-
-	// Validate cardinality.
-	if t.Cardinality != "per-subtask" && t.Cardinality != "one-to-one" {
-		return fmt.Errorf("cardinality must be %q or %q, got %q", "per-subtask", "one-to-one", t.Cardinality)
+	if err := validateTransitionHeader(t); err != nil {
+		return err
 	}
 
 	// Validate from reference (3-part).
