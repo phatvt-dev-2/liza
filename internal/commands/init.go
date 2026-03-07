@@ -1,4 +1,3 @@
-// Package commands implements Liza CLI commands.
 package commands
 
 import (
@@ -8,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -153,59 +153,7 @@ func InitCommandWithConfig(params InitParams) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write .mcp.json: %v\n", err)
 	}
 
-	// Create contract symlinks pointing to the global ~/.liza/CORE.md.
-	contractTarget := filepath.Join(globalDir, "CORE.md")
-	var reader *bufio.Reader
-	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
-		linkPath := filepath.Join(lizaPaths.ProjectRoot(), name)
-
-		fi, lstatErr := os.Lstat(linkPath)
-		if lstatErr != nil {
-			if !os.IsNotExist(lstatErr) {
-				fmt.Fprintf(os.Stderr, "Warning: cannot stat %s: %v\n", name, lstatErr)
-				continue
-			}
-			// File doesn't exist — fall through to create symlink.
-		} else {
-			// Already a correct symlink — nothing to do.
-			if fi.Mode()&os.ModeSymlink != 0 {
-				target, err := os.Readlink(linkPath)
-				if err == nil && target == contractTarget {
-					continue
-				}
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: cannot read symlink %s: %v\n", name, err)
-				}
-			}
-
-			// Exists but is not the correct symlink — ask permission.
-			if reader == nil {
-				reader = bufio.NewReader(stdin)
-			}
-			fmt.Fprintf(os.Stderr, "Warning: %s already exists but does not point to %s.\n", name, contractTarget)
-			fmt.Fprintf(os.Stderr, "Without this symlink, liza agents will not use liza's contracts.\n")
-			fmt.Fprintf(os.Stderr, "Overwrite %s with symlink to %s? (y/n): ", name, contractTarget)
-
-			response, err := reader.ReadString('\n')
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", name)
-				continue
-			}
-			response = strings.TrimSpace(strings.ToLower(response))
-			if response != "y" && response != "yes" {
-				continue
-			}
-
-			if err := os.Remove(linkPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to remove existing %s: %v\n", name, err)
-				continue
-			}
-		}
-
-		if err := os.Symlink(contractTarget, linkPath); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", name, err)
-		}
-	}
+	createContractSymlinks(lizaPaths.ProjectRoot(), filepath.Join(globalDir, "CORE.md"), stdin)
 
 	// Write GUARDRAILS.md template to project root (non-fatal, like claude-settings)
 	if err := embedded.WriteGuardrails(lizaPaths.ProjectRoot()); err != nil {
@@ -345,16 +293,68 @@ func InitCommandWithConfig(params InitParams) error {
 	return nil
 }
 
-// createIntegrationBranch creates the integration branch if it doesn't exist
+// createContractSymlinks creates CLAUDE.md, AGENTS.md, and GEMINI.md symlinks
+// pointing to the global CORE.md contract. Prompts via stdin when an existing
+// non-symlink file would be overwritten.
+func createContractSymlinks(projectRoot, contractTarget string, stdin io.Reader) {
+	var reader *bufio.Reader
+	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+		linkPath := filepath.Join(projectRoot, name)
+
+		fi, lstatErr := os.Lstat(linkPath)
+		if lstatErr != nil {
+			if !os.IsNotExist(lstatErr) {
+				fmt.Fprintf(os.Stderr, "Warning: cannot stat %s: %v\n", name, lstatErr)
+				continue
+			}
+			// File doesn't exist — fall through to create symlink.
+		} else {
+			if fi.Mode()&os.ModeSymlink != 0 {
+				target, err := os.Readlink(linkPath)
+				if err == nil && target == contractTarget {
+					continue
+				}
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: cannot read symlink %s: %v\n", name, err)
+				}
+			}
+
+			// Exists but is not the correct symlink — ask permission.
+			if reader == nil {
+				reader = bufio.NewReader(stdin)
+			}
+			fmt.Fprintf(os.Stderr, "Warning: %s already exists but does not point to %s.\n", name, contractTarget)
+			fmt.Fprintf(os.Stderr, "Without this symlink, liza agents will not use liza's contracts.\n")
+			fmt.Fprintf(os.Stderr, "Overwrite %s with symlink to %s? (y/n): ", name, contractTarget)
+
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", name)
+				continue
+			}
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response != "y" && response != "yes" {
+				continue
+			}
+
+			if err := os.Remove(linkPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to remove existing %s: %v\n", name, err)
+				continue
+			}
+		}
+
+		if err := os.Symlink(contractTarget, linkPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", name, err)
+		}
+	}
+}
+
 func createIntegrationBranch() error {
-	// Check if integration branch exists
 	cmd := exec.Command("git", "rev-parse", "--verify", "integration")
 	if err := cmd.Run(); err == nil {
-		// Branch already exists
 		return nil
 	}
 
-	// Create integration branch from HEAD
 	cmd = exec.Command("git", "branch", "integration", "HEAD")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -372,11 +372,11 @@ func stringPtrOrNil(s string) *string {
 	return &s
 }
 
-// entryPointNames returns a comma-separated list of entry-point names from the config.
 func entryPointNames(cfg *pipeline.PipelineConfig) string {
 	names := make([]string, 0, len(cfg.Pipeline.EntryPoints))
 	for name := range cfg.Pipeline.EntryPoints {
 		names = append(names, name)
 	}
+	slices.Sort(names)
 	return strings.Join(names, ", ")
 }

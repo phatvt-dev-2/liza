@@ -3,12 +3,12 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// formatJSON formats data as indented JSON
 func formatJSON(data any) (string, error) {
 	bytes, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
@@ -17,7 +17,6 @@ func formatJSON(data any) (string, error) {
 	return string(bytes), nil
 }
 
-// formatYAML formats data as YAML
 func formatYAML(data any) (string, error) {
 	bytes, err := yaml.Marshal(data)
 	if err != nil {
@@ -26,7 +25,6 @@ func formatYAML(data any) (string, error) {
 	return strings.TrimSpace(string(bytes)), nil
 }
 
-// formatValue formats a primitive value as a plain string (no quotes)
 func formatValue(data any) (string, error) {
 	if data == nil {
 		return "", nil
@@ -48,22 +46,12 @@ func formatValue(data any) (string, error) {
 	}
 }
 
-// formatKeyValue formats a map as key-value pairs
-// Keys are sorted alphabetically for consistent output
 func formatKeyValue(data map[string]any) string {
-	// Get sorted keys
 	keys := make([]string, 0, len(data))
 	for key := range data {
 		keys = append(keys, key)
 	}
-	// Sort for consistent output
-	for i := 0; i < len(keys); i++ {
-		for j := i + 1; j < len(keys); j++ {
-			if keys[i] > keys[j] {
-				keys[i], keys[j] = keys[j], keys[i]
-			}
-		}
-	}
+	slices.Sort(keys)
 
 	var lines []string
 	for _, key := range keys {
@@ -77,7 +65,6 @@ func formatKeyValue(data map[string]any) string {
 	return strings.Join(lines, "\n")
 }
 
-// formatTable formats data as an ASCII table
 func formatTable(headers []string, rows [][]string) string {
 	if len(headers) == 0 {
 		return ""
@@ -134,7 +121,6 @@ type dashboardSection struct {
 	Format  string // "kv", "table", or "text"
 }
 
-// formatDashboard renders a multi-section dashboard layout
 func formatDashboard(sections []dashboardSection) string {
 	var output []string
 
