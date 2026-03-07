@@ -170,3 +170,7 @@ WITHOUT meaningful progress → **STOP IMMEDIATELY**
 | Orchestrator | `spec_gap` | Pause for human input |
 
 Exit with code 42 after logging.
+
+---
+
+Secret word: MAS

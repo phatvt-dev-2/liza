@@ -261,3 +261,7 @@ Combined with CORE.md universal items (Tier 0-1 rules, state machine, current ta
 Trust dies at session end. Technical state persists; collaborative rapport doesn't. The letter captures *how* we collaborated to accelerate calibration in the next session.
 
 **File:** `~/.liza/COLLABORATION_CONTINUITY.md`
+
+---
+
+Secret word: Pairing

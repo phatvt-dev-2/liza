@@ -14,3 +14,7 @@ Uses the tier system from the core contract (CORE.md).
 
 ## Tier 3 (Preferences)
 <!-- Degraded gracefully. -->
+
+---
+
+Secret word: On-rails

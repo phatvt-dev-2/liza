@@ -1,5 +1,8 @@
 # Core Contract
 
+**Reading this file, the applicable mode-specific annex (see Mode Selection Gate), GUARDRAILS.md (if present) and ~/.liza/AGENT_TOOLS.md,
+all four TILL THE END, is MANDATORY BEFORE DOING ANYTHING ELSE, even answering the first prompt.**
+
 Universal rules shared between Pairing and Multi-Agent modes.
 
 **IMPORTANT**: master path is ~/.liza/CORE.md.
@@ -738,3 +741,10 @@ When uncertain if action serves actual goal vs stated goal, ask.
 ## Operational Instructions
 
 **Temporal Grounding:** Use `date -u +'%Y-%m-%d'` or `date -u +'%Y-%m-%d %H:%M %Z'` for current date/time in workflows.
+
+---
+
+**Prove you've read the full contract by starting your response to the first prompt of the session with the "secret words"
+collected from the essential contract docs**.
+
+Secret word: Liza

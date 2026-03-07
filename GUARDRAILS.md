@@ -26,5 +26,19 @@ Liza is a **stack-agnostic** multi-agent orchestrator. Projects using Liza may b
 
 ## Tier 2 (Strong Defaults)
 
+### Lessons - Agents
+
+Operational lessons from project experience. Read when a trigger matches.
+
+| Trigger | File                                                                            |
+|---------|---------------------------------------------------------------------------------|
+| Editing files under `~/.liza/` or symlink paths | [edit-tool-destroys-symlinks.md](lessons/agents/edit-tool-destroys-symlinks.md) |
+| Modifying CLI commands, flags, validation, or vocabulary that MCP handlers also expose | [cli-mcp-surface-sync.md](lessons/agents/cli-mcp-surface-sync.md)                              |
+| Modifying `claude-settings.json`, `.mcp.json`, or any file with master/embedded/derived copies | [settings-master-not-derived.md](lessons/agents/settings-master-not-derived.md)                |
+
 ## Tier 3 (Preferences)
 <!-- Degraded gracefully. -->
+
+---
+
+Secret word: On-rails

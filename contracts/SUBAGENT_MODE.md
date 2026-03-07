@@ -72,3 +72,7 @@ Return immediately with explanation if:
 - Necessary information is missing that cannot be derived without hazardous assumption
 - Task would require violating Tier 0 invariants
 - Brief requests state modification but mode is `MODE: SUBAGENT` (not READ-WRITE)
+
+---
+
+Secret word: Subagent

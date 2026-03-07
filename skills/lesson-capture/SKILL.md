@@ -63,16 +63,20 @@ date: YYYY-MM-DD
 
 # Index Format
 
-Each audience directory has a `README.md` index:
+| Audience | Location                   |
+|----------|----------------------------|
+| Agents   | `GUARDRAILS.md` (Tier 2)   |
+| Humans   | `lessons/humans/README.md` |
+
 
 ```markdown
-# Lessons — [Agents|Humans]
+### Lessons — [Agents|Humans]
 
-Operational lessons captured from project experience. Read the full lesson when a trigger matches your current work.
+Operational lessons from project experience. Read when a trigger matches.
 
-| Trigger | Title | File |
-|---------|-------|------|
-| When ... | Title | [filename.md](filename.md) |
+| Trigger | File |
+|---------|------|
+| When ... | [filename.md](filename.md) |
 ```
 
 The index is the discovery mechanism. Agents read it during session initialization and consult full lessons when a trigger matches their current task.

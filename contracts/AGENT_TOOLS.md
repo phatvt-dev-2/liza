@@ -91,3 +91,7 @@ Any non destructive tool by default.
 ### Batching
 
 Batch related operations within same MCP server when possible.
+
+---
+
+Secret word: Empowered
