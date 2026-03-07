@@ -44,7 +44,7 @@ func (t *StdioTransport) ReadRequest() (*JSONRPCRequest, error) {
 		if err == nil {
 			return nil, io.EOF
 		}
-		if err == bufio.ErrTooLong {
+		if errors.Is(err, bufio.ErrTooLong) {
 			return nil, ErrRequestTooLarge
 		}
 		return nil, fmt.Errorf("failed to read request: %w", err)
