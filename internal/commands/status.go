@@ -105,20 +105,15 @@ type circuitBreakerStatus struct {
 
 // StatusCommand returns a comprehensive system status
 func StatusCommand(opts StatusOptions) (string, error) {
-	// Setup paths
 	statePath := paths.New(opts.ProjectRoot).StatePath()
-
-	// Read state
 	bb := db.For(statePath)
 	state, err := bb.Read()
 	if err != nil {
 		return "", fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Build status data
 	status := buildStatusData(state, opts.Detailed, opts.ProjectRoot)
 
-	// Format output
 	switch opts.Format {
 	case "json":
 		return formatJSON(status)
@@ -133,14 +128,12 @@ func StatusCommand(opts StatusOptions) (string, error) {
 func buildStatusData(state *models.State, detailed bool, projectRoot string) statusData {
 	data := statusData{}
 
-	// Populate goal information
 	data.Goal = goalStatus{
 		Description: state.Goal.Description,
 		Status:      string(state.Goal.Status),
 		SpecRef:     state.Goal.SpecRef,
 	}
 
-	// Populate sprint information
 	data.Sprint = sprintStatus{
 		ID:         state.Sprint.ID,
 		Number:     state.Sprint.Number,
@@ -150,7 +143,6 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 		TasksTotal: len(state.Tasks),
 	}
 
-	// Populate config/system mode
 	data.Config = configStatus{
 		Mode: string(state.Config.Mode),
 	}
@@ -158,19 +150,12 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 		data.Config.PausedBy = state.Config.ModeChangedBy
 	}
 
-	// Populate task statistics
-	data.Tasks = buildTaskStatus(state, projectRoot)
-
-	// Populate agent information
+	pr := ops.LoadResolverForModels(projectRoot)
+	data.Tasks = buildTaskStatus(state, pr)
 	data.Agents = buildAgentStatuses(state)
-
-	// Populate orchestrator state
 	data.OrchestratorState = buildOrchestratorStatus(state, projectRoot)
+	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable, pr)
 
-	// Populate work queues
-	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable, projectRoot)
-
-	// Collect pending transitions for tasks
 	for i := range state.Tasks {
 		avail := ops.AvailableTransitions(&state.Tasks[i], projectRoot)
 		if len(avail) > 0 {
@@ -181,7 +166,6 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 		}
 	}
 
-	// Optionally include detailed information
 	if detailed {
 		if len(state.Anomalies) > 0 {
 			anomalies := make([]string, len(state.Anomalies))
@@ -214,13 +198,12 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 }
 
 // buildTaskStatus calculates task statistics
-func buildTaskStatus(state *models.State, projectRoot string) taskStatus {
+func buildTaskStatus(state *models.State, pr models.PipelineResolver) taskStatus {
 	ts := taskStatus{
 		Total:    len(state.Tasks),
 		ByStatus: make(map[string]int),
 	}
 
-	// Build merged task IDs for dependency checking
 	mergedIDs := make(map[string]bool)
 	for _, task := range state.Tasks {
 		if task.Status == models.TaskStatusMerged {
@@ -228,19 +211,15 @@ func buildTaskStatus(state *models.State, projectRoot string) taskStatus {
 		}
 	}
 
-	// Count tasks by status and categories
 	for _, task := range state.Tasks {
-		// Count by status
 		ts.ByStatus[string(task.Status)]++
 
-		// Count active vs terminal
 		if task.Status.IsTerminal() {
 			ts.Terminal++
 		} else {
 			ts.Active++
 		}
 
-		// Check if blocked by dependencies
 		if task.Status == models.TaskStatusReady ||
 			task.Status == models.TaskStatusRejected ||
 			task.Status == models.TaskStatusIntegrationFailed {
@@ -257,8 +236,6 @@ func buildTaskStatus(state *models.State, projectRoot string) taskStatus {
 		}
 	}
 
-	// Count work availability
-	pr := ops.LoadResolverForModels(projectRoot)
 	ts.Claimable = models.CountClaimableTasks(state, models.RoleCoder, pr)
 	ts.Reviewable = models.CountReviewableTasks(state, models.RoleCodeReviewer, pr)
 
@@ -282,11 +259,8 @@ func buildAgentStatuses(state *models.State) []agentStatus {
 			as.CurrentTask = *agent.CurrentTask
 		}
 
-		// Calculate time since heartbeat
 		timeSince := now.Sub(agent.Heartbeat)
 		as.TimeSinceHeartbeat = formatDuration(timeSince)
-
-		// Check process status
 		as.ProcessStatus = getProcessStatus(agent.PID)
 		as.PID = agent.PID
 
@@ -314,7 +288,6 @@ func buildOrchestratorStatus(state *models.State, projectRoot string) orchestrat
 		TriggerCount: count,
 	}
 
-	// Build human-readable reason
 	switch trigger {
 	case "INITIAL_PLANNING":
 		ps.Reason = "No tasks exist; initial planning needed"
@@ -343,8 +316,7 @@ func buildOrchestratorStatus(state *models.State, projectRoot string) orchestrat
 }
 
 // buildWorkQueuesStatus calculates work queue availability
-func buildWorkQueuesStatus(state *models.State, claimable, reviewable int, projectRoot string) workQueuesStatus {
-	pr := ops.LoadResolverForModels(projectRoot)
+func buildWorkQueuesStatus(state *models.State, claimable, reviewable int, pr models.PipelineResolver) workQueuesStatus {
 	return workQueuesStatus{
 		Coder: queueStatus{
 			Available: claimable,
@@ -363,13 +335,12 @@ func getProcessStatus(pid int) string {
 		return "unknown"
 	}
 
-	// Try to find the process
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return "not found"
 	}
 
-	// Send signal 0 to check if process exists
+	// Signal 0 checks process existence without actually signaling
 	err = process.Signal(syscall.Signal(0))
 	if err == nil {
 		return "running"
