@@ -51,25 +51,20 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 				continue
 			}
 
-			// Check if lease is expired.
-			// If lease is nil but reviewing_by is set, treat as malformed/expired.
-			isExpired := false
-			var staleReviewer string
+			// Determine expiry. If lease is nil but reviewing_by is set,
+			// treat as malformed/expired.
 			var expiredAt string
-
-			if task.ReviewLeaseExpires == nil {
-				isExpired = true
-				staleReviewer = *task.ReviewingBy
+			switch {
+			case task.ReviewLeaseExpires == nil:
 				expiredAt = "unknown (lease missing)"
-			} else if task.ReviewLeaseExpires.Before(now) || task.ReviewLeaseExpires.Equal(now) {
-				isExpired = true
-				staleReviewer = *task.ReviewingBy
+			case !task.ReviewLeaseExpires.After(now):
 				expiredAt = task.ReviewLeaseExpires.Format(time.RFC3339)
-			}
-
-			if !isExpired {
+			default:
 				continue
 			}
+
+			// Capture reviewer before clearing the claim.
+			staleReviewer := *task.ReviewingBy
 
 			// Revert to submitted state and clear the stale claim.
 			if match.usePipeline {

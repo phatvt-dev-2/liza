@@ -32,6 +32,19 @@ func IsProcessAlive(pid int) bool {
 	return err == nil
 }
 
+// validateAgentDeletion checks whether an agent can be safely deleted based on
+// lease and task state. Does not check PID liveness (callers handle that separately).
+func validateAgentDeletion(agent models.Agent, agentID string) error {
+	now := time.Now().UTC()
+	if agent.LeaseExpires != nil && agent.LeaseExpires.After(now) {
+		return fmt.Errorf("agent %s has active lease (expires %v), use --force to delete", agentID, agent.LeaseExpires.Format(time.RFC3339))
+	}
+	if agent.CurrentTask != nil {
+		return fmt.Errorf("agent %s is working on task %s, use --force to delete", agentID, *agent.CurrentTask)
+	}
+	return nil
+}
+
 // DeleteAgent removes an agent from state. Without force, refuses if the agent
 // has an active lease, current task, or running process. The allowRunningPID
 // flag bypasses only the PID liveness check (for interactive CLI confirmation)
@@ -55,16 +68,10 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
 	}
 
-	now := time.Now().UTC()
 	if !force {
-		if agent.LeaseExpires != nil && agent.LeaseExpires.After(now) {
-			return nil, fmt.Errorf("agent %s has active lease (expires %v), use --force to delete", agentID, agent.LeaseExpires.Format(time.RFC3339))
+		if err := validateAgentDeletion(agent, agentID); err != nil {
+			return nil, err
 		}
-
-		if agent.CurrentTask != nil {
-			return nil, fmt.Errorf("agent %s is working on task %s, use --force to delete", agentID, *agent.CurrentTask)
-		}
-
 		if !allowRunningPID && agent.PID != 0 && IsProcessAlive(agent.PID) {
 			return nil, fmt.Errorf("agent %s is still running with PID %d, use --force to delete or confirm interactively via CLI", agentID, agent.PID)
 		}
@@ -76,21 +83,16 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 			return &errors.NotFoundError{Entity: "agent", ID: agentID}
 		}
 
-		now := time.Now().UTC()
 		if !force {
-			if agent.LeaseExpires != nil && agent.LeaseExpires.After(now) {
-				return fmt.Errorf("agent %s has active lease (expires %v), use --force to delete", agentID, agent.LeaseExpires.Format(time.RFC3339))
-			}
-
-			if agent.CurrentTask != nil {
-				return fmt.Errorf("agent %s is working on task %s, use --force to delete", agentID, *agent.CurrentTask)
+			if err := validateAgentDeletion(agent, agentID); err != nil {
+				return err
 			}
 		}
 
 		delete(state.Agents, agentID)
 
 		humanNote := models.HumanNote{
-			Timestamp: now,
+			Timestamp: time.Now().UTC(),
 			Message:   fmt.Sprintf("Agent %s deleted: %s", agentID, reason),
 			For:       agentID,
 		}

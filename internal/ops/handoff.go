@@ -64,13 +64,11 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 
 		task.HandoffPending = true
 		note := fmt.Sprintf("summary: %s | next_action: %s", summary, nextAction)
-		notePtr := &note
-		agentPtr := &agentID
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
 			Event: "handoff_initiated",
-			Agent: agentPtr,
-			Note:  notePtr,
+			Agent: &agentID,
+			Note:  &note,
 		})
 
 		if state.Handoff == nil {
@@ -87,9 +85,8 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 		if !exists {
 			agent = models.Agent{Role: runtimeRole}
 		}
-		currentTask := taskID
 		agent.Status = models.AgentStatusHandoff
-		agent.CurrentTask = &currentTask
+		agent.CurrentTask = &taskID
 		agent.Heartbeat = now
 		state.Agents[agentID] = agent
 
