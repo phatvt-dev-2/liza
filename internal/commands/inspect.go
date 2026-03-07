@@ -21,14 +21,7 @@ type InspectOptions struct {
 // Validate checks if the inspect options are valid
 func (opts *InspectOptions) Validate() error {
 	validFormats := []string{"json", "yaml", "table", "value", ""}
-	valid := false
-	for _, f := range validFormats {
-		if opts.Format == f {
-			valid = true
-			break
-		}
-	}
-	if !valid {
+	if !slices.Contains(validFormats, opts.Format) {
 		return fmt.Errorf("invalid format: %s (must be json, yaml, table, or value)", opts.Format)
 	}
 	return nil
@@ -118,65 +111,37 @@ func handleFieldQuery(state *models.State, fieldPath string, opts InspectOptions
 func handleEntityQuery(state *models.State, entity string, args []string, opts InspectOptions) (string, error) {
 	switch entity {
 	case "config":
-		// Show all config fields
 		return formatOutput(state.Config, opts.Format)
 	case "sprint":
-		// Show all sprint fields
 		return formatOutput(state.Sprint, opts.Format)
 	case "tasks":
-		// List all tasks or filter by criteria
-		// If there are additional args, treat first arg as task ID
-		if len(args) > 0 {
-			taskOpts := inspectTasksOptions{Format: opts.Format}
-			result, err := inspectTask(state, args[0], taskOpts)
-			if err != nil {
-				return "", err
-			}
-			return result.(string), nil
-		}
-		// Otherwise list all tasks
 		taskOpts := inspectTasksOptions{Format: opts.Format}
-		result, err := inspectTasks(state, taskOpts)
-		if err != nil {
-			return "", err
-		}
-		return result.(string), nil
-	case "agents":
-		// List all agents or show specific agent
 		if len(args) > 0 {
-			agentOpts := inspectAgentsOptions{Format: opts.Format}
-			result, err := inspectAgent(state, args[0], agentOpts)
-			if err != nil {
-				return "", err
-			}
-			return result.(string), nil
+			return asString(inspectTask(state, args[0], taskOpts))
 		}
-		// Otherwise list all agents
+		return asString(inspectTasks(state, taskOpts))
+	case "agents":
 		agentOpts := inspectAgentsOptions{Format: opts.Format}
-		result, err := inspectAgents(state, agentOpts)
-		if err != nil {
-			return "", err
+		if len(args) > 0 {
+			return asString(inspectAgent(state, args[0], agentOpts))
 		}
-		return result.(string), nil
+		return asString(inspectAgents(state, agentOpts))
 	case "metrics":
-		// Show sprint metrics or per-agent metrics
-		metricsOpts := inspectMetricsOptions{Format: opts.Format}
-		result, err := inspectMetrics(state, metricsOpts)
-		if err != nil {
-			return "", err
-		}
-		return result.(string), nil
+		return asString(inspectMetrics(state, inspectMetricsOptions{Format: opts.Format}))
 	case "anomalies":
-		// List all anomalies or filter by criteria
-		anomaliesOpts := inspectAnomaliesOptions{Format: opts.Format}
-		result, err := inspectAnomalies(state, anomaliesOpts)
-		if err != nil {
-			return "", err
-		}
-		return result.(string), nil
+		return asString(inspectAnomalies(state, inspectAnomaliesOptions{Format: opts.Format}))
 	default:
 		return "", &errors.NotFoundError{Entity: entity}
 	}
+}
+
+// asString extracts the string result from an (any, error) return pair.
+// Used by entity handlers that return formatted strings when not in internal mode.
+func asString(result any, err error) (string, error) {
+	if err != nil {
+		return "", err
+	}
+	return result.(string), nil
 }
 
 // formatOutput formats the output based on the requested format

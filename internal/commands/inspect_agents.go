@@ -54,7 +54,7 @@ func inspectAgents(state *models.State, opts inspectAgentsOptions) (any, error) 
 		}
 
 		// Build agentInfo with computed fields
-		info := buildagentInfo(agentID, &agent, currentTask)
+		info := buildAgentInfo(agentID, &agent, currentTask)
 		agents = append(agents, info)
 	}
 
@@ -87,7 +87,7 @@ func inspectAgent(state *models.State, agentID string, opts inspectAgentsOptions
 	}
 
 	// Build agentInfo with computed fields
-	info := buildagentInfo(agentID, &agent, currentTask)
+	info := buildAgentInfo(agentID, &agent, currentTask)
 
 	// If called internally, return structured data
 	if opts.Internal {
@@ -98,8 +98,8 @@ func inspectAgent(state *models.State, agentID string, opts inspectAgentsOptions
 	return formatAgentOutput(info, opts.Format)
 }
 
-// buildagentInfo converts an Agent to agentInfo with computed fields
-func buildagentInfo(agentID string, agent *models.Agent, currentTask *models.Task) agentInfo {
+// buildAgentInfo converts an Agent to agentInfo with computed fields
+func buildAgentInfo(agentID string, agent *models.Agent, currentTask *models.Task) agentInfo {
 	info := agentInfo{
 		ID:              agentID,
 		Role:            agent.Role,
@@ -204,13 +204,13 @@ func formatAgentsTable(agents []agentInfo) string {
 			timeOnTask = agent.TimeOnTask
 		}
 
-		// Format PID with status indicator
-		pidDisplay := "-"
-		if agent.PID == 0 {
+		var pidDisplay string
+		switch {
+		case agent.PID == 0:
 			pidDisplay = "- n/a"
-		} else if agent.ProcessStatus == "running" {
+		case agent.ProcessStatus == "running":
 			pidDisplay = fmt.Sprintf("%d ✓", agent.PID)
-		} else {
+		default:
 			pidDisplay = fmt.Sprintf("%d ✗", agent.PID)
 		}
 

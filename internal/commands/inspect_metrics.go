@@ -29,8 +29,8 @@ type metricsInfo struct {
 	TaskOutcomeApprovalRatePercent   int `json:"task_outcome_approval_rate_percent" yaml:"task_outcome_approval_rate_percent"`
 }
 
-// AgentmetricsInfo represents per-agent performance metrics
-type AgentmetricsInfo struct {
+// AgentMetricsInfo represents per-agent performance metrics
+type AgentMetricsInfo struct {
 	AgentID            string `json:"agent_id" yaml:"agent_id"`
 	Role               string `json:"role" yaml:"role"`
 	TasksCompleted     int    `json:"tasks_completed" yaml:"tasks_completed"`
@@ -61,7 +61,7 @@ func inspectMetrics(state *models.State, opts inspectMetricsOptions) (any, error
 	}
 
 	// Get sprint metrics
-	metricsInfo := buildmetricsInfo(state.Sprint.Metrics)
+	metricsInfo := buildMetricsInfo(state.Sprint.Metrics)
 
 	// If called internally, return structured data
 	if opts.Internal {
@@ -72,8 +72,8 @@ func inspectMetrics(state *models.State, opts inspectMetricsOptions) (any, error
 	return formatMetricsOutput(metricsInfo, opts.Format)
 }
 
-// buildmetricsInfo converts SprintMetrics to metricsInfo
-func buildmetricsInfo(metrics models.SprintMetrics) metricsInfo {
+// buildMetricsInfo converts SprintMetrics to metricsInfo
+func buildMetricsInfo(metrics models.SprintMetrics) metricsInfo {
 	return metricsInfo{
 		TasksDone:                        metrics.TasksDone,
 		TasksInProgress:                  metrics.TasksInProgress,
@@ -90,13 +90,13 @@ func buildmetricsInfo(metrics models.SprintMetrics) metricsInfo {
 }
 
 // calculateAgentMetrics computes per-agent statistics from tasks
-func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) []AgentmetricsInfo {
+func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) []AgentMetricsInfo {
 	// Build a map to track metrics per agent
-	agentStats := make(map[string]*AgentmetricsInfo)
+	agentStats := make(map[string]*AgentMetricsInfo)
 
 	// Initialize metrics for all registered agents
 	for agentID, agent := range agents {
-		agentStats[agentID] = &AgentmetricsInfo{
+		agentStats[agentID] = &AgentMetricsInfo{
 			AgentID: agentID,
 			Role:    agent.Role,
 		}
@@ -112,7 +112,7 @@ func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) 
 
 		// Create entry if agent is not registered (shouldn't happen in practice)
 		if _, exists := agentStats[agentID]; !exists {
-			agentStats[agentID] = &AgentmetricsInfo{
+			agentStats[agentID] = &AgentMetricsInfo{
 				AgentID: agentID,
 				Role:    "unknown",
 			}
@@ -146,7 +146,7 @@ func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) 
 	}
 
 	// Convert map to slice
-	result := make([]AgentmetricsInfo, 0, len(agentStats))
+	result := make([]AgentMetricsInfo, 0, len(agentStats))
 	for _, stats := range agentStats {
 		result = append(result, *stats)
 	}
@@ -177,7 +177,7 @@ func formatMetricsOutput(metrics metricsInfo, format string) (string, error) {
 }
 
 // formatAgentMetricsOutput formats per-agent metrics for output
-func formatAgentMetricsOutput(metrics []AgentmetricsInfo, format string) (string, error) {
+func formatAgentMetricsOutput(metrics []AgentMetricsInfo, format string) (string, error) {
 	// Default to table format
 	if format == "" {
 		format = "table"
@@ -204,7 +204,7 @@ func formatMetricsValue(metrics metricsInfo) (string, error) {
 }
 
 // formatAgentMetricsTable formats per-agent metrics as a table
-func formatAgentMetricsTable(metrics []AgentmetricsInfo) string {
+func formatAgentMetricsTable(metrics []AgentMetricsInfo) string {
 	if len(metrics) == 0 {
 		return "No agent metrics found"
 	}

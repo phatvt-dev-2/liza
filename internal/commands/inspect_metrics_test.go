@@ -273,10 +273,10 @@ func TestInspectAgentMetrics(t *testing.T) {
 			// Validate result based on format
 			switch tt.wantFormat {
 			case "internal":
-				// Should return []AgentmetricsInfo
-				agentMetrics, ok := result.([]AgentmetricsInfo)
+				// Should return []AgentMetricsInfo
+				agentMetrics, ok := result.([]AgentMetricsInfo)
 				if !ok {
-					t.Errorf("expected []AgentmetricsInfo, got %T", result)
+					t.Errorf("expected []AgentMetricsInfo, got %T", result)
 					return
 				}
 				if len(agentMetrics) != tt.wantCount {
@@ -284,7 +284,7 @@ func TestInspectAgentMetrics(t *testing.T) {
 				}
 
 				// Find coder-1 metrics and verify calculations
-				var coder1Metrics *AgentmetricsInfo
+				var coder1Metrics *AgentMetricsInfo
 				for i := range agentMetrics {
 					if agentMetrics[i].AgentID == "coder-1" {
 						coder1Metrics = &agentMetrics[i]
@@ -318,7 +318,7 @@ func TestInspectAgentMetrics(t *testing.T) {
 					return
 				}
 				// Validate JSON
-				var agentMetrics []AgentmetricsInfo
+				var agentMetrics []AgentMetricsInfo
 				if err := json.Unmarshal([]byte(output), &agentMetrics); err != nil {
 					t.Errorf("invalid JSON output: %v", err)
 				}
@@ -352,7 +352,7 @@ func TestInspectAgentMetrics(t *testing.T) {
 	}
 }
 
-func TestBuildmetricsInfo(t *testing.T) {
+func TestBuildMetricsInfo(t *testing.T) {
 	metrics := models.SprintMetrics{
 		TasksDone:                        10,
 		TasksInProgress:                  3,
@@ -367,7 +367,7 @@ func TestBuildmetricsInfo(t *testing.T) {
 		TaskOutcomeApprovalRatePercent:   72,
 	}
 
-	info := buildmetricsInfo(metrics)
+	info := buildMetricsInfo(metrics)
 
 	// Verify all fields are copied correctly
 	if info.TasksDone != 10 {
@@ -460,7 +460,7 @@ func TestCalculateAgentMetrics(t *testing.T) {
 	}
 
 	// Find coder-1 metrics
-	var coder1 *AgentmetricsInfo
+	var coder1 *AgentMetricsInfo
 	for i := range metrics {
 		if metrics[i].AgentID == "coder-1" {
 			coder1 = &metrics[i]
@@ -491,7 +491,7 @@ func TestCalculateAgentMetrics(t *testing.T) {
 	}
 
 	// Find coder-2 metrics
-	var coder2 *AgentmetricsInfo
+	var coder2 *AgentMetricsInfo
 	for i := range metrics {
 		if metrics[i].AgentID == "coder-2" {
 			coder2 = &metrics[i]

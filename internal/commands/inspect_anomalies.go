@@ -37,7 +37,7 @@ func inspectAnomalies(state *models.State, opts inspectAnomaliesOptions) (any, e
 	// Build anomalyInfo with computed fields
 	anomalyInfos := make([]anomalyInfo, len(filtered))
 	for i, anomaly := range filtered {
-		anomalyInfos[i] = buildanomalyInfo(anomaly)
+		anomalyInfos[i] = buildAnomalyInfo(anomaly)
 	}
 
 	// If called internally (for composition), return structured data
@@ -49,8 +49,8 @@ func inspectAnomalies(state *models.State, opts inspectAnomaliesOptions) (any, e
 	return formatAnomaliesOutput(anomalyInfos, opts.Format)
 }
 
-// buildanomalyInfo converts an Anomaly to anomalyInfo with computed fields
-func buildanomalyInfo(anomaly models.Anomaly) anomalyInfo {
+// buildAnomalyInfo converts an Anomaly to anomalyInfo with computed fields
+func buildAnomalyInfo(anomaly models.Anomaly) anomalyInfo {
 	info := anomalyInfo{
 		Timestamp: anomaly.Timestamp,
 		Task:      anomaly.Task,

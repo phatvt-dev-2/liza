@@ -386,7 +386,7 @@ func TestAgentInfo_ComputedFields(t *testing.T) {
 		},
 	}
 
-	info := buildagentInfo("coder-1", &agent, task)
+	info := buildAgentInfo("coder-1", &agent, task)
 
 	// Check that computed fields are set
 	if info.TimeSinceHeartbeat == "" {
@@ -429,7 +429,7 @@ func TestAgentInfo_IdleAgent(t *testing.T) {
 		ContextPercent:  20,
 	}
 
-	info := buildagentInfo("coder-2", &agent, nil)
+	info := buildAgentInfo("coder-2", &agent, nil)
 
 	// Check that computed fields are set appropriately
 	if info.TimeSinceHeartbeat == "" {
@@ -491,7 +491,7 @@ func TestIsAgentProcessAlive_InspectAgents(t *testing.T) {
 	}
 }
 
-// TestAgentInfo_PIDAndProcessStatus tests that buildagentInfo populates PID and ProcessStatus
+// TestAgentInfo_PIDAndProcessStatus tests that buildAgentInfo populates PID and ProcessStatus
 func TestAgentInfo_PIDAndProcessStatus(t *testing.T) {
 	now := time.Now()
 
@@ -529,13 +529,13 @@ func TestAgentInfo_PIDAndProcessStatus(t *testing.T) {
 				ContextPercent:  10,
 			}
 
-			info := buildagentInfo("test-agent", &agent, nil)
+			info := buildAgentInfo("test-agent", &agent, nil)
 
 			if info.PID != tt.agentPID {
-				t.Errorf("buildagentInfo() PID = %d, want %d", info.PID, tt.agentPID)
+				t.Errorf("buildAgentInfo() PID = %d, want %d", info.PID, tt.agentPID)
 			}
 			if info.ProcessStatus != tt.wantProcessStatus {
-				t.Errorf("buildagentInfo() ProcessStatus = %s, want %s", info.ProcessStatus, tt.wantProcessStatus)
+				t.Errorf("buildAgentInfo() ProcessStatus = %s, want %s", info.ProcessStatus, tt.wantProcessStatus)
 			}
 		})
 	}

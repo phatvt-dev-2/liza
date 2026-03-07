@@ -221,7 +221,7 @@ func TestInspectAnomalies(t *testing.T) {
 	}
 }
 
-func TestBuildanomalyInfo(t *testing.T) {
+func TestBuildAnomalyInfo(t *testing.T) {
 	now := time.Now()
 	timestamp := now.Add(-2 * time.Hour)
 
@@ -236,7 +236,7 @@ func TestBuildanomalyInfo(t *testing.T) {
 		},
 	}
 
-	info := buildanomalyInfo(anomaly)
+	info := buildAnomalyInfo(anomaly)
 
 	// Verify all fields are copied correctly
 	if info.Task != "task-1" {
