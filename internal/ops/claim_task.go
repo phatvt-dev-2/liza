@@ -27,6 +27,7 @@ type ClaimResult struct {
 	IntegrationFix    bool
 	PreviousAssignee  string // empty if none
 	WorktreeRecreated bool   // true if old worktree was deleted and new one created
+	Warnings          []string
 }
 
 type claimWorktreePhaseResult struct {
@@ -61,6 +62,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	var previousAssignee string
 	var baseCommit string
 	var integrationBranch string
+	var postWorktreeCmd *string
 	var leaseDuration int
 	var maxCoderIterations int
 	var targetStatus models.TaskStatus
@@ -190,6 +192,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	// Store values for Phase 2
 	taskStatus = task.Status
 	integrationBranch = state.Config.IntegrationBranch
+	postWorktreeCmd = state.Config.PostWorktreeCmd
 	leaseDuration = state.Config.LeaseDuration
 	if leaseDuration == 0 {
 		leaseDuration = models.DefaultLeaseDurationSeconds
@@ -236,6 +239,18 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	}
 	worktreeCreated := worktreePhase.created
 	worktreeDeleted := worktreePhase.deleted
+
+	// Run post-worktree command on newly created or integration-fix worktrees.
+	// Skipped for same-coder reclaims to avoid mutating an in-progress worktree.
+	// Non-fatal: warnings are surfaced through ClaimResult for caller visibility.
+	var postCmdWarnings []string
+	if postWorktreeCmd != nil && (worktreeCreated || isIntegrationFixClaim) {
+		if postErr := RunPostWorktreeCmd(*postWorktreeCmd, worktreeDir); postErr != nil {
+			warning := fmt.Sprintf("post-worktree-cmd: %v", postErr)
+			postCmdWarnings = append(postCmdWarnings, warning)
+			log.Printf("WARNING: claim-task %s: %s", taskID, warning)
+		}
+	}
 
 	// --- Phase 3: Re-validate and Commit ---
 	now := time.Now().UTC()
@@ -369,6 +384,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		IntegrationFix:    isIntegrationFixClaim,
 		PreviousAssignee:  previousAssignee,
 		WorktreeRecreated: worktreeDeleted && worktreeCreated,
+		Warnings:          postCmdWarnings,
 	}, nil
 }
 

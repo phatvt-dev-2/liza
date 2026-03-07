@@ -48,4 +48,7 @@ func printClaimResult(r *ops.ClaimResult) {
 			fmt.Printf("  previous_assignee: %s\n", r.PreviousAssignee)
 		}
 	}
+	for _, w := range r.Warnings {
+		fmt.Printf("  WARNING: %s\n", w)
+	}
 }

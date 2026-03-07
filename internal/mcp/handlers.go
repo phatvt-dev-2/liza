@@ -427,8 +427,10 @@ func (s *Server) handleClaimTask(params map[string]any) (any, error) {
 		return nil, fmt.Errorf("claim task failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Task %s claimed by %s (from %s), worktree: %s",
-		result.TaskID, result.AgentID, result.SourceStatus, result.WorktreeRel))
+	return textResult(appendWarnings(
+		fmt.Sprintf("Task %s claimed by %s (from %s), worktree: %s",
+			result.TaskID, result.AgentID, result.SourceStatus, result.WorktreeRel),
+		result.Warnings))
 }
 
 // handleSubmitForReview implements the liza_submit_for_review tool

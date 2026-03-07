@@ -59,7 +59,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 			}
 			// Run post-worktree command even on existing worktrees — idempotent, catches prior failures.
 			if postCmd != nil {
-				if err := runPostWorktreeCmd(*postCmd, worktreeDir); err != nil {
+				if err := RunPostWorktreeCmd(*postCmd, worktreeDir); err != nil {
 					result.Warnings = append(result.Warnings, fmt.Sprintf("post-worktree-cmd: %v", err))
 				}
 			}
@@ -101,7 +101,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	// Run post-worktree command so the worktree is build/test-ready.
 	// Non-fatal: agents can run the command manually.
 	if postCmd != nil {
-		if err := runPostWorktreeCmd(*postCmd, worktreeDir); err != nil {
+		if err := RunPostWorktreeCmd(*postCmd, worktreeDir); err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("post-worktree-cmd: %v", err))
 		}
 	}
@@ -109,13 +109,14 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	return result, nil
 }
 
-// runPostWorktreeCmd runs the configured post-worktree shell command in the given directory.
+// RunPostWorktreeCmd runs the configured post-worktree shell command in the given directory.
+// It is idempotent and safe to call on both new and existing worktrees.
 //
 // Trust model: the command comes from state.yaml which lives inside .liza/ in
 // the project root. Write access to state.yaml implies write access to the
 // repo (same trust boundary as Makefile, .github/workflows/, package.json
 // scripts). No additional confirmation gate is needed.
-func runPostWorktreeCmd(cmdStr, dir string) error {
+func RunPostWorktreeCmd(cmdStr, dir string) error {
 	cmd := exec.Command("sh", "-c", cmdStr)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()

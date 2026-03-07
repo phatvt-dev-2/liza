@@ -88,6 +88,45 @@ func TestEnsureReviewerWorktree_MissingRecoverable(t *testing.T) {
 	}
 }
 
+func TestEnsureReviewerWorktree_MissingRecoverable_RunsPostWorktreeCmd(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+
+	// Configure a post-worktree command that creates a marker file.
+	postCmd := "touch .post-worktree-ran"
+	state.Config.PostWorktreeCmd = &postCmd
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	state.Tasks = []models.Task{task}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	// Create the branch so recovery can find it.
+	branchName := paths.TaskBranchPrefix + "task-1"
+	cmd := exec.Command("git", "branch", branchName)
+	cmd.Dir = tmpDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to create branch: %v\n%s", err, out)
+	}
+
+	// No worktree directory — recovery should recreate it.
+	recovered, err := ensureReviewerWorktree(tmpDir, bb, "task-1", "code-reviewer-1")
+	if err != nil {
+		t.Fatalf("Expected successful recovery, got error: %v", err)
+	}
+	if !recovered {
+		t.Error("Expected recovered=true")
+	}
+
+	// Verify the post-worktree command ran in the recovered worktree.
+	markerPath := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1", ".post-worktree-ran")
+	if _, statErr := os.Stat(markerPath); os.IsNotExist(statErr) {
+		t.Error("Post-worktree command did not run after worktree recovery: marker file missing")
+	}
+}
+
 func TestEnsureReviewerWorktree_MissingAlreadyRecovered(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)

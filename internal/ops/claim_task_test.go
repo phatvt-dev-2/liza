@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -617,6 +618,104 @@ func TestClaimTask_ReadyWithStaleBranchAndWorktree(t *testing.T) {
 	}
 	if task.Worktree == nil {
 		t.Error("Worktree should be set")
+	}
+}
+
+func TestClaimTask_PostWorktreeCmdRunsOnFreshClaim(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// Configure a post-worktree command that creates a marker file.
+	postCmd := "touch .post-worktree-ran"
+	state.Config.PostWorktreeCmd = &postCmd
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
+	}
+
+	// Verify the post-worktree command ran in the worktree directory.
+	markerPath := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1", ".post-worktree-ran")
+	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
+		t.Error("Post-worktree command did not run: marker file missing")
+	}
+
+	// No warnings expected on success.
+	if len(result.Warnings) != 0 {
+		t.Errorf("Expected no warnings, got %v", result.Warnings)
+	}
+}
+
+func TestClaimTask_PostWorktreeCmdFailureProducesWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// Configure a post-worktree command that will fail.
+	postCmd := "exit 1"
+	state.Config.PostWorktreeCmd = &postCmd
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() should succeed even when post-worktree-cmd fails, got: %v", err)
+	}
+
+	// Warning should be surfaced in result.
+	if len(result.Warnings) == 0 {
+		t.Error("Expected warning from failed post-worktree-cmd")
+	} else if !strings.Contains(result.Warnings[0], "post-worktree-cmd") {
+		t.Errorf("Warning = %q, want to contain 'post-worktree-cmd'", result.Warnings[0])
+	}
+}
+
+func TestClaimTask_PostWorktreeCmdSkippedOnSameCoderReclaim(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// Configure a post-worktree command that creates a marker file.
+	postCmd := "touch .post-worktree-ran"
+	state.Config.PostWorktreeCmd = &postCmd
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Create the real git worktree that same-coder reclaim expects.
+	gitWrapper := git.New(tmpDir)
+	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("Failed to create initial rejected worktree: %v", err)
+	}
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
+	}
+
+	// Post-worktree command should NOT have run on same-coder reclaim.
+	markerPath := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1", ".post-worktree-ran")
+	if _, err := os.Stat(markerPath); err == nil {
+		t.Error("Post-worktree command should not run on same-coder reclaim")
+	}
+	if len(result.Warnings) != 0 {
+		t.Errorf("Expected no warnings, got %v", result.Warnings)
 	}
 }
 

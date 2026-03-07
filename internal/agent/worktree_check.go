@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -66,6 +67,13 @@ func ensureReviewerWorktree(projectRoot string, bb *db.Blackboard, taskID, agent
 	if attachErr := gitWrapper.AttachWorktree(taskID, branchName); attachErr != nil {
 		logger.Error("Failed to recreate worktree", "task_id", taskID, "error", attachErr)
 		return false, fmt.Errorf("worktree recreation failed: %w", attachErr)
+	}
+
+	// Run post-worktree command to ensure recovered worktree is build-ready.
+	if state.Config.PostWorktreeCmd != nil {
+		if postErr := ops.RunPostWorktreeCmd(*state.Config.PostWorktreeCmd, wtPath); postErr != nil {
+			logger.Warn("post-worktree-cmd failed after worktree recovery", "task_id", taskID, "error", postErr)
+		}
 	}
 
 	// Record recovery in history.
