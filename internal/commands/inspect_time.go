@@ -14,7 +14,6 @@ func formatDuration(d time.Duration) string {
 		return "0s"
 	}
 
-	// Handle negative durations (for overdue)
 	negative := d < 0
 	if negative {
 		d = -d
@@ -25,7 +24,6 @@ func formatDuration(d time.Duration) string {
 	hours := minutes / 60
 	days := hours / 24
 
-	// Format based on magnitude
 	var result string
 	if days > 0 {
 		hours = hours % 24
@@ -46,19 +44,18 @@ func formatDuration(d time.Duration) string {
 	return result
 }
 
-// CalculateTaskAge returns duration since task was created
+// calculateTaskAge returns duration since task was created.
 func calculateTaskAge(task *models.Task) time.Duration {
 	return time.Since(task.Created)
 }
 
-// CalculateTimeOnTask returns how long agent has been on current task
-// Looks for the most recent "claimed" event in task history
+// calculateTimeOnTask returns how long the agent has been on the current task
+// by finding the most recent "claimed" event in task history.
 func calculateTimeOnTask(task *models.Task) time.Duration {
 	if len(task.History) == 0 {
 		return 0
 	}
 
-	// Find most recent claimed event
 	var claimedTime time.Time
 	for _, entry := range task.History {
 		if entry.Event == "claimed" {
@@ -75,18 +72,18 @@ func calculateTimeOnTask(task *models.Task) time.Duration {
 	return time.Since(claimedTime)
 }
 
-// CalculateTimeSinceHeartbeat returns duration since agent's last heartbeat
+// calculateTimeSinceHeartbeat returns duration since agent's last heartbeat.
 func calculateTimeSinceHeartbeat(agent *models.Agent) time.Duration {
 	return time.Since(agent.Heartbeat)
 }
 
-// CalculateSprintElapsed returns duration since sprint started
+// calculateSprintElapsed returns duration since sprint started.
 func calculateSprintElapsed(sprint *models.Sprint) time.Duration {
 	return time.Since(sprint.Timeline.Started)
 }
 
-// CalculateSprintRemaining returns duration until deadline
-// Returns negative duration if overdue
+// calculateSprintRemaining returns duration until deadline.
+// Returns negative duration if overdue.
 func calculateSprintRemaining(sprint *models.Sprint) time.Duration {
 	return time.Until(sprint.Timeline.Deadline)
 }
