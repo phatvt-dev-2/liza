@@ -79,6 +79,70 @@ type ResumeResult struct {
 	SprintAdvanced *AdvanceSprintResult // non-nil when sprint was advanced to next
 }
 
+// resumeSystemMode transitions PAUSED or CIRCUIT_BREAKER_TRIPPED to RUNNING.
+// Returns a description of what was resumed, or empty if mode was already running.
+func resumeSystemMode(s *models.State, timestamp time.Time, changedBy string) string {
+	switch s.Config.Mode {
+	case models.SystemModePaused:
+		s.Config.Mode = models.SystemModeRunning
+		s.Config.ModeChangedAt = &timestamp
+		s.Config.ModeChangedBy = &changedBy
+		return "PAUSED mode"
+	case models.SystemModeCircuitBreakerTripped:
+		s.Config.Mode = models.SystemModeRunning
+		s.Config.ModeChangedAt = &timestamp
+		s.Config.ModeChangedBy = &changedBy
+		s.CircuitBreaker.Status = "OK"
+		s.CircuitBreaker.CurrentTrigger = nil
+		return "CIRCUIT_BREAKER_TRIPPED mode"
+	default:
+		return ""
+	}
+}
+
+// resumeSprint handles CHECKPOINT and COMPLETED sprint transitions.
+// Returns a description and optional advance result. No-op when sprint is in
+// neither state.
+func resumeSprint(s *models.State, lizaPaths paths.LizaPaths, projectRoot string, timestamp time.Time) (string, *AdvanceSprintResult, error) {
+	switch s.Sprint.Status {
+	case models.SprintStatusCompleted:
+		// COMPLETED sprint — archive and create new sprint.
+		// This is the second step: human ran liza proceed, now starts next sprint.
+		plan, err := planSprintAdvanceFromCompleted(s, timestamp.UTC())
+		if err != nil {
+			return "", nil, fmt.Errorf("sprint advance failed: %w", err)
+		}
+		archivePath := lizaPaths.SprintArchivePath(plan.archivedSprint.Number)
+
+		if err := writeSprintArchive(archivePath, &plan.archivedSprint); err != nil {
+			return "", nil, fmt.Errorf("archive write failed (state unchanged): %w", err)
+		}
+
+		applySprintAdvance(s, plan)
+		return "COMPLETED sprint", &AdvanceSprintResult{
+			ArchivedSprintID: plan.archivedSprint.ID,
+			NewSprintID:      plan.newSprintID,
+			NewSprintNumber:  plan.newNumber,
+			CarriedTasks:     plan.carriedTasks,
+			ArchivePath:      archivePath,
+		}, nil
+
+	case models.SprintStatusCheckpoint:
+		if allPlannedTasksTerminalForProject(s, projectRoot) {
+			// Sprint is truly done — mark COMPLETED for human review.
+			// Human runs liza proceed, then liza resume again to advance.
+			s.Sprint.Status = models.SprintStatusCompleted
+		} else {
+			// Mid-sprint checkpoint — just resume the same sprint.
+			s.Sprint.Status = models.SprintStatusInProgress
+		}
+		return "CHECKPOINT", nil, nil
+
+	default:
+		return "", nil, nil
+	}
+}
+
 // Resume transitions from PAUSED or CIRCUIT_BREAKER_TRIPPED to RUNNING,
 // and/or resumes sprint from CHECKPOINT or COMPLETED. No terminal I/O.
 //
@@ -100,7 +164,6 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 
 	err := blackboard.Modify(func(s *models.State) error {
 		currentMode := s.Config.Mode
-
 		if currentMode == "" {
 			currentMode = models.SystemModeRunning
 		}
@@ -110,68 +173,25 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 			return fmt.Errorf("cannot resume from STOPPED state (system must be restarted)")
 		}
 
-		isPaused := currentMode == models.SystemModePaused
-		isCircuitBreakerTripped := currentMode == models.SystemModeCircuitBreakerTripped
-		isCheckpoint := s.Sprint.Status == models.SprintStatusCheckpoint
-		isCompleted := s.Sprint.Status == models.SprintStatusCompleted
+		canResumeMode := currentMode == models.SystemModePaused || currentMode == models.SystemModeCircuitBreakerTripped
+		canResumeSprint := s.Sprint.Status == models.SprintStatusCheckpoint || s.Sprint.Status == models.SprintStatusCompleted
 
-		if !isPaused && !isCircuitBreakerTripped && !isCheckpoint && !isCompleted {
+		if !canResumeMode && !canResumeSprint {
 			return fmt.Errorf("system is not PAUSED, circuit breaker not tripped, and sprint is not at CHECKPOINT or COMPLETED (current mode: %s, sprint status: %s)", currentMode, s.Sprint.Status)
 		}
 
-		if isPaused {
-			s.Config.Mode = models.SystemModeRunning
-			s.Config.ModeChangedAt = &timestamp
-			s.Config.ModeChangedBy = &changedBy
-			resumedFrom = "PAUSED mode"
-		} else if isCircuitBreakerTripped {
-			s.Config.Mode = models.SystemModeRunning
-			s.Config.ModeChangedAt = &timestamp
-			s.Config.ModeChangedBy = &changedBy
-			s.CircuitBreaker.Status = "OK"
-			s.CircuitBreaker.CurrentTrigger = nil
-			resumedFrom = "CIRCUIT_BREAKER_TRIPPED mode"
+		resumedFrom = resumeSystemMode(s, timestamp, changedBy)
+
+		sprintDesc, advResult, err := resumeSprint(s, lizaPaths, projectRoot, timestamp)
+		if err != nil {
+			return err
 		}
-
-		if isCompleted {
-			// COMPLETED sprint — archive and create new sprint.
-			// This is the second step: human ran liza proceed, now starts next sprint.
-			plan, err := planSprintAdvanceFromCompleted(s, timestamp.UTC())
-			if err != nil {
-				return fmt.Errorf("sprint advance failed: %w", err)
-			}
-			archivePath := lizaPaths.SprintArchivePath(plan.archivedSprint.Number)
-
-			if err := writeSprintArchive(archivePath, &plan.archivedSprint); err != nil {
-				return fmt.Errorf("archive write failed (state unchanged): %w", err)
-			}
-
-			applySprintAdvance(s, plan)
-			advanceResult = &AdvanceSprintResult{
-				ArchivedSprintID: plan.archivedSprint.ID,
-				NewSprintID:      plan.newSprintID,
-				NewSprintNumber:  plan.newNumber,
-				CarriedTasks:     plan.carriedTasks,
-				ArchivePath:      archivePath,
-			}
+		advanceResult = advResult
+		if sprintDesc != "" {
 			if resumedFrom != "" {
-				resumedFrom += " and COMPLETED sprint"
+				resumedFrom += " and " + sprintDesc
 			} else {
-				resumedFrom = "COMPLETED sprint"
-			}
-		} else if isCheckpoint {
-			if allPlannedTasksTerminalForProject(s, projectRoot) {
-				// Sprint is truly done — mark COMPLETED for human review.
-				// Human runs liza proceed, then liza resume again to advance.
-				s.Sprint.Status = models.SprintStatusCompleted
-			} else {
-				// Mid-sprint checkpoint — just resume the same sprint.
-				s.Sprint.Status = models.SprintStatusInProgress
-			}
-			if resumedFrom != "" {
-				resumedFrom += " and CHECKPOINT"
-			} else {
-				resumedFrom = "CHECKPOINT"
+				resumedFrom = sprintDesc
 			}
 		}
 
