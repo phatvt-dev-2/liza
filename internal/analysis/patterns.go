@@ -17,41 +17,22 @@ type PatternResult struct {
 	Evidence  string
 }
 
-// DetectPatterns analyzes anomalies and detects circuit breaker patterns
-// Returns the first matching pattern, or a non-triggered result if none match
+// DetectPatterns analyzes anomalies and detects circuit breaker patterns.
+// Returns the first matching pattern (checked in priority order), or a non-triggered result if none match.
 func DetectPatterns(anomalies []models.Anomaly) PatternResult {
-	// Check patterns in order (as per bash implementation)
-
-	// 1. retry_cluster: 3+ retry_loops with similar error_pattern
-	if result := checkRetryCluster(anomalies); result.Triggered {
-		return result
+	checks := []func([]models.Anomaly) PatternResult{
+		checkRetryCluster,
+		checkDebtAccumulation,
+		checkAssumptionCascade,
+		checkSpecGapCluster,
+		checkWorkaroundPattern,
+		checkExternalServiceOutage,
 	}
-
-	// 2. debt_accumulation: 3+ trade_offs with debt_created=true
-	if result := checkDebtAccumulation(anomalies); result.Triggered {
-		return result
+	for _, check := range checks {
+		if result := check(anomalies); result.Triggered {
+			return result
+		}
 	}
-
-	// 3. assumption_cascade: 2+ assumption_violated with same assumption
-	if result := checkAssumptionCascade(anomalies); result.Triggered {
-		return result
-	}
-
-	// 4. spec_gap_cluster: 2+ spec_ambiguity with same spec_ref
-	if result := checkSpecGapCluster(anomalies); result.Triggered {
-		return result
-	}
-
-	// 5. workaround_pattern: 2+ workarounds/trade_offs with similar root_cause
-	if result := checkWorkaroundPattern(anomalies); result.Triggered {
-		return result
-	}
-
-	// 6. external_service_outage: 2+ external_blockers with same blocker_service
-	if result := checkExternalServiceOutage(anomalies); result.Triggered {
-		return result
-	}
-
 	return PatternResult{Triggered: false}
 }
 
@@ -104,46 +85,19 @@ func checkDebtAccumulation(anomalies []models.Anomaly) PatternResult {
 
 // checkAssumptionCascade detects assumption_cascade pattern
 func checkAssumptionCascade(anomalies []models.Anomaly) PatternResult {
-	assumptions := filterByType(anomalies, "assumption_violated")
-
-	groups := groupByField(assumptions, "assumption")
-	for _, group := range groups {
-		if len(group) >= 2 {
-			return PatternResult{
-				Triggered: true,
-				Pattern:   "assumption_cascade",
-				Severity:  "SPEC_FLAW",
-				Evidence:  "Same assumption violated across multiple tasks",
-			}
-		}
-	}
-
-	return PatternResult{Triggered: false}
+	return checkGroupedThreshold(anomalies, "assumption_violated", "assumption", 2,
+		"assumption_cascade", "SPEC_FLAW", "Same assumption violated across multiple tasks")
 }
 
 // checkSpecGapCluster detects spec_gap_cluster pattern
 func checkSpecGapCluster(anomalies []models.Anomaly) PatternResult {
-	specAmbiguities := filterByType(anomalies, "spec_ambiguity")
-
-	groups := groupByField(specAmbiguities, "spec_ref")
-	for _, group := range groups {
-		if len(group) >= 2 {
-			return PatternResult{
-				Triggered: true,
-				Pattern:   "spec_gap_cluster",
-				Severity:  "SPEC_FLAW",
-				Evidence:  "Multiple tasks hitting same spec ambiguity",
-			}
-		}
-	}
-
-	return PatternResult{Triggered: false}
+	return checkGroupedThreshold(anomalies, "spec_ambiguity", "spec_ref", 2,
+		"spec_gap_cluster", "SPEC_FLAW", "Multiple tasks hitting same spec ambiguity")
 }
 
 // checkWorkaroundPattern detects workaround_pattern
 func checkWorkaroundPattern(anomalies []models.Anomaly) PatternResult {
-	// Filter workarounds and trade_offs
-	workarounds := []models.Anomaly{}
+	var workarounds []models.Anomaly
 	for _, a := range anomalies {
 		if a.Type == "workaround" || a.Type == "trade_off" {
 			workarounds = append(workarounds, a)
@@ -186,7 +140,6 @@ func checkWorkaroundPattern(anomalies []models.Anomaly) PatternResult {
 // checkExternalServiceOutage detects external_service_outage pattern
 func checkExternalServiceOutage(anomalies []models.Anomaly) PatternResult {
 	externals := filterByType(anomalies, "external_blocker")
-
 	groups := groupByField(externals, "blocker_service")
 	for service, group := range groups {
 		if len(group) >= 2 {
@@ -198,13 +151,30 @@ func checkExternalServiceOutage(anomalies []models.Anomaly) PatternResult {
 			}
 		}
 	}
+	return PatternResult{Triggered: false}
+}
 
+// checkGroupedThreshold detects patterns where anomalies of a given type share a field value
+// at or above a threshold count.
+func checkGroupedThreshold(anomalies []models.Anomaly, anomalyType, field string, threshold int, pattern, severity, evidence string) PatternResult {
+	filtered := filterByType(anomalies, anomalyType)
+	groups := groupByField(filtered, field)
+	for _, group := range groups {
+		if len(group) >= threshold {
+			return PatternResult{
+				Triggered: true,
+				Pattern:   pattern,
+				Severity:  severity,
+				Evidence:  evidence,
+			}
+		}
+	}
 	return PatternResult{Triggered: false}
 }
 
 // filterByType returns anomalies of a specific type
 func filterByType(anomalies []models.Anomaly, anomalyType string) []models.Anomaly {
-	result := []models.Anomaly{}
+	var result []models.Anomaly
 	for _, a := range anomalies {
 		if a.Type == anomalyType {
 			result = append(result, a)
@@ -229,9 +199,9 @@ func GenerateReport(result PatternResult, anomalies []models.Anomaly, timestamp 
 	var sb strings.Builder
 
 	sb.WriteString("# Circuit Breaker Report\n\n")
-	sb.WriteString(fmt.Sprintf("**Triggered:** %s\n", timestamp.Format(time.RFC3339)))
-	sb.WriteString(fmt.Sprintf("**Pattern:** %s\n", result.Pattern))
-	sb.WriteString(fmt.Sprintf("**Severity:** %s\n\n", result.Severity))
+	fmt.Fprintf(&sb, "**Triggered:** %s\n", timestamp.Format(time.RFC3339))
+	fmt.Fprintf(&sb, "**Pattern:** %s\n", result.Pattern)
+	fmt.Fprintf(&sb, "**Severity:** %s\n\n", result.Severity)
 
 	sb.WriteString("## Trigger Evidence\n\n")
 	sb.WriteString(result.Evidence)
@@ -239,11 +209,9 @@ func GenerateReport(result PatternResult, anomalies []models.Anomaly, timestamp 
 
 	sb.WriteString("## Anomalies (raw)\n\n")
 	sb.WriteString("```yaml\n")
-
-	// Marshal anomalies to YAML
 	yamlData, err := yaml.Marshal(anomalies)
 	if err != nil {
-		sb.WriteString(fmt.Sprintf("Error marshaling anomalies: %v\n", err))
+		fmt.Fprintf(&sb, "Error marshaling anomalies: %v\n", err)
 	} else {
 		sb.Write(yamlData)
 	}

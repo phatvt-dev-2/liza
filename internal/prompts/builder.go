@@ -101,6 +101,14 @@ type USReviewerContextConfig struct {
 	TaskOrdinal    int
 }
 
+// resolveWorktreePath returns the full worktree path if the task has one, or "" otherwise.
+func resolveWorktreePath(projectRoot string, worktree *string) string {
+	if worktree == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s", projectRoot, *worktree)
+}
+
 // BuildBasePrompt creates the base bootstrap prompt for all agents
 func BuildBasePrompt(config BasePromptConfig) (string, error) {
 	return executeTemplate("base_prompt", config)
@@ -140,19 +148,8 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 		countTasksByStatus(state.Tasks, models.TaskStatusReadyForReview) +
 		countTasksByStatus(state.Tasks, models.TaskStatusApproved)
 
-	hypothesisExhausted := 0
-	for _, task := range state.Tasks {
-		if len(task.FailedBy) >= 2 && !task.Status.IsTerminal() {
-			hypothesisExhausted++
-		}
-	}
-
-	immediateDiscoveries := 0
-	for _, disc := range state.Discovered {
-		if disc.Urgency == "immediate" && disc.ConvertedToTask == nil {
-			immediateDiscoveries++
-		}
-	}
+	hypothesisExhausted := countHypothesisExhausted(state.Tasks)
+	immediateDiscoveries := countImmediateDiscoveries(state.Discovered)
 
 	detCtx := ops.LoadDetectionContext(config.ProjectRoot)
 	var sprintTerminals []models.TaskStatus
@@ -164,23 +161,9 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 
 	sprintComplete := state.AllPlannedTasksTerminalWith(sprintTerminals)
 
-	// Collect merged planning tasks with output[] for PLANNING_COMPLETE detection.
-	// Only transition-source role-pairs qualify — coding tasks with output[] are ignored.
-	// Uses the same IsPlanningPair predicate as workdetection to avoid classification drift.
 	var planningTasks []planningTaskData
 	if sprintComplete {
-		for _, taskID := range state.Sprint.Scope.Planned {
-			task := state.FindTask(taskID)
-			if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
-				continue
-			}
-			if ops.IsPlanningPair(task.RolePair, planningPairs) {
-				planningTasks = append(planningTasks, planningTaskData{
-					TaskID: task.ID,
-					Output: task.Output,
-				})
-			}
-		}
+		planningTasks = collectMergedPlanningTasks(state, planningPairs)
 	}
 
 	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, sprintComplete, planningTasks)
@@ -222,15 +205,10 @@ type coderContextData struct {
 
 // BuildCoderContext creates coder-specific context with task details
 func BuildCoderContext(task *models.Task, config CoderContextConfig) (string, error) {
-	worktreePath := ""
-	if task.Worktree != nil {
-		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
-	}
-
 	data := coderContextData{
 		Task:              task,
 		Config:            config,
-		WorktreePath:      worktreePath,
+		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("coder_context", data)
@@ -313,11 +291,6 @@ type usReviewerContextData struct {
 
 // BuildReviewerContext creates reviewer-specific context with review details
 func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (string, error) {
-	worktreePath := ""
-	if task.Worktree != nil {
-		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
-	}
-
 	var scopeExtensions []map[string]string
 	if task.AssignedTo != nil {
 		scopeExtensions = ops.GetLatestScopeExtensions(task.History, *task.AssignedTo)
@@ -326,7 +299,7 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (stri
 	data := reviewerContextData{
 		Task:              task,
 		Config:            config,
-		WorktreePath:      worktreePath,
+		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		BaseCommit:        derefString(task.BaseCommit),
 		ReviewCommit:      derefString(task.ReviewCommit),
 		AssignedTo:        derefString(task.AssignedTo),
@@ -338,15 +311,10 @@ func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (stri
 
 // BuildCodePlannerContext creates code-planner-specific context with task details
 func BuildCodePlannerContext(task *models.Task, config CodePlannerContextConfig) (string, error) {
-	worktreePath := ""
-	if task.Worktree != nil {
-		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
-	}
-
 	data := codePlannerContextData{
 		Task:              task,
 		Config:            config,
-		WorktreePath:      worktreePath,
+		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("code_planner_context", data)
@@ -354,15 +322,10 @@ func BuildCodePlannerContext(task *models.Task, config CodePlannerContextConfig)
 
 // BuildCodePlanReviewerContext creates code-plan-reviewer-specific context with review details
 func BuildCodePlanReviewerContext(task *models.Task, config CodePlanReviewerContextConfig) (string, error) {
-	worktreePath := ""
-	if task.Worktree != nil {
-		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
-	}
-
 	data := codePlanReviewerContextData{
 		Task:              task,
 		Config:            config,
-		WorktreePath:      worktreePath,
+		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		BaseCommit:        derefString(task.BaseCommit),
 		ReviewCommit:      derefString(task.ReviewCommit),
 		AssignedTo:        derefString(task.AssignedTo),
@@ -373,15 +336,10 @@ func BuildCodePlanReviewerContext(task *models.Task, config CodePlanReviewerCont
 
 // BuildEpicPlanReviewerContext creates epic-plan-reviewer-specific context with review details
 func BuildEpicPlanReviewerContext(task *models.Task, config EpicPlanReviewerContextConfig) (string, error) {
-	worktreePath := ""
-	if task.Worktree != nil {
-		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
-	}
-
 	data := epicPlanReviewerContextData{
 		Task:              task,
 		Config:            config,
-		WorktreePath:      worktreePath,
+		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		BaseCommit:        derefString(task.BaseCommit),
 		ReviewCommit:      derefString(task.ReviewCommit),
 		AssignedTo:        derefString(task.AssignedTo),
@@ -392,15 +350,10 @@ func BuildEpicPlanReviewerContext(task *models.Task, config EpicPlanReviewerCont
 
 // BuildEpicPlannerContext creates epic-planner-specific context with task details and decomposition guidance
 func BuildEpicPlannerContext(task *models.Task, config EpicPlannerContextConfig) (string, error) {
-	worktreePath := ""
-	if task.Worktree != nil {
-		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
-	}
-
 	data := epicPlannerContextData{
 		Task:              task,
 		Config:            config,
-		WorktreePath:      worktreePath,
+		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("epic_planner_context", data)
@@ -408,15 +361,10 @@ func BuildEpicPlannerContext(task *models.Task, config EpicPlannerContextConfig)
 
 // BuildUSWriterContext creates us-writer-specific context with task details
 func BuildUSWriterContext(task *models.Task, config USWriterContextConfig) (string, error) {
-	worktreePath := ""
-	if task.Worktree != nil {
-		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
-	}
-
 	data := usWriterContextData{
 		Task:              task,
 		Config:            config,
-		WorktreePath:      worktreePath,
+		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		HasPriorRejection: hasPriorRejection(task),
 	}
 	return executeTemplate("us_writer_context", data)
@@ -424,15 +372,10 @@ func BuildUSWriterContext(task *models.Task, config USWriterContextConfig) (stri
 
 // BuildUSReviewerContext creates us-reviewer-specific context with review details
 func BuildUSReviewerContext(task *models.Task, config USReviewerContextConfig) (string, error) {
-	worktreePath := ""
-	if task.Worktree != nil {
-		worktreePath = fmt.Sprintf("%s/%s", config.ProjectRoot, *task.Worktree)
-	}
-
 	data := usReviewerContextData{
 		Task:              task,
 		Config:            config,
-		WorktreePath:      worktreePath,
+		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		BaseCommit:        derefString(task.BaseCommit),
 		ReviewCommit:      derefString(task.ReviewCommit),
 		AssignedTo:        derefString(task.AssignedTo),
@@ -463,6 +406,48 @@ func countTasksByStatus(tasks []models.Task, status models.TaskStatus) int {
 		}
 	}
 	return count
+}
+
+// countHypothesisExhausted counts non-terminal tasks that have been failed by 2+ reviewers.
+func countHypothesisExhausted(tasks []models.Task) int {
+	count := 0
+	for _, task := range tasks {
+		if len(task.FailedBy) >= 2 && !task.Status.IsTerminal() {
+			count++
+		}
+	}
+	return count
+}
+
+// countImmediateDiscoveries counts unresolved discoveries with "immediate" urgency.
+func countImmediateDiscoveries(discovered []models.Discovery) int {
+	count := 0
+	for _, disc := range discovered {
+		if disc.Urgency == "immediate" && disc.ConvertedToTask == nil {
+			count++
+		}
+	}
+	return count
+}
+
+// collectMergedPlanningTasks returns merged planning tasks with output for PLANNING_COMPLETE detection.
+// Only transition-source role-pairs qualify — coding tasks with output are ignored.
+// Uses the same IsPlanningPair predicate as workdetection to avoid classification drift.
+func collectMergedPlanningTasks(state *models.State, planningPairs map[string]bool) []planningTaskData {
+	var result []planningTaskData
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
+			continue
+		}
+		if ops.IsPlanningPair(task.RolePair, planningPairs) {
+			result = append(result, planningTaskData{
+				TaskID: task.ID,
+				Output: task.Output,
+			})
+		}
+	}
+	return result
 }
 
 // determineWakeTrigger determines what triggered the orchestrator to wake
