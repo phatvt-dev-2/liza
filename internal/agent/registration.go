@@ -20,7 +20,6 @@ func validateIdentity(agentID, role string) error {
 		return fmt.Errorf("agent ID required")
 	}
 
-	// Split on last hyphen
 	lastHyphen := -1
 	for i := len(agentID) - 1; i >= 0; i-- {
 		if agentID[i] == '-' {
@@ -36,12 +35,10 @@ func validateIdentity(agentID, role string) error {
 	idRole := agentID[:lastHyphen]
 	numStr := agentID[lastHyphen+1:]
 
-	// Validate number is numeric
 	if _, err := strconv.Atoi(numStr); err != nil {
 		return fmt.Errorf("agent ID suffix must be numeric: %s", agentID)
 	}
 
-	// Validate role matches
 	if idRole != role {
 		return fmt.Errorf("agent ID role mismatch (ID=%s, config=%s)", idRole, role)
 	}
@@ -210,7 +207,6 @@ func resetAgentToIdle(bb *db.Blackboard, agentID string) error {
 			return &errors.NotFoundError{Entity: "agent", ID: agentID}
 		}
 
-		// Reset to IDLE state
 		agent.Status = models.AgentStatusIdle
 		agent.CurrentTask = nil
 		agent.Heartbeat = now
@@ -259,7 +255,7 @@ func resetAgentAfterExit(bb *db.Blackboard, agentID, projectRoot string) error {
 	})
 }
 
-// setAgentToOrchestratingStatus sets a orchestrator agent's status to PLANNING
+// setAgentToOrchestratingStatus sets an orchestrator agent's status to PLANNING
 func setAgentToOrchestratingStatus(bb *db.Blackboard, agentID string) error {
 	now := time.Now().UTC()
 

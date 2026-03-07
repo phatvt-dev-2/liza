@@ -232,7 +232,6 @@ func isDoerRuntime(role string) bool {
 	return false
 }
 
-// isReviewerRuntime returns true if the runtime role is a reviewer role.
 func isReviewerRuntime(role string) bool {
 	switch role {
 	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer,
@@ -250,12 +249,10 @@ type CLIExecutor interface {
 	ExecuteInteractive(ctx context.Context, cliName string, projectRoot string) (exitCode int, err error)
 }
 
-// DefaultCLIExecutor implements real CLI execution
 type DefaultCLIExecutor struct {
 	outputsDir string // Directory to save agent outputs (if empty, output goes to stdout)
 }
 
-// NewDefaultCLIExecutor creates a new DefaultCLIExecutor with optional output directory
 func NewDefaultCLIExecutor(outputsDir string) *DefaultCLIExecutor {
 	return &DefaultCLIExecutor{outputsDir: outputsDir}
 }
@@ -398,13 +395,11 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return err
 	}
 
-	// Register agent (sets STARTING → IDLE)
 	if err := registerAgent(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800); err != nil {
 		return err
 	}
 	defer unregisterAgent(bb, config.AgentID, config.ProjectRoot)
 
-	// Load config from state
 	state, err := bb.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read state: %w", err)
