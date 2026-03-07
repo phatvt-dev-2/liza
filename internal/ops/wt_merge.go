@@ -149,10 +149,6 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		return nil, fmt.Errorf("task must be in an approved state to merge (current status: %s)", task.Status)
 	}
 
-	if task.Worktree == nil {
-		return nil, fmt.Errorf("task has no worktree")
-	}
-
 	if task.ReviewCommit == nil {
 		return nil, fmt.Errorf("task has no review_commit")
 	}
@@ -160,35 +156,41 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	// Initialize git wrapper
 	gitWrapper := git.New(projectRoot)
 
-	// Get worktree HEAD and verify it matches review_commit
-	wtHEAD, err := gitWrapper.GetWorktreeHEAD(taskID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get worktree HEAD: %w", err)
-	}
-
-	// Normalize review_commit to full SHA and compare exact match.
-	// This mirrors shell parity: resolve refs/short SHAs first, then compare canonical SHAs.
+	// Normalize review_commit to full SHA.
 	reviewCommit := *task.ReviewCommit
 	expectedCommit, err := gitWrapper.GetCommitSHA(reviewCommit)
 	if err != nil {
 		return nil, fmt.Errorf("review_commit (%s) not found in repository: %w", reviewCommit, err)
 	}
-	if wtHEAD != expectedCommit {
-		// HEAD mismatch indicates state corruption — stops retry loops, preserves worktree
-		shortWtHEAD := wtHEAD
-		if len(wtHEAD) > 7 {
-			shortWtHEAD = wtHEAD[:7]
-		}
-		shortReviewCommit := expectedCommit
-		if len(expectedCommit) > 7 {
-			shortReviewCommit = expectedCommit[:7]
-		}
-		reason := fmt.Sprintf("worktree HEAD (%s) does not match approved commit (%s)", shortWtHEAD, shortReviewCommit)
-		if err := markIntegrationFailed(bb, taskID, agentID, reason, "", pb); err != nil {
-			return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", err)
+
+	// Worktree-present path: verify HEAD matches review_commit to detect tampering.
+	// Worktree-absent path (e.g. cleared by task recovery after Ctrl-C): skip HEAD
+	// verification — the approved commit is still in git and safe to merge.
+	if task.Worktree != nil {
+		wtHEAD, err := gitWrapper.GetWorktreeHEAD(taskID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get worktree HEAD: %w", err)
 		}
 
-		return nil, &IntegrationFailedError{Reason: IntegrationReasonHEADMismatch}
+		if wtHEAD != expectedCommit {
+			// HEAD mismatch indicates state corruption — stops retry loops, preserves worktree
+			shortWtHEAD := wtHEAD
+			if len(wtHEAD) > 7 {
+				shortWtHEAD = wtHEAD[:7]
+			}
+			shortReviewCommit := expectedCommit
+			if len(expectedCommit) > 7 {
+				shortReviewCommit = expectedCommit[:7]
+			}
+			reason := fmt.Sprintf("worktree HEAD (%s) does not match approved commit (%s)", shortWtHEAD, shortReviewCommit)
+			if err := markIntegrationFailed(bb, taskID, agentID, reason, "", pb); err != nil {
+				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", err)
+			}
+
+			return nil, &IntegrationFailedError{Reason: IntegrationReasonHEADMismatch}
+		}
+	} else {
+		log.Printf("wt-merge %s: WARNING — worktree missing (cleared by recovery?), proceeding with review_commit %s", taskID, expectedCommit[:7])
 	}
 
 	// Get integration branch

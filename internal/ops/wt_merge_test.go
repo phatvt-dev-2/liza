@@ -1267,6 +1267,81 @@ func captureLogOutput(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+// TestMergeWorktree_MissingWorktreeWithReviewCommit tests that MergeWorktree succeeds
+// when the worktree was deleted (e.g. by task recovery after Ctrl-C) but review_commit
+// is still valid in git. This simulates the real scenario where:
+// 1. Writer claims task → worktree created
+// 2. Writer submits for review → review_commit set
+// 3. Task recovery releases coder claim → Worktree=nil
+// 4. Reviewer approves → task is APPROVED with Worktree=nil but valid review_commit
+// 5. MergeWorktree should succeed by skipping HEAD verification
+func TestMergeWorktree_MissingWorktreeWithReviewCommit(t *testing.T) {
+	taskID := "missing-wt"
+	agentID := "reviewer-1"
+
+	// Set up a repo with a worktree commit, then remove the worktree from state
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	// Read state and clear Worktree to simulate recovery
+	bb := db.New(stateFile)
+	err := bb.Modify(func(s *models.State) error {
+		task := s.FindTask(taskID)
+		if task == nil {
+			return fmt.Errorf("task not found")
+		}
+		task.Worktree = nil
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to clear worktree: %v", err)
+	}
+
+	// MergeWorktree should succeed despite missing worktree
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() with missing worktree: unexpected error: %v", err)
+	}
+
+	if result.TaskID != taskID {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, taskID)
+	}
+	if result.MergeCommit == "" {
+		t.Error("MergeCommit should be non-empty (commit was merged)")
+	}
+
+	// Verify state was updated to MERGED
+	afterState := readStateForTest(t, stateFile)
+	task := afterState.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found after merge")
+	}
+	if task.Status != models.TaskStatusMerged {
+		t.Errorf("Task status = %s, want %s", task.Status, models.TaskStatusMerged)
+	}
+}
+
+func TestMergeWorktree_MissingWorktreeNoReviewCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	approvedBy := "reviewer-1"
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:           "task-1",
+			Status:       models.TaskStatusApproved,
+			Worktree:     nil,
+			ReviewCommit: nil,
+			ApprovedBy:   &approvedBy,
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := MergeWorktree(tmpDir, "task-1", "reviewer-1")
+	testhelpers.RequireErrorContains(t, err, "no review_commit")
+}
+
 // readStateForTest reads state from a state file for test verification.
 func readStateForTest(t *testing.T, stateFile string) *models.State {
 	t.Helper()
