@@ -253,6 +253,54 @@ func TestClaimTask_LegacyGoalStillWorks(t *testing.T) {
 	}
 }
 
+func TestClaimTask_PipelineRejectedReclaim(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+
+	// Create a CODE_REJECTED task with no assigned coder (recovered state)
+	task := models.Task{
+		ID:          "task-1",
+		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
+		Description: "Pipeline coding task after rejection",
+		Status:      models.TaskStatus("CODE_REJECTED"),
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "README.md",
+		DoneWhen:    "done",
+		Scope:       "scope",
+		History:     []models.TaskHistoryEntry{},
+	}
+	state.Tasks = []models.Task{task}
+	state.Sprint.Scope.Planned = []string{"task-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-2")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
+	}
+	if result.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+
+	// Verify the task transitioned to IMPLEMENTING_CODE
+	bb := db.For(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	readTask := readState.FindTask("task-1")
+	if readTask == nil {
+		t.Fatal("Task not found")
+	}
+	if readTask.Status != models.TaskStatus("IMPLEMENTING_CODE") {
+		t.Errorf("Task status = %v, want IMPLEMENTING_CODE", readTask.Status)
+	}
+}
+
 func TestClaimTask_PipelineRejectedIterationLimit(t *testing.T) {
 	tmpDir, stateFile := setupPipelineTest(t)
 
