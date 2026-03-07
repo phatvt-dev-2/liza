@@ -110,11 +110,10 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 			extra["scope_extensions"] = entries
 		}
 
-		agentPtr := &input.AgentID
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
 			Event: "pre_execution_checkpoint",
-			Agent: agentPtr,
+			Agent: &input.AgentID,
 			Extra: extra,
 		})
 
