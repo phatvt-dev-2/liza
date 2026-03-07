@@ -216,91 +216,18 @@ func (sc *statusClassifier) IsRejected(s models.TaskStatus) bool {
 }
 
 func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) error {
-	// Track agent assignments to prevent duplicates
 	assignments := make(map[string][]string) // agent ID -> task IDs
 	taskIDs := buildTaskIDSet(state.Tasks)
-
 	sc := newStatusClassifier(resolver, cfg)
 
 	for _, task := range state.Tasks {
-		// Initial/draft states cannot have assigned_to
-		if sc.IsInitial(task.Status) && task.AssignedTo != nil {
-			return fmt.Errorf("%s task with assigned_to: %s", task.Status, task.ID)
-		}
-
-		// Executing states must have assigned_to, worktree, base_commit (unless integration_fix), lease_expires
-		if sc.IsExecuting(task.Status) {
-			if task.AssignedTo == nil {
-				return fmt.Errorf("%s task without assigned_to: %s", task.Status, task.ID)
-			}
-			if task.Worktree == nil {
-				return fmt.Errorf("%s task without worktree: %s", task.Status, task.ID)
-			}
-			if !task.IntegrationFix && task.BaseCommit == nil {
-				return fmt.Errorf("%s task without base_commit: %s", task.Status, task.ID)
-			}
-			if task.LeaseExpires == nil {
-				return fmt.Errorf("%s task without lease_expires: %s", task.Status, task.ID)
-			}
-		}
-
-		// Submitted states must have review_commit
-		if sc.IsSubmitted(task.Status) && task.ReviewCommit == nil {
-			return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
-		}
-
-		// Reviewing states must have reviewing_by, review_lease_expires, and review_commit
-		if sc.IsReviewing(task.Status) {
-			if task.ReviewingBy == nil {
-				return fmt.Errorf("%s task without reviewing_by: %s", task.Status, task.ID)
-			}
-			if task.ReviewLeaseExpires == nil {
-				return fmt.Errorf("%s task without review_lease_expires: %s", task.Status, task.ID)
-			}
-			if task.ReviewCommit == nil {
-				return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
-			}
-		}
-
-		// Approved states must have review_commit
-		if sc.IsApproved(task.Status) && task.ReviewCommit == nil {
-			return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
-		}
-
-		// MERGED task must NOT have worktree
-		if task.Status == models.TaskStatusMerged && task.Worktree != nil {
-			return fmt.Errorf("MERGED task still has worktree: %s", task.ID)
-		}
-
-		// BLOCKED must have blocked_reason and blocked_questions
-		if task.Status == models.TaskStatusBlocked {
-			if task.BlockedReason == nil {
-				return fmt.Errorf("BLOCKED task without blocked_reason: %s", task.ID)
-			}
-			if len(task.BlockedQuestions) == 0 {
-				return fmt.Errorf("BLOCKED task without blocked_questions: %s", task.ID)
-			}
-		}
-
-		// Rejected states must have rejection_reason
-		if sc.IsRejected(task.Status) && task.RejectionReason == nil {
-			return fmt.Errorf("%s task without rejection_reason: %s", task.Status, task.ID)
-		}
-
-		// SUPERSEDED must have superseded_by and rescope_reason
-		if task.Status == models.TaskStatusSuperseded {
-			if len(task.SupersededBy) == 0 {
-				return fmt.Errorf("SUPERSEDED task without superseded_by: %s", task.ID)
-			}
-			if task.RescopeReason == nil {
-				return fmt.Errorf("SUPERSEDED task without rescope_reason: %s", task.ID)
-			}
+		if err := validateStatusFields(&task, &sc); err != nil {
+			return err
 		}
 
 		// Track assignments for duplicate check (executing tasks count as active)
 		if task.AssignedTo != nil && sc.IsExecuting(task.Status) {
-			agent := *task.AssignedTo
-			assignments[agent] = append(assignments[agent], task.ID)
+			assignments[*task.AssignedTo] = append(assignments[*task.AssignedTo], task.ID)
 		}
 
 		// Executing task worktree path must exist (only check if projectRoot is not empty to allow tests)
@@ -359,23 +286,8 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			return fmt.Errorf("task %s has parent_task referencing non-existent task '%s'", task.ID, *task.ParentTask)
 		}
 
-		// output entries must have required fields
-		for i, entry := range task.Output {
-			if entry.Desc == "" {
-				return fmt.Errorf("task %s output[%d] missing desc", task.ID, i)
-			}
-			if entry.DoneWhen == "" {
-				return fmt.Errorf("task %s output[%d] missing done_when", task.ID, i)
-			}
-			if entry.Scope == "" {
-				return fmt.Errorf("task %s output[%d] missing scope", task.ID, i)
-			}
-			if entry.SpecRef == "" {
-				return fmt.Errorf("task %s output[%d] missing spec_ref", task.ID, i)
-			}
-			if strings.Contains(entry.SpecRef, ".worktrees/") {
-				return fmt.Errorf("task %s output[%d] spec_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.SpecRef)
-			}
+		if err := validateTaskOutput(&task); err != nil {
+			return err
 		}
 	}
 
@@ -386,6 +298,98 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		}
 	}
 
+	return nil
+}
+
+// validateStatusFields checks that each task status has its required fields present.
+func validateStatusFields(task *models.Task, sc *statusClassifier) error {
+	if sc.IsInitial(task.Status) && task.AssignedTo != nil {
+		return fmt.Errorf("%s task with assigned_to: %s", task.Status, task.ID)
+	}
+
+	if sc.IsExecuting(task.Status) {
+		if task.AssignedTo == nil {
+			return fmt.Errorf("%s task without assigned_to: %s", task.Status, task.ID)
+		}
+		if task.Worktree == nil {
+			return fmt.Errorf("%s task without worktree: %s", task.Status, task.ID)
+		}
+		if !task.IntegrationFix && task.BaseCommit == nil {
+			return fmt.Errorf("%s task without base_commit: %s", task.Status, task.ID)
+		}
+		if task.LeaseExpires == nil {
+			return fmt.Errorf("%s task without lease_expires: %s", task.Status, task.ID)
+		}
+	}
+
+	if sc.IsSubmitted(task.Status) && task.ReviewCommit == nil {
+		return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
+	}
+
+	if sc.IsReviewing(task.Status) {
+		if task.ReviewingBy == nil {
+			return fmt.Errorf("%s task without reviewing_by: %s", task.Status, task.ID)
+		}
+		if task.ReviewLeaseExpires == nil {
+			return fmt.Errorf("%s task without review_lease_expires: %s", task.Status, task.ID)
+		}
+		if task.ReviewCommit == nil {
+			return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
+		}
+	}
+
+	if sc.IsApproved(task.Status) && task.ReviewCommit == nil {
+		return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
+	}
+
+	if task.Status == models.TaskStatusMerged && task.Worktree != nil {
+		return fmt.Errorf("MERGED task still has worktree: %s", task.ID)
+	}
+
+	if task.Status == models.TaskStatusBlocked {
+		if task.BlockedReason == nil {
+			return fmt.Errorf("BLOCKED task without blocked_reason: %s", task.ID)
+		}
+		if len(task.BlockedQuestions) == 0 {
+			return fmt.Errorf("BLOCKED task without blocked_questions: %s", task.ID)
+		}
+	}
+
+	if sc.IsRejected(task.Status) && task.RejectionReason == nil {
+		return fmt.Errorf("%s task without rejection_reason: %s", task.Status, task.ID)
+	}
+
+	if task.Status == models.TaskStatusSuperseded {
+		if len(task.SupersededBy) == 0 {
+			return fmt.Errorf("SUPERSEDED task without superseded_by: %s", task.ID)
+		}
+		if task.RescopeReason == nil {
+			return fmt.Errorf("SUPERSEDED task without rescope_reason: %s", task.ID)
+		}
+	}
+
+	return nil
+}
+
+// validateTaskOutput checks that output entries have all required fields.
+func validateTaskOutput(task *models.Task) error {
+	for i, entry := range task.Output {
+		if entry.Desc == "" {
+			return fmt.Errorf("task %s output[%d] missing desc", task.ID, i)
+		}
+		if entry.DoneWhen == "" {
+			return fmt.Errorf("task %s output[%d] missing done_when", task.ID, i)
+		}
+		if entry.Scope == "" {
+			return fmt.Errorf("task %s output[%d] missing scope", task.ID, i)
+		}
+		if entry.SpecRef == "" {
+			return fmt.Errorf("task %s output[%d] missing spec_ref", task.ID, i)
+		}
+		if strings.Contains(entry.SpecRef, ".worktrees/") {
+			return fmt.Errorf("task %s output[%d] spec_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.SpecRef)
+		}
+	}
 	return nil
 }
 
