@@ -58,7 +58,7 @@ func DeleteWorktree(projectRoot, taskID string) (*DeleteWorktreeResult, error) {
 	}
 
 	branchName := paths.TaskBranchPrefix + taskID
-	_ = gitWrapper.DeleteBranch(branchName)
+	_ = gitWrapper.DeleteBranch(branchName) // Best-effort: branch may already be gone via RemoveWorktree.
 
 	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
