@@ -1067,8 +1067,7 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 	// --- CODEBASE EXPLORATION: context-saving delegation ---
 	assertSection("codebase-exploration", []string{
 		"CODEBASE EXPLORATION",
-		"delegated exploration tool/subagent",
-		"targeted local search",
+		"AGENT_TOOLS.md",
 	})
 
 	// --- NEGATIVE: role-specific content must NOT leak into base ---

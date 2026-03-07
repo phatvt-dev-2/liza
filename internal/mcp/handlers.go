@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/commands"
@@ -160,14 +159,26 @@ func requireRole(agentID, expectedRole string) error {
 	return nil
 }
 
-// requireOneOfRoles validates agent ID format and that it matches one of expected runtime roles.
-func requireOneOfRoles(agentID string, expectedRoles ...string) error {
+// requireDoerRole validates agent ID format and that it has a doer role.
+func requireDoerRole(agentID string) error {
 	if err := identity.ValidateFormat(agentID); err != nil {
 		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
 	}
-	role, _ := identity.ExtractRole(agentID) // cannot fail after ValidateFormat
-	if !slices.Contains(expectedRoles, role) {
-		return &RoleError{Expected: expectedRoles, Got: role, AgentID: agentID}
+	role, _ := identity.ExtractRole(agentID)
+	if !roles.IsDoerRole(role) {
+		return &RoleError{Expected: roles.DoerRoles(), Got: role, AgentID: agentID}
+	}
+	return nil
+}
+
+// requireReviewerRole validates agent ID format and that it has a reviewer role.
+func requireReviewerRole(agentID string) error {
+	if err := identity.ValidateFormat(agentID); err != nil {
+		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
+	}
+	role, _ := identity.ExtractRole(agentID)
+	if !roles.IsReviewerRole(role) {
+		return &RoleError{Expected: roles.ReviewerRoles(), Got: role, AgentID: agentID}
 	}
 	return nil
 }
@@ -418,7 +429,7 @@ func (s *Server) handleClaimTask(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeUSWriter); err != nil {
+	if err := requireDoerRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -451,7 +462,7 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeUSWriter); err != nil {
+	if err := requireDoerRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -470,7 +481,7 @@ func (s *Server) handleHandoff(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeUSWriter); err != nil {
+	if err := requireDoerRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -510,7 +521,7 @@ func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer, roles.RuntimeEpicPlanReviewer, roles.RuntimeUSReviewer); err != nil {
+	if err := requireReviewerRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -697,7 +708,7 @@ func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer, roles.RuntimeEpicPlanReviewer, roles.RuntimeUSReviewer); err != nil {
+	if err := requireReviewerRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -778,7 +789,7 @@ func (s *Server) handleWriteCheckpoint(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeEpicPlanner, roles.RuntimeUSWriter); err != nil {
+	if err := requireDoerRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -828,7 +839,7 @@ func (s *Server) handleSetTaskOutput(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeEpicPlanner, roles.RuntimeUSWriter); err != nil {
+	if err := requireDoerRole(agentID); err != nil {
 		return nil, err
 	}
 

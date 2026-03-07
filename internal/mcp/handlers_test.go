@@ -1999,19 +1999,19 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "claim_task rejects reviewer",
 			handler: server.handleClaimTask,
 			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner us-writer] roles",
+			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
 		},
 		{
 			name:    "submit_for_review rejects reviewer",
 			handler: server.handleSubmitForReview,
 			params:  map[string]any{"task_id": "task-1", "commit_sha": "abc123", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner us-writer] roles",
+			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
 		},
 		{
 			name:    "handoff rejects reviewer",
 			handler: server.handleHandoff,
 			params:  map[string]any{"task_id": "task-1", "summary": "s", "next_action": "n", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner us-writer] roles",
+			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
 		},
 		{
 			name:    "submit_verdict rejects coder",

@@ -153,10 +153,74 @@ func TestHandoff_WrongStatus(t *testing.T) {
 
 	_, err := Handoff(tmpDir, "task-1", "s", "n", "coder-1")
 	if err == nil {
-		t.Fatal("Expected error for non-IMPLEMENTING task")
+		t.Fatal("Expected error for non-executing task")
 	}
-	if !strings.Contains(err.Error(), "not IMPLEMENTING") {
-		t.Errorf("Error = %q, want to contain 'not IMPLEMENTING'", err.Error())
+	if !strings.Contains(err.Error(), "not in an executing status") {
+		t.Errorf("Error = %q, want to contain 'not in an executing status'", err.Error())
+	}
+}
+
+func TestHandoff_PipelineExecutingStatus(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	agent := "code-planner-1"
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:          "task-1",
+			Type:        models.TaskTypeCoding,
+			Description: "Pipeline task",
+			Status:      "CODE_PLANNING", // pipeline executing status
+			Priority:    1,
+			Created:     now,
+			SpecRef:     "README.md",
+			DoneWhen:    "Done",
+			Scope:       "Scope",
+			AssignedTo:  &agent,
+			History:     []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Handoff(tmpDir, "task-1", "Context exhausted", "Resume from step 3", agent)
+	if err != nil {
+		t.Fatalf("Handoff() error: %v", err)
+	}
+	if result.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+}
+
+func TestHandoff_PipelineNonExecutingStatus(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	agent := "code-planner-1"
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:          "task-1",
+			Type:        models.TaskTypeCoding,
+			Description: "Pipeline task",
+			Status:      "CODING_PLAN_TO_REVIEW", // pipeline submitted status, not executing
+			Priority:    1,
+			Created:     now,
+			SpecRef:     "README.md",
+			DoneWhen:    "Done",
+			Scope:       "Scope",
+			AssignedTo:  &agent,
+			History:     []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Handoff(tmpDir, "task-1", "s", "n", agent)
+	if err == nil {
+		t.Fatal("Expected error for non-executing pipeline status")
+	}
+	if !strings.Contains(err.Error(), "not in an executing status") {
+		t.Errorf("Error = %q, want to contain 'not in an executing status'", err.Error())
 	}
 }
 

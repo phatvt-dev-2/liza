@@ -472,7 +472,7 @@ func (s *Server) registerMutationTools() {
 	// liza_claim_task tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_claim_task",
-		Description: "Claim an unclaimed task for work. Requires coder, code-planner, or us-writer role.",
+		Description: "Claim an unclaimed task for work. Requires coder, code-planner, epic-planner, or us-writer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -492,7 +492,7 @@ func (s *Server) registerMutationTools() {
 	// liza_submit_for_review tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_for_review",
-		Description: "Submit completed work for review after commit SHA validation. Requires coder, code-planner, or us-writer role.",
+		Description: "Submit completed work for review after commit SHA validation. Requires coder, code-planner, epic-planner, or us-writer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -516,7 +516,7 @@ func (s *Server) registerMutationTools() {
 	// liza_handoff tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_handoff",
-		Description: "Initiate context-exhaustion handoff for a claimed task. Requires coder, code-planner, or us-writer role.",
+		Description: "Initiate context-exhaustion handoff for a claimed task. Requires coder, code-planner, epic-planner, or us-writer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{

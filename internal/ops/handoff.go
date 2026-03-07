@@ -9,7 +9,6 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // HandoffResult contains the outcome of a successful handoff initiation.
@@ -44,18 +43,27 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
 	}
 
+	var pipelineExecuting []models.TaskStatus
+	resolver, _, resolverErr := loadResolver(projectRoot)
+	if resolverErr != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
+	}
+	if resolver != nil {
+		for _, rpName := range resolver.RolePairNames() {
+			if es, err := resolver.ExecutingStatus(rpName); err == nil {
+				pipelineExecuting = append(pipelineExecuting, es)
+			}
+		}
+	}
+
 	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
-		expectedStatus := models.TaskStatusImplementing
-		if runtimeRole == roles.RuntimeCodePlanner {
-			expectedStatus = models.TaskStatusCodePlanning
-		}
-		if task.Status != expectedStatus {
-			return fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedStatus, task.Status)
+		if !isExecutingStatus(task.Status, pipelineExecuting) {
+			return fmt.Errorf("task %s is not in an executing status (current status: %s)", taskID, task.Status)
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {

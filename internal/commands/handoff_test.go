@@ -162,7 +162,7 @@ func TestHandoffCommand(t *testing.T) {
 				}
 			},
 			wantErr:       true,
-			wantErrSubstr: "is not IMPLEMENTING",
+			wantErrSubstr: "is not in an executing status",
 		},
 		{
 			name:       "task assigned to different coder",

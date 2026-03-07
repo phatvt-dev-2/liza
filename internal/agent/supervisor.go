@@ -223,24 +223,11 @@ func exit42TaskProgressSignature(task *models.Task) string {
 	return string(payload)
 }
 
-// isDoerRuntime returns true if the runtime role is a doer (task implementer) role.
-func isDoerRuntime(role string) bool {
-	switch role {
-	case roles.RuntimeCoder, roles.RuntimeCodePlanner,
-		roles.RuntimeEpicPlanner, roles.RuntimeUSWriter:
-		return true
-	}
-	return false
-}
+// isDoerRuntime delegates to roles.IsDoerRole.
+func isDoerRuntime(role string) bool { return roles.IsDoerRole(role) }
 
-func isReviewerRuntime(role string) bool {
-	switch role {
-	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer,
-		roles.RuntimeEpicPlanReviewer, roles.RuntimeUSReviewer:
-		return true
-	}
-	return false
-}
+// isReviewerRuntime delegates to roles.IsReviewerRole.
+func isReviewerRuntime(role string) bool { return roles.IsReviewerRole(role) }
 
 // CLIExecutor interface for testing (mock vs real CLI)
 type CLIExecutor interface {

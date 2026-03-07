@@ -108,7 +108,7 @@ func TestAddTaskCommand(t *testing.T) {
 			scope:       "Scope",
 			priority:    1,
 			wantErr:     true,
-			errContains: "task ID is required",
+			errContains: "task ID cannot be empty",
 		},
 		{
 			name:        "empty description",

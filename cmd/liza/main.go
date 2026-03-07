@@ -197,9 +197,9 @@ This is the final step in the task lifecycle, integrating completed and approved
 work back into the main codebase.
 
 Requirements:
-  - Task must be in APPROVED or CODING_PLAN_APPROVED status
+  - Task must be in an approved status (resolved from pipeline config or legacy statuses)
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
-  - Agent must be a code-reviewer or code-plan-reviewer role
+  - Agent must be a reviewer role (code-reviewer, code-plan-reviewer, epic-plan-reviewer, or us-reviewer)
   - Worktree HEAD must match the task's review_commit
 
 Process:
@@ -224,8 +224,8 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 		if err != nil {
 			return err
 		}
-		if role != roles.RuntimeCodeReviewer && role != roles.RuntimeCodePlanReviewer {
-			return fmt.Errorf("wt-merge requires code-reviewer or code-plan-reviewer agent (got: %s)", role)
+		if !roles.IsReviewerRole(role) {
+			return fmt.Errorf("wt-merge requires a reviewer role (got: %s)", role)
 		}
 
 		projectRoot, err := requireProjectRoot()
@@ -239,13 +239,13 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 
 var claimTaskCmd = &cobra.Command{
 	Use:   "claim-task <task-id> <agent-id>",
-	Short: "Claim a task for a coder agent",
-	Long: `Claim a task for a coder agent using the three-phase claim pattern.
+	Short: "Claim a task for a doer agent",
+	Long: `Claim a task for a doer agent using the three-phase claim pattern.
 
 Supports claiming from multiple source states:
-  - READY: normal new claim
-  - REJECTED: re-claim (same coder preserves worktree, different coder gets fresh)
-  - INTEGRATION_FAILED: any coder can claim (worktree preserved for conflict resolution)
+  - Initial state: normal new claim (e.g. READY, DRAFT_CODE, DRAFT_CODING_PLAN, DRAFT_EPIC_PLAN, DRAFT_US)
+  - Rejected state: re-claim (same doer preserves worktree, different doer gets fresh)
+  - INTEGRATION_FAILED: any doer can claim (worktree preserved for conflict resolution)
 
 Phase 1: Validate under lock (check status, deps, agent availability)
 Phase 2: Handle worktree outside lock (create/preserve/delete as needed)
@@ -271,11 +271,11 @@ var submitForReviewCmd = &cobra.Command{
 	Short: "Submit a task for review",
 	Long: `Validate a task worktree commit and submit it for review.
 
-Used by coder agents to submit completed work for review.
+Used by doer agents to submit completed work for review.
 
 Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
-  - Task must be in IMPLEMENTING status
+  - Task must be in an executing status (resolved from pipeline config or legacy IMPLEMENTING)
   - Task must be assigned to the submitting agent
   - <commit-sha> must exactly match current worktree HEAD before rebase
 
@@ -305,11 +305,11 @@ Updates:
 var handoffCmd = &cobra.Command{
 	Use:   "handoff <task-id> <summary> <next-action>",
 	Short: "Initiate context-exhaustion handoff for a claimed task",
-	Long: `Atomically initiate handoff when a coder is nearing context exhaustion.
+	Long: `Atomically initiate handoff when a doer agent is nearing context exhaustion.
 
 Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
-  - Task must be in IMPLEMENTING status
+  - Task must be in an executing status (resolved from pipeline config or legacy IMPLEMENTING)
   - Task must be assigned to the submitting agent
 
 Updates:
@@ -346,7 +346,7 @@ Used by reviewer agents to approve or reject work.
 
 Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
-  - Task must be in READY_FOR_REVIEW status
+  - Task must be in a submitted status (resolved from pipeline config or legacy READY_FOR_REVIEW)
   - For REJECTED verdicts, a rejection reason is required
 
 For APPROVED verdict:
@@ -439,9 +439,9 @@ Used to release task claims manually when needed, such as when an agent
 crashes or a lease needs to be freed.
 
 Roles:
-  - code-reviewer: Release review claim (reviewing_by, review_lease_expires)
-  - coder: Release coder claim (assigned_to, lease_expires) and set IMPLEMENTING → READY
-  - both: Release both reviewer and coder claims
+  - code-reviewer: Release review claim (reviewing_by, review_lease_expires). Works for any reviewer role.
+  - coder: Release doer claim (assigned_to, lease_expires) and reset to initial state. Works for any doer role.
+  - both: Release both reviewer and doer claims
 
 Safety:
   - By default, refuses to release claims with valid (non-expired) leases
@@ -926,7 +926,7 @@ var agentCmd = &cobra.Command{
 
 The supervisor:
 - Registers the agent with collision detection
-- Polls for role-specific work (coder/reviewer/orchestrator/code-planning roles)
+- Polls for role-specific work (all doer, reviewer, and orchestrator roles)
 - Claims tasks (doer/reviewer roles only)
 - Builds and executes prompts with the specified CLI
 - Manages heartbeats to keep lease alive
@@ -934,11 +934,19 @@ The supervisor:
 - Loops until work is exhausted or ABORT signal
 
 Roles:
-  coder               - Claims and implements coding tasks
-  code-reviewer       - Reviews coding tasks and submits verdicts
   orchestrator        - Creates and manages task breakdown
+
+  Specification phase:
+  epic-planner        - Decomposes vision into epics
+  epic-plan-reviewer  - Reviews epic decomposition
+  us-writer           - Writes user stories from epics
+  us-reviewer         - Reviews user stories
+
+  Coding phase:
   code-planner        - Claims and produces coding plans
   code-plan-reviewer  - Reviews coding plans and submits verdicts
+  coder               - Claims and implements coding tasks
+  code-reviewer       - Reviews coding tasks and submits verdicts
 
 Example:
   # Using --agent-id flag (recommended)
@@ -946,6 +954,10 @@ Example:
   liza agent code-reviewer --agent-id code-reviewer-1 --cli claude
   liza agent code-planner --agent-id code-planner-1 --cli claude
   liza agent code-plan-reviewer --agent-id code-plan-reviewer-1 --cli claude
+  liza agent epic-planner --agent-id epic-planner-1 --cli claude
+  liza agent epic-plan-reviewer --agent-id epic-plan-reviewer-1 --cli claude
+  liza agent us-writer --agent-id us-writer-1 --cli claude
+  liza agent us-reviewer --agent-id us-reviewer-1 --cli claude
   liza agent orchestrator --agent-id orchestrator-1 --interactive
 
   # Save agent output to .liza/agent-outputs/
@@ -955,7 +967,9 @@ Example:
   LIZA_AGENT_ID=coder-1 liza agent coder
   LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer --cli claude
   LIZA_AGENT_ID=code-planner-1 liza agent code-planner --cli claude
-  LIZA_AGENT_ID=code-plan-reviewer-1 liza agent code-plan-reviewer --cli claude`,
+  LIZA_AGENT_ID=code-plan-reviewer-1 liza agent code-plan-reviewer --cli claude
+  LIZA_AGENT_ID=epic-planner-1 liza agent epic-planner --cli claude
+  LIZA_AGENT_ID=us-writer-1 liza agent us-writer --cli claude`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		role := args[0]
@@ -980,7 +994,7 @@ Example:
 		}
 
 		if !slices.Contains(roles.AllRuntime(), role) {
-			return fmt.Errorf("invalid role: %s (must be coder, code-reviewer, orchestrator, code-planner, or code-plan-reviewer)", role)
+			return fmt.Errorf("invalid role: %s (valid: %s)", role, strings.Join(roles.AllRuntime(), ", "))
 		}
 
 		cliName, _ := cmd.Flags().GetString("cli")
@@ -1170,7 +1184,7 @@ var recoverTaskCmd = &cobra.Command{
 	Short: "Recover a task (release claims, remove worktree and branch)",
 	Long: `Recover a task by performing full cleanup:
 
-- Release agent claims (coder and/or reviewer)
+- Release agent claims (doer and/or reviewer)
 - Remove git worktree and branch
 - Recover the claiming agent from state
 
@@ -1200,8 +1214,8 @@ var recoverAgentCmd = &cobra.Command{
 	Short: "Recover a crashed agent (release claims, remove worktree, delete agent)",
 	Long: `Recover a crashed agent by performing full cleanup:
 
-- Release task claims (IMPLEMENTING → READY for coders, REVIEWING → READY_FOR_REVIEW for reviewers)
-- Remove git worktree and branch (coders only)
+- Release task claims (executing → initial for doers, reviewing → submitted for reviewers)
+- Remove git worktree and branch (doers only)
 - Delete agent from state
 
 Idempotent: safe to run multiple times (no error if agent already gone).

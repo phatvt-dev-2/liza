@@ -36,7 +36,7 @@ func TestConcurrentClaimAttempts(t *testing.T) {
 	numAgents := 5
 	agentIDs := make([]string, numAgents)
 	for i := 0; i < numAgents; i++ {
-		agentID := "coder-" + string(rune('a'+i))
+		agentID := "coder-" + string(rune('1'+i))
 		agentIDs[i] = agentID
 		testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
 	}
@@ -116,7 +116,7 @@ func TestConcurrentClaimsOfDifferentTasks(t *testing.T) {
 	// Register multiple agents (one per task)
 	agentIDs := make([]string, numTasks)
 	for i := 0; i < numTasks; i++ {
-		agentID := "coder-" + string(rune('a'+i))
+		agentID := "coder-" + string(rune('1'+i))
 		agentIDs[i] = agentID
 		testhelpers.RegisterTestAgent(t, bb, agentID, "coder")
 	}

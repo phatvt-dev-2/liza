@@ -85,14 +85,14 @@ func TestWtMergeCommand(t *testing.T) {
 			wantStatus:    models.TaskStatusApproved,
 		},
 		{
-			name:          "task has no worktree",
+			name:          "task has no review_commit",
 			taskID:        "task-6",
 			taskStatus:    models.TaskStatusApproved,
-			reviewCommit:  testhelpers.StringPtr("pqr1234"),
+			reviewCommit:  nil,
 			agentID:       "coder-6",
 			setupWorktree: false,
 			wantErr:       true,
-			errContains:   "task has no worktree",
+			errContains:   "task has no review_commit",
 			wantStatus:    models.TaskStatusApproved,
 		},
 		{
