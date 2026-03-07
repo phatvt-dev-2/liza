@@ -991,7 +991,6 @@ Example:
 			return fmt.Errorf("invalid CLI: %s (must be claude, codex, gemini, mistral, or kimi)", cliName)
 		}
 
-		// --log is incompatible with -i (interactive mode)
 		if logOutput && interactive {
 			return fmt.Errorf("--log is incompatible with -i (interactive mode)")
 		}
@@ -1166,7 +1165,6 @@ Example:
 	},
 }
 
-// recover-task command
 var recoverTaskCmd = &cobra.Command{
 	Use:   "recover-task <task-id>",
 	Short: "Recover a task (release claims, remove worktree and branch)",
@@ -1197,7 +1195,6 @@ Idempotent: safe to run multiple times.`,
 	},
 }
 
-// recover-agent command
 var recoverAgentCmd = &cobra.Command{
 	Use:   "recover-agent <agent-id>",
 	Short: "Recover a crashed agent (release claims, remove worktree, delete agent)",
@@ -1223,14 +1220,12 @@ By default, refuses to recover agents whose PID is still alive.`,
 	},
 }
 
-// Parent delete command
 var deleteCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "Delete agents or tasks from the state database",
 	Long:  `Delete agents that crashed or tasks that are no longer needed.`,
 }
 
-// delete agent subcommand
 var deleteAgentCmd = &cobra.Command{
 	Use:   "agent <agent-id>",
 	Short: "Delete an agent from the state database",
@@ -1252,7 +1247,6 @@ current tasks.`,
 	},
 }
 
-// delete task subcommand
 var deleteTaskCmd = &cobra.Command{
 	Use:   "task <task-id>",
 	Short: "Delete a task from the state database",
