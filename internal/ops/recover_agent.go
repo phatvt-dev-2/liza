@@ -53,7 +53,6 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 		}, nil
 	}
 
-	// PID liveness check
 	if !force && agent.PID != 0 && IsProcessAlive(agent.PID) {
 		return nil, fmt.Errorf("agent %s is still running with PID %d, use --force to recover", agentID, agent.PID)
 	}
@@ -80,7 +79,6 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 		}
 	}
 
-	// Load pipeline resolver for pipeline-aware claim release
 	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
@@ -99,7 +97,6 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 			return nil
 		}
 
-		// Release task claim if agent had a task
 		if taskID != "" {
 			task := state.FindTask(taskID)
 			if task != nil {
@@ -129,11 +126,9 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 			}
 		}
 
-		// Delete the agent
 		delete(state.Agents, agentID)
 		result.AgentDeleted = true
 
-		// Add audit trail
 		state.HumanNotes = append(state.HumanNotes, models.HumanNote{
 			Timestamp: now,
 			Message:   fmt.Sprintf("Agent %s recovered (%s): %s", agentID, role, reason),
