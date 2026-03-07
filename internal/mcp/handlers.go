@@ -129,6 +129,18 @@ func requireTaskAndAgent(params map[string]any) (taskID, agentID string, err err
 	return taskID, agentID, nil
 }
 
+// RoleError indicates an agent does not have the required role for an operation.
+// The message is intentionally client-facing so agents receive actionable feedback.
+type RoleError struct {
+	Expected []string
+	Got      string
+	AgentID  string
+}
+
+func (e *RoleError) Error() string {
+	return fmt.Sprintf("requires one of %v roles (got %s from %s)", e.Expected, e.Got, e.AgentID)
+}
+
 // requireRole validates agent ID format and that it matches the expected runtime role.
 func requireRole(agentID, expectedRole string) error {
 	if err := identity.ValidateFormat(agentID); err != nil {
@@ -136,7 +148,7 @@ func requireRole(agentID, expectedRole string) error {
 	}
 	role, _ := identity.ExtractRole(agentID) // cannot fail after ValidateFormat
 	if role != expectedRole {
-		return fmt.Errorf("requires %s role (got %s from %s)", expectedRole, role, agentID)
+		return &RoleError{Expected: []string{expectedRole}, Got: role, AgentID: agentID}
 	}
 	return nil
 }
@@ -152,7 +164,7 @@ func requireOneOfRoles(agentID string, expectedRoles ...string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("requires one of %v roles (got %s from %s)", expectedRoles, role, agentID)
+	return &RoleError{Expected: expectedRoles, Got: role, AgentID: agentID}
 }
 
 // handleGet implements the liza_get tool
@@ -404,7 +416,7 @@ func (s *Server) handleClaimTask(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeUSWriter); err != nil {
 		return nil, err
 	}
 
@@ -435,7 +447,7 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeUSWriter); err != nil {
 		return nil, err
 	}
 
@@ -454,7 +466,7 @@ func (s *Server) handleHandoff(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeUSWriter); err != nil {
 		return nil, err
 	}
 
@@ -494,7 +506,7 @@ func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer, roles.RuntimeEpicPlanReviewer); err != nil {
 		return nil, err
 	}
 
@@ -670,7 +682,7 @@ func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer, roles.RuntimeEpicPlanReviewer); err != nil {
 		return nil, err
 	}
 
@@ -749,7 +761,7 @@ func (s *Server) handleWriteCheckpoint(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeEpicPlanner, roles.RuntimeUSWriter); err != nil {
 		return nil, err
 	}
 
@@ -799,7 +811,7 @@ func (s *Server) handleSetTaskOutput(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCoder, roles.RuntimeCodePlanner, roles.RuntimeEpicPlanner, roles.RuntimeUSWriter); err != nil {
 		return nil, err
 	}
 

@@ -16,9 +16,10 @@ type MarkBlockedResult struct {
 	Reason string
 }
 
-// MarkBlocked transitions a task from IMPLEMENTING to BLOCKED. Only the
+// MarkBlocked transitions a task from an executing status to BLOCKED. Only the
 // assigned agent can block its own task. Requires reason and 1-3 clarifying
-// questions per the blocking protocol. No terminal I/O.
+// questions per the blocking protocol. Pipeline-aware: supports both legacy
+// IMPLEMENTING status and pipeline-defined executing statuses. No terminal I/O.
 func MarkBlocked(projectRoot, taskID, reason string, questions []string, agentID string) (*MarkBlockedResult, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID is required")
@@ -40,22 +41,42 @@ func MarkBlocked(projectRoot, taskID, reason string, questions []string, agentID
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
 
+	// Load pipeline config once for pipeline-aware status checks and transitions.
+	var pipelineExecuting []models.TaskStatus
+	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
+	resolver, _, _ := loadResolver(projectRoot)
+	if resolver != nil {
+		for _, rpName := range resolver.RolePairNames() {
+			if es, err := resolver.ExecutingStatus(rpName); err == nil {
+				pipelineExecuting = append(pipelineExecuting, es)
+			}
+		}
+		pipelineTransitions = BuildPipelineTransitions(resolver)
+	}
+
 	err := bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
-		if task.Status != models.TaskStatusImplementing {
-			return fmt.Errorf("task must be in IMPLEMENTING status to be marked blocked, current status: %s", task.Status)
+		if !isExecutingStatus(task.Status, pipelineExecuting) {
+			return fmt.Errorf("task must be in an executing status to be marked blocked, current status: %s", task.Status)
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
 			return fmt.Errorf("only the assigned agent can mark task as blocked")
 		}
 
-		if err := task.Transition(models.TaskStatusBlocked); err != nil {
-			return err
+		// Use pipeline-aware transition if available, otherwise hardcoded.
+		if pipelineTransitions != nil {
+			if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
+				return err
+			}
+		} else {
+			if err := task.Transition(models.TaskStatusBlocked); err != nil {
+				return err
+			}
 		}
 		task.BlockedReason = &reason
 		task.BlockedQuestions = questions

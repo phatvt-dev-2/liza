@@ -150,8 +150,91 @@ func TestMarkBlocked_WrongStatus(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for non-IMPLEMENTING task")
 	}
-	if !strings.Contains(err.Error(), "IMPLEMENTING") {
-		t.Errorf("Error = %q, want to contain 'IMPLEMENTING'", err.Error())
+	if !strings.Contains(err.Error(), "executing status") {
+		t.Errorf("Error = %q, want to contain 'executing status'", err.Error())
+	}
+}
+
+func TestMarkBlocked_PipelineExecutingStatus(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	agent := "coder-1"
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:          "task-1",
+			Type:        models.TaskTypeCoding,
+			Description: "Pipeline task in executing state",
+			Status:      "IMPLEMENTING_CODE",
+			RolePair:    "coding-pair",
+			Priority:    1,
+			Created:     now,
+			AssignedTo:  &agent,
+			SpecRef:     "README.md",
+			DoneWhen:    "Done",
+			Scope:       "Test",
+			History:     []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := MarkBlocked(tmpDir, "task-1", "Spec ambiguity", []string{"What should the format be?"}, agent)
+	if err != nil {
+		t.Fatalf("MarkBlocked() failed for pipeline executing status: %v", err)
+	}
+
+	if result.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+
+	// Verify state transition
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusBlocked {
+		t.Errorf("Status = %v, want BLOCKED", task.Status)
+	}
+	if task.AssignedTo != nil {
+		t.Error("AssignedTo should be nil after blocking")
+	}
+}
+
+func TestMarkBlocked_PipelineNonExecutingStatus(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:          "task-1",
+			Type:        models.TaskTypeCoding,
+			Description: "Pipeline task at initial (non-executing) status",
+			Status:      "DRAFT_CODE",
+			RolePair:    "coding-pair",
+			Priority:    1,
+			Created:     now,
+			SpecRef:     "README.md",
+			DoneWhen:    "Done",
+			Scope:       "Test",
+			History:     []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := MarkBlocked(tmpDir, "task-1", "reason", []string{"q1"}, "coder-1")
+	if err == nil {
+		t.Fatal("Expected error for non-executing pipeline status")
+	}
+	if !strings.Contains(err.Error(), "executing status") {
+		t.Errorf("Error = %q, want to contain 'executing status'", err.Error())
 	}
 }
 

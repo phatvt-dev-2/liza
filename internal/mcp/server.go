@@ -221,6 +221,10 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	if errors.As(err, &preconditionErr) {
 		return protocol.NewError(protocol.ValidationError, preconditionErr.Reason, nil)
 	}
+	var roleErr *RoleError
+	if errors.As(err, &roleErr) {
+		return protocol.NewError(protocol.ValidationError, roleErr.Error(), nil)
+	}
 
 	msg := err.Error()
 
@@ -444,7 +448,7 @@ func (s *Server) registerMutationTools() {
 	// liza_claim_task tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_claim_task",
-		Description: "Claim an unclaimed task for work. Requires coder or code-planner role.",
+		Description: "Claim an unclaimed task for work. Requires coder, code-planner, or us-writer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -464,7 +468,7 @@ func (s *Server) registerMutationTools() {
 	// liza_submit_for_review tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_for_review",
-		Description: "Submit completed work for review after commit SHA validation. Requires coder or code-planner role.",
+		Description: "Submit completed work for review after commit SHA validation. Requires coder, code-planner, or us-writer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -488,7 +492,7 @@ func (s *Server) registerMutationTools() {
 	// liza_handoff tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_handoff",
-		Description: "Initiate context-exhaustion handoff for a claimed task. Requires coder or code-planner role.",
+		Description: "Initiate context-exhaustion handoff for a claimed task. Requires coder, code-planner, or us-writer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -516,7 +520,7 @@ func (s *Server) registerMutationTools() {
 	// liza_submit_verdict tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_verdict",
-		Description: "Submit review verdict (APPROVED or REJECTED). Requires code-reviewer or code-plan-reviewer role.",
+		Description: "Submit review verdict (APPROVED or REJECTED). Requires code-reviewer, code-plan-reviewer, or epic-plan-reviewer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -674,7 +678,7 @@ func (s *Server) registerComplexOperations() {
 	// liza_wt_merge tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_wt_merge",
-		Description: "Merge approved task to integration branch. Requires code-reviewer role.",
+		Description: "Merge approved task to integration branch. Requires code-reviewer, code-plan-reviewer, or epic-plan-reviewer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -730,7 +734,7 @@ func (s *Server) registerComplexOperations() {
 	// liza_write_checkpoint tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_write_checkpoint",
-		Description: "Write a pre-execution checkpoint before implementing a task. Required before submission for review. Requires coder or code-planner role.",
+		Description: "Write a pre-execution checkpoint before implementing a task. Required before submission for review. Requires coder, code-planner, epic-planner, or us-writer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -778,7 +782,7 @@ func (s *Server) registerComplexOperations() {
 	// liza_set_task_output tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_set_task_output",
-		Description: "Persist structured task definitions for downstream transition. Requires coder or code-planner role.",
+		Description: "Persist structured task definitions for downstream transition. Requires coder, code-planner, epic-planner, or us-writer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{

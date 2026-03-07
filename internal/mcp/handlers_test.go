@@ -1999,49 +1999,79 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "claim_task rejects reviewer",
 			handler: server.handleClaimTask,
 			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner] roles",
+			wantErr: "requires one of [coder code-planner us-writer] roles",
 		},
 		{
 			name:    "submit_for_review rejects reviewer",
 			handler: server.handleSubmitForReview,
 			params:  map[string]any{"task_id": "task-1", "commit_sha": "abc123", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner] roles",
+			wantErr: "requires one of [coder code-planner us-writer] roles",
 		},
 		{
 			name:    "handoff rejects reviewer",
 			handler: server.handleHandoff,
 			params:  map[string]any{"task_id": "task-1", "summary": "s", "next_action": "n", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner] roles",
+			wantErr: "requires one of [coder code-planner us-writer] roles",
 		},
 		{
 			name:    "submit_verdict rejects coder",
 			handler: server.handleSubmitVerdict,
 			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "coder-1"},
-			wantErr: "requires one of [code-reviewer code-plan-reviewer] roles",
+			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer] roles",
 		},
 		{
 			name:    "wt_merge rejects coder",
 			handler: server.handleWtMerge,
 			params:  map[string]any{"task_id": "task-1", "agent_id": "coder-1"},
-			wantErr: "requires one of [code-reviewer code-plan-reviewer] roles",
+			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer] roles",
 		},
 		{
 			name:    "add_tasks rejects coder",
 			handler: server.handleAddTasks,
 			params:  map[string]any{"tasks": []any{map[string]any{"id": "t-new", "desc": "d", "spec": "specs/test-spec.md", "done": "d", "scope": "s"}}, "agent_id": "coder-1"},
-			wantErr: "requires orchestrator role",
+			wantErr: "requires one of [orchestrator] roles",
 		},
 		{
 			name:    "supersede rejects coder",
 			handler: server.handleSupersede,
 			params:  map[string]any{"task_id": "task-1", "reason": "r", "agent_id": "coder-1"},
-			wantErr: "requires orchestrator role",
+			wantErr: "requires one of [orchestrator] roles",
 		},
 		{
 			name:    "write_checkpoint rejects reviewer",
 			handler: server.handleWriteCheckpoint,
 			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
-			wantErr: "requires one of [coder code-planner] roles",
+			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
+		},
+		{
+			name:    "write_checkpoint accepts epic-planner (passes role check)",
+			handler: server.handleWriteCheckpoint,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "epic-planner-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
+			wantErr: "write checkpoint failed", // passes role check, fails downstream
+		},
+		{
+			name:    "write_checkpoint accepts us-writer (passes role check)",
+			handler: server.handleWriteCheckpoint,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "us-writer-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
+			wantErr: "write checkpoint failed", // passes role check, fails downstream
+		},
+		{
+			name:    "set_task_output accepts epic-planner (passes role check)",
+			handler: server.handleSetTaskOutput,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "epic-planner-1", "output": []any{map[string]any{"desc": "d", "done_when": "dw", "scope": "s"}}},
+			wantErr: "set task output failed", // passes role check, fails downstream
+		},
+		{
+			name:    "set_task_output accepts us-writer (passes role check)",
+			handler: server.handleSetTaskOutput,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "us-writer-1", "output": []any{map[string]any{"desc": "d", "done_when": "dw", "scope": "s"}}},
+			wantErr: "set task output failed", // passes role check, fails downstream
+		},
+		{
+			name:    "submit_verdict accepts epic-plan-reviewer (passes role check)",
+			handler: server.handleSubmitVerdict,
+			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "epic-plan-reviewer-1"},
+			wantErr: "submit verdict failed", // passes role check, fails downstream
 		},
 		// Malformed agent ID cases
 		{
@@ -2060,7 +2090,7 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "submit_verdict rejects unknown role",
 			handler: server.handleSubmitVerdict,
 			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "foobar-1"},
-			wantErr: "requires one of [code-reviewer code-plan-reviewer] roles",
+			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer] roles",
 		},
 	}
 

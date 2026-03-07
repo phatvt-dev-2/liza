@@ -537,6 +537,19 @@ func TestClassifyError(t *testing.T) {
 			wantCode: protocol.ValidationError,
 			wantMsg:  "validation failed: precondition not met",
 		},
+		// RoleError (typed — exposes message)
+		{
+			name:     "typed RoleError",
+			err:      &RoleError{Expected: []string{"coder", "code-planner"}, Got: "code-reviewer", AgentID: "code-reviewer-1"},
+			wantCode: protocol.ValidationError,
+			wantMsg:  "requires one of [coder code-planner] roles (got code-reviewer from code-reviewer-1)",
+		},
+		{
+			name:     "wrapped RoleError",
+			err:      fmt.Errorf("handler failed: %w", &RoleError{Expected: []string{"coder"}, Got: "orchestrator", AgentID: "orchestrator-1"}),
+			wantCode: protocol.ValidationError,
+			wantMsg:  "requires one of [coder] roles (got orchestrator from orchestrator-1)",
+		},
 		// Default: internal error
 		{
 			name:     "generic error",

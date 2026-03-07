@@ -93,7 +93,7 @@ func TestMarkBlockedCommand(t *testing.T) {
 			questions:  []string{"Question?"},
 			agentID:    "coder-1",
 			wantErr:    true,
-			wantErrMsg: "must be in IMPLEMENTING status",
+			wantErrMsg: "must be in an executing status",
 			setupState: func(s *models.State) {
 				now := time.Now().UTC()
 				s.Tasks = []models.Task{
