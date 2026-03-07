@@ -10,14 +10,11 @@ import (
 )
 
 const (
-	// DefaultHeartbeatInterval is the default time between heartbeats.
-	// Derived from models.DefaultHeartbeatIntervalSec to maintain a single source of truth.
+	// DefaultHeartbeatInterval derives from models to maintain a single source of truth.
 	DefaultHeartbeatInterval = time.Duration(models.DefaultHeartbeatIntervalSec) * time.Second
-	// DefaultLeaseDuration is the default lease duration
-	DefaultLeaseDuration = time.Duration(models.DefaultLeaseDurationSeconds) * time.Second
+	DefaultLeaseDuration     = time.Duration(models.DefaultLeaseDurationSeconds) * time.Second
 )
 
-// HeartbeatConfig contains configuration for the heartbeat mechanism
 type HeartbeatConfig struct {
 	AgentID       string
 	StatePath     string
@@ -26,7 +23,6 @@ type HeartbeatConfig struct {
 	State         *models.State // Optional: if provided, interval is read from state.Config.HeartbeatInterval
 }
 
-// Heartbeat manages background lease extension for an agent
 type Heartbeat struct {
 	agentID       string
 	bb            *db.Blackboard
@@ -34,16 +30,13 @@ type Heartbeat struct {
 	leaseDuration time.Duration
 }
 
-// NewHeartbeat creates a new heartbeat instance
 func NewHeartbeat(config HeartbeatConfig) *Heartbeat {
 	interval := config.Interval
 
-	// If state is provided, read interval from config with bounds validation
 	if config.State != nil {
 		interval = models.NormalizeHeartbeatInterval(config.State.Config.HeartbeatInterval)
 	}
 
-	// Fall back to explicit config.Interval or default
 	if interval == 0 {
 		interval = DefaultHeartbeatInterval
 	}
@@ -61,8 +54,6 @@ func NewHeartbeat(config HeartbeatConfig) *Heartbeat {
 	}
 }
 
-// Start begins the heartbeat loop, extending the agent's lease periodically
-// Returns when the context is cancelled or an unrecoverable error occurs
 func (h *Heartbeat) Start(ctx context.Context) error {
 	logger := GetLogger()
 	ticker := time.NewTicker(h.interval)
@@ -74,15 +65,13 @@ func (h *Heartbeat) Start(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			if err := h.beat(); err != nil {
-				// Log error but continue (per bash: "|| true")
-				// Supervisors can detect stale agents via watch command
+				// Non-fatal: supervisors detect stale agents via watch command
 				logger.Error("Heartbeat update failed", "error", err, "agent_id", h.agentID)
 			}
 		}
 	}
 }
 
-// beat performs a single heartbeat update
 func (h *Heartbeat) beat() error {
 	now := time.Now().UTC()
 	newLease := now.Add(h.leaseDuration)
