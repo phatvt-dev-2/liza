@@ -143,8 +143,8 @@ func (fl *FileLock) WithLockOperation(operation string, fn func() error) error {
 	var lock *flock.Flock
 	var err error
 
-	now := time.Now()
-	deadline := now.Add(fl.lockTimeout)
+	acquireStart := time.Now()
+	deadline := acquireStart.Add(fl.lockTimeout)
 	locked := false
 
 	for time.Now().Before(deadline) {
@@ -185,7 +185,7 @@ func (fl *FileLock) WithLockOperation(operation string, fn func() error) error {
 		}
 	}
 
-	acquisitionTime := time.Since(now)
+	acquisitionTime := time.Since(acquireStart)
 	holdStart := time.Now()
 
 	// We intentionally do NOT remove the lock file or PID file here.
