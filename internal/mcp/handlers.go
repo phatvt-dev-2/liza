@@ -506,7 +506,7 @@ func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer, roles.RuntimeEpicPlanReviewer); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer, roles.RuntimeEpicPlanReviewer, roles.RuntimeUSReviewer); err != nil {
 		return nil, err
 	}
 
@@ -682,7 +682,7 @@ func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer, roles.RuntimeEpicPlanReviewer); err != nil {
+	if err := requireOneOfRoles(agentID, roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer, roles.RuntimeEpicPlanReviewer, roles.RuntimeUSReviewer); err != nil {
 		return nil, err
 	}
 

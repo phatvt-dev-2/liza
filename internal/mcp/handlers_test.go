@@ -2017,13 +2017,13 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "submit_verdict rejects coder",
 			handler: server.handleSubmitVerdict,
 			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "coder-1"},
-			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer] roles",
+			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
 		},
 		{
 			name:    "wt_merge rejects coder",
 			handler: server.handleWtMerge,
 			params:  map[string]any{"task_id": "task-1", "agent_id": "coder-1"},
-			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer] roles",
+			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
 		},
 		{
 			name:    "add_tasks rejects coder",
@@ -2073,6 +2073,18 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "epic-plan-reviewer-1"},
 			wantErr: "submit verdict failed", // passes role check, fails downstream
 		},
+		{
+			name:    "submit_verdict accepts us-reviewer (passes role check)",
+			handler: server.handleSubmitVerdict,
+			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "us-reviewer-1"},
+			wantErr: "submit verdict failed", // passes role check, fails downstream
+		},
+		{
+			name:    "wt_merge accepts us-reviewer (passes role check)",
+			handler: server.handleWtMerge,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "us-reviewer-1"},
+			wantErr: "merge failed", // passes role check, fails downstream
+		},
 		// Malformed agent ID cases
 		{
 			name:    "claim_task rejects malformed ID (no number)",
@@ -2090,7 +2102,7 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:    "submit_verdict rejects unknown role",
 			handler: server.handleSubmitVerdict,
 			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "foobar-1"},
-			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer] roles",
+			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
 		},
 	}
 

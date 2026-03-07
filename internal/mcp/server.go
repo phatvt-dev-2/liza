@@ -520,7 +520,7 @@ func (s *Server) registerMutationTools() {
 	// liza_submit_verdict tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_submit_verdict",
-		Description: "Submit review verdict (APPROVED or REJECTED). Requires code-reviewer, code-plan-reviewer, or epic-plan-reviewer role.",
+		Description: "Submit review verdict (APPROVED or REJECTED). Requires code-reviewer, code-plan-reviewer, epic-plan-reviewer, or us-reviewer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -678,7 +678,7 @@ func (s *Server) registerComplexOperations() {
 	// liza_wt_merge tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_wt_merge",
-		Description: "Merge approved task to integration branch. Requires code-reviewer, code-plan-reviewer, or epic-plan-reviewer role.",
+		Description: "Merge approved task to integration branch. Requires code-reviewer, code-plan-reviewer, epic-plan-reviewer, or us-reviewer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
