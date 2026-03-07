@@ -1,12 +1,92 @@
 # Liza
 
-A peer-supervised multi-agent coding system (MAS) built on behavioral contracts.
+An Adversarial Multi-Agent Coding System built on behavioral contracts.
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/liza-mas/liza)
 
+## What is Liza?
+
+Liza is simultaneously a **Pairing** and **Multi-Agent System** (MAS) optimized for thoughtfulness, trust and auditability, leading to faster execution thanks to fewer cycles.
+
+Main characteristics:
+- Built upon a **[behavioral contract](contracts/)** (Harness Engineering) and advanced [skills](skills/).
+- **Autonomous Spec-driven Coding System**:
+  - From vague spec to code and tests, with intermediate artifacts (epics, US, implementation plans)
+    that are AI generated but human reviewed.
+  - Automatic task decomposition based on complexity with dependency management for parallel execution.
+  - Multi-sprints between which the user operates.
+- **Adversarial** architecture:
+  - Every activity is dual — a doer and a reviewer.
+  - They interact like a developer and a PR reviewer do — submission, feedback comments, verdict, revised submission, etc.
+- **Hybrid hardened architecture**:
+  - LLM agents wrapped by code-enforced supervisors.
+    The supervisor does the **deterministic code-enforced actions** (worktree management, merges, TDD enforcement, etc),
+    leaving the **judgment to the agent** who acts through Liza's **MCP tools**.
+  - Agent logs recording for automatic analysis and continuous improvements (token optimization, ...)
+- **Structured workflow**:
+  - Coordination is performed via an auditable YAML **blackboard** (the Kanban board of the agents with full historized state details).
+  - Agents don't discover work — they receive pre-claimed tasks in bootstrap prompt. Eliminates race conditions and cognitive overhead.
+
+![Liza's Console](docs/img/liza-console.png)
+
+Example of a task on the blackboard:
+```yaml
+    - id: code-planning-1-code-3
+      type: coding
+      role_pair: coding-pair
+      description: Role infrastructure recognizes the 4 new roles with correct runtime/workflow mapping.
+      status: MERGED
+      priority: 1
+      assigned_to: coder-2
+      base_commit: e7625ed69318836dd495b22855df3a8b91fe32b5
+      iteration: 1
+      review_commit: 9d9254b893af477fc34f48063169634d200fa332
+      approved_by: code-reviewer-1
+      merge_commit: 2fa6399223262df6a87c6b1354dfc882b73114c5
+      lease_expires: 2026-03-06T01:47:22.075108537Z
+      spec_ref: specs/plans/sub-pipelines-phase2.md
+      done_when: ToWorkflow("epic-planner") returns "epic_planner" (and all 4 pairs); IsValidRuntime("us-writer") returns true; AllRuntime() returns 9 roles; Tests pass
+      scope: internal/roles/roles.go, internal/roles/roles_test.go, internal/models/state.go
+      created: 2026-03-06T01:17:00.99638669Z
+      history:
+        - time: 2026-03-06T01:17:22.075108537Z
+          event: claimed
+          agent: coder-2
+        - time: 2026-03-06T01:19:30.131578505Z
+          event: pre_execution_checkpoint
+          agent: coder-2
+          files_to_modify:
+            - internal/roles/roles.go
+            - internal/roles/roles_test.go
+            - internal/models/state.go
+          intent: Add 4 new role constants (epic-planner, epic-plan-reviewer, us-writer, us-reviewer) with runtime↔workflow mapping, update AllRuntime()/AllWorkflow() to return 9 roles, and add Role* aliases in models/state.go.
+          validation_plan: 'Run `go test ./internal/roles/ ./internal/models/` in worktree. Verify: ToWorkflow("epic-planner")→"epic_planner" for all 4 new roles, IsValidRuntime("us-writer")→true, AllRuntime() returns 9 roles.'
+        - time: 2026-03-06T01:22:05.371651393Z
+          event: submitted_for_review
+          agent: coder-2
+        - time: 2026-03-06T01:24:30.366073081Z
+          event: approved
+          agent: code-reviewer-1
+        - time: 2026-03-06T03:06:35.560908548+01:00
+          event: merged
+          agent: code-reviewer-1
+          commit: 2fa6399223262df6a87c6b1354dfc882b73114c5
+          tests_ran: false
+```
+
+The complete **[Vision](<specs/build/1 - Vision.md>)** of Liza.
+
+## Getting Started
+
+- **Pairing**: See [Pairing Guide](docs/USAGE_PAIRING.md) — human-agent collaboration under contract
+- **Multi-Agent (Liza)**: See [USAGE](docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
+- **Reference**: [Configuration](docs/CONFIGURATION.md) · [Recipes](docs/RECIPES.md) · [Troubleshooting](docs/TROUBLESHOOTING.md)
+
+---
+
 ## Features
 
-- **Behavioral Contract**: 55+ LLM failure modes mapped to specific countermeasures, operating as an explicit state machine with tiered rules
+- **Behavioral Contract**: 55+ LLM failure modes mapped to specific countermeasures, operating as an explicit state machine with tiered rules. Pairing sub-modes — Autonomous, User Duck, Agent Duck, True Pairing, Spike.
 - **Multi-Provider**: Supports claude, codex, kimi, mistral, and gemini CLIs
 - **Blackboard Pattern**: All agents read/write to a central `state.yaml` with atomic file locking
 - **Git Worktrees**: Each task gets an isolated worktree for parallel development
@@ -15,7 +95,11 @@ A peer-supervised multi-agent coding system (MAS) built on behavioral contracts.
 - **MCP Server**: Structured API access to Liza operations for agents
 - **Code-Enforced Guardrails**: Role boundaries and TDD gates enforced in Go, not just prompts
 - **Project Guardrails**: Optional `GUARDRAILS.md` for project-specific constraints using the same Tier 0-3 system
-- **Skills System**: 17 composable skill protocols (debugging, code review, testing, architecture, etc.) agents load on demand
+- **Declarative Sub-Pipelines**: YAML-driven pipeline configuration with auto-execute transitions, replacing hardcoded role-pair logic
+- **Specification Phase**: Six roles (epic-planner, epic-plan-reviewer, us-writer, us-reviewer, code-planner, code-plan-reviewer) for full spec elaboration before coding sprints
+- **Structured Task Output**: Planning agents persist typed deliverables for downstream consumption
+- **Rebase Conflict Detection**: Catches integration failures at submission time with actionable feedback
+- **Skills System**: 20 composable skill protocols (debugging, code review, testing, architecture, spec writing, etc.) agents load on demand
 - **Multi-Sprint Support**: Sprint numbering, checkpoint summaries, and history across sprints
 - **Circuit Breaker**: Pattern detection (loops, repeated failures) triggers automatic sprint checkpoint
 - **Crash Recovery**: `recover-agent` and `recover-task` commands for idempotent cleanup after hard crashes
@@ -61,7 +145,9 @@ and may use any skill they consider relevant to adapt to the situation.
 
 **Liza has the built-in capability to do things right on the first pass.**
 
-As of today, Liza has only 3 roles. More to come: Spec Writer / Spec Reviewer, etc.
+Liza has 9 roles organized in two pipeline phases:
+- **Specification phase**: orchestrator, epic-planner, epic-plan-reviewer, us-writer, us-reviewer
+- **Coding phase**: orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -70,69 +156,70 @@ As of today, Liza has only 3 roles. More to come: Spec Writer / Spec Reviewer, e
 │               kills agents, pauses system)                  │
 └─────────────────────────────────────────────────────────────┘
                               │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-    ┌────────────┐       ┌──────────┐        ┌──────────┐
-    │Orchestrator│       │  Coder   │        │ Reviewer │
-    │            │       │          │        │          │
-    │ Decomposes │       │ Claims   │        │ Examines │
-    │ goal into  │       │ tasks,   │        │ work,    │
-    │ tasks,     │       │ iterates │        │ approves │
-    │ rescopes   │       │ until    │        │ or       │
-    │ on failure │       │ approved │        │ rejects, │
-    │            │       │  review  │        │ merges   │
-    └─────┬──────┘       └────┬─────┘        └────┬─────┘
-          │                   │                   │
-          └───────────────────┴───────────────────┘
-                              │
-                              ▼
-                     ┌─────────────────┐
-                     │   .liza/        │
-                     │   state.yaml    │  ← blackboard
-                     │   log.yaml      │  ← activity history
-                     │   alerts.log    │  ← watch daemon output
-                     │   archive/      │  ← terminal-state tasks
-                     └─────────────────┘
-                              │
-                              ▼
-                     ┌─────────────────┐
-                     │  .worktrees/    │
-                     │  task-1/        │  ← isolated workspaces
-                     │  task-2/        │
-                     └─────────────────┘
+    ┌─────────── Specification Phase ──────────┐
+    │                                          │
+    │  Orchestrator (decomposes & rescopes)    │
+    │  Epic Planner ←→ Epic Plan Reviewer      │
+    │  US Writer    ←→ US Reviewer             │
+    │                                          │
+    └──────────────────┬───────────────────────┘
+                       │ liza proceed
+    ┌──────────── Coding Phase ────────────────┐
+    │                                          │
+    │  Orchestrator (decomposes & rescopes)    │
+    │  Code Planner ←→ Code Plan Reviewer      │
+    │  Coder        ←→ Code Reviewer           │
+    │                                          │
+    └──────────────────┬───────────────────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │   .liza/        │
+              │   state.yaml    │  ← blackboard
+              │   log.yaml      │  ← activity history
+              │   alerts.log    │  ← watch daemon output
+              │   archive/      │  ← terminal-state tasks
+              └─────────────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │  .worktrees/    │
+              │  task-1/        │  ← isolated workspaces
+              │  task-2/        │
+              └─────────────────┘
 ```
 
 See [Architecture](specs/architecture).
 
 ### Task Lifecycle
 
+Each role pair follows the same intra-pair flow (concrete state names are role-pair-specific, e.g. `DRAFT_CODE`, `IMPLEMENTING_CODE`):
+
 ```
-DRAFT → READY → IMPLEMENTING → READY_FOR_REVIEW → REVIEWING → APPROVED → MERGED
-                      │ ↑              ↑                ↓          │
-                      │ └──────────────┼─────── REJECTED ──┘       │
-                      │                │                            ↓
-                      ├──> BLOCKED ────┤                 INTEGRATION_FAILED
-                      │    ├──> SUPERSEDED
-                      │    └──> ABANDONED
-                      │
-                      └──> READY (release claim)
+initial → executing → submitted → reviewing → approved → MERGED
+             │ ↑                      ↓           │
+             │ └────── rejected ──────┘           │
+             │                                     ↓
+             ├──> BLOCKED               INTEGRATION_FAILED
+             │    ├──> SUPERSEDED
+             │    └──> ABANDONED
+             │
+             └──> initial (release claim)
 ```
----
 
-## Getting Started
+Inter-pair transitions (`liza proceed`) create downstream tasks between sprints:
 
-### Hands-on
+```
+  Spec phase                                    Coding phase
 
-- **Pairing**: See [Pairing Guide](docs/USAGE_PAIRING.md) — human-agent collaboration under contract
-- **Multi-Agent (Liza)**: See [USAGE](docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
-- **Reference**: [Configuration](docs/CONFIGURATION.md) · [Recipes](docs/RECIPES.md) · [Troubleshooting](docs/TROUBLESHOOTING.md)
-
-### Deep understanding
-
-Liza is simultaneously a Pairing and Multi-Agent System optimized for thoughtfulness, trust and auditability, leading to faster execution thanks to fewer cycles.
-- The contract lives in [contracts/](contracts/). It supports three modes: Pairing (with sub-modes — Autonomous, User Duck, Agent Duck, True Pairing, Spike), MAS, and Subagent (lightweight mode for delegated work).
-- The complete [Vision](<specs/build/1 - Vision.md>) of Liza
-
+  Epic Planner ─approved─► MERGED               Code Planner ─approved─► MERGED
+       │ liza proceed (epic-to-us)                   │ liza proceed (code-plan-to-coding)
+       ▼                                             ▼
+  US Writer ─approved─► MERGED                  Coder ─approved─► MERGED
+       │ liza proceed (us-to-coding)
+       ▼
+  Code Planner (coding phase)
+```
 ---
 
 ## Why This Exists
@@ -225,6 +312,7 @@ liza validate                                       # Validate state
 liza get tasks                                      # Query tasks
 liza status                                         # Dashboard overview
 liza watch                                          # Monitor for anomalies
+liza proceed                                        # Transition between pipeline phases
 liza pause / liza resume                            # Human intervention
 liza stop / liza start                              # System control
 liza sprint-checkpoint                              # Sprint checkpoint
@@ -271,19 +359,23 @@ See [RELEASE.md](RELEASE.md) for maintainer release workflow.
 
 The contract in Pairing mode is battle-tested for making the **agents write most of the production code (~90%) under human supervision**.
 
-The Multi-Agent mode is an **alpha version** with ongoing refinement. The main limitation to address real projects is
-the lack of additional role pairs.
+The Multi-Agent mode is an **alpha version** with ongoing refinement. The specification phase pipeline is embedded but not yet the default entry point — use `--config` and `--entry-point` flags with `liza init` to activate it.
+
+**Implemented roles:**
+- Orchestrator (decomposes goal into tasks)
+- Epic Planner / Epic Plan Reviewer
+- US Writer / US Reviewer
+- Code Planner / Code Plan Reviewer
+- Coder / Code Reviewer
 
 **Planned role pairs:**
-- Spec Writer / Spec Reviewer
 - Architect / Architecture Reviewer
 - Tech Writer / Doc Reviewer
-- [Orchestrator] / Plan Reviewer
 
 **Roadmap:**
-- Specification phase pipeline (Requirement Orchestrator → Spec Writer → Spec Reviewer) before coding sprints
+- Architecture role pair — define architecture from specs for coders to follow
 - Context handoff as blackboard event — structured positive/negative findings on every task completion
-- Sprint Analyzer role — steering interface for the human at sprint boundaries
+- Sprint Analyzer role — analyze agent logs at sprint boundaries, capitalize on patterns via lesson-capture
 - Deterministic pre/post hooks at role transitions — mechanical checks before spawning agents and before their handoff
 - Orchestrator-routed model selection — assign tasks to models based on estimated complexity
 
