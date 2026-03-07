@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
@@ -55,8 +56,8 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 	if orchestratorID == "" {
 		orchestratorID = "orchestrator-1"
 	}
-	if input.ID == "" {
-		return nil, fmt.Errorf("task ID is required")
+	if err := paths.ValidateTaskID(input.ID); err != nil {
+		return nil, fmt.Errorf("invalid task ID: %w", err)
 	}
 	if input.Description == "" {
 		return nil, fmt.Errorf("description is required")

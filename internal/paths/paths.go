@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -244,27 +245,27 @@ func ValidatePath(path string) error {
 	return nil
 }
 
-// ValidateTaskID checks that a task ID is safe for use in file paths and branch names.
-// Rejects path traversal attempts (../, /, \) and empty IDs.
-// Allows alphanumeric characters, hyphens, underscores, and dots (but not leading dots).
+// safeTaskIDRe enforces a strict charset for task IDs: alphanumeric, hyphens,
+// underscores, and dots (no leading dot). This ensures safety for file paths,
+// branch names, and interpolation into prompt text (including JSON fragments).
+var safeTaskIDRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+
+// ValidateTaskID checks that a task ID is safe for use in file paths, branch names,
+// and prompt interpolation. Rejects path traversal, empty IDs, and any character
+// outside [a-zA-Z0-9._-].
 func ValidateTaskID(taskID string) error {
 	if taskID == "" {
 		return fmt.Errorf("task ID cannot be empty")
 	}
 
-	// Reject path separators and traversal
-	if strings.Contains(taskID, "/") || strings.Contains(taskID, "\\") || strings.Contains(taskID, "..") {
-		return fmt.Errorf("task ID contains path separator or traversal: %q", taskID)
+	// Strict charset check — must start with alphanumeric, then [a-zA-Z0-9._-]
+	if !safeTaskIDRe.MatchString(taskID) {
+		return fmt.Errorf("task ID contains invalid characters (allowed: a-z A-Z 0-9 . _ -): %q", taskID)
 	}
 
-	// Reject leading dot (hidden files)
-	if strings.HasPrefix(taskID, ".") {
-		return fmt.Errorf("task ID cannot start with dot: %q", taskID)
-	}
-
-	// Reject if filepath.Base changes the value (catches edge cases)
-	if filepath.Base(taskID) != taskID {
-		return fmt.Errorf("task ID is not a simple name: %q", taskID)
+	// Reject path traversal (.. sequences)
+	if strings.Contains(taskID, "..") {
+		return fmt.Errorf("task ID contains path traversal: %q", taskID)
 	}
 
 	return nil

@@ -52,6 +52,7 @@ func buildPrompt(state *models.State, config SupervisorConfig, taskID string) (s
 	baseConfig := prompts.BasePromptConfig{
 		Role:        config.Role,
 		AgentID:     config.AgentID,
+		TaskID:      taskID,
 		SpecsDir:    config.SpecsDir,
 		ProjectRoot: config.ProjectRoot,
 		StatePath:   config.StatePath,

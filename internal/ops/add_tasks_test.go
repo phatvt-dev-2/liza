@@ -22,7 +22,7 @@ func TestAddTask_Validation(t *testing.T) {
 		{
 			name:        "empty task ID",
 			input:       AddTaskInput{Description: "d", SpecRef: "s", DoneWhen: "w", Scope: "sc", Priority: 1},
-			errContains: "task ID is required",
+			errContains: "invalid task ID",
 		},
 		{
 			name:        "empty description",

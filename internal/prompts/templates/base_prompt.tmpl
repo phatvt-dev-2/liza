@@ -68,7 +68,11 @@ EXIT CODES:
 TIMESTAMPS: YYYY-MM-DDTHH:MM:SSZ (ISO 8601 UTC). Generate: date -u +%Y-%m-%dT%H:%M:%SZ
 
 FIRST ACTIONS:
-1. Query your assigned task: liza_get {"query": "tasks/<your-task-id>"}
+{{- if .TaskID}}
+1. Query your assigned task: liza_get {"query": "tasks/{{.TaskID}}"}
+{{- else}}
+1. Query workspace state: liza_get {"query": "tasks"}
+{{- end}}
 2. Read the goal spec: {{.GoalSpecRef}}
 3. Read lessons/agents/README.md (if it exists) — project-specific operational lessons
 4. Enforce GUARDRAILS.md at project root (if it exists) — project-specific mandatory constraints

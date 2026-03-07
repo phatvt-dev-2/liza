@@ -23,6 +23,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			config: BasePromptConfig{
 				Role:        "code-coder",
 				AgentID:     "coder-1",
+				TaskID:      "task-1",
 				SpecsDir:    "/project/specs",
 				ProjectRoot: "/project",
 				StatePath:   "/project/.liza/state.yaml",
@@ -58,7 +59,7 @@ func TestBuildBasePrompt(t *testing.T) {
 				"EXIT CODES:",
 				"TIMESTAMPS:",
 				"FIRST ACTIONS:",
-				"Query your assigned task: liza_get",
+				`Query your assigned task: liza_get {"query": "tasks/task-1"}`,
 				"Read the goal spec: specs/vision.md",
 				"lessons/agents/README.md",
 				"GUARDRAILS.md",
@@ -106,6 +107,10 @@ func TestBuildBasePrompt(t *testing.T) {
 			wantContains: []string{
 				"You are a Liza orchestrator agent",
 				"QUERY TOOLS",
+				`Query workspace state: liza_get {"query": "tasks"}`,
+			},
+			wantNotContain: []string{
+				"Query your assigned task",
 			},
 		},
 	}
@@ -930,6 +935,7 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 	config := BasePromptConfig{
 		Role:        "code-coder",
 		AgentID:     "coder-1",
+		TaskID:      "task-42",
 		SpecsDir:    "/project/specs",
 		ProjectRoot: "/project",
 		StatePath:   "/project/.liza/state.yaml",
@@ -1046,7 +1052,7 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 	// --- FIRST ACTIONS: boot sequence ---
 	assertSection("first-actions", []string{
 		"FIRST ACTIONS:",
-		"Query your assigned task: liza_get",
+		`Query your assigned task: liza_get {"query": "tasks/task-42"}`,
 		"Read the goal spec: specs/vision.md",
 		"lessons/agents/README.md",
 		"GUARDRAILS.md",

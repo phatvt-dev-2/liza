@@ -14,6 +14,7 @@ import (
 type BasePromptConfig struct {
 	Role        string
 	AgentID     string
+	TaskID      string // empty for orchestrator
 	SpecsDir    string
 	ProjectRoot string
 	StatePath   string
