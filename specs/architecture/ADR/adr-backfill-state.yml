@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-02-22T15:05:34Z"
+last_updated: "2026-03-07T16:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -427,9 +427,118 @@ clusters:
       limitations: "New requirements must be implemented in Go, not just added to prompts"
     note: "Part 3 of context optimization trilogy (26, 27, 30)"
 
+  # --- Wave 2: 2026-02-22 to 2026-03-07 ---
+
+  - id: 31
+    title: "Configurable Post-Worktree Command"
+    commit_shas: ["c2aba97", "0a53d76", "cc20f98", "7f682dd"]
+    date_range: "2026-02-27 to 2026-03-07"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0031-configurable-post-worktree-command.md"
+    user_context:
+      problem: "Hardcoded make sync-embedded prevented Liza from working on other projects; 7 wasted turns per agent"
+      alternatives: "Auto-detect build system — unreliable"
+      rationale: "Configurable hook in state.yaml; permissive failure strategy (warn, analyze logs in batches)"
+      limitations: "User must set flag at init time; failures are silent by design"
+
+  - id: 32
+    title: "Project-Specific Guardrails"
+    commit_shas: ["a29de97", "0a53d76"]
+    date_range: "2026-03-01 to 2026-03-05"
+    confidence: 0.85
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0032-project-specific-guardrails.md"
+    user_context:
+      problem: "Need project-specific rules; contract is project-agnostic; lessons had no enforcement"
+      alternatives: "state.yaml (not persistent), CORE.md sections (violates agnosticism)"
+      rationale: "Separate GUARDRAILS.md with same tier system — enforcement without contract pollution"
+      limitations: "Enforcement is prompt-based, not code-enforced; only G1.1 exists so far"
+
+  - id: 33
+    title: "Planner to Orchestrator Role Rename"
+    commit_shas: ["532cb37", "6692dad"]
+    date_range: "2026-03-02"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0033-orchestrator-role-rename.md"
+    user_context:
+      problem: "Monolithic Planner was a first iteration; always intended separation between orchestration and planning"
+      alternatives: "Supervisor (taken), Coordinator/Dispatcher (too narrow)"
+      rationale: "Orchestrator matches actual responsibilities; frees 'planner' for domain-specific planning roles"
+      limitations: "Breaking change to existing blackboard files (agent IDs)"
+
+  - id: 34
+    title: "Spec-Writing and User-Story-Writing Skills"
+    commit_shas: ["f73b8a6", "816e8f3"]
+    date_range: "2026-03-02 to 2026-03-03"
+    confidence: 0.85
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0034-spec-and-story-writing-skills.md"
+    user_context:
+      problem: "Phase 2 roles need structured know-how for spec/story production"
+      alternatives: "Embed in prompt templates — mixes instructions and know-how"
+      rationale: "Skills = know-how, prompts = instructions; preparatory step before introducing roles"
+      limitations: "Loose-coupled — agents must load skills explicitly"
+
+  - id: 35
+    title: "Declarative Sub-Pipelines"
+    commit_shas: ["b54dcdc", "326d101", "c017d9a", "9f2db05", "a14e6f8", "1817f4c", "e9a5de1", "3847f5f", "b1eb028", "a106ab6", "61b4697", "24eea7a", "3210c3a", "16385d9", "b39acee", "540026e", "3e85eed", "9ef9dd0", "5346ec0", "a1c160c"]
+    date_range: "2026-03-02 to 2026-03-07"
+    confidence: 1.0
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0035-declarative-sub-pipelines.md"
+    user_context:
+      problem: "Hardcoded state machine doesn't scale; more sub-pipelines planned (architecture, integration, security)"
+      alternatives: "Extend hardcoded states — unmanageable code duplication across ~15 call sites"
+      rationale: "Generic mechanisms tested once; YAML makes pipeline structure visible and reviewable"
+      limitations: "Validation at load time not compile time; legacy paths maintained for backward compat"
+    note: "Supersedes state machine parts of ADR-0019 and ADR-0020"
+
+  - id: 36
+    title: "Structured Task Output and Scope Extensions"
+    commit_shas: ["45150db", "8e75dee", "df10fe7"]
+    date_range: "2026-03-05 to 2026-03-06"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0036-structured-task-output-and-scope-extensions.md"
+    user_context:
+      problem: "output[]: generic mechanism for sub-task creation. scope_extensions: legit scope negotiation (no plan is 100% accurate)"
+      alternatives: "Free-form descriptions (loses structure); reject-and-replan (too rigid)"
+      rationale: "Structured output enables per-subtask transitions; scope extensions mirror real-world scope negotiation"
+      limitations: "Output schema is fixed (4 fields); scope extensions are advisory"
+
+  - id: 37
+    title: "Rebase Conflict Detection at Submission"
+    commit_shas: ["d451e14", "a89a650"]
+    date_range: "2026-03-05 to 2026-03-06"
+    confidence: 0.85
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0037-rebase-conflict-detection.md"
+    user_context:
+      problem: "Agents wasting turns on unreliable conflict resolution"
+      alternatives: "Let agents resolve — unreliable and expensive"
+      rationale: "Deterministic operations should not be delegated to agents; detect, abort, re-queue"
+      limitations: "Re-claiming agent redoes work; human must merge conflicting work to unblock"
+
+  - id: 38
+    title: "Phase 2 Roles"
+    commit_shas: ["8a29623", "fd4ddac", "1d71c1b", "9d9254b", "b70af75", "1cce045", "1707c90", "15324c6", "22fbcd0", "0998ced", "789c297", "6cce9fc"]
+    date_range: "2026-03-04 to 2026-03-07"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0038-phase-2-roles.md"
+    user_context:
+      problem: "Need specialized roles with dedicated supervisor handling, not just different prompts"
+      alternatives: "Reuse coder/reviewer with different prompts — insufficient for mechanical differences"
+      rationale: "Each role = prompt + supervisor handling; adversarial pair pattern scales to any activity"
+      limitations: "9 prompt templates to maintain; new roles require template AND supervisor wiring"
+    note: "Depends on ADR-0033, ADR-0034, ADR-0035"
+
 processing_cursor:
-  step: "ordering"
-  substep: "complete"
+  step: "cluster_analysis"
+  substep: "high_confidence_complete"
+  note: "Dropped medium-confidence candidates to avoid sequence gaps; no further candidates pending"
 
 configuration:
   adr_output_dir: "specs/architecture/ADR"

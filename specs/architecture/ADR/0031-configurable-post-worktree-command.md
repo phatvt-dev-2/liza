@@ -1,0 +1,65 @@
+# 31 - Configurable Post-Worktree Command
+
+## Context and Problem Statement
+
+Agent worktrees for Go projects failed builds because embedded assets (e.g., `internal/embedded/claude-settings.json`) were missing. The initial fix hardcoded `make sync-embedded` in `CreateWorktree()`, but this prevented Liza from working on another project than itself.
+
+The problem surfaced when agent log analysis revealed ~7 wasted turns per session where agents tried to diagnose and work around the missing assets, often blocked by sandbox permissions.
+
+## Considered Options
+
+1. **Auto-detect build system** — unreliable across language ecosystems.
+2. **Configurable hook** — user specifies the command at `liza init` time.
+
+## Decision Outcome
+
+Chose **Option 2**: replace the hardcoded call with a configurable `PostWorktreeCmd` field.
+
+### Architecture
+
+**Config schema** (`state.yaml`):
+```yaml
+config:
+  post_worktree_cmd: "make sync-embedded"  # nil if not specified
+```
+
+**CLI surface:**
+```
+liza init --post-worktree-cmd "make sync-embedded"
+```
+
+**Execution model:**
+- Command runs via `sh -c` in the worktree directory
+- `RunPostWorktreeCmd()` is idempotent — safe on both new and existing worktrees
+- Failures produce warnings, never block task claiming (permissive strategy)
+- Applied at all worktree creation points: direct creation, task claim, recovery, rejection reclaims
+
+**Trust model:** Same boundary as Makefile/CI config — write access to `state.yaml` equals write access to the repository.
+
+**Key files:**
+- `internal/models/state.go` — `Config.PostWorktreeCmd *string`
+- `internal/ops/wt_create.go` — `RunPostWorktreeCmd()` + hook calls
+- `internal/ops/claim_task.go` — post-command after worktree provisioning
+- `internal/agent/worktree_check.go` — reviewer worktree recovery
+
+### Rationale
+
+Agents should not waste turns on problems that can be solved deterministically via configuration. The permissive failure strategy (warn, don't block) reflects the current operational approach: let agents proceed and analyze logs in batches for systemic issues.
+
+### Implementation Notes
+
+The decision also triggered GUARDRAILS.md rule G1.1 (ADR-0032), which codifies the broader principle: no Liza-specific hardcoding in runtime code.
+
+### Consequences
+
+**Positive:**
+- Liza becomes stack-agnostic — works for any language/framework
+- Eliminates ~7 wasted agent turns per session on Go projects
+- Single configuration point for project-specific worktree setup
+
+**Limitations accepted:**
+- User must know to set the flag at init time
+- Command failures are silent (by design) — requires log analysis to detect
+
+---
+*Reconstructed from commits c2aba97, 0a53d76, cc20f98, 7f682dd (2026-02-27 to 2026-03-07)*
