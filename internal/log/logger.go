@@ -1,4 +1,3 @@
-// Package log provides structured logging to log.yaml with lock-guarded append operations.
 package log
 
 import (
@@ -63,12 +62,10 @@ func (l *Logger) WithLockTimeout(timeout time.Duration) *Logger {
 // Append adds a log entry to the log file.
 // The timestamp is automatically set to the current UTC time.
 func (l *Logger) Append(entry Entry) error {
-	// Validate entry
 	if err := entry.Validate(); err != nil {
 		return fmt.Errorf("invalid entry: %w", err)
 	}
 
-	// Set timestamp if not already set
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now().UTC()
 	}
@@ -155,10 +152,7 @@ func (l *Logger) GetLastTimestamp() (time.Time, error) {
 	}
 
 	size := info.Size()
-	window := defaultTailReadBytes
-	if size < window {
-		window = size
-	}
+	window := min(defaultTailReadBytes, size)
 
 	for {
 		start := size - window
@@ -189,13 +183,7 @@ func (l *Logger) GetLastTimestamp() (time.Time, error) {
 		if start == 0 || window >= maxTailReadBytes || window >= size {
 			break
 		}
-		window *= 2
-		if window > maxTailReadBytes {
-			window = maxTailReadBytes
-		}
-		if window > size {
-			window = size
-		}
+		window = min(window*2, maxTailReadBytes, size)
 	}
 
 	return time.Time{}, fmt.Errorf("failed to parse last log entry from bounded tail window")
