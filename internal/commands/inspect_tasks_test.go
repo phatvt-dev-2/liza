@@ -358,7 +358,7 @@ func TestTaskInfo_ComputedFields(t *testing.T) {
 		},
 	}
 
-	info := buildtaskInfo(&task)
+	info := buildTaskInfo(&task)
 
 	// Check that computed fields are set
 	if info.Age == "" {
@@ -542,7 +542,7 @@ func TestTaskInfo_DependenciesField(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info := buildtaskInfo(tt.task)
+			info := buildTaskInfo(tt.task)
 
 			if len(info.DependsOn) != tt.wantDepsCount {
 				t.Errorf("expected %d dependencies, got %d", tt.wantDepsCount, len(info.DependsOn))

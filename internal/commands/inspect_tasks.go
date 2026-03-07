@@ -43,24 +43,16 @@ type taskInfo struct {
 
 // inspectTasks lists all tasks or filters by criteria
 func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
-	// Get all tasks
-	tasks := state.Tasks
+	filtered := filterTasks(state.Tasks, opts)
 
-	// Apply filters
-	filtered := filterTasks(tasks, opts)
-
-	// Build taskInfo with computed fields
 	taskInfos := make([]taskInfo, len(filtered))
 	for i, task := range filtered {
-		taskInfos[i] = buildtaskInfo(&task)
+		taskInfos[i] = buildTaskInfo(&task)
 	}
 
-	// If called internally (for composition), return structured data
 	if opts.Internal {
 		return taskInfos, nil
 	}
-
-	// Otherwise, format for output
 	return formatTasksOutput(taskInfos, opts.Format)
 }
 
@@ -71,20 +63,15 @@ func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (
 		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
 	}
 
-	// Build taskInfo with computed fields
-	info := buildtaskInfo(foundTask)
-
-	// If called internally, return structured data
+	info := buildTaskInfo(foundTask)
 	if opts.Internal {
 		return info, nil
 	}
-
-	// Otherwise, format for output
 	return formatTaskOutput(info, opts.Format)
 }
 
-// buildtaskInfo converts a Task to taskInfo with computed fields
-func buildtaskInfo(task *models.Task) taskInfo {
+// buildTaskInfo converts a Task to taskInfo with computed fields
+func buildTaskInfo(task *models.Task) taskInfo {
 	info := taskInfo{
 		ID:              task.ID,
 		Description:     task.Description,
@@ -104,15 +91,9 @@ func buildtaskInfo(task *models.Task) taskInfo {
 		Output:          task.Output,
 	}
 
-	// Compute age (time since created)
-	age := calculateTaskAge(task)
-	info.Age = formatDuration(age)
+	info.Age = formatDuration(calculateTaskAge(task))
+	info.TimeInStatus = formatDuration(calculateTimeInStatus(task))
 
-	// Compute time in current status
-	timeInStatus := calculateTimeInStatus(task)
-	info.TimeInStatus = formatDuration(timeInStatus)
-
-	// Format lease expiry if present
 	if task.LeaseExpires != nil {
 		remaining := time.Until(*task.LeaseExpires)
 		formatted := formatDuration(remaining)
@@ -124,19 +105,15 @@ func buildtaskInfo(task *models.Task) taskInfo {
 
 // calculateTimeInStatus calculates how long the task has been in its current status
 func calculateTimeInStatus(task *models.Task) time.Duration {
-	// Find the most recent status transition in history
-	// (iterate backwards to find most recent first)
 	for i := len(task.History) - 1; i >= 0; i-- {
 		entry := task.History[i]
 		switch entry.Event {
 		case "claimed", "submitted_for_review", "rejected", "approved",
 			"merged", "blocked", "abandoned", "superseded", "integration_failed":
-			// Found the most recent status change - return duration since then
 			return time.Since(entry.Time)
 		}
 	}
 
-	// If no status change event found, use creation time as fallback
 	return time.Since(task.Created)
 }
 
@@ -145,19 +122,14 @@ func filterTasks(tasks []models.Task, opts inspectTasksOptions) []models.Task {
 	var filtered []models.Task
 
 	for _, task := range tasks {
-		// Apply status filter
 		if opts.StatusFilter != "" && string(task.Status) != opts.StatusFilter {
 			continue
 		}
-
-		// Apply assigned_to filter
 		if opts.AssignedToFilter != "" {
 			if task.AssignedTo == nil || *task.AssignedTo != opts.AssignedToFilter {
 				continue
 			}
 		}
-
-		// Apply blocked filter
 		if opts.BlockedFilter {
 			if task.Status != models.TaskStatusBlocked {
 				continue
@@ -172,7 +144,6 @@ func filterTasks(tasks []models.Task, opts inspectTasksOptions) []models.Task {
 
 // formatTasksOutput formats a list of tasks for output
 func formatTasksOutput(tasks []taskInfo, format string) (string, error) {
-	// Default to table format
 	if format == "" {
 		format = "table"
 	}
@@ -185,7 +156,6 @@ func formatTasksOutput(tasks []taskInfo, format string) (string, error) {
 	case "table":
 		return formatTasksTable(tasks), nil
 	case "value":
-		// Value format doesn't make sense for multiple tasks
 		return "", fmt.Errorf("value format not supported for task lists (use json, yaml, or table)")
 	default:
 		return "", fmt.Errorf("invalid format: %s", format)
@@ -194,7 +164,6 @@ func formatTasksOutput(tasks []taskInfo, format string) (string, error) {
 
 // formatTaskOutput formats a single task for output
 func formatTaskOutput(task taskInfo, format string) (string, error) {
-	// Default to value format for single task
 	if format == "" {
 		format = "value"
 	}
@@ -207,7 +176,6 @@ func formatTaskOutput(task taskInfo, format string) (string, error) {
 	case "value":
 		return formatTaskValue(task), nil
 	case "table":
-		// Single task in table format
 		return formatTasksTable([]taskInfo{task}), nil
 	default:
 		return "", fmt.Errorf("invalid format: %s", format)
