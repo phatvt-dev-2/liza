@@ -30,72 +30,13 @@ func SetupCommand(targetDir string, force bool, stdin io.Reader) error {
 	}
 
 	planned := embedded.PlanGlobalFiles(targetDir)
+	existing, fresh := partitionByExistence(planned)
 
-	// Partition into new vs existing files
-	var existing, fresh []string
-	for _, p := range planned {
-		if _, err := os.Stat(p); err == nil {
-			existing = append(existing, p)
-		} else {
-			fresh = append(fresh, p)
-		}
+	skipFiles, err := confirmOverwrites(existing, fresh, force, targetDir, stdin)
+	if err != nil {
+		return err
 	}
 
-	var reader *bufio.Reader
-
-	// If files already exist, require --force and confirmation
-	if len(existing) > 0 {
-		if !force {
-			return fmt.Errorf("global config already exists at %s (%d files), use --force to overwrite",
-				targetDir, len(existing))
-		}
-
-		fmt.Printf("%d existing files will be overwritten:\n", len(existing))
-		for _, p := range existing {
-			fmt.Printf("  %s\n", relDisplay(targetDir, p))
-		}
-		if len(fresh) > 0 {
-			fmt.Printf("%d new files will be added.\n", len(fresh))
-		}
-		fmt.Printf("\nOverwrite? (y/n): ")
-
-		reader = bufio.NewReader(stdin)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("failed to read input, aborting")
-		}
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
-			return fmt.Errorf("aborted by user")
-		}
-		fmt.Println()
-	}
-
-	// Identify user-customizable files that exist — these need individual confirmation
-	skipFiles := make(map[string]bool)
-	for _, p := range existing {
-		base := filepath.Base(p)
-		if userCustomizableFiles[base] {
-			if reader == nil {
-				reader = bufio.NewReader(stdin)
-			}
-			fmt.Fprintf(os.Stderr, "%s is user-customizable and has local changes.\n", base)
-			fmt.Fprintf(os.Stderr, "Overwrite %s? (y/n): ", relDisplay(targetDir, p))
-			response, err := reader.ReadString('\n')
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", base)
-				skipFiles[p] = true
-				continue
-			}
-			response = strings.TrimSpace(strings.ToLower(response))
-			if response != "y" && response != "yes" {
-				skipFiles[p] = true
-				fmt.Fprintf(os.Stderr, "  Skipped %s (kept existing)\n", base)
-			}
-		}
-	}
-
-	// Backup existing files before overwriting
 	for _, p := range existing {
 		if skipFiles[p] {
 			continue
@@ -114,6 +55,82 @@ func SetupCommand(targetDir string, force bool, stdin io.Reader) error {
 		return fmt.Errorf("failed to write pipeline.yaml: %w", err)
 	}
 
+	printSetupSummary(targetDir, written, skipFiles)
+	return nil
+}
+
+// partitionByExistence splits paths into those that exist on disk and those that don't.
+func partitionByExistence(paths []string) (existing, fresh []string) {
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			existing = append(existing, p)
+		} else {
+			fresh = append(fresh, p)
+		}
+	}
+	return
+}
+
+// confirmOverwrites handles interactive confirmation for overwriting existing files.
+// Returns the set of files to skip (user-customizable files the user declined to overwrite).
+func confirmOverwrites(existing, fresh []string, force bool, targetDir string, stdin io.Reader) (map[string]bool, error) {
+	skipFiles := make(map[string]bool)
+
+	if len(existing) == 0 {
+		return skipFiles, nil
+	}
+
+	if !force {
+		return nil, fmt.Errorf("global config already exists at %s (%d files), use --force to overwrite",
+			targetDir, len(existing))
+	}
+
+	fmt.Printf("%d existing files will be overwritten:\n", len(existing))
+	for _, p := range existing {
+		fmt.Printf("  %s\n", relDisplay(targetDir, p))
+	}
+	if len(fresh) > 0 {
+		fmt.Printf("%d new files will be added.\n", len(fresh))
+	}
+	fmt.Printf("\nOverwrite? (y/n): ")
+
+	reader := bufio.NewReader(stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read input: %w", err)
+	}
+	response = strings.TrimSpace(strings.ToLower(response))
+	if response != "y" && response != "yes" {
+		return nil, fmt.Errorf("aborted by user")
+	}
+	fmt.Println()
+
+	// Per-file prompts for user-customizable files
+	for _, p := range existing {
+		base := filepath.Base(p)
+		if !userCustomizableFiles[base] {
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "%s is user-customizable and has local changes.\n", base)
+		fmt.Fprintf(os.Stderr, "Overwrite %s? (y/n): ", relDisplay(targetDir, p))
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to read input for %s: %v\n", base, err)
+			skipFiles[p] = true
+			continue
+		}
+		response = strings.TrimSpace(strings.ToLower(response))
+		if response != "y" && response != "yes" {
+			skipFiles[p] = true
+			fmt.Fprintf(os.Stderr, "  Skipped %s (kept existing)\n", base)
+		}
+	}
+
+	return skipFiles, nil
+}
+
+// printSetupSummary prints the final setup results to stdout.
+func printSetupSummary(targetDir string, written []string, skipFiles map[string]bool) {
 	fmt.Printf("Liza global config written to %s (%d files + pipeline.yaml):\n", targetDir, len(written))
 	for _, p := range written {
 		fmt.Printf("  %s\n", relDisplay(targetDir, p))
@@ -124,7 +141,6 @@ func SetupCommand(targetDir string, force bool, stdin io.Reader) error {
 	}
 	fmt.Printf("\nNext: configure global permissions in ~/.claude/settings.json\n")
 	fmt.Printf("See: contracts/contract-activation.md § Claude\n")
-	return nil
 }
 
 // backupFile copies src to src.bak, preserving permissions.
