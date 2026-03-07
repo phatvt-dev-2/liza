@@ -122,6 +122,110 @@ func shortSHA(s string) string {
 	return s
 }
 
+// casMergeOutcome holds the result of a compare-and-swap merge into an integration ref.
+type casMergeOutcome struct {
+	mergeCommit  string // SHA of the resulting commit (merge commit or fast-forwarded task commit)
+	preMergeHEAD string // integration HEAD before the merge (needed for working tree sync and rollback)
+	fastForward  bool   // true when the merge was a fast-forward or the commit was already merged
+	conflict     bool   // true when merge-tree found conflicts; caller handles state transition
+}
+
+// performCASMerge merges expectedCommit into integrationRef using a compare-and-swap
+// retry loop to handle concurrent merges. Returns conflict=true when merge-tree
+// detects conflicts (caller is responsible for the INTEGRATION_FAILED transition).
+func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string) (*casMergeOutcome, error) {
+	var mergeCommit, preMergeHEAD string
+	var fastForward bool
+
+	var attempt int
+	for attempt = 0; attempt < maxMergeRetries; attempt++ {
+		if attempt > 0 {
+			log.Printf("wt-merge %s: CAS retry attempt %d/%d", taskID, attempt+1, maxMergeRetries)
+		}
+
+		var err error
+		preMergeHEAD, err = gw.GetCommitSHA(integrationRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get integration HEAD: %w", err)
+		}
+		if mergeCASRetryTestHook != nil {
+			if hookErr := mergeCASRetryTestHook(attempt, integrationRef, preMergeHEAD); hookErr != nil {
+				return nil, fmt.Errorf("merge CAS retry hook failed: %w", hookErr)
+			}
+		}
+
+		// Already merged — expectedCommit is ancestor of integration HEAD.
+		isAncestor, err := gw.IsAncestor(expectedCommit, preMergeHEAD)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check ancestry: %w", err)
+		}
+		if isAncestor {
+			return &casMergeOutcome{
+				mergeCommit:  preMergeHEAD,
+				preMergeHEAD: preMergeHEAD,
+				fastForward:  true,
+			}, nil
+		}
+
+		// Fast-forward: integration HEAD is ancestor of expected commit.
+		isFF, err := gw.IsAncestor(preMergeHEAD, expectedCommit)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check fast-forward: %w", err)
+		}
+		if isFF {
+			if err := gw.UpdateRef(integrationRef, expectedCommit, preMergeHEAD); err != nil {
+				var casErr *git.RefConflictError
+				if errors.As(err, &casErr) {
+					continue
+				}
+				return nil, fmt.Errorf("failed to fast-forward integration branch: %w", err)
+			}
+			return &casMergeOutcome{
+				mergeCommit:  expectedCommit,
+				preMergeHEAD: preMergeHEAD,
+				fastForward:  true,
+			}, nil
+		}
+
+		// True merge — use merge-tree (no working tree modification).
+		treeSHA, clean, err := gw.MergeTree(preMergeHEAD, expectedCommit)
+		if err != nil {
+			return nil, fmt.Errorf("merge-tree computation failed: %w", err)
+		}
+		if !clean {
+			return &casMergeOutcome{
+				preMergeHEAD: preMergeHEAD,
+				conflict:     true,
+			}, nil
+		}
+
+		mergeMsg := "Merge " + taskID + " (task/" + taskID + ")"
+		mergeCommit, err = gw.CreateCommitFromTree(treeSHA, []string{preMergeHEAD, expectedCommit}, mergeMsg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create merge commit: %w", err)
+		}
+		fastForward = false
+
+		if err := gw.UpdateRef(integrationRef, mergeCommit, preMergeHEAD); err != nil {
+			var casErr *git.RefConflictError
+			if errors.As(err, &casErr) {
+				continue
+			}
+			return nil, fmt.Errorf("failed to update integration branch: %w", err)
+		}
+		break
+	}
+	if attempt == maxMergeRetries {
+		return nil, fmt.Errorf("merge CAS failed after %d attempts — high contention on %s", maxMergeRetries, integrationRef)
+	}
+
+	return &casMergeOutcome{
+		mergeCommit:  mergeCommit,
+		preMergeHEAD: preMergeHEAD,
+		fastForward:  fastForward,
+	}, nil
+}
+
 // MergeWorktree merges an approved task into the integration branch.
 // This is the final step in the task lifecycle, integrating completed work.
 // Returns IntegrationFailedError if merge conflicts or integration tests fail.
@@ -199,97 +303,22 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		integrationBranch = "main"
 	}
 
-	// Merge with CAS retry loop: read HEAD → merge-tree → commit-tree → update-ref (CAS).
-	// On RefConflictError (another merge landed), re-read HEAD and retry.
 	integrationRef := "refs/heads/" + integrationBranch
 
-	var mergeCommit string
-	var preMergeHEAD string
-	var fastForward bool
-
-	var attempt int
-	for attempt = 0; attempt < maxMergeRetries; attempt++ {
-		if attempt > 0 {
-			log.Printf("wt-merge %s: CAS retry attempt %d/%d", taskID, attempt+1, maxMergeRetries)
-		}
-
-		// (Re-)read integration HEAD
-		preMergeHEAD, err = gitWrapper.GetCommitSHA(integrationRef)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get integration HEAD: %w", err)
-		}
-		if mergeCASRetryTestHook != nil {
-			if hookErr := mergeCASRetryTestHook(attempt, integrationRef, preMergeHEAD); hookErr != nil {
-				return nil, fmt.Errorf("merge CAS retry hook failed: %w", hookErr)
-			}
-		}
-
-		// Check if worktree HEAD is already ancestor of integration (already merged)
-		isAncestor, err := gitWrapper.IsAncestor(expectedCommit, preMergeHEAD)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check ancestry: %w", err)
-		}
-
-		if isAncestor {
-			// Already merged - nothing to do, no CAS needed
-			mergeCommit = preMergeHEAD
-			fastForward = true
-			break
-		}
-
-		isFF, err := gitWrapper.IsAncestor(preMergeHEAD, expectedCommit)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check fast-forward: %w", err)
-		}
-
-		if isFF {
-			// Fast-forward: CAS update ref to task commit
-			if err := gitWrapper.UpdateRef(integrationRef, expectedCommit, preMergeHEAD); err != nil {
-				var casErr *git.RefConflictError
-				if errors.As(err, &casErr) {
-					continue // CAS failed — retry from new HEAD
-				}
-				return nil, fmt.Errorf("failed to fast-forward integration branch: %w", err)
-			}
-			mergeCommit = expectedCommit
-			fastForward = true
-			break
-		}
-
-		// True merge required - use merge-tree (no working tree modification)
-		treeSHA, clean, err := gitWrapper.MergeTree(preMergeHEAD, expectedCommit)
-		if err != nil {
-			return nil, fmt.Errorf("merge-tree computation failed: %w", err)
-		}
-		if !clean {
-			// Merge conflicts - mark as integration failed (no retry)
-			if updateErr := markIntegrationFailed(bb, taskID, agentID, "merge conflict", "", pb); updateErr != nil {
-				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
-			}
-			return nil, &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
-		}
-
-		// Create merge commit using commit-tree (no working tree needed)
-		mergeMsg := "Merge " + taskID + " (task/" + taskID + ")"
-		mergeCommit, err = gitWrapper.CreateCommitFromTree(treeSHA, []string{preMergeHEAD, expectedCommit}, mergeMsg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create merge commit: %w", err)
-		}
-		fastForward = false
-
-		// CAS update integration branch to point to new merge commit
-		if err := gitWrapper.UpdateRef(integrationRef, mergeCommit, preMergeHEAD); err != nil {
-			var casErr *git.RefConflictError
-			if errors.As(err, &casErr) {
-				continue // CAS failed — another merge landed; retry from new HEAD
-			}
-			return nil, fmt.Errorf("failed to update integration branch: %w", err)
-		}
-		break // CAS succeeded
+	outcome, err := performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID)
+	if err != nil {
+		return nil, err
 	}
-	if attempt == maxMergeRetries {
-		return nil, fmt.Errorf("merge CAS failed after %d attempts — high contention on %s", maxMergeRetries, integrationRef)
+	if outcome.conflict {
+		if updateErr := markIntegrationFailed(bb, taskID, agentID, "merge conflict", "", pb); updateErr != nil {
+			return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
+		}
+		return nil, &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
 	}
+
+	mergeCommit := outcome.mergeCommit
+	preMergeHEAD := outcome.preMergeHEAD
+	fastForward := outcome.fastForward
 
 	// Sync files changed by the merge into the main working tree.
 	// update-ref only moves the ref pointer; without this, files added/modified
