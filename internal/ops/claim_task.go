@@ -150,14 +150,15 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
 			}
 			targetStatus = models.TaskStatusImplementing
-			if task.Status == models.TaskStatusReady {
+			switch task.Status {
+			case models.TaskStatusReady:
 				isFreshClaim = true
 				if unmet := unmetDependencies(task, state); len(unmet) > 0 {
 					return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
 				}
-			} else if task.Status == models.TaskStatusIntegrationFailed {
+			case models.TaskStatusIntegrationFailed:
 				isIntegrationFixClaim = true
-			} else {
+			default: // TaskStatusRejected
 				isRejectionClaim = true
 				if task.AssignedTo != nil {
 					previousAssignee = *task.AssignedTo
@@ -168,12 +169,13 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
 			}
 			targetStatus = models.TaskStatusCodePlanning
-			if task.Status == models.TaskStatusDraftCodingPlan {
+			switch task.Status {
+			case models.TaskStatusDraftCodingPlan:
 				isFreshClaim = true
 				if unmet := unmetDependencies(task, state); len(unmet) > 0 {
 					return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
 				}
-			} else {
+			default: // TaskStatusCodingPlanRejected
 				isRejectionClaim = true
 				if task.AssignedTo != nil {
 					previousAssignee = *task.AssignedTo
@@ -218,7 +220,6 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	// --- Phase 2: Handle Worktree ---
 	gitWrapper := git.New(lp.ProjectRoot())
 
-	// Get base commit for the integration branch
 	baseCommit, err = gitWrapper.GetCommitSHA(integrationBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get integration branch commit: %w", err)
@@ -319,7 +320,6 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 		// Different updates based on source state
 		if isIntegrationFixClaim {
-			// Set integration_fix flag
 			task.IntegrationFix = true
 		} else if isRejectionClaim && previousAssignee != agentID {
 			// Different coder: reset review_cycles_current, update base_commit and worktree

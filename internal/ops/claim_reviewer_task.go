@@ -86,7 +86,6 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 			return fmt.Errorf("task %s has no review_commit — cannot claim for review", task.ID)
 		}
 
-		// Atomically claim the task and transition to REVIEWING
 		if task.RolePair != "" && pb != nil {
 			// Pipeline path: resolve reviewing status from role-pair.
 			reviewing, err := pr.ReviewingStatus(task.RolePair)
@@ -109,7 +108,6 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		task.ReviewingBy = &input.AgentID
 		task.ReviewLeaseExpires = &leaseExpires
 
-		// Update agent status
 		agent := state.Agents[input.AgentID]
 		agent.Status = models.AgentStatusReviewing
 		currentTask := task.ID
@@ -118,7 +116,6 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		agent.LeaseExpires = &leaseExpires
 		state.Agents[input.AgentID] = agent
 
-		// Capture values to return
 		result.TaskID = task.ID
 		if task.Worktree != nil {
 			result.Worktree = *task.Worktree

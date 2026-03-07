@@ -96,7 +96,6 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 		return nil, &PreconditionError{Reason: msg}
 	}
 
-	// Validate role_pair when pipeline config exists.
 	if resolver != nil && input.RolePair != "" {
 		if _, rpErr := resolver.RolePair(input.RolePair); rpErr != nil {
 			return nil, &PreconditionError{
