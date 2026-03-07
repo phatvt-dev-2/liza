@@ -76,7 +76,6 @@ func WatchCommand(ctx context.Context, config WatchConfig) error {
 	ticker := time.NewTicker(config.CheckInterval)
 	defer ticker.Stop()
 
-	// Run checks immediately on start
 	if err := runChecks(ctx, config); err != nil {
 		fmt.Fprintf(os.Stderr, "Check error: %v\n", err)
 	}
@@ -261,7 +260,6 @@ func checkSprintStalled(projectRoot string, state *models.State, cache map[strin
 		return nil, nil
 	}
 
-	// Count blocked planned tasks for the message
 	blockedCount := 0
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
@@ -312,7 +310,6 @@ func checkExpiredLeases(state *models.State) []alert {
 	now := time.Now().UTC()
 	graceDeadline := now.Add(-models.LeaseExpiryGracePeriod)
 
-	// Check agent leases (coders with active tasks)
 	for agentID, agent := range state.Agents {
 		if agent.CurrentTask == nil {
 			continue
@@ -330,7 +327,6 @@ func checkExpiredLeases(state *models.State) []alert {
 		}
 	}
 
-	// Check reviewer leases (REVIEWING tasks with expired leases)
 	for _, task := range state.Tasks {
 		if task.Status != models.TaskStatusReviewing {
 			continue
@@ -401,24 +397,26 @@ func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []al
 			agentStatus = string(agent.Status)
 		}
 
-		if agentStatus != "WORKING" {
-			cacheKey := "orphaned:" + task.ID
-			firstSeen, seen := cache[cacheKey]
-			if !seen {
-				cache[cacheKey] = now
-			} else if now.Sub(firstSeen) > OrphanedGracePeriod {
-				alerts = append(alerts, alert{
-					Timestamp: now,
-					Level:     alertLevelCritical,
-					Category:  "ORPHANED REJECTED",
-					Message: fmt.Sprintf("%s — assigned to %s but agent is %s (orphaned %ds+)",
-						task.ID, assignee, agentStatus, int(OrphanedGracePeriod.Seconds())),
-				})
-				delete(cache, cacheKey) // Alert once per grace period
-			}
-		} else {
-			// Agent is working, clear cache
+		if agentStatus == "WORKING" {
 			delete(cache, "orphaned:"+task.ID)
+			continue
+		}
+
+		cacheKey := "orphaned:" + task.ID
+		firstSeen, seen := cache[cacheKey]
+		if !seen {
+			cache[cacheKey] = now
+			continue
+		}
+		if now.Sub(firstSeen) > OrphanedGracePeriod {
+			alerts = append(alerts, alert{
+				Timestamp: now,
+				Level:     alertLevelCritical,
+				Category:  "ORPHANED REJECTED",
+				Message: fmt.Sprintf("%s — assigned to %s but agent is %s (orphaned %ds+)",
+					task.ID, assignee, agentStatus, int(OrphanedGracePeriod.Seconds())),
+			})
+			delete(cache, cacheKey)
 		}
 	}
 
@@ -491,7 +489,6 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []alert {
 			continue
 		}
 
-		// Find first claimer from history
 		var firstClaimer string
 		for _, entry := range task.History {
 			if entry.Event == "claimed" && entry.Agent != nil {
@@ -563,7 +560,6 @@ func checkStalled(logPath string, cache map[string]time.Time) []alert {
 	var alerts []alert
 	now := time.Now().UTC()
 
-	// Use typed log parsing to get the last timestamp
 	logger := log.New(logPath)
 	lastTimestamp, err := logger.GetLastTimestamp()
 	if err != nil || lastTimestamp.IsZero() {
@@ -571,22 +567,21 @@ func checkStalled(logPath string, cache map[string]time.Time) []alert {
 	}
 
 	age := time.Since(lastTimestamp)
-	if age > StallThreshold {
-		// Throttle alerts to once every 5 minutes
-		cacheKey := "stalled:alert"
-		lastAlert, seen := cache[cacheKey]
-		if !seen || now.Sub(lastAlert) >= 5*time.Minute {
-			alerts = append(alerts, alert{
-				Timestamp: now,
-				Level:     alertLevelWarning,
-				Category:  "STALLED",
-				Message:   fmt.Sprintf("no progress for %d minutes", int(age.Minutes())),
-			})
-			cache[cacheKey] = now
-		}
-	} else {
-		// Clear cache if system is no longer stalled
+	if age <= StallThreshold {
 		delete(cache, "stalled:alert")
+		return alerts
+	}
+
+	cacheKey := "stalled:alert"
+	lastAlert, seen := cache[cacheKey]
+	if !seen || now.Sub(lastAlert) >= 5*time.Minute {
+		alerts = append(alerts, alert{
+			Timestamp: now,
+			Level:     alertLevelWarning,
+			Category:  "STALLED",
+			Message:   fmt.Sprintf("no progress for %d minutes", int(age.Minutes())),
+		})
+		cache[cacheKey] = now
 	}
 
 	return alerts
