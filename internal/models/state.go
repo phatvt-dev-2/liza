@@ -442,6 +442,30 @@ func (s *State) ReleaseAgent(agentID string) {
 	}
 }
 
+// TopPriorityTier returns all candidates that share the highest priority
+// (lowest number). Returns nil if candidates is empty.
+func TopPriorityTier(candidates []*Task) []*Task {
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	bestPriority := candidates[0].Priority
+	for _, t := range candidates[1:] {
+		if t.Priority < bestPriority {
+			bestPriority = t.Priority
+		}
+	}
+
+	var tier []*Task
+	for _, t := range candidates {
+		if t.Priority == bestPriority {
+			tier = append(tier, t)
+		}
+	}
+
+	return tier
+}
+
 // FindTask returns a pointer to the task with the given ID, or nil if not found.
 // The returned pointer refers to the element within s.Tasks, so mutations are
 // reflected in the state (useful inside Blackboard.Modify closures).

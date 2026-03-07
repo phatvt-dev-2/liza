@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -74,7 +75,7 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 				candidates = append(candidates, &state.Tasks[i])
 			}
 		}
-		task := selectHighestPriorityTask(candidates)
+		task := pickRandomFromTopTier(candidates)
 
 		if task == nil {
 			return fmt.Errorf("no reviewable tasks found")
@@ -137,16 +138,13 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 	return &result, nil
 }
 
-// selectHighestPriorityTask returns the highest-priority task from candidates,
-// using creation time as FIFO tie-breaker. Returns nil if candidates is empty.
-func selectHighestPriorityTask(candidates []*models.Task) *models.Task {
-	var best *models.Task
-	for _, t := range candidates {
-		if best == nil || t.Priority < best.Priority {
-			best = t
-		} else if t.Priority == best.Priority && best.Created.After(t.Created) {
-			best = t
-		}
+// pickRandomFromTopTier selects a random task from the highest-priority tier.
+// This prevents multiple reviewers from deterministically converging on the
+// same task. Returns nil if candidates is empty.
+func pickRandomFromTopTier(candidates []*models.Task) *models.Task {
+	tier := models.TopPriorityTier(candidates)
+	if len(tier) == 0 {
+		return nil
 	}
-	return best
+	return tier[rand.IntN(len(tier))]
 }

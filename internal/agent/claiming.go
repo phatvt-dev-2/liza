@@ -3,6 +3,7 @@ package agent
 import (
 	"errors"
 	"fmt"
+	"math/rand/v2"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -39,19 +40,26 @@ func claimDoerTask(projectRoot, agentID, workflowRole string, bb *db.Blackboard)
 			candidates = append(candidates, &state.Tasks[i])
 		}
 	}
-	task := selectHighestPriorityTask(candidates)
+	tier := shuffledByPriorityTier(candidates)
 
-	if task == nil {
+	if len(tier) == 0 {
 		return "", "", fmt.Errorf("no claimable tasks found")
 	}
 
-	result, err := ops.ClaimTask(projectRoot, task.ID, agentID)
-	if err != nil {
-		logger.Error("Claim error", "error", err)
-		return "", "", err
+	// Try each candidate in the shuffled tier until one succeeds.
+	var lastErr error
+	for _, task := range tier {
+		result, claimErr := ops.ClaimTask(projectRoot, task.ID, agentID)
+		if claimErr != nil {
+			logger.Warn("Claim attempt failed, trying next candidate",
+				"task_id", task.ID, "error", claimErr)
+			lastErr = claimErr
+			continue
+		}
+		return result.TaskID, result.WorktreeRel, nil
 	}
 
-	return result.TaskID, result.WorktreeRel, nil
+	return "", "", fmt.Errorf("all %d candidates in top priority tier failed to claim: %w", len(tier), lastErr)
 }
 
 // claimCoderTask wraps claimDoerTask for backward compatibility.
@@ -59,18 +67,15 @@ func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, wor
 	return claimDoerTask(projectRoot, agentID, models.RoleCoder, bb)
 }
 
-// selectHighestPriorityTask returns the highest-priority task from candidates,
-// using creation time as FIFO tie-breaker. Returns nil if candidates is empty.
-func selectHighestPriorityTask(candidates []*models.Task) *models.Task {
-	var best *models.Task
-	for _, t := range candidates {
-		if best == nil || t.Priority < best.Priority {
-			best = t
-		} else if t.Priority == best.Priority && best.Created.After(t.Created) {
-			best = t
-		}
-	}
-	return best
+// shuffledByPriorityTier returns candidates in the highest-priority tier,
+// shuffled randomly. This prevents multiple agents from deterministically
+// converging on the same task.
+func shuffledByPriorityTier(candidates []*models.Task) []*models.Task {
+	tier := models.TopPriorityTier(candidates)
+	rand.Shuffle(len(tier), func(i, j int) {
+		tier[i], tier[j] = tier[j], tier[i]
+	})
+	return tier
 }
 
 func claimReviewerTaskForRole(projectRoot, agentID, workflowRole string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
@@ -93,6 +98,17 @@ func claimReviewerTaskForRole(projectRoot, agentID, workflowRole string, leaseDu
 // claimReviewerTask wraps claimReviewerTaskForRole for backward compatibility.
 func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
 	return claimReviewerTaskForRole(projectRoot, agentID, models.RoleCodeReviewer, leaseDuration, bb)
+}
+
+// releaseReviewerClaimQuietly releases a reviewer claim, logging but not
+// propagating errors. Used in supervisor recovery paths for transient failures
+// where blockReviewerTask was NOT called.
+func releaseReviewerClaimQuietly(projectRoot, taskID, agentID string) {
+	_, err := ops.ReleaseClaim(projectRoot, taskID, "code-reviewer", true, "supervisor: worktree check transient failure", agentID)
+	if err != nil {
+		GetLogger().Warn("Failed to release reviewer claim during recovery",
+			"task_id", taskID, "error", err)
+	}
 }
 
 func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr models.PipelineResolver) error {

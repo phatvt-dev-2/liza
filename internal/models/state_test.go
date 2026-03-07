@@ -1714,3 +1714,75 @@ func TestAllPlannedTasksTerminal(t *testing.T) {
 		})
 	}
 }
+
+func TestTopPriorityTier(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		candidates []*Task
+		wantIDs    []string
+	}{
+		{
+			name:       "nil input",
+			candidates: nil,
+			wantIDs:    nil,
+		},
+		{
+			name:       "empty slice",
+			candidates: []*Task{},
+			wantIDs:    nil,
+		},
+		{
+			name:       "single candidate",
+			candidates: []*Task{{ID: "a", Priority: 5, Created: now}},
+			wantIDs:    []string{"a"},
+		},
+		{
+			name: "distinct priorities returns top only",
+			candidates: []*Task{
+				{ID: "p3", Priority: 3, Created: now},
+				{ID: "p1", Priority: 1, Created: now},
+				{ID: "p2", Priority: 2, Created: now},
+			},
+			wantIDs: []string{"p1"},
+		},
+		{
+			name: "tied top priority returns all tied",
+			candidates: []*Task{
+				{ID: "a", Priority: 1, Created: now},
+				{ID: "b", Priority: 2, Created: now},
+				{ID: "c", Priority: 1, Created: now},
+				{ID: "d", Priority: 3, Created: now},
+			},
+			wantIDs: []string{"a", "c"},
+		},
+		{
+			name: "all same priority returns all",
+			candidates: []*Task{
+				{ID: "x", Priority: 2, Created: now},
+				{ID: "y", Priority: 2, Created: now},
+				{ID: "z", Priority: 2, Created: now},
+			},
+			wantIDs: []string{"x", "y", "z"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TopPriorityTier(tt.candidates)
+			if len(got) != len(tt.wantIDs) {
+				t.Fatalf("len = %d, want %d", len(got), len(tt.wantIDs))
+			}
+			gotIDs := make(map[string]bool, len(got))
+			for _, task := range got {
+				gotIDs[task.ID] = true
+			}
+			for _, id := range tt.wantIDs {
+				if !gotIDs[id] {
+					t.Errorf("missing expected ID %q in result", id)
+				}
+			}
+		})
+	}
+}

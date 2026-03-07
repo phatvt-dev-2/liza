@@ -272,9 +272,10 @@ func TestClaimReviewerTask_TieBreaking(t *testing.T) {
 		t.Fatalf("ClaimReviewerTask() error: %v", err)
 	}
 
-	// Should claim the oldest task when priorities are equal (FIFO tie-breaker)
-	if result.TaskID != "task-old" {
-		t.Errorf("TaskID = %q, want %q (older, created first)", result.TaskID, "task-old")
+	// With randomized selection, either task is valid (same priority tier)
+	validIDs := map[string]bool{"task-old": true, "task-new": true}
+	if !validIDs[result.TaskID] {
+		t.Errorf("TaskID = %q, want one of %v", result.TaskID, validIDs)
 	}
 }
 

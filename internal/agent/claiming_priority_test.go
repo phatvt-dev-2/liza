@@ -42,9 +42,9 @@ func TestClaimCoderTask_BasicPrioritySelection(t *testing.T) {
 	}
 }
 
-// TestClaimCoderTask_TieBreakingByCreationTime verifies that when multiple tasks
-// have the same priority, the oldest task (by creation time) is selected.
-func TestClaimCoderTask_TieBreakingByCreationTime(t *testing.T) {
+// TestClaimCoderTask_SamePriorityRandomSelection verifies that when multiple tasks
+// have the same priority, any task from the top tier is selected (randomized).
+func TestClaimCoderTask_SamePriorityRandomSelection(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -74,9 +74,10 @@ func TestClaimCoderTask_TieBreakingByCreationTime(t *testing.T) {
 		t.Fatalf("Expected successful claim, got error: %v", err)
 	}
 
-	// Should claim the oldest task
-	if taskID != "task-oldest" {
-		t.Errorf("Expected to claim 'task-oldest', but got '%s'", taskID)
+	// Should claim any task from the same-priority tier (randomized selection)
+	validIDs := map[string]bool{"task-oldest": true, "task-middle": true, "task-newest": true}
+	if !validIDs[taskID] {
+		t.Errorf("Expected one of %v, but got '%s'", validIDs, taskID)
 	}
 }
 
@@ -115,9 +116,10 @@ func TestClaimCoderTask_RespectsClaimability(t *testing.T) {
 		t.Fatalf("Expected successful claim, got error: %v", err)
 	}
 
-	// Should claim the dependency task first (oldest claimable with priority 3)
-	if taskID != "task-dep" {
-		t.Errorf("Expected to claim 'task-dep', but got '%s'", taskID)
+	// Both task-dep and task-low-claimable are priority 3 and claimable (randomized)
+	validIDs := map[string]bool{"task-dep": true, "task-low-claimable": true}
+	if !validIDs[taskID] {
+		t.Errorf("Expected one of %v, but got '%s'", validIDs, taskID)
 	}
 }
 
@@ -196,7 +198,8 @@ func TestClaimCoderTask_IntegrationFailedPriority(t *testing.T) {
 	}
 }
 
-// TestClaimCoderTask_AllSamePriority verifies FIFO behavior when all tasks have the same priority.
+// TestClaimCoderTask_AllSamePriority verifies that any task in the same-priority
+// tier can be selected (randomized, not deterministic FIFO).
 func TestClaimCoderTask_AllSamePriority(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
@@ -227,9 +230,10 @@ func TestClaimCoderTask_AllSamePriority(t *testing.T) {
 		t.Fatalf("Expected successful claim, got error: %v", err)
 	}
 
-	// Should claim the oldest task (FIFO)
-	if taskID != "task-1" {
-		t.Errorf("Expected to claim 'task-1' (oldest), but got '%s'", taskID)
+	// Should claim any task from the same-priority tier (randomized)
+	validIDs := map[string]bool{"task-1": true, "task-2": true, "task-3": true}
+	if !validIDs[taskID] {
+		t.Errorf("Expected one of %v, but got '%s'", validIDs, taskID)
 	}
 }
 
@@ -361,9 +365,9 @@ func TestClaimReviewerTask_BasicPrioritySelection(t *testing.T) {
 	}
 }
 
-// TestClaimReviewerTask_TieBreakingByCreationTime verifies that when multiple reviewable tasks
-// have the same priority, the oldest task is selected.
-func TestClaimReviewerTask_TieBreakingByCreationTime(t *testing.T) {
+// TestClaimReviewerTask_SamePriorityRandomSelection verifies that when multiple reviewable tasks
+// have the same priority, any task from the tier is selected (randomized).
+func TestClaimReviewerTask_SamePriorityRandomSelection(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -393,9 +397,10 @@ func TestClaimReviewerTask_TieBreakingByCreationTime(t *testing.T) {
 		t.Fatalf("Expected successful claim, got error: %v", err)
 	}
 
-	// Should claim the oldest task
-	if taskID != "task-oldest" {
-		t.Errorf("Expected to claim 'task-oldest', but got '%s'", taskID)
+	// Should claim any task from the same-priority tier (randomized)
+	validIDs := map[string]bool{"task-oldest": true, "task-middle": true, "task-newest": true}
+	if !validIDs[taskID] {
+		t.Errorf("Expected one of %v, but got '%s'", validIDs, taskID)
 	}
 }
 
@@ -502,5 +507,91 @@ func TestClaimReviewerTask_NoReviewableTasks(t *testing.T) {
 	// claimReviewerTask wraps the error in a Modify() call, so check for substring
 	if err.Error() != "modification function failed: no reviewable tasks found" {
 		t.Errorf("Expected 'modification function failed: no reviewable tasks found' error, got: %v", err)
+	}
+}
+
+// TestShuffledByPriorityTier verifies that shuffledByPriorityTier filters to
+// the highest-priority tier and includes all members.
+func TestShuffledByPriorityTier(t *testing.T) {
+	now := time.Now().UTC()
+
+	t.Run("empty candidates", func(t *testing.T) {
+		result := shuffledByPriorityTier(nil)
+		if result != nil {
+			t.Errorf("Expected nil for empty input, got %v", result)
+		}
+	})
+
+	t.Run("single candidate", func(t *testing.T) {
+		task := &models.Task{ID: "only", Priority: 1, Created: now}
+		result := shuffledByPriorityTier([]*models.Task{task})
+		if len(result) != 1 || result[0].ID != "only" {
+			t.Errorf("Expected [only], got %v", result)
+		}
+	})
+
+	t.Run("filters to top tier", func(t *testing.T) {
+		p1a := &models.Task{ID: "p1a", Priority: 1, Created: now}
+		p1b := &models.Task{ID: "p1b", Priority: 1, Created: now.Add(-time.Minute)}
+		p2 := &models.Task{ID: "p2", Priority: 2, Created: now}
+		p3 := &models.Task{ID: "p3", Priority: 3, Created: now}
+
+		result := shuffledByPriorityTier([]*models.Task{p3, p1a, p2, p1b})
+		if len(result) != 2 {
+			t.Fatalf("Expected 2 tasks in top tier, got %d", len(result))
+		}
+
+		ids := map[string]bool{result[0].ID: true, result[1].ID: true}
+		if !ids["p1a"] || !ids["p1b"] {
+			t.Errorf("Expected {p1a, p1b}, got %v", ids)
+		}
+	})
+}
+
+// TestClaimDoerTask_RetriesOnFailure verifies that the retry loop skips a
+// broken task and claims the next one in the shuffled tier.
+func TestClaimDoerTask_RetriesOnFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// Create two same-priority tasks: one REJECTED (needs worktree but has none)
+	// and one READY (will get a fresh worktree via ClaimTask).
+	taskBroken := testhelpers.BuildTaskByStatus("task-broken", models.TaskStatusRejected, now)
+	taskBroken.Priority = 1
+	taskBroken.Created = now.Add(-2 * time.Minute)
+	taskBroken.AssignedTo = nil
+	// No worktree created — ClaimTask will fail for this one
+
+	taskGood := testhelpers.BuildTaskByStatus("task-good", models.TaskStatusReady, now)
+	taskGood.Priority = 1
+	taskGood.Created = now.Add(-1 * time.Minute)
+
+	state.Tasks = []models.Task{taskBroken, taskGood}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	// Run enough times to verify that we always succeed (retry logic kicks in
+	// when the broken task is tried first).
+	for i := 0; i < 5; i++ {
+		// Re-create state for each iteration to reset claim state
+		state.Tasks[0].AssignedTo = nil
+		state.Tasks[0].Status = models.TaskStatusRejected
+		state.Tasks[1].AssignedTo = nil
+		state.Tasks[1].Status = models.TaskStatusReady
+		testhelpers.WriteInitialState(t, statePath, state)
+
+		taskID, _, err := claimCoderTask(tmpDir, "coder-1", bb)
+		if err != nil {
+			t.Fatalf("Iteration %d: Expected successful claim, got error: %v", i, err)
+		}
+		if taskID != "task-good" {
+			// task-broken may also succeed if ClaimTask handles it — either is fine
+			if taskID != "task-broken" {
+				t.Errorf("Iteration %d: unexpected task ID: %s", i, taskID)
+			}
+		}
 	}
 }

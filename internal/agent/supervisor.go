@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -521,6 +522,26 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				"agent_id", config.AgentID,
 				"task_id", taskID,
 				"review_commit", reviewCommit)
+
+			// Verify worktree exists before launching agent.
+			_, wtErr := ensureReviewerWorktree(config.ProjectRoot, bb, taskID, config.AgentID)
+			if wtErr != nil {
+				GetLogger().Warn("Reviewer worktree check failed",
+					"task_id", taskID, "error", wtErr)
+				if !errors.Is(wtErr, errTaskBlocked) {
+					// Transient error (bb.Read, BranchExists, AttachWorktree).
+					// blockReviewerTask was NOT called, so the reviewer claim
+					// and agent state are still dangling — release them.
+					releaseReviewerClaimQuietly(config.ProjectRoot, taskID, config.AgentID)
+				}
+				// For errTaskBlocked, blockReviewerTask already cleared
+				// claim fields and released agent state.
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			// If recovered==true, worktree was recreated from the existing
+			// branch. The claim and reviewCommit are still valid — proceed
+			// directly to launch the agent.
 		}
 
 		// Set orchestrator status to PLANNING

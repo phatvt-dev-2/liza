@@ -160,6 +160,31 @@ func (g *Git) CreateWorktree(taskID, fromBranch string) (string, error) {
 	return baseCommit, nil
 }
 
+// AttachWorktree creates a worktree for an already-existing branch.
+// Unlike CreateWorktree, this does not create a new branch with -b.
+func (g *Git) AttachWorktree(taskID, existingBranch string) error {
+	if err := paths.ValidateTaskID(taskID); err != nil {
+		return fmt.Errorf("invalid task ID: %w", err)
+	}
+	worktreePath := filepath.Join(g.projectRoot, paths.WorktreesDirName, taskID)
+
+	if _, err := os.Stat(worktreePath); err == nil {
+		return fmt.Errorf("worktree already exists: %s", worktreePath)
+	}
+
+	worktreesDir := filepath.Join(g.projectRoot, paths.WorktreesDirName)
+	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .worktrees directory: %w", err)
+	}
+
+	_, err := g.exec("worktree", "add", worktreePath, existingBranch)
+	if err != nil {
+		return fmt.Errorf("failed to attach worktree: %w", err)
+	}
+
+	return nil
+}
+
 // CreateWorktreeFresh creates a worktree, deleting any existing one first
 // This is used for task reassignment scenarios
 func (g *Git) CreateWorktreeFresh(taskID, fromBranch string) (string, error) {
