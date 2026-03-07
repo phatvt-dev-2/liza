@@ -14,7 +14,6 @@ func UpdateSprintMetricsCommand(projectRoot string) error {
 		return err
 	}
 
-	// Output summary
 	fmt.Println("Sprint metrics updated:")
 	fmt.Printf("  Tasks done: %d\n", metrics.TasksDone)
 	fmt.Printf("  Tasks in progress: %d\n", metrics.TasksInProgress)
