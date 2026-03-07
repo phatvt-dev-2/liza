@@ -93,6 +93,10 @@ A 200-line refactor in a util is less ADR-worthy than a one-line addition of `ce
 - Different author working on unrelated area
 - Explicit markers: "BREAKING", "v2", "rewrite", "migrate to X"
 
+## Candidate numbering
+
+Assign candidate numbers in strict chronological order (earliest commit date first). This numbering carries through to the final ADR sequence ID. When presenting candidates grouped by confidence tier, sort candidates within each group by ascending number (i.e. chronologically).
+
 ## Anti-patterns
 
 - **Over-clustering**: One giant cluster called "backend infrastructure" — too broad
@@ -322,7 +326,7 @@ When the user invokes this skill:
 2. If starting fresh, begin with file classification
 3. Show the user your classification of tier 0-1 files for validation
 4. Proceed through the process, asking at each gate
-5. Process clusters in chronological order within confidence tiers (high-confidence first)
+5. Number candidates chronologically (by earliest commit date); present grouped by confidence tier, sorted by ascending number within each group
 6. After commit-based ADRs, scan specs/docs for gaps
 7. Enrich ADRs with cross-references and context
 8. Propose chronological renumbering if needed
