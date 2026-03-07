@@ -21,7 +21,6 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 }
 
 func printClaimResult(r *ops.ClaimResult) {
-	// Status-specific progress messages
 	switch r.SourceStatus {
 	case models.TaskStatusRejected:
 		if r.PreviousAssignee == r.AgentID {
@@ -33,7 +32,6 @@ func printClaimResult(r *ops.ClaimResult) {
 		fmt.Println("Claiming INTEGRATION_FAILED task, preserving worktree for conflict resolution")
 	}
 
-	// Success summary
 	fmt.Printf("IMPLEMENTING: %s by %s (from %s)\n", r.TaskID, r.AgentID, r.SourceStatus)
 	fmt.Printf("  worktree: %s\n", r.WorktreeRel)
 	fmt.Printf("  base_commit: %s\n", r.BaseCommit)
