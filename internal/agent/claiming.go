@@ -12,7 +12,6 @@ import (
 func claimDoerTask(projectRoot, agentID, workflowRole string, bb *db.Blackboard) (taskID, worktree string, err error) {
 	logger := GetLogger()
 
-	// Handoff applies to doer roles (coder and code-planner).
 	if workflowRole == models.RoleCoder || workflowRole == models.RoleCodePlanner {
 		handoffResult, err := ops.ResumeHandoff(ops.ResumeHandoffInput{
 			ProjectRoot: projectRoot,
@@ -55,8 +54,7 @@ func claimDoerTask(projectRoot, agentID, workflowRole string, bb *db.Blackboard)
 	return result.TaskID, result.WorktreeRel, nil
 }
 
-// claimCoderTask finds and claims a coder task.
-// Backward-compatible wrapper for existing tests/callers.
+// claimCoderTask wraps claimDoerTask for backward compatibility.
 func claimCoderTask(projectRoot, agentID string, bb *db.Blackboard) (taskID, worktree string, err error) {
 	return claimDoerTask(projectRoot, agentID, models.RoleCoder, bb)
 }
@@ -75,8 +73,6 @@ func selectHighestPriorityTask(candidates []*models.Task) *models.Task {
 	return best
 }
 
-// claimReviewerTask finds and claims a reviewable task.
-// Delegates to ops.ClaimReviewerTask for the actual state mutation.
 func claimReviewerTaskForRole(projectRoot, agentID, workflowRole string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
 	logger := GetLogger()
 
@@ -94,13 +90,11 @@ func claimReviewerTaskForRole(projectRoot, agentID, workflowRole string, leaseDu
 	return result.TaskID, result.Worktree, result.ReviewCommit, nil
 }
 
-// claimReviewerTask finds and claims a code-reviewer task.
-// Backward-compatible wrapper for existing tests/callers.
+// claimReviewerTask wraps claimReviewerTaskForRole for backward compatibility.
 func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
 	return claimReviewerTaskForRole(projectRoot, agentID, models.RoleCodeReviewer, leaseDuration, bb)
 }
 
-// handleApprovedMerges handles merging approved tasks
 func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr models.PipelineResolver) error {
 	logger := GetLogger()
 	state, err := bb.Read()
@@ -108,22 +102,18 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr mod
 		return err
 	}
 
-	// Find approved tasks where approved_by = agentID and merge_commit = null
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if models.IsApprovedForMerge(task, pr) &&
 			task.ApprovedBy != nil && *task.ApprovedBy == agentID &&
 			task.MergeCommit == nil {
 
-			GetLogger().Info("Merging approved task", "task_id", task.ID)
+			logger.Info("Merging approved task", "task_id", task.ID)
 
-			// Execute merge - ops.MergeWorktree handles all validation and state updates
 			result, err := ops.MergeWorktree(projectRoot, task.ID, agentID)
 			if err != nil {
-				// Check if this is an integration failure (merge conflict or test failure)
 				var integrationErr *ops.IntegrationFailedError
 				if errors.As(err, &integrationErr) {
-					// Integration failed - state already updated
 					logArgs := []any{
 						"task_id", task.ID,
 						"reason", integrationErr.Reason,
@@ -137,27 +127,23 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr mod
 					logger.Warn("Integration failed", logArgs...)
 					continue
 				}
-				// Other error - log and continue
 				logger.Warn("Failed to merge task, will retry",
 					"task_id", task.ID,
 					"error", err)
 				continue
 			}
 
-			// Log non-fatal warnings from cleanup
 			for _, w := range result.Warnings {
 				logger.Warn("Merge cleanup warning", "task_id", task.ID, "warning", w)
 			}
 
-			// Merge succeeded
-			GetLogger().Info("Successfully merged task", "task_id", task.ID)
+			logger.Info("Successfully merged task", "task_id", task.ID)
 		}
 	}
 
 	return nil
 }
 
-// hasPendingMerges checks if there are approved tasks awaiting merge by this agent
 func hasPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResolver) bool {
 	state, err := bb.ReadCached()
 	if err != nil {
@@ -175,10 +161,8 @@ func hasPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResol
 	return false
 }
 
-// handleAvailableTransitions executes pipeline transitions for newly-merged tasks.
-// Called by the supervisor after handleApprovedMerges to auto-create child tasks
-// from pipeline transitions. Children are added to state.Tasks but NOT to the
-// current sprint's scope — they get carried to the next sprint.
+// handleAvailableTransitions creates child tasks from pipeline transitions.
+// Children are NOT added to the current sprint's scope — they carry to the next sprint.
 func handleAvailableTransitions(projectRoot string) error {
 	results, err := ops.ExecuteAvailableTransitions(projectRoot)
 	if err != nil {
@@ -196,19 +180,14 @@ func handleAvailableTransitions(projectRoot string) error {
 	return nil
 }
 
-// logTaskSubmissionIfCompleted checks if a claimed task was submitted for review
-// and logs this transition for visibility in agent logs
 func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string, pr models.PipelineResolver) error {
 	state, err := bb.Read()
 	if err != nil {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	// Find the task
 	if task := state.FindTask(taskID); task != nil {
-		// Check if it's now in a submitted state
 		if models.IsSubmittedStatus(task, pr) {
-			// Log the successful submission
 			reviewCommit := "unknown"
 			if task.ReviewCommit != nil {
 				reviewCommit = *task.ReviewCommit
@@ -223,7 +202,6 @@ func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string, pr 
 			return nil
 		}
 
-		// If task is still executing, agent may have exited without completing
 		if models.IsExecutingStatus(task, pr) {
 			GetLogger().Warn("Agent exited with task still claimed",
 				"task_id", task.ID,
@@ -232,7 +210,6 @@ func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string, pr 
 			return nil
 		}
 
-		// If task is BLOCKED, agent discovered a dependency issue
 		if task.Status == models.TaskStatusBlocked {
 			GetLogger().Info("Agent blocked task due to dependency issue",
 				"task_id", task.ID,
@@ -240,11 +217,8 @@ func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string, pr 
 			return nil
 		}
 
-		// Task exists but wasn't submitted (still in other status)
-		// This is normal if agent exited for other reasons (context switch, failure, etc.)
 		return nil
 	}
 
-	// Task not found - unusual but not an error
 	return nil
 }
