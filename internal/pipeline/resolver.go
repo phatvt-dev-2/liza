@@ -127,26 +127,11 @@ func (r *Resolver) AllDeclaredStates() []models.TaskStatus {
 // is sprint-terminal. MERGED is always included as the universal terminal for
 // role-pairs at the end of the pipeline.
 func (r *Resolver) SprintTerminalStates() []models.TaskStatus {
-	// Collect all role-pairs that are sources of transitions.
-	transitionSources := make(map[string]bool)
-	// From sub-pipeline transitions (2-part refs).
-	for _, sp := range r.config.Pipeline.SubPipelines {
-		for _, t := range sp.Transitions {
-			fromPair, _, _ := parseRef(t.From)
-			transitionSources[fromPair] = true
-		}
-	}
-	// From pipeline-transitions (3-part refs).
-	for _, t := range r.config.Pipeline.PipelineTransitions {
-		_, fromPair, _, err := parse3PartRef(t.From)
-		if err == nil {
-			transitionSources[fromPair] = true
-		}
-	}
+	sources := r.TransitionSourcePairs()
 
 	var states []models.TaskStatus
 	for name, rp := range r.config.Pipeline.RolePairs {
-		if transitionSources[name] {
+		if sources[name] {
 			states = append(states, models.TaskStatus(rp.States.Approved))
 		}
 	}

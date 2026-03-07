@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -153,17 +154,15 @@ func prependFrontmatter(content []byte) []byte {
 	}
 
 	rest := content[len(prefix):]
-	idx := bytes.Index(rest, []byte("\n---\n"))
-	if idx == -1 {
+	existingBlockBytes, after, found := bytes.Cut(rest, []byte("\n---\n"))
+	if !found {
 		return append([]byte(frontmatter()), content...) // malformed, prepend fresh
 	}
 
-	existingBlock := string(rest[:idx])
-	after := rest[idx+len("\n---\n"):]
+	existingBlock := string(existingBlockBytes)
 
-	// Keep non-liza fields, drop old liza_* fields
 	var kept []string
-	for _, line := range strings.Split(existingBlock, "\n") {
+	for line := range strings.SplitSeq(existingBlock, "\n") {
 		if !strings.HasPrefix(line, "liza_") {
 			kept = append(kept, line)
 		}
@@ -193,14 +192,11 @@ func stripFrontmatter(content []byte) []byte {
 	if !bytes.HasPrefix(content, prefix) {
 		return content
 	}
-	// Find the closing "---" delimiter
 	rest := content[len(prefix):]
-	idx := bytes.Index(rest, []byte("\n---\n"))
-	if idx == -1 {
+	_, after, found := bytes.Cut(rest, []byte("\n---\n"))
+	if !found {
 		return content // malformed frontmatter, leave as-is
 	}
-	// Skip past closing "---\n" and any single trailing blank line
-	after := rest[idx+len("\n---\n"):]
 	if len(after) > 0 && after[0] == '\n' {
 		after = after[1:]
 	}
@@ -246,6 +242,18 @@ func collectFiles(fsys embed.FS) ([]string, error) {
 	return files, err
 }
 
+// confirmMerge prompts the user for yes/no confirmation and returns true if accepted.
+func confirmMerge(prompt string, stdin io.Reader) (bool, error) {
+	fmt.Print(prompt)
+	reader := bufio.NewReader(stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return false, fmt.Errorf("failed to read user input: %w", err)
+	}
+	response = strings.TrimSpace(strings.ToLower(response))
+	return response == "y" || response == "yes", nil
+}
+
 // WriteClaudeSettings writes the embedded claude-settings.json to .claude/settings.json.
 // If the file already exists, prompts the user to merge settings.
 // Returns nil on success or if user declines merge.
@@ -260,15 +268,11 @@ func WriteClaudeSettings(projectRoot string, stdin io.Reader) error {
 
 	var existingSettings map[string]any
 	if existingData, err := os.ReadFile(settingsPath); err == nil {
-		fmt.Print("Should the Liza claude settings be merged into the existing settings file? (y/n): ")
-		reader := bufio.NewReader(stdin)
-		response, err := reader.ReadString('\n')
+		ok, err := confirmMerge("Should the Liza claude settings be merged into the existing settings file? (y/n): ", stdin)
 		if err != nil {
-			return fmt.Errorf("failed to read user input: %w", err)
+			return err
 		}
-
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
+		if !ok {
 			return nil
 		}
 
@@ -310,9 +314,7 @@ func WriteClaudeSettings(projectRoot string, stdin io.Reader) error {
 // Special handling for permissions.allow array (union of both).
 func mergeSettings(liza, existing map[string]any) map[string]any {
 	result := make(map[string]any)
-	for k, v := range liza {
-		result[k] = v
-	}
+	maps.Copy(result, liza)
 
 	// Existing settings override liza defaults (preserve user customizations),
 	// except "permissions" which gets deep-merged to union allow lists.
@@ -337,9 +339,7 @@ func mergeSettings(liza, existing map[string]any) map[string]any {
 // Existing values override liza defaults, except "allow" which is unioned.
 func mergePermissions(liza, existing map[string]any) map[string]any {
 	result := make(map[string]any)
-	for k, v := range liza {
-		result[k] = v
-	}
+	maps.Copy(result, liza)
 
 	for k, v := range existing {
 		if k == "allow" {
@@ -400,15 +400,11 @@ func WriteMCPSettings(projectRoot string, stdin io.Reader) error {
 
 	var existingSettings map[string]any
 	if existingData, err := os.ReadFile(mcpSettingsPath); err == nil {
-		fmt.Print("Should the Liza MCP server configuration be merged into the existing .mcp.json file? (y/n): ")
-		reader := bufio.NewReader(stdin)
-		response, err := reader.ReadString('\n')
+		ok, err := confirmMerge("Should the Liza MCP server configuration be merged into the existing .mcp.json file? (y/n): ", stdin)
 		if err != nil {
-			return fmt.Errorf("failed to read user input: %w", err)
+			return err
 		}
-
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
+		if !ok {
 			return nil
 		}
 
@@ -476,9 +472,7 @@ func WriteGuardrails(projectRoot string) error {
 // (individual server entries merged, existing takes precedence per server name).
 func mergeMCPSettings(liza, existing map[string]any) map[string]any {
 	result := make(map[string]any)
-	for k, v := range liza {
-		result[k] = v
-	}
+	maps.Copy(result, liza)
 
 	for k, v := range existing {
 		if k == "mcpServers" {
@@ -486,12 +480,8 @@ func mergeMCPSettings(liza, existing map[string]any) map[string]any {
 			existingServers, existingOk := v.(map[string]any)
 			if lizaOk && existingOk {
 				mergedServers := make(map[string]any)
-				for name, cfg := range lizaServers {
-					mergedServers[name] = cfg
-				}
-				for name, cfg := range existingServers {
-					mergedServers[name] = cfg
-				}
+				maps.Copy(mergedServers, lizaServers)
+				maps.Copy(mergedServers, existingServers)
 				result[k] = mergedServers
 			} else {
 				result[k] = v
