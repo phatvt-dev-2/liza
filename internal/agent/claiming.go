@@ -175,6 +175,27 @@ func hasPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResol
 	return false
 }
 
+// handleAvailableTransitions executes pipeline transitions for newly-merged tasks.
+// Called by the supervisor after handleApprovedMerges to auto-create child tasks
+// from pipeline transitions. Children are added to state.Tasks but NOT to the
+// current sprint's scope — they get carried to the next sprint.
+func handleAvailableTransitions(projectRoot string) error {
+	results, err := ops.ExecuteAvailableTransitions(projectRoot)
+	if err != nil {
+		return err
+	}
+
+	logger := GetLogger()
+	for _, r := range results {
+		logger.Info("Pipeline transition executed",
+			"source_task", r.SourceTaskID,
+			"transition", r.TransitionName,
+			"children_created", len(r.ChildTaskIDs))
+	}
+
+	return nil
+}
+
 // logTaskSubmissionIfCompleted checks if a claimed task was submitted for review
 // and logs this transition for visibility in agent logs
 func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string, pr models.PipelineResolver) error {

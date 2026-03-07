@@ -1,7 +1,9 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"slices"
 	"strings"
 	"time"
@@ -11,6 +13,11 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 )
+
+// errTransitionAlreadyExecuted is returned by proceedInner when the transition
+// has already been fully executed (idempotency guard). This is an expected
+// condition in ExecuteAvailableTransitions, not a configuration error.
+var errTransitionAlreadyExecuted = errors.New("transition already executed")
 
 // ProceedResult contains the outcome of executing a manual inter-pair transition.
 type ProceedResult struct {
@@ -47,6 +54,7 @@ var knownTransitions = map[string]transitionDef{
 // Proceed executes a manual inter-pair transition on a source task.
 // It creates child tasks from the source's output[] entries and records
 // the transition in the source's transitions_executed map.
+// Children are added to Sprint.Scope.Planned so they appear in the next sprint.
 //
 // Preconditions:
 //   - Sprint must be COMPLETED
@@ -77,125 +85,12 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 			return fmt.Errorf("sprint must be COMPLETED before proceeding (current: %s)", s.Sprint.Status)
 		}
 
-		// Find source task
-		task := s.FindTask(taskID)
-		if task == nil {
-			return fmt.Errorf("task %q not found", taskID)
+		if err := proceedInner(s, taskID, transitionName, tDef, now, result); err != nil {
+			return err
 		}
 
-		// Validate source status
-		if task.Status != tDef.requiredStatus {
-			return fmt.Errorf("task %q must be at %s for transition %q (current: %s)",
-				taskID, tDef.requiredStatus, transitionName, task.Status)
-		}
-
-		// Check if this is a crash recovery scenario
-		alreadyExecuted := task.TransitionsExecuted[transitionName]
-
-		if alreadyExecuted {
-			switch tDef.cardinality {
-			case "per-subtask":
-				// Crash recovery: check if some children are missing
-				var missingChildren []int
-				for i := range task.Output {
-					childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
-					if s.FindTask(childID) == nil {
-						missingChildren = append(missingChildren, i)
-					}
-				}
-				if len(missingChildren) == 0 {
-					return fmt.Errorf("transition %q already executed on task %q", transitionName, taskID)
-				}
-				for _, idx := range missingChildren {
-					childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, idx)
-					child := buildChildTask(childID, taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, now)
-					s.Tasks = append(s.Tasks, child)
-					result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-				}
-				task.History = append(task.History, models.TaskHistoryEntry{
-					Time:  now,
-					Event: "transition_crash_recovery",
-					Extra: map[string]any{
-						"transition":         transitionName,
-						"recovered_children": len(missingChildren),
-					},
-				})
-				return nil
-
-			case "one-to-one":
-				// Crash recovery: check if child is missing
-				childID := fmt.Sprintf("%s-%s", taskID, transitionName)
-				if s.FindTask(childID) != nil {
-					return fmt.Errorf("transition %q already executed on task %q", transitionName, taskID)
-				}
-				child := buildOneToOneChild(childID, taskID, task, tDef, now)
-				s.Tasks = append(s.Tasks, child)
-				result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-				task.History = append(task.History, models.TaskHistoryEntry{
-					Time:  now,
-					Event: "transition_crash_recovery",
-					Extra: map[string]any{
-						"transition":         transitionName,
-						"recovered_children": 1,
-					},
-				})
-				return nil
-
-			default:
-				return fmt.Errorf("transition %q already executed on task %q", transitionName, taskID)
-			}
-		}
-
-		// Validate and create children based on cardinality
-		switch tDef.cardinality {
-		case "per-subtask":
-			if len(task.Output) == 0 {
-				return fmt.Errorf("task %q has no output[] entries for per-subtask transition %q", taskID, transitionName)
-			}
-			for i, entry := range task.Output {
-				if err := validateOutputEntry(entry, i); err != nil {
-					return err
-				}
-			}
-		case "one-to-one":
-			if task.SpecRef == "" {
-				return fmt.Errorf("task %q has empty spec_ref for one-to-one transition %q", taskID, transitionName)
-			}
-		default:
-			return fmt.Errorf("unsupported cardinality %q for transition %q", tDef.cardinality, transitionName)
-		}
-
-		// Mark transition as executed (write this first for crash recovery)
-		if task.TransitionsExecuted == nil {
-			task.TransitionsExecuted = make(map[string]bool)
-		}
-		task.TransitionsExecuted[transitionName] = true
-
-		// Create child tasks based on cardinality
-		switch tDef.cardinality {
-		case "per-subtask":
-			for i, entry := range task.Output {
-				childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
-				child := buildChildTask(childID, taskID, entry, tDef.targetStatus, tDef.targetRolePair, now)
-				s.Tasks = append(s.Tasks, child)
-				result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-			}
-		case "one-to-one":
-			childID := fmt.Sprintf("%s-%s", taskID, transitionName)
-			child := buildOneToOneChild(childID, taskID, task, tDef, now)
-			s.Tasks = append(s.Tasks, child)
-			result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-		}
-
-		// Add history entry to source task
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:  now,
-			Event: "transition_executed",
-			Extra: map[string]any{
-				"transition": transitionName,
-				"children":   len(result.ChildTaskIDs),
-			},
-		})
+		// Add children to sprint scope so they appear in the next sprint
+		s.Sprint.Scope.Planned = append(s.Sprint.Scope.Planned, result.ChildTaskIDs...)
 
 		return nil
 	})
@@ -205,6 +100,265 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 	}
 
 	return result, nil
+}
+
+// proceedInner is the core transition logic, operating on *models.State directly.
+// It has no blackboard dependency and no sprint status check, making it usable
+// both from Proceed (human-initiated, with sprint gate) and from
+// ExecuteAvailableTransitions (supervisor-initiated, no sprint gate).
+//
+// The result.ChildTaskIDs slice is appended to with created child task IDs.
+func proceedInner(s *models.State, taskID, transitionName string, tDef transitionDef, now time.Time, result *ProceedResult) error {
+	// Find source task
+	task := s.FindTask(taskID)
+	if task == nil {
+		return fmt.Errorf("task %q not found", taskID)
+	}
+
+	// Validate source status
+	if task.Status != tDef.requiredStatus {
+		return fmt.Errorf("task %q must be at %s for transition %q (current: %s)",
+			taskID, tDef.requiredStatus, transitionName, task.Status)
+	}
+
+	// Check if this is a crash recovery scenario
+	alreadyExecuted := task.TransitionsExecuted[transitionName]
+
+	if alreadyExecuted {
+		switch tDef.cardinality {
+		case "per-subtask":
+			// Crash recovery: check if some children are missing
+			var missingChildren []int
+			for i := range task.Output {
+				childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
+				if s.FindTask(childID) == nil {
+					missingChildren = append(missingChildren, i)
+				}
+			}
+			if len(missingChildren) == 0 {
+				return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
+			}
+			for _, idx := range missingChildren {
+				childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, idx)
+				child := buildChildTask(childID, taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, now)
+				s.Tasks = append(s.Tasks, child)
+				result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+			}
+			task.History = append(task.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: "transition_crash_recovery",
+				Extra: map[string]any{
+					"transition":         transitionName,
+					"recovered_children": len(missingChildren),
+				},
+			})
+			return nil
+
+		case "one-to-one":
+			// Crash recovery: check if child is missing
+			childID := fmt.Sprintf("%s-%s", taskID, transitionName)
+			if s.FindTask(childID) != nil {
+				return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
+			}
+			child := buildOneToOneChild(childID, taskID, task, tDef, now)
+			s.Tasks = append(s.Tasks, child)
+			result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+			task.History = append(task.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: "transition_crash_recovery",
+				Extra: map[string]any{
+					"transition":         transitionName,
+					"recovered_children": 1,
+				},
+			})
+			return nil
+
+		default:
+			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
+		}
+	}
+
+	// Validate and create children based on cardinality
+	switch tDef.cardinality {
+	case "per-subtask":
+		if len(task.Output) == 0 {
+			return fmt.Errorf("task %q has no output[] entries for per-subtask transition %q", taskID, transitionName)
+		}
+		for i, entry := range task.Output {
+			if err := validateOutputEntry(entry, i); err != nil {
+				return err
+			}
+		}
+	case "one-to-one":
+		if task.SpecRef == "" {
+			return fmt.Errorf("task %q has empty spec_ref for one-to-one transition %q", taskID, transitionName)
+		}
+	default:
+		return fmt.Errorf("unsupported cardinality %q for transition %q", tDef.cardinality, transitionName)
+	}
+
+	// Mark transition as executed (write this first for crash recovery)
+	if task.TransitionsExecuted == nil {
+		task.TransitionsExecuted = make(map[string]bool)
+	}
+	task.TransitionsExecuted[transitionName] = true
+
+	// Create child tasks based on cardinality
+	switch tDef.cardinality {
+	case "per-subtask":
+		for i, entry := range task.Output {
+			childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
+			child := buildChildTask(childID, taskID, entry, tDef.targetStatus, tDef.targetRolePair, now)
+			s.Tasks = append(s.Tasks, child)
+			result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+		}
+	case "one-to-one":
+		childID := fmt.Sprintf("%s-%s", taskID, transitionName)
+		child := buildOneToOneChild(childID, taskID, task, tDef, now)
+		s.Tasks = append(s.Tasks, child)
+		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+	}
+
+	// Add history entry to source task
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: "transition_executed",
+		Extra: map[string]any{
+			"transition": transitionName,
+			"children":   len(result.ChildTaskIDs),
+		},
+	})
+
+	return nil
+}
+
+// ExecuteAvailableTransitions auto-executes pipeline transitions for merged tasks.
+// Called by the supervisor after merging approved tasks. For each MERGED task with
+// available transitions (per its role-pair's approved status in the pipeline config),
+// it creates child tasks in state.Tasks but does NOT add them to Sprint.Scope.Planned.
+// Children are carried to the next sprint via collectNonTerminalTaskIDs during sprint
+// advancement.
+//
+// This intentionally scans ALL merged tasks, not just newly-merged ones: if the
+// supervisor crashes between merge and transition, the next run will pick up the
+// pending transition. The idempotency guard in proceedInner (TransitionsExecuted map)
+// prevents duplicate child creation.
+//
+// Returns nil, nil for legacy projects (no pipeline config).
+func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
+	resolver, cfg, err := loadResolver(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+	if resolver == nil {
+		return nil, nil // Legacy project — no pipeline config
+	}
+
+	statePath := paths.New(projectRoot).StatePath()
+	blackboard := db.For(statePath)
+
+	now := time.Now().UTC()
+	var results []ProceedResult
+
+	err = blackboard.Modify(func(s *models.State) error {
+		for i := range s.Tasks {
+			task := &s.Tasks[i]
+			if task.Status != models.TaskStatusMerged {
+				continue
+			}
+			if task.RolePair == "" {
+				continue
+			}
+
+			// Look up what the approved status was for this task's role-pair.
+			// The task is now MERGED, but transitions fire from the approved status.
+			approvedStatus, err := resolver.ApprovedStatus(task.RolePair)
+			if err != nil {
+				log.Printf("WARNING: ExecuteAvailableTransitions: task %s has unknown role-pair %q: %v", task.ID, task.RolePair, err)
+				continue
+			}
+
+			// Check available transitions at the approved status
+			available := resolver.AvailableTransitions(approvedStatus, task.TransitionsExecuted)
+			if len(available) == 0 {
+				continue
+			}
+
+			for _, transitionName := range available {
+				// Resolve transition def (allows both manual and auto triggers for supervisor)
+				tDef, err := buildTransitionDefFromPipeline(resolver, cfg, transitionName)
+				if err != nil {
+					log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", task.ID, transitionName, err)
+					continue
+				}
+
+				// Override requiredStatus: the task is MERGED, but the transition
+				// definition expects the approved status. We've already validated
+				// the role-pair match above, so this is a known override.
+				tDef.requiredStatus = models.TaskStatusMerged
+
+				result := ProceedResult{
+					SourceTaskID:   task.ID,
+					TransitionName: transitionName,
+				}
+
+				if err := proceedInner(s, task.ID, transitionName, tDef, now, &result); err != nil {
+					// Idempotent skip is expected — only warn on other errors
+					if !errors.Is(err, errTransitionAlreadyExecuted) {
+						log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", task.ID, transitionName, err)
+					}
+					continue
+				}
+
+				results = append(results, result)
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("execute available transitions failed: %w", err)
+	}
+
+	return results, nil
+}
+
+// buildTransitionDefFromPipeline resolves a transition definition from pipeline config.
+// This is the shared helper used by both resolveTransitionDef (with trigger check)
+// and ExecuteAvailableTransitions (without trigger check).
+func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig, transitionName string) (transitionDef, error) {
+	td, err := resolver.Transition(transitionName)
+	if err != nil {
+		return transitionDef{}, err
+	}
+
+	fromStatus, err := resolvePhaseRef(resolver, td.From)
+	if err != nil {
+		return transitionDef{}, fmt.Errorf("invalid from reference in transition %q: %w", transitionName, err)
+	}
+	toStatus, err := resolvePhaseRef(resolver, td.To)
+	if err != nil {
+		return transitionDef{}, fmt.Errorf("invalid to reference in transition %q: %w", transitionName, err)
+	}
+	targetPair, err := resolver.TransitionTargetRolePair(transitionName)
+	if err != nil {
+		return transitionDef{}, fmt.Errorf("invalid target role-pair in transition %q: %w", transitionName, err)
+	}
+
+	// Resolve doer display name for one-to-one child task descriptions.
+	var doerDisplay string
+	rp, rpErr := resolver.RolePair(targetPair)
+	if rpErr == nil {
+		doerDisplay = cfg.Pipeline.AgentRoles[rp.Doer]
+	}
+
+	return transitionDef{
+		requiredStatus:  fromStatus,
+		targetStatus:    toStatus,
+		cardinality:     td.Cardinality,
+		targetRolePair:  targetPair,
+		doerDisplayName: doerDisplay,
+	}, nil
 }
 
 // buildChildTask creates a child task from an output entry.
@@ -288,6 +442,8 @@ func AvailableTransitions(task *models.Task, projectRoot string) []string {
 
 // resolveTransitionDef looks up a transition definition, trying the pipeline config
 // first (if present) and falling back to the legacy knownTransitions map.
+// Only manual transitions are allowed — auto transitions are reserved for supervisor
+// execution via ExecuteAvailableTransitions.
 func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, error) {
 	resolver, cfg, err := loadResolver(projectRoot)
 	if err != nil {
@@ -295,7 +451,7 @@ func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, er
 	}
 
 	if resolver != nil {
-		// Pipeline path: look up transition from config
+		// Pipeline path: verify transition exists and check trigger type
 		td, err := resolver.Transition(transitionName)
 		if err != nil {
 			names := allTransitionNames(cfg)
@@ -308,33 +464,7 @@ func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, er
 			return transitionDef{}, fmt.Errorf("transition %q has trigger %q; only manual transitions can be executed via proceed", transitionName, td.Trigger)
 		}
 
-		fromStatus, err := resolvePhaseRef(resolver, td.From)
-		if err != nil {
-			return transitionDef{}, fmt.Errorf("invalid from reference in transition %q: %w", transitionName, err)
-		}
-		toStatus, err := resolvePhaseRef(resolver, td.To)
-		if err != nil {
-			return transitionDef{}, fmt.Errorf("invalid to reference in transition %q: %w", transitionName, err)
-		}
-		targetPair, err := resolver.TransitionTargetRolePair(transitionName)
-		if err != nil {
-			return transitionDef{}, fmt.Errorf("invalid target role-pair in transition %q: %w", transitionName, err)
-		}
-
-		// Resolve doer display name for one-to-one child task descriptions.
-		var doerDisplay string
-		rp, rpErr := resolver.RolePair(targetPair)
-		if rpErr == nil {
-			doerDisplay = cfg.Pipeline.AgentRoles[rp.Doer]
-		}
-
-		return transitionDef{
-			requiredStatus:  fromStatus,
-			targetStatus:    toStatus,
-			cardinality:     td.Cardinality,
-			targetRolePair:  targetPair,
-			doerDisplayName: doerDisplay,
-		}, nil
+		return buildTransitionDefFromPipeline(resolver, cfg, transitionName)
 	}
 
 	// Legacy path

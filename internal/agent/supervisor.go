@@ -456,6 +456,11 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				GetLogger().Warn("Merge handler error", "error", err)
 			}
 
+			// Execute pipeline transitions on newly-merged tasks
+			if err := handleAvailableTransitions(config.ProjectRoot); err != nil {
+				GetLogger().Warn("Transition handler error", "error", err)
+			}
+
 			// If there are still pending merges (transient errors), retry with
 			// backoff up to a max count, then proceed to waitForWork
 			if hasPendingMerges(bb, config.AgentID, pr) {

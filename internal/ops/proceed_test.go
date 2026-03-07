@@ -1196,3 +1196,384 @@ func TestAvailableTransitions_PipelineExcludesExecuted(t *testing.T) {
 		t.Errorf("AvailableTransitions = %v, want [] (already executed)", avail)
 	}
 }
+
+// --- ExecuteAvailableTransitions tests ---
+
+func TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	parentID := "us-task-1"
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "us-writing-pair",
+		Description:  "User authentication story",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "specs/auth.md",
+		DoneWhen:     "US approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+	if results[0].SourceTaskID != parentID {
+		t.Errorf("SourceTaskID = %q, want %q", results[0].SourceTaskID, parentID)
+	}
+	if results[0].TransitionName != "us-to-coding" {
+		t.Errorf("TransitionName = %q, want %q", results[0].TransitionName, "us-to-coding")
+	}
+	if len(results[0].ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1", len(results[0].ChildTaskIDs))
+	}
+
+	// Verify child exists in state
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	childID := results[0].ChildTaskIDs[0]
+	child := readState.FindTask(childID)
+	if child == nil {
+		t.Fatal("Child task not found in state.Tasks")
+	}
+	if child.RolePair != "code-planning-pair" {
+		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "code-planning-pair")
+	}
+	if child.Status != models.TaskStatus("DRAFT_CODING_PLAN") {
+		t.Errorf("Child status = %v, want DRAFT_CODING_PLAN", child.Status)
+	}
+
+	// Children must NOT be in Sprint.Scope.Planned
+	for _, id := range readState.Sprint.Scope.Planned {
+		if id == childID {
+			t.Errorf("Child %q should NOT be in Sprint.Scope.Planned", childID)
+		}
+	}
+
+	// Source task should have transition marked
+	srcTask := readState.FindTask(parentID)
+	if !srcTask.TransitionsExecuted["us-to-coding"] {
+		t.Error("transitions_executed should contain us-to-coding")
+	}
+}
+
+func TestExecuteAvailableTransitions_PerSubtask(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	parentID := "plan-task-1"
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan the auth module",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Implement login", DoneWhen: "POST /login works", Scope: "auth", SpecRef: "specs/auth.md#login"},
+			{Desc: "Implement refresh", DoneWhen: "POST /refresh works", Scope: "auth", SpecRef: "specs/auth.md#refresh"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+	if len(results[0].ChildTaskIDs) != 2 {
+		t.Fatalf("ChildTaskIDs count = %d, want 2", len(results[0].ChildTaskIDs))
+	}
+
+	// Verify children exist
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for _, childID := range results[0].ChildTaskIDs {
+		child := readState.FindTask(childID)
+		if child == nil {
+			t.Fatalf("Child task %q not found in state.Tasks", childID)
+		}
+		if child.RolePair != "coding-pair" {
+			t.Errorf("Child %q role_pair = %q, want %q", childID, child.RolePair, "coding-pair")
+		}
+		// Must NOT be in sprint scope
+		for _, id := range readState.Sprint.Scope.Planned {
+			if id == childID {
+				t.Errorf("Child %q should NOT be in Sprint.Scope.Planned", childID)
+			}
+		}
+	}
+}
+
+func TestExecuteAvailableTransitions_NoopForLegacy(t *testing.T) {
+	// No pipeline.yaml → legacy project
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	task := models.Task{
+		ID:           "task-1",
+		Type:         models.TaskTypeCoding,
+		Description:  "Some task",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Done",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+	if results != nil {
+		t.Errorf("results = %v, want nil for legacy project", results)
+	}
+}
+
+func TestExecuteAvailableTransitions_NoopWhenNoTransitions(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	// coding-pair has no outgoing transitions — should produce no results
+	task := models.Task{
+		ID:           "code-task-1",
+		Type:         models.TaskTypeCoding,
+		RolePair:     "coding-pair",
+		Description:  "Implement login",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Done",
+		Scope:        "scope",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("results count = %d, want 0 (no transitions for coding-pair)", len(results))
+	}
+}
+
+func TestExecuteAvailableTransitions_Idempotent(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	parentID := "us-task-1"
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	childID := "us-task-1-us-to-coding"
+	task := models.Task{
+		ID:                  parentID,
+		Type:                models.TaskTypeCoding,
+		RolePair:            "us-writing-pair",
+		Description:         "User authentication story",
+		Status:              models.TaskStatusMerged,
+		Priority:            1,
+		Created:             now,
+		SpecRef:             "specs/auth.md",
+		DoneWhen:            "US approved",
+		Scope:               "auth module",
+		ReviewCommit:        &reviewCommit,
+		MergeCommit:         &mergeCommit,
+		TransitionsExecuted: map[string]bool{"us-to-coding": true},
+		History:             []models.TaskHistoryEntry{},
+	}
+	child := models.Task{
+		ID:          childID,
+		Type:        models.TaskTypeCoding,
+		RolePair:    "code-planning-pair",
+		Description: "Code Planner task for: User authentication story",
+		Status:      models.TaskStatus("DRAFT_CODING_PLAN"),
+		Priority:    1,
+		Created:     now,
+		ParentTask:  &parentID,
+		SpecRef:     "specs/auth.md",
+		DoneWhen:    "done",
+		Scope:       "scope",
+		History:     []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task, child)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+	// Transition already executed and child exists → skipped
+	if len(results) != 0 {
+		t.Errorf("results count = %d, want 0 (idempotent)", len(results))
+	}
+}
+
+func TestExecuteAvailableTransitions_NoSprintGate(t *testing.T) {
+	// Verify ExecuteAvailableTransitions works regardless of sprint status
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress // NOT COMPLETED
+
+	now := time.Now().UTC()
+	parentID := "us-task-1"
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "us-writing-pair",
+		Description:  "User authentication story",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "specs/auth.md",
+		DoneWhen:     "US approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Should succeed even though sprint is IN_PROGRESS (not COMPLETED)
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+}
+
+// --- Proceed: sprint scope update ---
+
+func TestProceed_AddsChildrenToSprintScope(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-task-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		Description:  "Plan the auth module",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Implement login", DoneWhen: "POST /login works", Scope: "auth", SpecRef: "specs/auth.md#login"},
+			{Desc: "Implement refresh", DoneWhen: "POST /refresh works", Scope: "auth", SpecRef: "specs/auth.md#refresh"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	// Verify children are in sprint scope
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for _, childID := range result.ChildTaskIDs {
+		found := false
+		for _, id := range readState.Sprint.Scope.Planned {
+			if id == childID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Child %q not found in Sprint.Scope.Planned", childID)
+		}
+	}
+}
