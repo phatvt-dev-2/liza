@@ -138,7 +138,6 @@ func (r *Resolver) SprintTerminalStates() []models.TaskStatus {
 
 	states = append(states, models.TaskStatusMerged)
 
-	// Sort for deterministic output.
 	slices.Sort(states)
 	return states
 }
@@ -202,7 +201,6 @@ func (r *Resolver) Transition(name string) (*TransitionDef, error) {
 // status, excluding transitions already executed.
 func (r *Resolver) AvailableTransitions(status models.TaskStatus, transitionsExecuted map[string]bool) []string {
 	var available []string
-	// Check sub-pipeline transitions.
 	for _, sp := range r.config.Pipeline.SubPipelines {
 		for _, t := range sp.Transitions {
 			if t.Trigger != "manual" {
@@ -220,7 +218,6 @@ func (r *Resolver) AvailableTransitions(status models.TaskStatus, transitionsExe
 			}
 		}
 	}
-	// Check pipeline-transitions (3-part refs).
 	for _, t := range r.config.Pipeline.PipelineTransitions {
 		if t.Trigger != "manual" {
 			continue

@@ -95,7 +95,6 @@ func validate(cfg *PipelineConfig) error {
 		return fmt.Errorf("pipeline must define at least one role-pair")
 	}
 
-	// Validate doer/reviewer reference agent-roles.
 	for name, rp := range p.RolePairs {
 		if _, ok := p.AgentRoles[rp.Doer]; !ok {
 			return fmt.Errorf("role-pair %q: doer %q not found in agent-roles", name, rp.Doer)
@@ -105,7 +104,6 @@ func validate(cfg *PipelineConfig) error {
 		}
 	}
 
-	// Validate state names: non-empty and globally unique.
 	stateOwner := make(map[string]string) // state name → role-pair name
 	for name, rp := range p.RolePairs {
 		states := []struct {
@@ -130,12 +128,9 @@ func validate(cfg *PipelineConfig) error {
 		}
 	}
 
-	// Track role-pair membership across sub-pipelines (blocker fix 1).
-	rpSubPipeline := make(map[string]string) // role-pair → sub-pipeline name
-	// Track transition name uniqueness across sub-pipelines.
+	rpSubPipeline := make(map[string]string)   // role-pair → sub-pipeline name
 	transitionOwner := make(map[string]string) // transition name → sub-pipeline name
 
-	// Validate sub-pipelines.
 	for spName, sp := range p.SubPipelines {
 		if len(sp.Steps) == 0 {
 			return fmt.Errorf("sub-pipeline %q: must have at least one step", spName)
@@ -144,14 +139,12 @@ func validate(cfg *PipelineConfig) error {
 			if _, ok := p.RolePairs[step]; !ok {
 				return fmt.Errorf("sub-pipeline %q: step %q not found in role-pairs", spName, step)
 			}
-			// Enforce single-subpipeline membership per role-pair.
 			if existingSP, exists := rpSubPipeline[step]; exists {
 				return fmt.Errorf("role-pair %q appears in multiple sub-pipelines: %q and %q", step, existingSP, spName)
 			}
 			rpSubPipeline[step] = spName
 		}
 
-		// Validate transitions.
 		for _, t := range sp.Transitions {
 			if err := validateTransition(t, p, sp.Steps); err != nil {
 				return fmt.Errorf("sub-pipeline %q transition %q: %w", spName, t.Name, err)
@@ -163,7 +156,6 @@ func validate(cfg *PipelineConfig) error {
 		}
 	}
 
-	// Validate pipeline-transitions.
 	for _, t := range p.PipelineTransitions {
 		if err := validatePipelineTransition(t, p); err != nil {
 			return fmt.Errorf("pipeline-transition %q: %w", t.Name, err)
@@ -174,7 +166,6 @@ func validate(cfg *PipelineConfig) error {
 		transitionOwner[t.Name] = "pipeline-transitions"
 	}
 
-	// Validate entry-points.
 	for epName, epValue := range p.EntryPoints {
 		if err := validateEntryPoint(epName, epValue, p); err != nil {
 			return err
@@ -230,7 +221,6 @@ func validateTransition(t TransitionDef, p *Pipeline, steps []string) error {
 		return err
 	}
 
-	// Validate from reference.
 	fromPair, fromPhase, err := parseRef(t.From)
 	if err != nil {
 		return fmt.Errorf("from: %w", err)
@@ -242,7 +232,6 @@ func validateTransition(t TransitionDef, p *Pipeline, steps []string) error {
 		return fmt.Errorf("from: invalid phase %q", fromPhase)
 	}
 
-	// Validate to reference.
 	toPair, toPhase, err := parseRef(t.To)
 	if err != nil {
 		return fmt.Errorf("to: %w", err)
@@ -271,7 +260,6 @@ func validatePipelineTransition(t TransitionDef, p *Pipeline) error {
 		return err
 	}
 
-	// Validate from reference (3-part).
 	fromSP, fromPair, fromPhase, err := parse3PartRef(t.From)
 	if err != nil {
 		return fmt.Errorf("from: %w", err)
@@ -287,7 +275,6 @@ func validatePipelineTransition(t TransitionDef, p *Pipeline) error {
 		return fmt.Errorf("from: invalid phase %q", fromPhase)
 	}
 
-	// Validate to reference (3-part).
 	toSP, toPair, toPhase, err := parse3PartRef(t.To)
 	if err != nil {
 		return fmt.Errorf("to: %w", err)
@@ -303,7 +290,6 @@ func validatePipelineTransition(t TransitionDef, p *Pipeline) error {
 		return fmt.Errorf("to: invalid phase %q", toPhase)
 	}
 
-	// Cross-sub-pipeline constraint: from and to must reference different sub-pipelines.
 	if fromSP == toSP {
 		return fmt.Errorf("from and to must reference different sub-pipelines (both reference %q)", fromSP)
 	}
@@ -311,7 +297,7 @@ func validatePipelineTransition(t TransitionDef, p *Pipeline) error {
 	return nil
 }
 
-// validateEntryPoint validates a single entry-point definition (blocker fix 2).
+// validateEntryPoint validates a single entry-point definition.
 func validateEntryPoint(epName, epValue string, p *Pipeline) error {
 	spName, rpName, err := parseRef(epValue)
 	if err != nil {
@@ -323,7 +309,6 @@ func validateEntryPoint(epName, epValue string, p *Pipeline) error {
 		return fmt.Errorf("entry-point %q: sub-pipeline %q not found", epName, spName)
 	}
 
-	// Validate that the role-pair is a step of the referenced sub-pipeline.
 	if !slices.Contains(sp.Steps, rpName) {
 		return fmt.Errorf("entry-point %q: role-pair %q is not a step of sub-pipeline %q", epName, rpName, spName)
 	}

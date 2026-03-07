@@ -101,7 +101,6 @@ type USReviewerContextConfig struct {
 	TaskOrdinal    int
 }
 
-// resolveWorktreePath returns the full worktree path if the task has one, or "" otherwise.
 func resolveWorktreePath(projectRoot string, worktree *string) string {
 	if worktree == nil {
 		return ""
@@ -397,7 +396,6 @@ func hasPriorRejection(task *models.Task) bool {
 	return task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null"
 }
 
-// countTasksByStatus counts tasks with a specific status
 func countTasksByStatus(tasks []models.Task, status models.TaskStatus) int {
 	count := 0
 	for _, task := range tasks {
@@ -450,7 +448,6 @@ func collectMergedPlanningTasks(state *models.State, planningPairs map[string]bo
 	return result
 }
 
-// determineWakeTrigger determines what triggered the orchestrator to wake
 func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries int, sprintComplete bool, planningTasks []planningTaskData) string {
 	if totalTasks == 0 {
 		return "INITIAL_PLANNING"
@@ -576,7 +573,6 @@ type wakePlanningCompleteData struct {
 	PlanningTasks []planningTaskData
 }
 
-// buildInstructionsForWakeTrigger returns trigger-specific instructions
 func buildInstructionsForWakeTrigger(wakeTrigger string, wakeData wakeTemplateData, planningTasks []planningTaskData) (string, error) {
 	switch wakeTrigger {
 	case "INITIAL_PLANNING":
