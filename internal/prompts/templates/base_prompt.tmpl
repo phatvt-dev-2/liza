@@ -27,13 +27,15 @@ OPERATIONAL RULES:
   capture a lesson using the lesson-capture skill before moving on.
   Future agents read lessons/agents/README.md at init.
 
+Ensure to have read ~/.liza/AGENT_TOOLS.md for tool guidance.
+
 BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
 - NEVER combine cd and git in one command. Use: git -C <path> <cmd>
-- NEVER use sed/awk for file editing. See AGENT_TOOLS.md for file-edit tool preferences.
 - NEVER use $() command substitution, backticks, or ANSI-C quoting ($'...') in Bash commands.
 - NEVER attempt to install, bootstrap, or fix system-level tooling.
 - NEVER use "git add -A" or "git add .". Always stage specific files by name.
 - All liza_* operations are MCP tool calls — invoke as tools, NEVER via shell commands.
+- Avoid using sed/awk for file editing.
 
 QUERY TOOLS (all roles):
 - liza_get — Query state: {"query": "tasks"}, {"query": "tasks/<id>"}, {"query": "agents"}, {"query": "metrics"}

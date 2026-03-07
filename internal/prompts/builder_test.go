@@ -1001,7 +1001,6 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		"BASH CONSTRAINTS",
 		"NEVER combine cd and git in one command",
 		"git -C <path> <cmd>",
-		"NEVER use sed/awk for file editing",
 		"AGENT_TOOLS.md",
 		"NEVER use $() command substitution",
 		"ANSI-C quoting",

@@ -1,14 +1,11 @@
-# Tools for Coding Agents
+# Agent Tools
 
-- Here is the sub-contract for tool usage by coding agents.
+Sub-contract for tool usage. Applies to all modes (Pairing, Liza, Subagent).
+When a preferred tool is unavailable in the current session, fall through to the next option in the preference chain.
 
 ## Forbidden tools
 
 Refer to Security Protocol
-
-## Tool preferences
-
-None
 
 ## Other authorized tools
 
