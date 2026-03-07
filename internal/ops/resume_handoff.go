@@ -94,11 +94,10 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 			}
 
 			t.HandoffPending = false
-			agentPtr := &agentID
 			t.History = append(t.History, models.TaskHistoryEntry{
 				Time:  now,
 				Event: "handoff_resumed",
-				Agent: agentPtr,
+				Agent: &agentID,
 			})
 
 			agent, ok := s.Agents[agentID]

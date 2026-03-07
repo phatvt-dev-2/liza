@@ -34,15 +34,12 @@ func SprintCheckpoint(projectRoot string) (*SprintCheckpointResult, error) {
 		return nil, fmt.Errorf("failed to read state: %w", err)
 	}
 
-	if state.Sprint.Status == models.SprintStatusCheckpoint {
+	switch state.Sprint.Status {
+	case models.SprintStatusCheckpoint:
 		return nil, ErrSprintAlreadyCheckpoint
-	}
-
-	if state.Sprint.Status == models.SprintStatusCompleted {
+	case models.SprintStatusCompleted:
 		return nil, fmt.Errorf("cannot checkpoint: sprint is COMPLETED")
-	}
-
-	if state.Sprint.Status == models.SprintStatusAborted {
+	case models.SprintStatusAborted:
 		return nil, fmt.Errorf("cannot checkpoint: sprint is ABORTED")
 	}
 

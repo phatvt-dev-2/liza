@@ -144,11 +144,10 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 			task.ApprovedBy = &agentID
 			task.RejectionReason = nil
 
-			agentPtr := &agentID
 			task.History = append(task.History, models.TaskHistoryEntry{
 				Time:  now,
 				Event: "approved",
-				Agent: agentPtr,
+				Agent: &agentID,
 			})
 		} else {
 			if err := transitionTask(rejectedStatus); err != nil {
@@ -158,13 +157,11 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 			task.ReviewCyclesCurrent++
 			task.ReviewCyclesTotal++
 
-			agentPtr := &agentID
-			reasonPtr := &reason
 			task.History = append(task.History, models.TaskHistoryEntry{
 				Time:   now,
 				Event:  "rejected",
-				Agent:  agentPtr,
-				Reason: reasonPtr,
+				Agent:  &agentID,
+				Reason: &reason,
 			})
 
 			reviewLimit := effectiveReviewCycleLimit(state.Config)
@@ -196,12 +193,11 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 				}
 				task.AssignedTo = nil
 
-				blockedReasonPtr := &blockedReason
 				task.History = append(task.History, models.TaskHistoryEntry{
 					Time:   now,
 					Event:  "blocked",
-					Agent:  agentPtr,
-					Reason: blockedReasonPtr,
+					Agent:  &agentID,
+					Reason: &blockedReason,
 				})
 			}
 		}
