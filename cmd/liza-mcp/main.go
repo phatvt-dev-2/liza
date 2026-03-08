@@ -23,14 +23,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	lizaDir := filepath.Join(absProjectRoot, ".liza")
-	if _, err := os.Stat(lizaDir); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "Error: .liza directory not found in %s\n", absProjectRoot)
-		fmt.Fprintf(os.Stderr, "Run 'liza init' first to initialize the workspace\n")
-		os.Exit(1)
-	}
-
-	logPath := filepath.Join(lizaDir, "log.yaml")
+	logPath := filepath.Join(absProjectRoot, ".liza", "log.yaml")
 
 	mcp.Version = embedded.Version
 	mcp.BuildCommit = embedded.GitCommit

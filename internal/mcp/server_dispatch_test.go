@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -18,6 +19,17 @@ import (
 func reqID(id int) json.RawMessage {
 	b, _ := json.Marshal(id)
 	return b
+}
+
+// newInitializedServer creates a Server whose projectRoot contains a .liza
+// directory, so the initialization check passes for tool/resource dispatch.
+func newInitializedServer(t *testing.T) *Server {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".liza"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return NewServer(dir, filepath.Join(dir, ".liza", "log.yaml"))
 }
 
 func TestHandleRequest_Routing(t *testing.T) {
@@ -170,8 +182,79 @@ func TestHandleRequest_ToolCall_MissingName(t *testing.T) {
 	}
 }
 
+func TestHandleRequest_ToolCall_NotInitialized(t *testing.T) {
+	// Server with no .liza directory
+	dir := t.TempDir()
+	server := NewServer(dir, filepath.Join(dir, ".liza", "log.yaml"))
+
+	req := &protocol.JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      reqID(1),
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name":      "liza_status",
+			"arguments": map[string]any{},
+		},
+	}
+
+	resp := server.HandleRequest(req)
+	if resp.Error == nil {
+		t.Fatal("expected error for uninitialized workspace")
+	}
+	if resp.Error.Code != protocol.InvalidRequest {
+		t.Errorf("error code = %d, want %d (InvalidRequest)", resp.Error.Code, protocol.InvalidRequest)
+	}
+	if resp.Error.Message == "" {
+		t.Error("expected non-empty error message")
+	}
+}
+
+func TestHandleRequest_ToolCall_VersionWorksWithoutInit(t *testing.T) {
+	// Server with no .liza directory — liza_version should still work
+	dir := t.TempDir()
+	server := NewServer(dir, filepath.Join(dir, ".liza", "log.yaml"))
+
+	req := &protocol.JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      reqID(1),
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name":      "liza_version",
+			"arguments": map[string]any{},
+		},
+	}
+
+	resp := server.HandleRequest(req)
+	if resp.Error != nil {
+		t.Fatalf("liza_version should work without .liza: %v", resp.Error)
+	}
+}
+
+func TestHandleRequest_ResourceRead_NotInitialized(t *testing.T) {
+	// Server with no .liza directory
+	dir := t.TempDir()
+	server := NewServer(dir, filepath.Join(dir, ".liza", "log.yaml"))
+
+	req := &protocol.JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      reqID(1),
+		Method:  "resources/read",
+		Params: map[string]any{
+			"uri": "liza://state",
+		},
+	}
+
+	resp := server.HandleRequest(req)
+	if resp.Error == nil {
+		t.Fatal("expected error for uninitialized workspace")
+	}
+	if resp.Error.Code != protocol.InvalidRequest {
+		t.Errorf("error code = %d, want %d (InvalidRequest)", resp.Error.Code, protocol.InvalidRequest)
+	}
+}
+
 func TestHandleRequest_ToolCall_UnknownTool(t *testing.T) {
-	server := NewServer("/tmp/test", "/tmp/test/.liza/log.yaml")
+	server := newInitializedServer(t)
 
 	req := &protocol.JSONRPCRequest{
 		JSONRPC: "2.0",
@@ -193,7 +276,7 @@ func TestHandleRequest_ToolCall_UnknownTool(t *testing.T) {
 }
 
 func TestHandleRequest_ToolCall_Success(t *testing.T) {
-	server := NewServer("/tmp/test", "/tmp/test/.liza/log.yaml")
+	server := newInitializedServer(t)
 
 	// Register a test handler
 	server.registerTool(protocol.Tool{
@@ -229,7 +312,7 @@ func TestHandleRequest_ToolCall_Success(t *testing.T) {
 }
 
 func TestHandleRequest_ToolCall_NilArguments(t *testing.T) {
-	server := NewServer("/tmp/test", "/tmp/test/.liza/log.yaml")
+	server := newInitializedServer(t)
 
 	var receivedArgs map[string]any
 	server.registerTool(protocol.Tool{
@@ -321,7 +404,7 @@ func TestHandleRequest_ToolCall_AddTaskPostWriteValidationFailure(t *testing.T) 
 }
 
 func TestHandleRequest_ToolCall_HandlerError(t *testing.T) {
-	server := NewServer("/tmp/test", "/tmp/test/.liza/log.yaml")
+	server := newInitializedServer(t)
 
 	server.registerTool(protocol.Tool{
 		Name:        "failing_tool",
@@ -351,7 +434,7 @@ func TestHandleRequest_ToolCall_HandlerError(t *testing.T) {
 }
 
 func TestHandleRequest_ResourceRead_InvalidParams(t *testing.T) {
-	server := NewServer("/tmp/test", "/tmp/test/.liza/log.yaml")
+	server := newInitializedServer(t)
 
 	tests := []struct {
 		name   string
@@ -416,6 +499,13 @@ func TestClassifyError(t *testing.T) {
 		wantCode int
 		wantMsg  string
 	}{
+		// Not initialized
+		{
+			name:     "NotInitializedError",
+			err:      &NotInitializedError{ProjectRoot: "/tmp/test"},
+			wantCode: protocol.InvalidRequest,
+			wantMsg:  "workspace not initialized (no .liza directory in /tmp/test) — run 'liza init' first",
+		},
 		// Not found (typed)
 		{
 			name:     "typed NotFoundError",

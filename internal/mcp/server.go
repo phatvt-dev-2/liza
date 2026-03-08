@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -149,6 +151,22 @@ func (s *Server) handleToolsList(req *protocol.JSONRPCRequest) *protocol.JSONRPC
 	return rpcResult(req, map[string]any{"tools": s.ListTools()})
 }
 
+// NotInitializedError indicates the .liza directory does not exist.
+type NotInitializedError struct{ ProjectRoot string }
+
+func (e *NotInitializedError) Error() string {
+	return fmt.Sprintf("workspace not initialized (no .liza directory in %s) — run 'liza init' first", e.ProjectRoot)
+}
+
+// checkInitialized returns an error if the .liza directory doesn't exist.
+func (s *Server) checkInitialized() error {
+	lizaDir := filepath.Join(s.projectRoot, ".liza")
+	if _, err := os.Stat(lizaDir); os.IsNotExist(err) {
+		return &NotInitializedError{ProjectRoot: s.projectRoot}
+	}
+	return nil
+}
+
 // handleToolCall handles the tools/call request
 func (s *Server) handleToolCall(req *protocol.JSONRPCRequest) *protocol.JSONRPCResponse {
 	params, ok := req.Params.(map[string]any)
@@ -159,6 +177,13 @@ func (s *Server) handleToolCall(req *protocol.JSONRPCRequest) *protocol.JSONRPCR
 	toolName, ok := params["name"].(string)
 	if !ok {
 		return rpcError(req, protocol.NewInvalidParamsError("name must be a string"))
+	}
+
+	// liza_version works without initialization
+	if toolName != "liza_version" {
+		if err := s.checkInitialized(); err != nil {
+			return rpcError(req, s.classifyError(err))
+		}
 	}
 
 	handler, ok := s.handlers[toolName]
@@ -186,6 +211,10 @@ func (s *Server) handleResourcesList(req *protocol.JSONRPCRequest) *protocol.JSO
 
 // handleResourceRead handles the resources/read request
 func (s *Server) handleResourceRead(req *protocol.JSONRPCRequest) *protocol.JSONRPCResponse {
+	if err := s.checkInitialized(); err != nil {
+		return rpcError(req, s.classifyError(err))
+	}
+
 	params, ok := req.Params.(map[string]any)
 	if !ok {
 		return rpcError(req, protocol.NewInvalidParamsError("params must be an object"))
@@ -250,6 +279,10 @@ func matchStringErrorRule(msg string) *protocol.JSONRPCError {
 // All branches use sanitized messages — raw err.Error() is never exposed to clients.
 func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	// Type-based checks first (preferred)
+	var nie *NotInitializedError
+	if errors.As(err, &nie) {
+		return protocol.NewError(protocol.InvalidRequest, nie.Error(), nil)
+	}
 	var nfe *lizaerrors.NotFoundError
 	if errors.As(err, &nfe) {
 		return protocol.NewError(protocol.NotFound, "resource not found", nil)
