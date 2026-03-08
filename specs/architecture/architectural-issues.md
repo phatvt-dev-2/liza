@@ -13,17 +13,18 @@ Persistent record of issues identified by architectural analysis skills.
 3. Do not delete resolved issues from this document without preserving traceability metadata.
 4. If a resolved issue is removed from an active section, add/update its `Fixed (Traceability)` entry in the same change.
 5. `Fix Details` keeps the long-form rationale; `Fixed (Traceability)` is the canonical index for historical closure.
+6. Keep the **Open Issues Summary** table in sync when adding, resolving, or re-prioritizing issues.
 
 ## Table of Contents
 
 - [Update Policy](#update-policy)
+- [Open Issues Summary](#open-issues-summary)
 - [Structural Load-Bearing Elements](#structural-load-bearing-elements)
   - [Mode Selection Trigger Coupled to Prompt Lexeme](#mode-selection-trigger-coupled-to-prompt-lexeme)
 - [Systemic Tensions](#systemic-tensions)
   - [Two-Track State Mutation](#two-track-state-mutation)
   - [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency)
   - [Role-Boundary Severity Drift](#role-boundary-severity-drift)
-  - [Reviewer Role Namespace Fragmentation](#reviewer-role-namespace-fragmentation)
   - [Merge Execution Authority Split](#merge-execution-authority-split)
   - [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope)
   - [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows)
@@ -38,22 +39,16 @@ Persistent record of issues identified by architectural analysis skills.
   - [Single-Goal Data Model Constrains Applicability](#single-goal-data-model-constrains-applicability)
   - [Orchestrator State Change Verification is Non-Binding](#orchestrator-state-change-verification-is-non-binding)
 - [Stress Points](#stress-points)
-  - [Validation Integrity Split by Ingress](#validation-integrity-split-by-ingress)
   - [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
-  - [Exit Code 42 Restart Loop Without Progress Detection](#exit-code-42-restart-loop-without-progress-detection)
   - [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments)
-- [Cascade](#cascade)
-  - [Integration Test Script Silent Absence](#integration-test-script-silent-absence)
 - [Fragility](#fragility)
   - [Cross-Script State Mutation](#cross-script-state-mutation)
   - [Bootstrap Artifact Path Drift](#bootstrap-artifact-path-drift)
   - [File-Based Spec References Without Version Anchors](#file-based-spec-references-without-version-anchors)
-  - [MCP Tool Schema Drift](#mcp-tool-schema-drift)
   - [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation)
 - [Blind Spots](#blind-spots)
   - [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification)
   - [Initialization Completion Unverifiable](#initialization-completion-unverifiable)
-  - [Orchestrator Role Invisible in Type System](#orchestrator-role-invisible-in-type-system)
   - [No Source Type for Pre-Implementation Spec Findings](#no-source-type-for-pre-implementation-spec-findings)
   - [Prompt-Build-to-Execution State Drift](#prompt-build-to-execution-state-drift)
 - [Trajectory](#trajectory)
@@ -64,8 +59,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Spec Corpus Lacks Lifecycle Management](#spec-corpus-lacks-lifecycle-management)
   - [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface)
   - [No Query Layer](#no-query-layer)
-- [Code-Level Architectural Smells](#code-level-architectural-smells)
-  - [Interactive Stdin in Library Packages](#interactive-stdin-in-library-packages)
 - [Accepted v1 Limitations](#accepted-v1-limitations)
   - [Orchestrator as Single Semantic Interpreter](#orchestrator-as-single-semantic-interpreter)
   - [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate)
@@ -81,32 +74,57 @@ Persistent record of issues identified by architectural analysis skills.
 - [Completed Fixes](#completed-fixes)
 - [Fixed (Traceability)](#fixed-traceability)
 - [Fix Details](#fix-details)
-  - [Documentation/Implementation Desynchronization](#documentationimplementation-desynchronization)
-  - [YAML Round-Trip Data Loss](#yaml-round-trip-data-loss)
-  - [Merge Conflict Resolution](#merge-conflict-resolution)
-  - [Anomaly Log Reader](#anomaly-log-reader)
-  - [Human Role Clarification](#human-role-clarification)
-  - [Task Dependencies](#task-dependencies)
-  - [Supervisor Clarification](#supervisor-clarification)
-  - [Review Lease Validation](#review-lease-validation)
-  - [Multi-State Claiming](#multi-state-claiming)
-  - [Approval Rate Monitoring](#approval-rate-monitoring)
-  - [Root Cause Required Before Rescope](#root-cause-required-before-rescope)
-  - [Iteration-Limit Config Drift](#iteration-limit-config-drift)
-  - [Error Classification Lost at Agent Interface](#error-classification-lost-at-agent-interface)
-  - [Implicit State Machine](#implicit-state-machine)
-  - [Multi-Instance Blackboard Coherence](#multi-instance-blackboard-coherence)
-  - [Magic Number 1800 Scattered](#magic-number-1800-scattered)
-  - [executeTemplate Panics on Error](#executetemplate-panics-on-error)
-  - [Inconsistent NotFoundError Usage](#inconsistent-notfounderror-usage)
-  - [Supervisor God File](#supervisor-god-file)
-  - [Duplicated File-Locking Mechanism](#duplicated-file-locking-mechanism)
-  - [MCP Handler Bypasses Blackboard Locking](#mcp-handler-bypasses-blackboard-locking)
-  - [Commands Presentation+Logic Coupling](#commands-presentationlogic-coupling)
-  - [Agent → Commands Upward Dependency](#agent--commands-upward-dependency)
-  - [Pervasive Task-Lookup Duplication](#pervasive-task-lookup-duplication)
-  - [Untested MCP Server Dispatch Layer](#untested-mcp-server-dispatch-layer)
-  - [Untested Work Detection Logic](#untested-work-detection-logic)
+
+## Open Issues Summary
+
+| Priority | Category | Issue |
+|----------|----------|-------|
+| **high** | LOAD-BEARING | [Mode Selection Trigger Coupled to Prompt Lexeme](#mode-selection-trigger-coupled-to-prompt-lexeme) |
+| **high** | LOAD-BEARING | [Orchestrator as Single Semantic Interpreter](#orchestrator-as-single-semantic-interpreter) |
+| **high** | LOAD-BEARING | [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate) |
+| **high** | TENSION | [Role-Boundary Severity Drift](#role-boundary-severity-drift) |
+| **high** | TENSION | [Code Reviewer Structural Accountability Gap](#code-reviewer-structural-accountability-gap) |
+| **high** | FEEDBACK | [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure) |
+| **high** | STRESS POINT | [Filesystem/Git I/O Contention](#filesystemgit-io-contention) |
+| **high** | STRESS POINT | [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments) |
+| **high** | FRAGILITY | [Dual Contract Delivery Paths](#dual-contract-delivery-paths) |
+| **medium** | TENSION | [Two-Track State Mutation](#two-track-state-mutation) (partially resolved) |
+| **medium** | TENSION | [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency) |
+| **medium** | TENSION | [Merge Execution Authority Split](#merge-execution-authority-split) |
+| **medium** | TENSION | [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope) |
+| **medium** | TENSION | [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows) |
+| **medium** | TENSION | [Spec Completeness vs Reality](#spec-completeness-vs-reality) |
+| **medium** | FEEDBACK | [Supervisor Wait-Claim-Spawn Loop](#supervisor-wait-claim-spawn-loop) |
+| **medium** | FEEDBACK | [Issue Registry Resolution Drift](#issue-registry-resolution-drift) |
+| **medium** | FEEDBACK | [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause) |
+| **medium** | FEEDBACK | [Restart/Lease Churn Under Load](#restartlease-churn-under-load) |
+| **medium** | ASSUMPTION | [Implicit Orchestrator Provenance Default](#implicit-orchestrator-provenance-default) |
+| **medium** | ASSUMPTION | [Well-Formed Blackboard State](#well-formed-blackboard-state) |
+| **medium** | ASSUMPTION | [Orchestrator State Change Verification is Non-Binding](#orchestrator-state-change-verification-is-non-binding) |
+| **medium** | ASSUMPTION | [Human Availability as Bottleneck](#human-availability-as-bottleneck) |
+| **medium** | STRESS POINT | [Supervisor Contention](#supervisor-contention) |
+| **medium** | FRAGILITY | [Cross-Script State Mutation](#cross-script-state-mutation) |
+| **medium** | FRAGILITY | [Bootstrap Artifact Path Drift](#bootstrap-artifact-path-drift) |
+| **medium** | FRAGILITY | [File-Based Spec References Without Version Anchors](#file-based-spec-references-without-version-anchors) |
+| **medium** | FRAGILITY | [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation) |
+| **medium** | BLIND SPOT | [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification) |
+| **medium** | BLIND SPOT | [Initialization Completion Unverifiable](#initialization-completion-unverifiable) |
+| **medium** | ACCEPTED v1 | [Self-Reported Validation](#self-reported-validation) |
+| **low** | ASSUMPTION | [Spec Maturity Dependency](#spec-maturity-dependency) |
+| **low** | ASSUMPTION | [Single-Goal Data Model Constrains Applicability](#single-goal-data-model-constrains-applicability) |
+| **low** | BLIND SPOT | [No Source Type for Pre-Implementation Spec Findings](#no-source-type-for-pre-implementation-spec-findings) |
+| **low** | BLIND SPOT | [Prompt-Build-to-Execution State Drift](#prompt-build-to-execution-state-drift) |
+| **low** | TRAJECTORY | [Blackboard Growth Without Pruning](#blackboard-growth-without-pruning) |
+| **low** | TRAJECTORY | [Role Addition Accelerates Contract Complexity Pressure](#role-addition-accelerates-contract-complexity-pressure) |
+| **low** | TRAJECTORY | [Anomaly Detail Validation Incomplete](#anomaly-detail-validation-incomplete) |
+| **low** | TRAJECTORY | [Task Type Registry is Partial Abstraction](#task-type-registry-is-partial-abstraction) |
+| **low** | TRAJECTORY | [Spec Corpus Lacks Lifecycle Management](#spec-corpus-lacks-lifecycle-management) |
+| **low** | TRAJECTORY | [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface) |
+| **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
+| **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
+
+**Counts:** 9 high, 22 medium, 12 low — 43 open issues total.
+
 ---
 
 ## Structural Load-Bearing Elements
@@ -182,21 +200,6 @@ Design contradictions that create structural friction.
 - Align role-boundary severity to a single tier across all mode and vision artifacts
 - Add consistency checks in contract maintenance workflow for severity-classified rules
 - Publish one canonical severity table referenced by all contracts
-
-### ~~Reviewer Role Namespace Fragmentation~~
-
-**Skill:** systemic-thinking
-**Category:** TENSION
-**Status:** RESOLVED (`a60c72e`)
-
-**Issue:** Internal role semantics for the reviewer were encoded as three incompatible namespace forms across internal boundaries: `code_reviewer` in task workflow typing, `code-reviewer` in runtime supervisor/agent role handling, and `reviewer` in claim-release mutation interfaces. These were bridged by implicit string translation rather than a declared canonical mapping.
-
-**Fix:** Created `internal/roles` package with unified constants and explicit mapping:
-- Runtime constants: `RuntimeCoder`, `RuntimeCodeReviewer`, `RuntimeOrchestrator`
-- Workflow constants: `WorkflowCoder`, `WorkflowCodeReviewer`
-- Mapping functions: `ToWorkflow()`, `ToRuntime()`, validation helpers `IsValidRuntime()`, `IsValidWorkflow()`
-- All agent/, cmd/, and ops/ production code migrated to use role constants
-- Comprehensive tests (253 LOC) cover all mappings, validation, and list functions
 
 ### Merge Execution Authority Split
 
@@ -384,16 +387,6 @@ Implicit dependencies that constrain system behavior.
 
 Bottlenecks that emerge under load.
 
-### ~~Validation Integrity Split by Ingress~~
-
-**Skill:** systemic-thinking
-**Category:** STRESS POINT
-**Status:** RESOLVED (`6fe5bcc`)
-
-**Issue:** Equivalent task-creation mutations do not share equivalent validation pressure by interface. CLI `add-task` executes post-mutation `ValidateCommand`, while MCP `liza_add_tasks` persists through `ops.AddTask` and returns without that same immediate full-state validation pass.
-
-**Fix:** Validation logic extracted from `commands/validate.go` (now a 28 LOC thin wrapper) into a shared `internal/statevalidate` package. `ops.AddTask` now runs `statevalidate.ValidateStateFile()` after every successful write and returns a typed `PostWriteValidationError` when mutation succeeds but validation fails. MCP classifies this as `ValidationError`. Both CLI and MCP ingress paths now share identical validation pressure at the ops layer.
-
 ### Filesystem/Git I/O Contention
 
 **Skill:** systemic-thinking
@@ -410,22 +403,6 @@ Bottlenecks that emerge under load.
 - Git operations queuing (serialization mutex for integration branch merges)
 - Separate integration repo for merges
 
-### ~~Exit Code 42 Restart Loop Without Progress Detection~~
-
-**Skill:** systemic-thinking
-**Category:** STRESS POINT
-**Status:** RESOLVED (`f15cd61`, `5f05403`)
-
-**Issue:** The supervisor loop treated exit code 42 as a graceful restart with a fixed 2-second sleep, with no tracking of restart frequency or progress verification.
-
-**Fix:** `exit42RestartTracker` in `agent/supervisor.go` implements all three mitigations:
-- Per-task restart count tracking with task-progress signature detection (resets count when task state changes meaningfully between restarts)
-- Capped exponential backoff (2s, 4s, 8s, ... up to configurable `exit42_max_backoff_seconds`, default 60s)
-- Circuit breaker: after `exit42_restart_threshold` (default 5) consecutive restarts without progress, task transitions to BLOCKED with diagnostic reason and questions
-- New config fields: `exit42_restart_threshold`, `exit42_max_backoff_seconds`
-- New task field: `exit42_restart_count`
-- Comprehensive unit tests covering backoff growth/cap, threshold blocking, and counter reset on progress
-
 ### Cache Coherence Gap in Multi-Process Deployments
 
 **Skill:** systemic-thinking
@@ -441,27 +418,6 @@ Bottlenecks that emerge under load.
 - Remove caching in favor of always reading under lock (simplest, performance cost)
 - Add cache versioning or generation counter in state.yaml
 - Document that `ReadCached()` is unsafe for multi-process use
-
----
-
-## Cascade
-
-Failure propagation paths and silent bypass patterns.
-
-### ~~Integration Test Script Silent Absence~~
-
-**Skill:** systemic-thinking
-**Category:** CASCADE
-**Status:** RESOLVED (`bce626d`, `52ceac5`)
-
-**Issue:** The merge operation silently skipped testing if `scripts/integration-test.sh` didn't exist — no warning, metric, or audit trail.
-
-**Fix:** Three mitigations implemented:
-- `MergeResult.NoTestScriptFound` boolean distinguishes "no test script" from "tests ran and passed"
-- `log.Printf` WARNING when merge proceeds without integration test script (audit trail)
-- `tests_ran` boolean persisted in task merge history `Extra` field for persistent audit
-- Stat error handling upgraded to tri-state: exists → run tests, `os.ErrNotExist` → log warning + set flag, other stat error → log distinct warning (addresses the `os.Stat` under-handling smell for this specific site)
-- Comprehensive test coverage: `TestMergeWorktree_NoTestScriptWarning`, `TestMergeWorktree_TestsRanInHistory`, non-`ErrNotExist` stat regression test
 
 ---
 
@@ -482,25 +438,6 @@ Partial failure modes with unclear recovery.
 - State machine validation after each operation
 - Transaction log for rollback capability
 - Centralized state mutation through single entry point
-
-### ~~MCP Tool Schema Drift~~
-
-**Skill:** systemic-thinking
-**Category:** FRAGILITY
-**Status:** RESOLVED (`642f94e`, `c9b17a3`)
-
-**Issue:** Hand-coded MCP `InputSchema` declarations could drift from handler parameter extraction with no compile-time or test-time verification.
-
-**Fix:** `schema_consistency_test.go` (584 LOC) uses Go AST parsing to extract handler parameter requirements directly from source code:
-- Parses `registerTool` calls in `server.go` to map tool name → handler function
-- Parses `handlers.go` to derive required fields from `requireString`, helper calls (`requireTaskAndAgent`), and `extractStringSlice` patterns (len guard)
-- Asserts schema `Required` fields match handler-required fields for all tools
-- Asserts extracted parameters are declared in schema properties
-- Dedicated `submit-for-review` SHA field regression test
-- `Server.GetTool()`, `GetHandler()`, `ToolNames()` methods added for testability
-- All ~20 tools covered; new tools automatically included in consistency checks
-
-**Remaining:** Schemas are still hand-coded (not generated from struct tags). The test suite makes drift detectable but not impossible. Schema generation from `ops.*Input` struct tags remains a future option for single-source-of-truth enforcement.
 
 ### Bootstrap Artifact Path Drift
 
@@ -539,14 +476,13 @@ Partial failure modes with unclear recovery.
 **Skill:** systemic-thinking
 **Category:** FRAGILITY
 
-**Issue:** Review leases expire based on `review_lease_expires` timestamp. Stale leases are cleared in two situations: (a) reviewer registration (`registration.go`) auto-clears stale claims on agent startup, and (b) the `clear-stale-review-claims` command can be invoked manually. However, there is no periodic in-loop reclamation — if no new reviewer registers and the command isn't invoked, stale REVIEWING tasks remain stuck. The supervisor's `claimReviewerTask` only considers READY_FOR_REVIEW tasks, not stale REVIEWING leases.
+**Issue:** Review leases expire based on `review_lease_expires` timestamp. Stale leases need periodic clearing to prevent tasks from getting stuck in REVIEWING with expired leases, particularly after crash scenarios where the agent cannot execute graceful cleanup.
 
-**Implication:** Between reviewer agent restarts, tasks can remain stuck in REVIEWING with an expired lease. The gap is not "no mechanism exists" but "no periodic mechanism" — recovery depends on a reviewer agent restarting or manual intervention.
+**Implication:** After a crash (no graceful shutdown), tasks can remain stuck in REVIEWING until the next reviewer wait-loop iteration clears stale claims.
 
-**Current mitigation:** Reviewer registration auto-clears stale claims on startup. `liza clear-stale-review-claims` command available for manual or automated invocation. Signal handling (`SIGINT`/`SIGTERM`) triggers `unregisterAgent()` which atomically releases active review claims on graceful exit — tasks return to READY_FOR_REVIEW immediately rather than waiting for lease expiry. The remaining gap is crash scenarios where the agent cannot execute cleanup.
+**Current mitigation:** Three clearing mechanisms now exist: (a) reviewer registration (`registration.go`) auto-clears stale claims on agent startup, (b) `liza clear-stale-review-claims` command for manual invocation, and (c) reviewer wait-loop (`waitforwork.go`) calls `ops.ClearStaleReviewClaims` before each poll iteration for all reviewer roles (code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer). Signal handling (`SIGINT`/`SIGTERM`) triggers `unregisterAgent()` which atomically releases active review claims on graceful exit. The remaining gap is narrow: crash scenarios where no reviewer agent is running to execute the wait-loop clearing.
 
 **Future options:**
-- Supervisor periodically runs stale claim clearing before claiming
 - Add watcher-based automatic lease expiration (transition to READY_FOR_REVIEW on expiry)
 - Include stale lease check in work detection diagnostics
 
@@ -583,20 +519,6 @@ Unacknowledged forces or gaps the system doesn't model.
 - Initialization checklist emitted as structured output (supervisor verifies before accepting agent as ready)
 - Canary questions: supervisor tests agent's knowledge of key contract clauses before allowing work
 - Reduce initialization surface by embedding more rules in supervisor-enforced structural mechanisms
-
-### ~~Orchestrator Role Invisible in Type System~~
-
-**Skill:** systemic-thinking
-**Category:** BLIND SPOT
-**Status:** RESOLVED (`e173f71`)
-
-**Issue:** The orchestrator was the only role absent from the type system. `models.RoleCoder` and `models.RoleCodeReviewer` existed but there was no `models.RoleOrchestrator`. Wake trigger detection used imperative branching rather than declarative definitions.
-
-**Fix:** All three "future options" addressed:
-- `models.RoleOrchestrator` constant added as alias for `roles.WorkflowOrchestrator`; `IsClaimable()` now has explicit orchestrator case (returns false — orchestrators don't participate in task claiming)
-- `roles.WorkflowOrchestrator` added with bidirectional `ToWorkflow()`/`ToRuntime()` mapping; `AllWorkflow()` and `AllRuntime()` include orchestrator; `IsValidRuntime()` no longer special-cases orchestrator
-- `orchestratorWakeTriggerSpecs` in `workdetection.go` declares wake triggers as data (trigger type → description → state predicate), replacing imperative if-else branching; tests verify trigger order, descriptions, and count functions
-- Remaining implicit behaviors: infinite wait time override in `waitforwork.go`, pseudo-task `"planning"` in `supervisor.go`, post-execution verification in `systemctl.go` — these are supervisor-specific and appropriate for the agent package
 
 ### No Source Type for Pre-Implementation Spec Findings
 
@@ -741,24 +663,6 @@ Long-term concerns about system evolution.
 - Extract query functions to `ops` or a new `queries` package returning structured data (each presentation layer formats independently)
 - Promote `models/diagnostics.go` as the canonical query home and migrate state queries from `commands` and `agent`
 - Accept `commands` as the shared query+formatting layer and document or rename to reflect its dual role
-
----
-
-
-## Code-Level Architectural Smells
-
-Issues identified through code-level architectural analysis (patterns, structure, duplication).
-
-### ~~Interactive Stdin in Library Packages~~
-
-**Skill:** software-architecture-review
-**Category:** Untestable by design
-**Status:** RESOLVED (`7a5e79c`)
-
-**Issue:** Direct `os.Stdin` reads via `bufio.NewReader(os.Stdin)` or `bufio.NewScanner(os.Stdin)` in 8 locations across 5 files in 2 packages (`embedded/embedded.go`, `commands/setup.go`, `commands/init.go`, `commands/delete_task.go`, `commands/delete_agent.go`).
-
-**Fix:** All 8 locations now accept an `io.Reader` parameter, defaulting to `os.Stdin` when nil (CLI behavior unchanged). `cmd/liza/main.go` passes `os.Stdin` at call sites. Tests use `strings.NewReader` for mock input — the `os.Stdin` monkey-patching pattern (`os.Stdin = r` / `defer`) is fully eliminated. `withMockStdin` helper removed.
-
 
 ---
 
@@ -929,423 +833,10 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 
 ## Completed Fixes
 
-- [x] Merge conflict resolution *(systemic-thinking)*
-- [x] Anomaly log reader *(systemic-thinking)*
-- [x] Human role clarification *(systemic-thinking)*
-- [x] Task dependencies *(systemic-thinking)*
-- [x] Supervisor clarification *(systemic-thinking)*
-- [x] Review lease validation *(systemic-thinking)*
-- [x] Multi-state claiming *(systemic-thinking)*
-- [x] Approval rate monitoring *(systemic-thinking)*
-- [x] Root cause required before rescope *(systemic-thinking)*
-- [x] Iteration-limit config drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) — enforce effective limits in `ClaimTask`/`SubmitVerdict` with explicit BLOCKED escalation *(software-architecture-review)*
-- [x] flock inode race — stop deleting lock/PID files after unlock *(code-review)*
-- [x] ReadCached shared mutable pointer — cache raw bytes, return fresh structs *(code-review)*
-- [x] Watcher AfterFunc panic — check closed flag under mutex before channel send *(code-review)*
-- [x] wt_merge TOCTOU — re-validate task status under lock in all 4 Modify callbacks *(code-review)*
-- [x] Merge retry cap — 3 retries with linear backoff, then proceed to waitForWork *(code-review)*
-- [x] Reviewer tight loop — 5s sleep on claim failure *(code-review)*
-- [x] Branch cleanup gating — only delete branch/worktree when created in this invocation *(code-review)*
-- [x] Worktree prune — `git worktree prune` after manual removal fallback *(code-review)*
-- [x] Path traversal via taskID — `ValidateTaskID()` rejects `/`, `\`, `..`, leading `.` *(code-review)*
-- [x] os.Getwd() → paths.GetProjectRoot() — worktree-aware project root via `git rev-parse` *(code-review)*
-- [x] wt_merge ordering — commit state to MERGED before worktree deletion *(code-review)*
-- [x] Agent status staleness — update agent state in submit-review, submit-verdict, delete-task *(code-review)*
-- [x] classifyError stub — pattern-based mapping to JSON-RPC error codes *(code-review)*
-- [x] Error classification lost at agent interface — `classifyError()` implemented with 5 error categories *(systemic-thinking)*
-- [x] JSON-RPC notifications — detect `id: null` requests, handle without reply *(code-review)*
-- [x] Hypothesis exhaustion false positive — exclude terminal tasks from FailedBy check *(code-review)*
-- [x] Concurrent git contention — documented limitation in architectural-issues *(code-review)*
-- [x] Embedded assets clean-checkout — documented `make sync-embedded` requirement in Makefile + REPOSITORY.md *(code-review)*
-- [x] `code_reviewer` → `code-reviewer` — fixed in agent-runtime-reference.md *(code-review)*
-- [x] `git init -b main` — fixed bare `git init` in get_test.go to avoid `master` default *(code-review)*
-- [x] cleanupStaleLock inode race — truncate lock file instead of deleting it *(code-review)*
-- [x] classifyError "invalid" overbroad — narrowed to `invalid task ID`, sanitized all error messages *(code-review)*
-- [x] mergeCommit[:7] unguarded in rollback path — added length check *(code-review)*
-- [x] Implicit state machine — declared `taskTransitions` map + `Transition()` method, migrated all 14 transition sites *(systemic-thinking)*
-- [x] Untested MCP server dispatch layer — `server_dispatch_test.go` covers `HandleRequest` routing, `classifyError` all 5 branches, `handleToolCall`, `handleResourceRead`, `handleNotification` *(software-architecture-review)*
-- [x] Untested work detection logic — `diagnostics_test.go` covers all 4 functions (`CountClaimableTasks`, `CountReviewableTasks`, `GetCoderWorkDiagnostics`, `GetReviewerWorkDiagnostics`) *(software-architecture-review)*
-- [x] MCP handler bypasses Blackboard locking — `readStateResource()` now uses `Blackboard.ReadRaw()` under flock instead of direct `os.ReadFile` *(software-architecture-review)*
-- [x] Duplicated file-locking mechanism — extracted to `internal/filelock` package, both `db` and `log` use shared implementation *(software-architecture-review)*
-- [x] Pervasive task-lookup duplication — `State.FindTask()` and `FindTaskIndex()` replace 35+ inline loops and 3 duplicate helpers *(software-architecture-review)*
-- [x] Supervisor god file — decomposed 1,426 LOC into 6 cohesive files within `internal/agent/` by responsibility *(software-architecture-review)*
-- [x] Agent → commands upward dependency — extracted business logic to `internal/ops/` package, `agent` no longer imports `commands` *(software-architecture-review)*
-- [x] Commands presentation+logic coupling — extracted all 15 MCP-exposed mutation commands to `internal/ops/`; MCP handlers call ops directly; commands are thin presentation wrappers *(software-architecture-review)*
-- [x] Monolithic DeleteTaskCommand — extracted business logic to `ops.CheckDeleteTask()` + `ops.DeleteTask()` (220→~75 LOC); interactive confirmation remains at CLI level *(software-architecture-review)*
-- [x] Magic number 1800 scattered — defined `Default{LeaseDurationSeconds,*PollInterval,*MaxWait}` constants in `models/state.go`; all 9 fallback sites now reference named constants *(software-architecture-review)*
-- [x] executeTemplate panics on error — changed to return `(string, error)` in both `prompts/templates.go` and `commands/templates.go`; propagated through all callers *(software-architecture-review)*
-- [x] Multi-instance Blackboard coherence — `db.For()` process-level singleton constructor; all ~30 production `db.New()` calls replaced; tests retain `db.New()` for isolation *(systemic-thinking)*
-- [x] Documentation/Implementation Desynchronization — replaced all operational `yq` references across 8 docs/specs files with `liza` CLI equivalents or tool-agnostic instructions *(systemic-thinking)*
-- [x] YAML Round-Trip Data Loss — added `Extra map[string]any` with `yaml:",inline"` to all model structs; unknown YAML fields now survive round-trips *(systemic-thinking)*
-- [x] Inconsistent NotFoundError Usage — added `ID` field to `NotFoundError`, migrated 25+ ad-hoc string errors to structured type across `ops/`, `db/`, `agent/`, `commands/`; `IsNotFound()` uses `errors.As`; MCP `classifyError()` uses type-based detection with string fallback *(software-architecture-review)*
-- [x] Lease Duration Default Split — corrected prose in blackboard-schema.md to match YAML example and runtime code (1800 seconds / 30 minutes) *(systemic-thinking)*
-- [x] MCP parse-error response write failure ignored — made `WriteError` failure terminal; `Run` returns error instead of silently continuing *(architecture-review)*
-- [x] `submit-for-review` `commit_sha` contract drift — aligned contract in `d4c688e`; **REGRESSED**: caller-provided SHA is currently required again in CLI/MCP and ops surfaces *(architecture-review)*
-- [x] REJECTED reassignment can orphan worktree on recreate failure — reordered reassignment to secure replacement before teardown with compensating recovery *(architecture-review)*
-- [x] Reviewer Role Namespace Fragmentation — `internal/roles` package with unified constants and explicit `ToWorkflow()`/`ToRuntime()` mapping *(systemic-thinking)*
-- [x] Interactive Stdin in Library Packages — all 8 locations accept `io.Reader` parameter; `os.Stdin` monkey-patching eliminated *(software-architecture-review)*
-- [x] Hardcoded `"task/"` branch prefix — `paths.TaskBranchPrefix` constant; all 7 production files migrated *(software-architecture-review)*
-- [x] Role naming divergence — unified via `internal/roles` package *(software-architecture-review)*
-- [x] Divergent GracePeriod values (60s vs 120s) — unified `models.LeaseExpiryGracePeriod` *(software-architecture-review)*
-- [x] `ClaimTask` function complexity (265 LOC) — phase helpers extracted, `unmetDependencies()` shared *(software-architecture-review)*
-- [x] `inspect_field.go` manual reflection — replaced with reflect-based YAML-tag walker *(software-architecture-review)*
-- [x] `validate.validateAnomalies` at 13.3% coverage — targeted table-driven tests for all anomaly types *(software-architecture-review)*
-- [x] `supervisor.resumeHandoffTask` at 11.4% coverage — success/failure/edge-case tests *(software-architecture-review)*
-- [x] MCP stdio transport no frame-size guard — `MaxRequestSize` (10MB) with bounded read *(software-architecture-review)*
-- [x] Watch stall detection parses YAML text directly — uses `log.GetLastTimestamp()` typed parser *(software-architecture-review)*
-- [x] Watch/log O(n) growth paths — append-only writes + bounded tail-window reads *(software-architecture-review)*
-- [x] `heartbeat_interval` config ignored — `NormalizeHeartbeatInterval()` with bounds validation *(software-architecture-review)*
-- [x] Orchestrator max-wait config ignored — orchestrators respect configured value *(software-architecture-review)*
-- [x] Stale-lock cleanup error discarded — propagated as `LockErrorFilesystem` *(software-architecture-review)*
-- [x] `DeleteTask` side effects outpace state commit — git cleanup deferred to after state mutation *(software-architecture-review)*
-- [x] `get config.*` projection drift — reflect-based walker discovers all YAML-tagged fields *(software-architecture-review)*
-- [x] `ReleaseClaim` orphans worktree/branch on coder release — cleanup added post-state-mutation; `handleReadyClaimWorktree` made resilient to stale resources *(bug-fix)*
-- [x] Exit code 42 restart loop — per-task restart tracking with exponential backoff and circuit breaker to BLOCKED *(systemic-thinking)*
-- [x] Orchestrator role invisible in type system — `models.RoleOrchestrator`, `roles.WorkflowOrchestrator`, declarative `orchestratorWakeTriggerSpecs` *(systemic-thinking)*
-- [x] Two-Track State Mutation (partial) — `ops.ClaimReviewerTask` and `ops.ResumeHandoff` extracted with structured input/result types; agent lifecycle still inline *(systemic-thinking)*
-- [x] Validation Integrity Split by Ingress — `internal/statevalidate` package extracted; `ops.AddTask` runs post-write validation with typed `PostWriteValidationError`; both CLI and MCP share identical validation pressure *(systemic-thinking)*
-- [x] Integration Test Script Silent Absence — `NoTestScriptFound` field, log WARNING on missing script, `tests_ran` persisted in merge history `Extra`, tri-state stat handling *(systemic-thinking)*
-- [x] MCP Tool Schema Drift — AST-based `schema_consistency_test.go` (584 LOC) verifies schema/handler consistency for all ~20 tools; `GetTool()`/`GetHandler()`/`ToolNames()` accessors added *(systemic-thinking)*
-
 ---
-
 
 ## Fixed (Traceability)
 
-Commit SHA where issue details were first marked as fixed (proxy for actual fix commit).
-
-| Issue | Marked Fixed In |
-|-------|-----------------|
-| Documentation/Implementation Desynchronization | `e9a932e` |
-| YAML Round-Trip Data Loss | `50056d2` |
-| Merge Conflict Resolution | `de4bebf` |
-| Anomaly Log Reader | `de4bebf` |
-| Human Role Clarification | `de4bebf` |
-| Task Dependencies | `de4bebf` |
-| Supervisor Clarification | `de4bebf` |
-| Review Lease Validation | `de4bebf` |
-| Multi-State Claiming | `de4bebf` |
-| Approval Rate Monitoring | `de4bebf` |
-| Root Cause Required Before Rescope | `de4bebf` |
-| Error Classification Lost at Agent Interface | `a1e347b` |
-| Implicit State Machine | `2b5d236` |
-| Multi-Instance Blackboard Coherence | `9d1890c` |
-| Magic Number 1800 Scattered | `150c4d0` |
-| executeTemplate Panics on Error | `ad3288c` |
-| Inconsistent NotFoundError Usage | `e6f7bd2` |
-| Supervisor God File | `c281430` |
-| Duplicated File-Locking Mechanism | `a0bd779` |
-| MCP Handler Bypasses Blackboard Locking | `af911ed` |
-| Commands Presentation+Logic Coupling | `bfe179d` |
-| Agent → Commands Upward Dependency | `c7e98d7` |
-| Pervasive Task-Lookup Duplication | `363b440` |
-| Untested MCP Server Dispatch Layer | `40ef645` |
-| Untested Work Detection Logic | `40ef645` |
-| Lease Duration Default Split | (pending commit) |
-| Iteration-Limit Config Drift (`max_coder_iterations`, `max_review_cycles`, `task.max_iterations`) | `5fceaad` |
-| MCP parse-error response write failure ignored | `80297b9` |
-| `submit-for-review` `commit_sha` contract drift | `d4c688e` (regressed) |
-| REJECTED reassignment can orphan worktree on recreate failure | `ccaf9b0` |
-| Reviewer Role Namespace Fragmentation | `a60c72e` |
-| Interactive Stdin in Library Packages | `7a5e79c` |
-| Hardcoded `"task/"` branch prefix | `59a8e3e` |
-| Role naming divergence | `a60c72e` |
-| Divergent GracePeriod values | `b9f20ff` |
-| `ClaimTask` function complexity | `e86abd4` |
-| `inspect_field.go` manual reflection | `c4bd748` |
-| `validate.validateAnomalies` low coverage | `d8533ab` |
-| `supervisor.resumeHandoffTask` low coverage | `d8533ab` |
-| MCP stdio transport no frame-size guard | `c2fe02b` |
-| Watch stall detection YAML text parsing | `61b16d5` |
-| Watch/log O(n) growth paths | `fe8de6b` |
-| `heartbeat_interval` config ignored | `9e59acf` |
-| Orchestrator max-wait config ignored | `1d4f4f4` |
-| Stale-lock cleanup error discarded | `729da05` |
-| `DeleteTask` side effects outpace state commit | `7dd05ce` |
-| `get config.*` projection drift | `c4bd748` |
-| `ReleaseClaim` orphans worktree/branch on coder release | (pending commit) |
-| Exit Code 42 Restart Loop Without Progress Detection | `f15cd61`, `5f05403` |
-| Orchestrator Role Invisible in Type System | `e173f71` |
-| Two-Track State Mutation (partial — reviewer claiming + handoff) | `ac4ce6f` |
-| Validation Integrity Split by Ingress | `6fe5bcc` |
-| Integration Test Script Silent Absence | `bce626d`, `52ceac5` |
-| MCP Tool Schema Drift | `642f94e`, `c9b17a3` |
-
 ---
-
 
 ## Fix Details
-
-### Documentation/Implementation Desynchronization
-
-**Skill:** systemic-thinking
-**Category:** TENSION
-
-**Fix:** Complete documentation sweep replacing all operational `yq` commands across 8 files:
-- Read-only queries → `liza get`/`liza status` equivalents
-- Agent deletion → `liza delete agent`
-- Task claim release → `liza release-claim`
-- Manual state repairs → tool-agnostic "edit state.yaml" instructions
-- Protocol pseudo-code → notes referencing Go implementation
-
-Remaining `yq` references are historical only (ADRs, release notes, benchmark traces) or in independent tooling (spec-backfill scripts).
-
-### YAML Round-Trip Data Loss
-
-**Skill:** systemic-thinking
-**Category:** FRAGILITY
-
-**Fix:** Added `Extra map[string]any` with `yaml:",inline"` tag to all model structs in `internal/models/state.go`. The yaml.v3 inline map captures unknown YAML keys during unmarshal and emits them back during marshal. Known struct fields take priority (no duplication). Nil maps produce zero output (no change to existing YAML). Unknown fields at all nesting levels (root, task, agent, config, etc.) now survive `Blackboard.Modify()` and `Read()`+`Write()` round-trips.
-
-### Merge Conflict Resolution
-
-**Skill:** systemic-thinking
-
-**Original issue:** No guidance on how Code Reviewer should handle merge conflicts. Unclear whether to resolve, escalate, or fail the review.
-
-**Fix:** Code Reviewer MAY resolve trivial conflicts (whitespace, import order, non-overlapping additions). Logic conflicts requiring judgment MUST be escalated to human.
-
-### Anomaly Log Reader
-
-**Skill:** systemic-thinking
-
-**Original issue:** Circuit breaker patterns (retry_cluster, spec_gap_cluster, hypothesis_exhaustion) were logged but Orchestrator had no mechanism to read them, making escalation triggers invisible.
-
-**Fix:** Orchestrator reads `.liza/anomalies.log` on wake to detect patterns and take corrective action.
-
-### Human Role Clarification
-
-**Skill:** systemic-thinking
-
-**Original issue:** Human role was ambiguous—sometimes described as observer, sometimes as decision-maker. Unclear who resolves deadlocks.
-
-**Fix:** Human is escalation point with decision authority, not passive observer. All deadlocks and ambiguities route to human for resolution.
-
-### Task Dependencies
-
-**Skill:** systemic-thinking
-
-**Original issue:** No mechanism to express or enforce task ordering. Coders could claim tasks whose prerequisites weren't complete.
-
-**Fix:** Added `depends_on` field to task schema. `liza claim-task` validates all dependencies are MERGED before allowing claim. Orchestrator instructions updated to specify dependencies when decomposing tasks.
-
-### Supervisor Clarification
-
-**Skill:** systemic-thinking
-
-**Original issue:** "Supervisor" was ambiguous—could be interpreted as singleton process managing all agents, leading to incorrect architectural assumptions.
-
-**Fix:** Clarified that "supervisor" refers to the enclosing loop in each `liza agent` instance, not a singleton process. Each role runs in its own terminal with its own supervisor loop.
-
-### Review Lease Validation
-
-**Skill:** systemic-thinking
-
-**Original issue:** `find_reviewable_task()` treated missing `review_lease_expires` as expired, allowing tasks with `reviewing_by` set but no lease timestamp to be claimed by another reviewer.
-
-**Fix:** Now requires BOTH `reviewing_by` AND `review_lease_expires` to be set before treating a lease as stale. Missing `review_lease_expires` with `reviewing_by` set is treated as actively claimed (not reviewable).
-
-### Multi-State Claiming
-
-**Skill:** systemic-thinking
-
-**Original issue:** `liza claim-task` only handled READY tasks. REJECTED and INTEGRATION_FAILED tasks couldn't be re-claimed, and worktree handling for reassignment was undefined.
-
-**Fix:** Supports claiming from READY, REJECTED, and INTEGRATION_FAILED states:
-- READY: creates fresh worktree
-- REJECTED (same coder): preserves worktree and base_commit for drift accuracy
-- REJECTED (different coder): deletes worktree, creates fresh, resets review_cycles_current
-- INTEGRATION_FAILED: preserves worktree for conflict resolution, sets integration_fix flag
-
-### Approval Rate Monitoring
-
-**Skill:** systemic-thinking
-**Category:** BLIND SPOT
-
-**Original issue:** Vision identifies "Code Reviewer rubber-stamps coder work" as medium-likelihood, high-impact risk with mitigation "rejection quota monitoring, anomaly patterns." However, circuit breaker patterns detect failure signals (retry_loop, spec_gap) but not success signals that should trigger suspicion.
-
-A Code Reviewer approving everything generates zero anomalies—no retry_cluster, no hypothesis_exhaustion, no review_deadlock. All metrics appear healthy. The system cannot distinguish validation from rubber-stamping.
-
-**Implication:** Core promise of external validation becomes invisible when violated. System health metrics are undefined in presence of colluding or lazy Code Reviewer.
-
-**Fix:** `liza update-sprint-metrics` computes two metrics from task history:
-- `review_verdict_approval_rate_percent` = approvals / (approvals + rejections) * 100
-- `task_outcome_approval_rate_percent` = approvals / submitted_for_review * 100
-
-Warns if review_verdict_approval_rate >95% over ≥5 review verdicts. Metrics stored in `sprint.metrics`.
-
-**Future options:**
-- Random re-review by second Code Reviewer
-- Human spot-checks of merged PRs
-- Require rejection quota per sprint
-
-### Root Cause Required Before Rescope
-
-**Skill:** systemic-thinking
-
-**Original issue:** Hypothesis exhaustion forced rescope without diagnosing cause, leading to task churn.
-
-**Fix:** Orchestrator must document root cause before rescoping and include it in `rescope_reason` and the rescope log entry (task lifecycle + roles).
-
-### Iteration-Limit Config Drift
-
-**Skill:** software-architecture-review
-**Category:** Hardcoded configuration / Runtime contract drift
-
-**Original issue:** Iteration controls were declarative only. `config.max_coder_iterations`, `config.max_review_cycles`, and task-level `max_iterations` were modeled/documented but not enforced in runtime flow, so operators could tune limits with no effect.
-
-**Fix:** Added runtime enforcement in `internal/ops`:
-- `ClaimTask` now enforces effective coder iteration limit (`task.max_iterations` override, else `config.max_coder_iterations`) before REJECTED reclaim; exhausted tasks transition to `BLOCKED`.
-- `SubmitVerdict` now enforces review-cycle and iteration ceilings during rejection flow; exhausted tasks transition to `BLOCKED` with explicit `blocked_reason`/`blocked_questions`.
-- State machine updated to allow `REJECTED -> BLOCKED` transitions; tests added in `internal/ops/claim_task_test.go`, `internal/ops/submit_verdict_test.go`, and `internal/models/state_test.go`.
-- Follow-up clean-code refactor in `be93dee` extracted escalation helpers (`enforceRejectedIterationLimit`, `classifyLimitEscalation`) with no behavioral change.
-
-### Error Classification Lost at Agent Interface
-
-**Skill:** systemic-thinking
-**Category:** BLIND SPOT
-
-**Original issue:** The `db` package introduced a well-designed error taxonomy (`LockError` with 5 classified categories: Timeout, Permission, DiskFull, Filesystem, Stale), but the MCP server's `classifyError()` was a TODO stub returning generic internal error for everything. Agents couldn't distinguish retryable errors from fatal ones.
-
-**Fix:** `classifyError()` in `internal/mcp/server.go` implements pattern-based mapping to distinct JSON-RPC error codes: not found, lock timeout, race condition, validation error, and internal error. Follow-up fix narrowed overbroad "invalid" matching to `invalid task ID` specifically.
-
-### Implicit State Machine
-
-**Skill:** systemic-thinking
-**Category:** LOAD-BEARING
-
-**Original issue:** Task state transitions were not enforced by a declared state machine. Each command independently checked its own preconditions, making the valid transition graph emergent from scattered conditional checks across 7 command files and `supervisor.go`. Adding or modifying a command could silently create invalid transition paths.
-
-**Fix:** Declared the complete transition graph as `taskTransitions` map in `internal/models/state.go` with `CanTransition()` and `Transition()` methods. All 14 production transition sites migrated from direct `task.Status = X` to `task.Transition(X)`, which validates against the declared graph and returns a descriptive error on invalid transitions. `IsClaimable()` rewritten to derive claimable statuses from `CanTransition()` instead of a hardcoded switch. Existing precondition checks in commands preserved as defense-in-depth.
-
-### Multi-Instance Blackboard Coherence
-
-**Skill:** systemic-thinking
-**Category:** ASSUMPTION
-
-**Original issue:** ~31 production `db.New()` call sites each created independent `Blackboard` instances with their own cache state and lock objects. This worked because `Blackboard` was stateless beyond its mtime-based cache, but created an invisible constraint: any future addition of in-process state (metrics, write batching, subscriptions) would fragment silently across instances with no error signal.
-
-**Fix:** Added `db.For(statePath)` — a process-level singleton constructor using `sync.Map`. All production `db.New()` calls replaced with `db.For()`. Callers sharing the same state path within a process now get the same `*Blackboard` instance, ensuring cache coherence and preventing future state fragmentation. `db.New()` retained for tests that need independent instances (natural isolation via unique temp directories). `db/doc.go` documents the instance management pattern.
-
-### Magic Number 1800 Scattered
-
-**Skill:** software-architecture-review
-**Category:** Hardcoded configuration
-
-**Fix:** Defined `DefaultLeaseDurationSeconds`, `Default{Coder,Orchestrator,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside the `Config` struct. All 3 lease-duration fallback sites and 6 poll/wait fallbacks in `getRoleWaitConfig` now reference the named constants. `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds` (single source of truth).
-
-### executeTemplate Panics on Error
-
-**Skill:** software-architecture-review
-**Category:** Leaky abstraction / Non-idempotent operations
-
-**Fix:** Changed `executeTemplate` in `internal/prompts/templates.go` and `executeCommandTemplate` in `internal/commands/templates.go` to return `(string, error)` instead of panicking. Propagated error returns through all callers: `Build{BasePrompt,OrchestratorContext,CoderContext,ReviewerContext}` in `prompts/builder.go`, `buildInstructionsForWakeTrigger`, `format{AgentValue,MetricsValue}` in `commands/`, and `buildPrompt` in `agent/prompt.go`. All callers already returned `(string, error)` or were internal — propagation was straightforward.
-
-### Inconsistent NotFoundError Usage
-
-**Skill:** software-architecture-review
-**Category:** Primitive obsession / Unstable interface
-
-**Fix:** Added `ID` field to `NotFoundError` (producing `"task not found: task-42"` matching the ad-hoc format). Migrated 25+ ad-hoc `fmt.Errorf("...not found...")` sites across `ops/` (12 files), `db/blackboard.go`, `agent/` (4 files), and `commands/inspect_*.go` (3 files) to use `&errors.NotFoundError{Entity: ..., ID: ...}`. Updated `IsNotFound()` to use `errors.As` (supports wrapped errors from `bb.Modify`). MCP `classifyError()` now uses type-based `errors.As` check first, with string fallback retained for external errors (git, etc.).
-
-### Supervisor God File
-
-**Skill:** software-architecture-review
-**Category:** God class/module
-**Status:** RESOLVED — decomposed into 6 cohesive files within `internal/agent/`
-
-**Fix:** Split `supervisor.go` (1,426 LOC, 31 functions) into 6 files by responsibility:
-- `supervisor.go` (~270 LOC) — types, interfaces, main loop (`RunSupervisor`)
-- `registration.go` (~175 LOC) — agent identity and lifecycle
-- `waitforwork.go` (~300 LOC) — work detection with event-driven + polling
-- `claiming.go` (~230 LOC) — task claiming and merge handling
-- `prompt.go` (~95 LOC) — prompt assembly
-- `systemctl.go` (~160 LOC) — system control, execution, orchestrator verification
-
-Test files split correspondingly. `supervisor_priority_test.go` renamed to `claiming_priority_test.go`. No signature changes, no behavior changes.
-
-### Duplicated File-Locking Mechanism
-
-**Skill:** software-architecture-review
-**Category:** DRY violation / Shotgun surgery
-**Status:** RESOLVED — extracted to `internal/filelock` package
-
-**Fix:** Created `internal/filelock` package with the complete locking implementation (lock acquisition, PID-based stale lock detection, error classification, metrics). Both `internal/db` and `internal/log` now use `filelock.FileLock` instead of independent implementations. The log package gained stale lock recovery and error classification it previously lacked. Constants (`DefaultLockTimeout`, `LockCheckInterval`) exist in one place. No external consumers of the old `db.LockError` types existed, so no aliases were needed.
-
-### MCP Handler Bypasses Blackboard Locking
-
-**Skill:** software-architecture-review
-**Category:** Leaky abstraction / Boundary violation
-**Status:** RESOLVED — `readStateResource()` now uses `Blackboard.ReadRaw()` under flock
-
-### Commands Presentation+Logic Coupling
-
-**Skill:** software-architecture-review
-**Category:** Leaky abstraction / Inappropriate intimacy
-**Status:** RESOLVED — all MCP-exposed mutation commands extracted to `internal/ops/`
-
-**Issue:** The `commands` package serves three consumers with incompatible I/O expectations — CLI (terminal), MCP server (JSON-RPC over stdio), and supervisor (background process) — but embeds terminal assumptions: 40+ `fmt.Print*` calls to stdout/stderr and 5+ direct `os.Stdin` reads in non-test production code. Functions like `ClaimTaskCommand()` print success messages, `SetupCommand()` prompts for confirmation, and `DeleteTaskCommand()` reads interactive input.
-
-**Implication:** MCP server calls commands via `handlers.go` that print to stdout, which is the JSON-RPC transport channel — stdout writes from commands could corrupt the protocol stream. Supervisor calls (`commands.ClaimTaskCommand()`, `commands.WtMergeCommand()`) mix operational output with supervisor logs. Tests must monkey-patch `os.Stdin` (8+ test files use `os.Stdin = r` / `defer func() { os.Stdin = oldStdin }()`) — fragile and not concurrency-safe.
-
-**Direction:** Separate business logic from presentation. Command functions return structured results; callers handle output. The MCP adapter already does this partially — `StatusCommand()` returns a string. Extend pattern to mutation commands. This also resolves the agent→commands coupling (see below).
-
-### Agent → Commands Upward Dependency
-
-**Skill:** software-architecture-review
-**Category:** Leaky abstraction
-**Status:** RESOLVED — extracted to `internal/ops` package
-
-**Fix:** Created `internal/ops/` package with pure business logic functions: `ClaimTask()` returning `*ClaimResult`, `MergeWorktree()` returning `*MergeResult`, `ClearStaleReviewClaims()` returning `(int, error)`, and `UpdateSprintMetrics()` returning `(SprintMetrics, error)`. `IntegrationFailedError` moved to `ops`. Command files in `internal/commands/` became thin presentation wrappers that call `ops` functions and format output. `internal/agent/` now imports `ops` instead of `commands` — the upward dependency is eliminated. Integration test subprocess output captured to `bytes.Buffer` in the ops layer (included in `MergeResult.TestOutput` and `IntegrationFailedError.TestOutput`) instead of wired to terminal.
-
-### Pervasive Task-Lookup Duplication
-
-**Skill:** software-architecture-review
-**Category:** DRY violation / Shotgun surgery
-**Status:** RESOLVED — `State.FindTask()` and `FindTaskIndex()` added to `internal/models/state.go`
-
-**Fix:** Added `FindTask(taskID string) *Task` and `FindTaskIndex(taskID string) int` methods to `*models.State`. Migrated all ~35 inline ID-lookup loops in non-test production code across `commands/`, `agent/`, `db/`, and `models/` packages. Removed 3 duplicate private helper functions (`findTaskByID` in `supervisor.go` and `inspect_agents.go`, `findTask` in `validate.go`). `Blackboard.GetTask()` and `UpdateTask()` now delegate to `State.FindTask()` internally. Bug fixes to task-lookup logic now require changing one method instead of 35+ locations.
-
-### Untested MCP Server Dispatch Layer
-
-**Skill:** software-architecture-review
-**Category:** Untested critical path
-**Status:** RESOLVED — `internal/mcp/server_dispatch_test.go` added
-
-**Fix:** Added `server_dispatch_test.go` with table-driven tests covering: `HandleRequest` routing (all 4 method branches + unknown method), `handleToolCall` (invalid params, missing name, unknown tool, successful handler, nil arguments, handler error with classification), `handleResourceRead` (invalid params), `classifyError` (all 5 classification branches: not found, lock timeout, race condition, validation, internal — 14 test cases), leak prevention (raw error strings never exposed), `handleNotification` (known and unknown). Request ID preservation verified.
-
-### Untested Work Detection Logic
-
-**Skill:** software-architecture-review
-**Category:** Untested critical path
-**Status:** RESOLVED — `internal/models/diagnostics_test.go` added
-
-**Fix:** Added `diagnostics_test.go` with table-driven tests covering all 4 functions: `CountClaimableTasks` (empty state, role filtering, mixed statuses, dependency blocking/satisfaction), `CountReviewableTasks` (empty state, status filtering, role filtering), `GetCoderWorkDiagnostics` (claimable found, blocked-by-deps, in-progress, combined), `GetReviewerWorkDiagnostics` (unassigned, expired leases, active reviews, nil lease handling).
-
-### MCP Parse-Error Response Write Failure Ignored
-
-**Skill:** architecture-review
-**Category:** Error handling
-**Status:** RESOLVED — parse-error write failure is now terminal
-
-**Fix:** `internal/mcp/server.go` parse-error path now checks `WriteError` return value. If the transport write fails, `Run` returns the error immediately instead of silently continuing the server loop.
-
-### `submit-for-review` `commit_sha` Contract Drift
-
-**Skill:** architecture-review
-**Category:** Data flow
-**Status:** REGRESSED — caller-provided commit SHA is required again in CLI/MCP surfaces and in `ops.SubmitForReview`
-
-**Fix:** `d4c688e` aligned contract and runtime semantics by removing caller-provided `commit_sha` from CLI/MCP surfaces and deriving the authoritative commit from worktree HEAD.
-
-**Current state:** Internal surfaces now require and enforce caller-provided SHA again (`submit-for-review <task-id> <commit-sha>` in CLI, required `commit_sha` in MCP schema/handler, and empty/mismatch rejection in `ops.SubmitForReview`), restoring the same contract drift class.
-
-### REJECTED Reassignment Can Orphan Worktree on Recreate Failure
-
-**Skill:** architecture-review
-**Category:** Documented smell
-**Status:** RESOLVED — reassignment flow hardened
-
-**Fix:** Reordered the different-coder REJECTED reassignment path in `internal/ops/claim_task.go` to secure the replacement worktree before tearing down the old one. If replacement creation fails, the old worktree is preserved and compensating recovery state is persisted.
-
----

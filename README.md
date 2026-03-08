@@ -9,7 +9,8 @@ An Adversarial Multi-Agent Coding System built on behavioral contracts.
 Liza is simultaneously a **Pairing** and **Multi-Agent System** (MAS) optimized for thoughtfulness, trust and auditability, leading to faster execution thanks to fewer cycles.
 
 Main characteristics:
-- Built upon a **[behavioral contract](contracts/)** (Harness Engineering) and advanced [skills](skills/).
+- Built upon a **[behavioral contract](contracts/)** which enforces governance intrinsically — not through external
+  scaffolding as Harness Engineering does — and advanced [skills](skills/).
 - **Autonomous Spec-driven Coding System**:
   - From vague spec to code and tests, with intermediate artifacts (epics, US, implementation plans)
     that are AI generated but human reviewed.
@@ -383,11 +384,11 @@ The Multi-Agent mode is an **alpha version** with ongoing refinement. The specif
 
 The contract is a capability test. It requires meta-cognitive machinery—the ability to parse instructions as executable specifications, observe state, pause at gates.
 
-| Provider | Classification | Notes |
-|----------|----------------|-------|
+| Provider | Classification                          | Notes |
+|----------|-----------------------------------------|-------|
 | Claude Opus 4.x | Fully compatible | Reference provider |
 | GPT-5.x-Codex | Fully compatible | Equally capable |
-| Kimi 2.5 | Fully compatible | Responsive to tooling feedback |
+| Kimi 2.5 | Compatible but poor on real-world tasks | Responsive to tooling feedback |
 | Mistral Devstral-2 | Partial | Requires explicit activation and supervision |
 | Gemini 2.5 Flash | Incompatible | Architectural limitation—no prompt-level fix |
 
