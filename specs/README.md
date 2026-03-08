@@ -2,6 +2,20 @@
 
 ## Quick Navigation
 
+### Architecture
+
+| Document                                               | Purpose |
+|--------------------------------------------------------|---------|
+| [C4 Diagrams](architecture/c4/c4.md) | System context, container, and component diagrams |
+| [Overview](architecture/overview.md)                   | System components, data flow, directory structure |
+| [Roles](architecture/roles.md)                         | Planner, Coder, Code Reviewer responsibilities |
+| [State Machines](architecture/state-machines.md)       | Task states, agent states, exit codes |
+| [Blackboard Schema](architecture/blackboard-schema.md) | state.yaml structure, locking, operations |
+| [Supervision Model](architecture/supervision-model.md) | Action responsibility: supervisor vs agent via MCP tools |
+| [Architecture Review](architecture/architecture-review.md) | Architecture review and analysis |
+| [Architectural Issues](architecture/architectural-issues.md) | Persistent record of issues from architectural analysis |
+| [ADR/](architecture/ADR/)                              | Architecture Decision Records (created as decisions arise) |
+
 ### Build (Intent)
 
 | Document                        | Purpose |
@@ -38,18 +52,6 @@
 | Document                                        | Purpose |
 |-------------------------------------------------|---------|
 | [Product Description](<functional/1 - Liza.md>) | What Liza is, domains, key integrations, scope |
-
-### Architecture
-
-| Document                                               | Purpose |
-|--------------------------------------------------------|---------|
-| [Overview](architecture/overview.md)                   | System components, data flow, directory structure |
-| [Roles](architecture/roles.md)                         | Planner, Coder, Code Reviewer responsibilities |
-| [State Machines](architecture/state-machines.md)       | Task states, agent states, exit codes |
-| [Blackboard Schema](architecture/blackboard-schema.md) | state.yaml structure, locking, operations |
-| [Supervision Model](architecture/supervision-model.md) | Action responsibility: supervisor vs agent via MCP tools |
-| [Architectural Issues](architecture/architectural-issues.md) | Persistent record of issues from architectural analysis |
-| [ADR/](architecture/ADR/)                              | Architecture Decision Records (created as decisions arise) |
 
 ### Protocols
 

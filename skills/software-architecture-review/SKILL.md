@@ -3,7 +3,7 @@ name: software-architecture-review
 description: Software Architecture Review Protocol
 ---
 
-**REVIEW_FILE** = `docs/reviews/architecture-review.md`
+**REVIEW_FILE** = `docs/architecture/architecture-review.md`
 
 **Recommended Tools:** Make sure you've read ~/.liza/AGENT_TOOLS.md
 list_directory_tree and warpgrep_codebase_search (fast and token efficient semantic search) may be specifically useful.
