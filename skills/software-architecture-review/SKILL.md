@@ -5,18 +5,8 @@ description: Software Architecture Review Protocol
 
 **REVIEW_FILE** = `docs/reviews/architecture-review.md`
 
-**Recommended Tools:**
-- **Warp Grep** (`warpgrep_codebase_search`) — Complement to regex for discovery-heavy phases. Use when:
-  - Regex would be brittle (semantic concepts like "error handling", "data transformation")
-  - You'd need multiple grep patterns to cover variations
-  - Searching for behavioral patterns, not just text patterns
-
-  Example queries by phase:
-  - **Phase 1 Discovery**: "Find all HTTP client implementations", "Find where data is normalized between formats"
-  - **Enrichment/Adversarial**: "Find try/except blocks that return None or pass silently", "Find file operations without existence checks"
-  - **Comparisons**: "Find all base classes and compare their patterns", "Find all TypedDict or dataclass definitions"
-
-  Start with Warp Grep for exploration, then use targeted regex/glob to verify specific patterns.
+**Recommended Tools:** Make sure you've read ~/.liza/AGENT_TOOLS.md
+list_directory_tree and warpgrep_codebase_search (fast and token efficient semantic search) may be specifically useful.
 
 Architecture is about trade-offs, not truths. Raise questions, suggest directions, avoid astronautics.
 

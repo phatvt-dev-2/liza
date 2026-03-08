@@ -21,6 +21,7 @@ Persistent record of issues identified by architectural analysis skills.
 - [Open Issues Summary](#open-issues-summary)
 - [Structural Load-Bearing Elements](#structural-load-bearing-elements)
   - [Mode Selection Trigger Coupled to Prompt Lexeme](#mode-selection-trigger-coupled-to-prompt-lexeme)
+  - [Role Pair Field as Single Point of Configuration Truth](#role-pair-field-as-single-point-of-configuration-truth)
 - [Systemic Tensions](#systemic-tensions)
   - [Two-Track State Mutation](#two-track-state-mutation)
   - [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency)
@@ -28,29 +29,44 @@ Persistent record of issues identified by architectural analysis skills.
   - [Merge Execution Authority Split](#merge-execution-authority-split)
   - [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope)
   - [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows)
+  - [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic)
+  - [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime)
+  - [Dual Transition Map Coupling](#dual-transition-map-coupling)
+  - [Orchestrator Role Dissolution Without Replacement](#orchestrator-role-dissolution-without-replacement)
+  - [Cross-Pair Knowledge Required by Single-Pair Reviewers](#cross-pair-knowledge-required-by-single-pair-reviewers)
 - [Feedback Loops](#feedback-loops)
   - [Supervisor Wait-Claim-Spawn Loop](#supervisor-wait-claim-spawn-loop)
   - [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure)
   - [Issue Registry Resolution Drift](#issue-registry-resolution-drift)
+  - [Contract-Driven Safety vs Structural Enforcement Asymptote](#contract-driven-safety-vs-structural-enforcement-asymptote)
 - [Assumptions](#assumptions)
   - [Implicit Orchestrator Provenance Default](#implicit-orchestrator-provenance-default)
   - [Spec Maturity Dependency](#spec-maturity-dependency)
   - [Well-Formed Blackboard State](#well-formed-blackboard-state)
   - [Single-Goal Data Model Constrains Applicability](#single-goal-data-model-constrains-applicability)
   - [Orchestrator State Change Verification is Non-Binding](#orchestrator-state-change-verification-is-non-binding)
+  - [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified)
 - [Stress Points](#stress-points)
   - [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
   - [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments)
+  - [Manual Sprint Transitions as Scaling Bottleneck](#manual-sprint-transitions-as-scaling-bottleneck)
+  - [Unbounded Integration Test Execution](#unbounded-integration-test-execution)
 - [Fragility](#fragility)
   - [Cross-Script State Mutation](#cross-script-state-mutation)
   - [Bootstrap Artifact Path Drift](#bootstrap-artifact-path-drift)
   - [File-Based Spec References Without Version Anchors](#file-based-spec-references-without-version-anchors)
   - [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation)
+  - [MCP Admin Handler Authorization Gap](#mcp-admin-handler-authorization-gap)
+  - [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap)
 - [Blind Spots](#blind-spots)
   - [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification)
   - [Initialization Completion Unverifiable](#initialization-completion-unverifiable)
   - [No Source Type for Pre-Implementation Spec Findings](#no-source-type-for-pre-implementation-spec-findings)
   - [Prompt-Build-to-Execution State Drift](#prompt-build-to-execution-state-drift)
+  - [No Feedback Signal for Specification Quality](#no-feedback-signal-for-specification-quality)
+  - [No Reverse Data Channel in Inter-Pair Transitions](#no-reverse-data-channel-in-inter-pair-transitions)
+  - [Retrospective Findings Don't Feed Forward to Next Sprint](#retrospective-findings-dont-feed-forward-to-next-sprint)
+  - [Sprint Metrics Lossy at Sprint Boundary](#sprint-metrics-lossy-at-sprint-boundary)
 - [Trajectory](#trajectory)
   - [Blackboard Growth Without Pruning](#blackboard-growth-without-pruning)
   - [Role Addition Accelerates Contract Complexity Pressure](#role-addition-accelerates-contract-complexity-pressure)
@@ -59,6 +75,9 @@ Persistent record of issues identified by architectural analysis skills.
   - [Spec Corpus Lacks Lifecycle Management](#spec-corpus-lacks-lifecycle-management)
   - [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface)
   - [No Query Layer](#no-query-layer)
+- [Cascades](#cascades)
+  - [Sub-Pipeline Expansion Multiplies Every Existing Issue](#sub-pipeline-expansion-multiplies-every-existing-issue)
+  - [Fan-Out Amplifies Decomposition Errors Across Pipeline Stages](#fan-out-amplifies-decomposition-errors-across-pipeline-stages)
 - [Accepted v1 Limitations](#accepted-v1-limitations)
   - [Orchestrator as Single Semantic Interpreter](#orchestrator-as-single-semantic-interpreter)
   - [Supervisor as Single Correctness Gate](#supervisor-as-single-correctness-gate)
@@ -88,6 +107,17 @@ Persistent record of issues identified by architectural analysis skills.
 | **high** | STRESS POINT | [Filesystem/Git I/O Contention](#filesystemgit-io-contention) |
 | **high** | STRESS POINT | [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments) |
 | **high** | FRAGILITY | [Dual Contract Delivery Paths](#dual-contract-delivery-paths) |
+| **high** | LOAD-BEARING | [Role Pair Field as Single Point of Configuration Truth](#role-pair-field-as-single-point-of-configuration-truth) |
+| **high** | TENSION | [Orchestrator Role Dissolution Without Replacement](#orchestrator-role-dissolution-without-replacement) |
+| **high** | FEEDBACK | [Contract-Driven Safety vs Structural Enforcement Asymptote](#contract-driven-safety-vs-structural-enforcement-asymptote) |
+| **high** | CASCADE | [Sub-Pipeline Expansion Multiplies Every Existing Issue](#sub-pipeline-expansion-multiplies-every-existing-issue) |
+| **high** | BLIND SPOT | [No Feedback Signal for Specification Quality](#no-feedback-signal-for-specification-quality) |
+| **high** | BLIND SPOT | [No Reverse Data Channel in Inter-Pair Transitions](#no-reverse-data-channel-in-inter-pair-transitions) |
+| **high** | CASCADE | [Fan-Out Amplifies Decomposition Errors Across Pipeline Stages](#fan-out-amplifies-decomposition-errors-across-pipeline-stages) |
+| **high** | TENSION | [Cross-Pair Knowledge Required by Single-Pair Reviewers](#cross-pair-knowledge-required-by-single-pair-reviewers) |
+| **medium** | ASSUMPTION | [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified) |
+| **medium** | BLIND SPOT | [Retrospective Findings Don't Feed Forward to Next Sprint](#retrospective-findings-dont-feed-forward-to-next-sprint) |
+| **medium** | STRESS POINT | [Manual Sprint Transitions as Scaling Bottleneck](#manual-sprint-transitions-as-scaling-bottleneck) |
 | **medium** | TENSION | [Two-Track State Mutation](#two-track-state-mutation) (partially resolved) |
 | **medium** | TENSION | [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency) |
 | **medium** | TENSION | [Merge Execution Authority Split](#merge-execution-authority-split) |
@@ -107,8 +137,13 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | FRAGILITY | [Bootstrap Artifact Path Drift](#bootstrap-artifact-path-drift) |
 | **medium** | FRAGILITY | [File-Based Spec References Without Version Anchors](#file-based-spec-references-without-version-anchors) |
 | **medium** | FRAGILITY | [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation) |
+| **medium** | FRAGILITY | [State Validation Composition Gap](#state-validation-composition-gap) |
+| **medium** | FRAGILITY | [MCP Admin Handler Authorization Gap](#mcp-admin-handler-authorization-gap) |
+| **medium** | FRAGILITY | [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) |
+| **medium** | STRESS POINT | [Unbounded Integration Test Execution](#unbounded-integration-test-execution) |
 | **medium** | BLIND SPOT | [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification) |
 | **medium** | BLIND SPOT | [Initialization Completion Unverifiable](#initialization-completion-unverifiable) |
+| **medium** | BLIND SPOT | [Sprint Metrics Lossy at Sprint Boundary](#sprint-metrics-lossy-at-sprint-boundary) |
 | **medium** | ACCEPTED v1 | [Self-Reported Validation](#self-reported-validation) |
 | **low** | ASSUMPTION | [Spec Maturity Dependency](#spec-maturity-dependency) |
 | **low** | ASSUMPTION | [Single-Goal Data Model Constrains Applicability](#single-goal-data-model-constrains-applicability) |
@@ -120,10 +155,13 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | TRAJECTORY | [Task Type Registry is Partial Abstraction](#task-type-registry-is-partial-abstraction) |
 | **low** | TRAJECTORY | [Spec Corpus Lacks Lifecycle Management](#spec-corpus-lacks-lifecycle-management) |
 | **low** | TRAJECTORY | [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface) |
+| **low** | TENSION | [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic) |
+| **low** | TENSION | [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime) |
+| **low** | TENSION | [Dual Transition Map Coupling](#dual-transition-map-coupling) |
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
 | **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
 
-**Counts:** 9 high, 22 medium, 12 low — 43 open issues total.
+**Counts:** 17 high, 30 medium, 15 low — 62 open issues total.
 
 ---
 
@@ -146,6 +184,23 @@ Single points of failure with no redundancy or validation mechanism.
 - Add explicit mode declaration outside free-text prompt (e.g., structured field/environment variable)
 - Add startup self-check that fails fast when expected mode and detected mode diverge
 - Record detected mode in blackboard state for runtime observability
+
+### Role Pair Field as Single Point of Configuration Truth
+
+**Skill:** systemic-thinking
+**Category:** LOAD-BEARING
+**Related:** [Mode Selection Trigger Coupled to Prompt Lexeme](#mode-selection-trigger-coupled-to-prompt-lexeme)
+
+**Issue:** The sub-pipelines spec introduces `role_pair` on tasks as the mechanism that replaces `task.type` for claimability, state resolution, and transition determination. State-machines.md notes that `role_pair` "supersedes" the type field. The pipeline YAML declares role-pairs, and `role_pair` on each task links to its entry. A task's lifecycle (what states are valid, who can claim it, what "approved" means, whether it's sprint-terminal) is derived from a YAML string referencing a configuration section. A typo, a renamed role-pair, or a pipeline config mismatch makes a task unclaimable, unresolvable, or invisible to the supervisor. The configuration is loaded per-operation from disk (architecture review pass 13: "pipeline config loaded per-operation from 14 ops files"), so there's no cached schema validation catching a bad config before tasks are stuck.
+
+**Implication:** Pipeline configuration correctness becomes the single most consequential validation in the system, yet it's validated at point-of-use rather than at initialization, making misconfiguration a runtime failure across every task operation simultaneously.
+
+**Current mitigation:** `liza validate` checks task states against known valid states. Pipeline YAML is loaded by `pipeline.LoadFrozen()`.
+
+**Future options:**
+- Validate pipeline config at `liza init` time and cache the validated schema
+- Add compile-time or startup-time consistency check between pipeline YAML and role constants
+- Reject tasks with unknown `role_pair` values at creation time, not at claim time
 
 ---
 
@@ -250,6 +305,106 @@ Design contradictions that create structural friction.
 - Add an alternate completion criterion based on all active (planned + replacement) tasks
 - Separate cadence checkpoint status from true work-closure status
 
+### Prompts Layer Imports Business Logic
+
+**Skill:** software-architecture-review
+**Category:** TENSION
+**Coupled with:** [No Query Layer](#no-query-layer)
+
+**Issue:** `internal/prompts/builder.go` imports `internal/ops` to call three functions: `LoadDetectionContext` (pipeline config lookup), `GetLatestScopeExtensions` (scope-extension file search), and `IsPlanningPair` (role-pair classification). This creates a `prompts → ops` dependency — the prompt-building layer (presentation) reaches into the business-logic layer for data it needs to assemble prompt context. The dependency inverts the expected flow where `ops` or `agent` would push context *into* prompt building, not have prompts pull from ops.
+
+**Implication:** Prompt assembly becomes coupled to ops implementation details. Changes to pipeline config loading or scope-extension storage require touching the prompts package. The dependency also makes `prompts` harder to test in isolation.
+
+**Current mitigation:** The three functions are pure queries (no side effects beyond file reads), so the coupling is dormant — it creates no mutation-path risk.
+
+**Future options:**
+- Have the caller (agent) resolve these values and pass them into prompt builder as parameters
+- Extract the three functions to a shared query package that both `ops` and `prompts` can import
+- Accept the coupling and document `prompts → ops` as an intentional read-path shortcut
+
+### Commands Layer Imports Agent Runtime
+
+**Skill:** software-architecture-review
+**Category:** TENSION
+**Coupled with:** [No Query Layer](#no-query-layer), [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency)
+
+**Issue:** `internal/commands/status.go` imports `internal/agent` to call `agent.DetectOrchestratorWakeTriggers()` — a pure state-query function that examines blackboard state to determine whether orchestrator should wake. This creates a `commands → agent` dependency where the CLI presentation layer reaches into the agent runtime layer for a query function. The function itself is a stateless query (reads tasks and checks conditions), but its location in the agent package creates a boundary crossing.
+
+**Implication:** The CLI layer gains a compile-time dependency on agent internals. As agent evolves (new wake conditions, supervisor changes), the commands package must track those changes. This is a specific instance of the broader pattern where query logic lives wherever it was first needed rather than in a shared query layer.
+
+**Current mitigation:** `DetectOrchestratorWakeTriggers` is a pure function with no side effects — it reads state and returns a struct. The coupling is limited to one call site (`commands/status.go:282`).
+
+**Future options:**
+- Move `DetectOrchestratorWakeTriggers` to `models/diagnostics.go` (already partially serves as query home)
+- Have the status command call through `ops` rather than reaching into `agent` directly
+- Extract to a query layer alongside the MCP cross-layer read functions
+
+### Dual Transition Map Coupling
+
+**Skill:** software-architecture-review
+**Category:** TENSION
+**Related:** [Two-Track State Mutation](#two-track-state-mutation), [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows)
+
+**Issue:** Two independent task transition systems coexist:
+1. **Hardcoded** — `models.taskTransitions` map with `CanTransition()` / `Transition()` (covers coding-pair and code-planning-pair states)
+2. **Pipeline-driven** — `pipeline.Resolver.TransitionMap()` extended by `ops.BuildPipelineTransitions()`, used via `TransitionWith()`
+
+In 7+ ops files, a manual branching pattern selects between them:
+```go
+if pipelineTransitions != nil {
+    task.TransitionWith(status, pipelineTransitions)
+} else {
+    task.Transition(status)  // hardcoded fallback
+}
+```
+
+Cross-cutting meta-state transitions (BLOCKED → SUPERSEDED/ABANDONED, INTEGRATION_FAILED → executing states, terminal states) are independently defined in both `models.taskTransitions` (lines 146-150) and `ops.BuildPipelineTransitions()` (lines 83-95). No shared validation verifies the two systems agree on meta-state behavior.
+
+**Implication:** Modifying meta-state transition rules (e.g., allowing BLOCKED → READY) requires updating both systems independently. The branching pattern in 7+ ops files means every state-transition operation must correctly select the transition system based on pipeline availability — a cross-cutting concern threaded manually through each function.
+
+**Current mitigation:** Both systems are well-tested independently. The hardcoded map is the legacy path; pipeline-driven is the modern path. The pattern is correct today.
+
+**Future options:**
+- Add a cross-validation test that verifies shared meta-states are consistent between the two systems
+- When legacy mode is retired, remove `taskTransitions` and make `TransitionWith` the only path
+- Extract meta-state transitions to a shared constant used by both systems
+
+---
+
+### Orchestrator Role Dissolution Without Replacement
+
+**Skill:** systemic-thinking
+**Category:** TENSION
+**Related:** [Orchestrator as Single Semantic Interpreter](#orchestrator-as-single-semantic-interpreter)
+
+**Issue:** The sub-pipelines spec renames Planner to Orchestrator, strips its planning responsibility into Code Planner, and reduces the Orchestrator to "creating a task for the Code Planner." Yet roles.md retains the Orchestrator with 8 substantial capabilities: rescoping tasks, resolving blocked reviews, hypothesis exhaustion handling, discovery conversion, goal alignment tracking, spec gap management, multi-blocked-task sequencing, and systemic finding disposition. The Orchestrator's wake triggers (blocked task, hypothesis exhaustion, integration failure, immediate discovery, systemic finding) all remain active. The vision describes the Orchestrator as "Single Semantic Interpreter" — the role carrying the entire semantic burden. The sub-pipeline evolution dissolves the planning function but doesn't redistribute the semantic interpretation function. A Code Planner plans code; it doesn't rescope failed tasks, resolve blocked reviews, or convert discoveries to tasks. The Orchestrator's post-Phase-1 residual responsibilities (all non-planning duties) are now its entire purpose, and they are exactly the capabilities no other role can perform.
+
+**Implication:** The Orchestrator's post-Phase-1 identity is undefined: it's no longer a planner (that's Code Planner) but still the only role capable of system-level judgment, with no spec for how its reduced scope interacts with its expanded responsibilities.
+
+**Current mitigation:** Orchestrator role definition in roles.md still describes all capabilities. The tension is between roles.md (full capability set) and the sub-pipelines spec (minimal Orchestrator).
+
+**Future options:**
+- Spec the Orchestrator's post-Phase-1 identity explicitly: what it does, what it doesn't, and why
+- Redistribute semantic interpretation capabilities to other roles where possible
+- Accept the Orchestrator as the system-level coordination role (not a planner) and rename/respec accordingly
+
+### Cross-Pair Knowledge Required by Single-Pair Reviewers
+
+**Skill:** systemic-thinking
+**Category:** TENSION
+**Related:** [No Feedback Signal for Specification Quality](#no-feedback-signal-for-specification-quality), [No Reverse Data Channel in Inter-Pair Transitions](#no-reverse-data-channel-in-inter-pair-transitions)
+
+**Issue:** Reviewers validate both the doer's artifact and its `output[]` decomposition into downstream tasks. Artifact review is within-domain ("is this plan sound?"). Decomposition review is cross-domain ("will these `output[]` entries make good inputs for the next pair?"). The Epic Plan Reviewer must understand what makes a good US Writer input. The Code Plan Reviewer must understand what makes a good Coder input. This cross-pair knowledge is embedded in a single-pair role. The reviewer is the only quality gate before `output[]` fans out into N downstream tasks via `liza proceed`. The sub-pipelines spec acknowledges this ("decomposition review is harder than artifact review") and defers it to reviewer skill prompts (Phase 2), meaning the quality gate's effectiveness depends entirely on prompt engineering, not structural enforcement.
+
+**Implication:** The reviewer's decomposition judgment is the single most consequential quality gate in the pipeline — it controls fan-out scope and shape — yet it operates on cross-pair knowledge that the role's structural position doesn't naturally provide.
+
+**Current mitigation:** Sub-pipelines spec §Known System Properties acknowledges "output[] decomposition quality" as a known trade-off. Phase 2 defers reviewer prompt templates with decomposition-specific checklists.
+
+**Future options:**
+- Downstream pair signals decomposition quality back to the reviewer pair (structural feedback, not just anomaly logging)
+- Decomposition validation as a separate gate from artifact review (two verdicts per submission)
+- Iteration cap calibration per role-pair to bound the cost of bad decomposition before detection
+
 ---
 
 ## Feedback Loops
@@ -300,6 +455,23 @@ Self-reinforcing patterns that can amplify failures.
 - Add automated checks that verify each "resolved" entry against current code contracts
 - Require a validation artifact (test/doc/assertion) link for every resolved architectural issue
 - Add a `REGRESSED` status class to avoid binary resolved/unresolved drift
+
+### Contract-Driven Safety vs Structural Enforcement Asymptote
+
+**Skill:** systemic-thinking
+**Category:** FEEDBACK
+**Related:** [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure)
+
+**Issue:** The architecture has two enforcement strategies operating simultaneously. The contract (CORE.md, ~800 lines) suppresses agent failure modes through behavioral rules loaded into context. The Go binary (`liza`) enforces structural invariants through code (supervisor-assigns-work, lease management, state machine validation, `ops` layer). ADR-0011 and ADR-0030 explicitly chose structural enforcement over behavioral compliance. Yet the system's most critical safety properties — Tier 0 invariants (no fabrication, no test corruption, no unapproved state change) — remain entirely behavioral. They cannot migrate to structural enforcement because they require semantic judgment. The structural enforcement strategy that works brilliantly for workflow mechanics (claiming, leasing, merging) is architecturally impossible for the safety properties that matter most. Each new structural enforcement (ADR-0030 guardrails, state validation extraction) removes a low-cost rule from the contract, leaving a higher concentration of the hard-to-enforce ones.
+
+**Implication:** The contract will asymptotically approach a core of pure behavioral rules that cannot be structurally enforced, and that residue is precisely the set the system was designed to solve.
+
+**Current mitigation:** The tier architecture (Tier 0 hard invariants vs Tier 2-3 best-effort) explicitly acknowledges that some rules are non-negotiable and others degrade gracefully — but doesn't address the dynamic where the non-negotiable set becomes the entire contract.
+
+**Future options:**
+- Accept the asymptote explicitly: document which rules are permanently behavioral and invest in detection rather than prevention (e.g., post-hoc audit of fabrication)
+- Structural proxies for semantic properties (e.g., require validation command output in commit metadata to structurally enforce "no unvalidated success")
+- Adversarial testing to measure behavioral rule compliance under context pressure empirically
 
 ---
 
@@ -381,6 +553,22 @@ Implicit dependencies that constrain system behavior.
 - Require orchestrator to document progress or blocking reason on each wake
 - Add orchestrator-specific circuit breaker for no-op execution patterns
 
+### `one-to-one` Transition Child Field Generation Unspecified
+
+**Skill:** systemic-thinking
+**Category:** ASSUMPTION
+
+**Issue:** The `us-to-coding` pipeline transition uses `one-to-one` cardinality. The sub-pipelines spec states that the child task's `desc`, `done_when`, and `scope` describe "the next phase's work" and are "generated from the transition definition." But the transition definition in the YAML contains only `name`, `from`, `to`, `trigger`, and `cardinality` — no child field templates or generation rules. For `per-subtask` cardinality, the child fields come from `output[]` entries (concrete, validated mechanism). For `one-to-one`, the source of child task content is unspecified. Whether `liza proceed` uses a hard-coded template, an LLM call, or manual input is an open design question in the Phase 2 spec.
+
+**Implication:** The cross-sub-pipeline data flow (`epic-spec-subpipeline` → `coding-subpipeline`) relies on a mechanism that has no concrete specification, making it the weakest link in the end-to-end pipeline data chain.
+
+**Current mitigation:** Phase 2 is not yet implemented. The gap is in the design spec, not in running code.
+
+**Future options:**
+- Add a `child_template` section to one-to-one transition definitions with field generation rules
+- Require `output[]` for all cardinalities (one-to-one simply requires exactly one entry)
+- Have `liza proceed` prompt the human for child task fields on one-to-one transitions
+
 ---
 
 ## Stress Points
@@ -418,6 +606,34 @@ Bottlenecks that emerge under load.
 - Remove caching in favor of always reading under lock (simplest, performance cost)
 - Add cache versioning or generation counter in state.yaml
 - Document that `ReadCached()` is unsafe for multi-process use
+
+### Manual Sprint Transitions as Scaling Bottleneck
+
+**Skill:** systemic-thinking
+**Category:** STRESS POINT
+**Related:** [Human Availability as Bottleneck](#human-availability-as-bottleneck)
+
+**Issue:** The two-step sprint advance flow (CHECKPOINT → `liza resume` → COMPLETED → `liza proceed` to create child tasks → `liza resume` again) requires human intervention at every inter-pipeline boundary. The sub-pipelines spec explicitly states: "the transition CODING_PLAN_APPROVED → DRAFT (coding pair) is a human privilege via `liza proceed`." With 4 role-pairs in series, a single feature passes through 4 human gates. The existing "Human Availability as Bottleneck" issue documents human as circuit breaker and escalation point, but the sub-pipeline architecture makes human intervention structural rather than exceptional: every inter-pair transition requires it. The compound effect on throughput is that the system's maximum velocity is capped by human response time multiplied by the number of pipeline stages, regardless of how many agents are deployed.
+
+**Implication:** The system's throughput ceiling shifts from "agent capacity" to "human gate frequency × pipeline depth" — adding more agents doesn't help when the bottleneck is the mandatory human touch between every role-pair.
+
+**Current mitigation:** Intentional design — human review at sprint boundaries is the trust mechanism. The spec describes this as "if the specs are good, the coding sprint can be trusted to run autonomously."
+
+**Future options:**
+- Allow configurable auto-proceed for low-risk transitions (e.g., code-plan → coding when plan approval rate is high)
+- Batch multiple pipeline transitions into single human review gate
+- Async notification with timeout-based auto-proceed for non-critical pipelines
+
+### Unbounded Integration Test Execution
+
+**Skill:** software-architecture-review
+**Category:** STRESS POINT
+
+**Issue:** `ops/wt_merge.go:MergeWorktree` runs `scripts/integration-test.sh` via `exec.Command` with no timeout or context cancellation. If the test script hangs (network dependency, infinite loop, blocking I/O), the merge operation blocks indefinitely. This blocks the CAS retry loop, which prevents all further merges. The supervisor's execution timeout (default 30m, `agent/supervisor.go:403`) does not protect this path — `MergeWorktree` is called by reviewer agents during the merge phase, not by the supervisor execution loop.
+
+**Implication:** A single hanging integration test can stall the entire merge pipeline. Other merge candidates queue behind the stuck CAS lock. The only recovery is manual process termination. In a multi-agent deployment, this converts a single test failure into a system-wide stall.
+
+**Direction:** Use `exec.CommandContext` with a configurable timeout (e.g., `Config.IntegrationTestTimeout`, default 10m). The timeout should be generous enough for legitimate test suites but bounded enough to prevent indefinite hangs. Consider also adding a timeout to the CAS retry loop itself as a defense-in-depth measure.
 
 ---
 
@@ -486,6 +702,42 @@ Partial failure modes with unclear recovery.
 - Add watcher-based automatic lease expiration (transition to READY_FOR_REVIEW on expiry)
 - Include stale lease check in work detection diagnostics
 
+### State Validation Composition Gap
+
+**Skill:** software-architecture-review
+**Category:** FRAGILITY
+
+**Issue:** The `statevalidate` package has 55.1% statement coverage — the lowest of any functional package. All entry-point validators are at 0%: `ValidateStateFile`, `ValidateAgentInvariants`, `ValidateAnomalies`, `validateRequiredFields`, `validateAgentInvariants`, `validateHandoff`, `validateDiscovered`, `validateAnomalies`, `checkSpecFileExists`. Inner validators that these compose (`validateTaskStates` 92.9%, `validateDependencies` 91.3%, `checkCircular` 81.8%) are well-covered. This creates a "tested parts, untested whole" pattern in the data-integrity package.
+
+**Implication:** The composition logic — which validators run, in what order, how errors aggregate — is untested. A bug in `ValidateStateFile` (the top-level entry point invoked by `liza validate` CLI and MCP `liza_validate` tool) could skip validators entirely without detection. Since `liza validate` is the primary mechanism for detecting blackboard corruption, this gap affects the system's self-healing capability.
+
+**Direction:** Table-driven tests calling `ValidateStateFile` with various malformed states (missing required fields, invalid agent invariants, malformed anomalies, broken handoff entries, missing spec files) would cover the composition layer cheaply. The inner validators' existing coverage means only the wiring needs testing.
+
+### MCP Admin Handler Authorization Gap
+
+**Skill:** software-architecture-review
+**Category:** FRAGILITY
+
+**Issue:** 7 state-mutating MCP handlers skip role validation, while 9 other handlers enforce role checks via `requireRole`, `requireDoerRole`, or `requireReviewerRole`. The unprotected handlers are: `handleDeleteAgent`, `handleWtCreate`, `handleWtDelete`, `handleAnalyze`, `handleSprintCheckpoint`, `handleUpdateSprintMetrics`, `handleClearStaleReviews`. A coder agent could call `handleSprintCheckpoint` (pausing all agents) or `handleDeleteAgent` (removing other agents from the workspace).
+
+**Implication:** The inconsistent authorization surface creates a fragility: any agent can perform admin operations intended for the orchestrator role. In the current trusted-agent deployment model this is low-risk operationally, but it violates defense-in-depth and makes the access control boundary hard to audit. If agent isolation becomes important (e.g., multi-tenant or adversarial agent scenarios), this gap would become a security concern.
+
+**Direction:** Add `requireRole(agentID, roles.RuntimeOrchestrator)` to admin operations (`handleAnalyze`, `handleSprintCheckpoint`, `handleUpdateSprintMetrics`, `handleClearStaleReviews`, `handleDeleteAgent`). Add `requireDoerRole` to `handleWtCreate`/`handleWtDelete`. For `handleMarkBlocked`, the ops-layer assignment check is sufficient — add a comment documenting the delegation.
+
+### SetTaskOutput spec_ref Validation Gap
+
+**Skill:** software-architecture-review
+**Category:** FRAGILITY
+**Related:** [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified)
+
+**Issue:** `ops/set_task_output.go` validates `desc`, `done_when`, and `scope` as non-empty but does NOT validate `spec_ref`. By contrast, `ops/proceed.go:validateOutputEntry` (line 405-418) requires all four fields including `spec_ref`. An agent can successfully set output entries with empty `spec_ref` via `liza_set_task_output`, then `liza proceed` fails at transition time with "output[N] missing spec_ref".
+
+This is a different code path from the `extractOutputEntries` MCP handler validation gap — that's the MCP extraction layer accepting empty fields; this is the ops-layer validation allowing empty `spec_ref` through.
+
+**Implication:** The failure is delayed — by the time the human runs `liza proceed`, the agent's work is already merged and the sprint is checkpointed. Fixing requires manual state editing or re-running the planning pair. The validation asymmetry between set and consume operations creates a "write now, fail later" pattern.
+
+**Direction:** Add `spec_ref` validation to `SetTaskOutput`, consistent with `validateOutputEntry`. Alternatively, if `spec_ref` should be optional for some transition types, make `validateOutputEntry` configurable per transition.
+
 ---
 
 ## Blind Spots
@@ -551,6 +803,79 @@ Unacknowledged forces or gaps the system doesn't model.
 - Include state version/checksum in prompt header for comparison
 - Snapshot state.yaml at prompt build time alongside the prompt
 - Add prompt-state consistency verification to post-execution diagnostics
+
+### No Feedback Signal for Specification Quality
+
+**Skill:** systemic-thinking
+**Category:** BLIND SPOT
+**Related:** [Spec Completeness vs Reality](#spec-completeness-vs-reality), [No Source Type for Pre-Implementation Spec Findings](#no-source-type-for-pre-implementation-spec-findings)
+
+**Issue:** The system has rich feedback loops for code quality: Code Reviewer rejects code, rejection metrics are tracked, rubber-stamping is detected, iteration limits catch coder loops, circuit breaker catches systemic patterns. Phase 2 adds spec-writing roles (Epic Planner, US Writer) with their own reviewers. But the feedback loop for specification quality — the signal that a spec is good enough to produce correct code — doesn't exist. The spec-to-code handoff is a one-way gate (`liza proceed`), and the only signal that a spec was bad is: coders fail. There is no metric, anomaly type, or circuit breaker pattern that measures "how often do approved specs produce blocked tasks?" The `spec_gap` anomaly type exists but is logged by the Orchestrator when discovering gaps during planning — not by the Coder when discovering an approved spec was insufficient. There's no path from "Coder blocks because spec was wrong" back to "Spec Reviewer approved a bad spec."
+
+**Implication:** As the system adds spec-writing pipelines, the spec reviewer's accuracy is the least measurable and most consequential quality dimension — a bad spec amplifies through every downstream role, and the system has no signal to detect this before coders burn cycles.
+
+**Current mitigation:** The `spec_changed` anomaly type lets Code Reviewer note spec drift, but this tracks change, not quality. Human checkpoint review provides periodic correction.
+
+**Future options:**
+- Track spec provenance on tasks: which spec version was approved, which role approved it, and whether downstream tasks succeeded or blocked
+- Add `spec_quality_gap` anomaly type for Coders to log "approved spec was insufficient for implementation"
+- Compute spec reviewer accuracy metric: ratio of downstream task success to spec approvals
+- Circuit breaker pattern for repeated spec-caused blocks across tasks from the same approved spec
+
+### No Reverse Data Channel in Inter-Pair Transitions
+
+**Skill:** systemic-thinking
+**Category:** BLIND SPOT
+**Related:** [No Feedback Signal for Specification Quality](#no-feedback-signal-for-specification-quality), [Cross-Pair Knowledge Required by Single-Pair Reviewers](#cross-pair-knowledge-required-by-single-pair-reviewers)
+
+**Issue:** The `output[]` mechanism is the sole structured data path between role pairs. Data flows strictly forward: doer writes `output[]`, reviewer validates, `liza proceed` stamps child tasks. When a downstream pair discovers the decomposition was wrong — scope too broad, `done_when` untestable, dependencies miscounted — the only recourse is BLOCKED → orchestrator SUPERSEDE → rescope. No structured signal reaches the upstream pair that created the decomposition. The upstream doer and reviewer receive no data about how their `output[]` performed. Discoveries and anomalies live in state.yaml, but they're addressed by the orchestrator, not routed to the pair that originated the flawed output. The `spec_quality_gap` anomaly type (proposed under "No Feedback Signal") would provide some signal, but even that routes to the orchestrator, not the upstream pair.
+
+**Implication:** Decomposition quality is a learned skill that cannot improve within the system because the feedback loop is severed at the pair boundary — the entity that could learn (the upstream pair) never sees the signal.
+
+**Current mitigation:** Human checkpoint review provides periodic observation of decomposition quality. Retrospective protocol identifies patterns but actions are human-directed, not agent-routed.
+
+**Future options:**
+- Add structured reverse-channel entries on child tasks (e.g., `parent_feedback: {quality: good|poor, reason: ...}`) populated by downstream doer on completion or blocking
+- Route `spec_quality_gap` anomalies to the upstream pair's reviewer, not just the orchestrator
+- Compute upstream pair accuracy metric: ratio of downstream child task success to upstream `output[]` entries approved
+
+### Retrospective Findings Don't Feed Forward to Next Sprint
+
+**Skill:** systemic-thinking
+**Category:** BLIND SPOT
+**Related:** [No Feedback Signal for Specification Quality](#no-feedback-signal-for-specification-quality)
+
+**Issue:** Sprint retrospective data — identified patterns, spec gaps, root causes, corrective actions — is archived with the completed sprint to `.liza/archive/sprint-N.yaml`. Agents in sprint N+1 read `state.yaml`, which contains only lightweight `sprint_history[]` summaries (id, number, status, dates, tasks_done). The detailed retrospective that should inform the next sprint's task creation, scope calibration, and risk awareness is structurally inaccessible to agents unless they explicitly read archive files — which no initialization protocol requires. The human is expected to translate retrospective actions into spec updates, but the *patterns* (iteration count distributions, anomaly frequencies, decomposition quality signals) are lost to agent context.
+
+**Implication:** Each sprint starts with the same naive optimism as the first — agents cannot calibrate based on prior sprint experience because the retrospective data exits the agent-readable surface at archival time.
+
+**Current mitigation:** Human translates retrospective actions into spec updates or task adjustments manually. `spec_changes` in state.yaml provides some continuity, but this tracks changes, not the reasoning behind them.
+
+**Future options:**
+- Include a `lessons` summary field in `sprint_history[]` entries (top 3 patterns from retrospective, machine-readable)
+- Add agent initialization step to read the most recent archived sprint's retrospective
+- Carry forward unresolved retrospective actions as structured items in state.yaml rather than archiving them with the sprint
+
+### Sprint Metrics Lossy at Sprint Boundary
+
+**Skill:** software-architecture-review
+**Category:** BLIND SPOT
+**Related:** [Retrospective Findings Don't Feed Forward to Next Sprint](#retrospective-findings-dont-feed-forward-to-next-sprint), [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface)
+
+**Issue:** `applySprintAdvance` (advance_sprint.go:100-107) reduces the full 12-field `SprintMetrics` struct to a single `TasksDone` count in `SprintSummary`. Fields lost from active state: `TasksTotal`, `TasksAbandoned`, `AvgReviewIterations`, `MaxReviewIterations`, `ReviewApprovalRate`, `TasksBlockedCount`, `AnomaliesLogged`, `AvgTaskDurationMinutes`, `ContextExhaustionCount`, `IntegrationFailures`, `SupersededCount`. These are preserved only in the archive YAML on disk (`.liza/archive/sprint-N.yaml`).
+
+`BuildOrchestratorContext` (builder.go:127) passes `state.SprintHistory` to orchestrator templates, but those summaries carry only `TasksDone`. The orchestrator's planning for sprint N+1 cannot reference sprint N's review iteration rates, block frequency, or anomaly counts without reading archive files — which no prompt template instructs.
+
+This is distinct from "Retrospective Findings Don't Feed Forward" (which covers qualitative retrospective findings) and "Metrics Collection Without Query Interface" (which covers the absence of a unified query layer). This issue is specifically about the quantitative metrics data being structurally discarded at the sprint boundary.
+
+**Implication:** The system collects detailed sprint performance metrics during execution, then discards all but one at the sprint boundary. Scope calibration decisions (how many tasks to plan, iteration cap tuning, risk assessment) lack quantitative foundation from prior sprints.
+
+**Current mitigation:** Full sprint data is archived to disk. Humans can inspect archives manually. The `SprintSummary` struct was intentionally kept lightweight per ADR-0028.
+
+**Future options:**
+- Extend `SprintSummary` with a small set of decision-relevant metrics (e.g., `AvgReviewIterations`, `ReviewApprovalRate`, `TasksBlockedCount`)
+- Add a `MetricsSummary` sub-struct to `SprintSummary` carrying the top 4-5 planning-relevant fields
+- Have orchestrator templates reference the previous sprint's archive file (deterministic path: `.liza/archive/sprint-N.yaml`)
 
 ---
 
@@ -663,6 +988,47 @@ Long-term concerns about system evolution.
 - Extract query functions to `ops` or a new `queries` package returning structured data (each presentation layer formats independently)
 - Promote `models/diagnostics.go` as the canonical query home and migrate state queries from `commands` and `agent`
 - Accept `commands` as the shared query+formatting layer and document or rename to reflect its dual role
+
+---
+
+## Cascades
+
+Failure propagation and compound interaction effects.
+
+### Sub-Pipeline Expansion Multiplies Every Existing Issue
+
+**Skill:** systemic-thinking
+**Category:** CASCADE
+**Related:** [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure), [Role Addition Accelerates Contract Complexity Pressure](#role-addition-accelerates-contract-complexity-pressure), [Supervisor Contention](#supervisor-contention), [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments), [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
+
+**Issue:** The sub-pipelines spec (Phase 2: Epic Planner → Epic Plan Reviewer → US Writer → US Reviewer → Code Planner → Code Plan Reviewer → Coder → Code Reviewer) adds 4 new roles to the current 4. Every issue in this registry that scales with role count compounds: "Contract Complexity vs Context Pressure" (8 roles × role-specific contract sections), "Role Addition Accelerates Contract Complexity Pressure" (acknowledged trajectory), "waitForXWork structural duplication" (8 role-specific wait functions already, doubling to 16), "Supervisor Contention" (8 concurrent supervisors vs current 3-4), "Cache Coherence Gap" (more processes, more stale reads), "Filesystem/Git I/O Contention" (more worktrees, more concurrent git operations). The architecture review (pass 13) notes production code grew 11% faster than tests during pipeline expansion. The compound effect is unmeasured: the 45+ open architectural issues are documented as independent concerns, yet under 8-role deployment they interact — supervisor contention amplifies lease churn, which amplifies restart frequency, which amplifies cache coherence gaps.
+
+**Implication:** Phase 2 deployment activates interaction effects between issues that were individually tolerable at 3-role scale; the risk profile is combinatorial, not additive.
+
+**Current mitigation:** Phase 1 (code-planning pair) provides empirical data at 5-role scale before Phase 2 doubles it. Issues are individually documented with mitigations.
+
+**Future options:**
+- Model interaction effects between high-priority issues before Phase 2 deployment
+- Establish performance baselines at current scale to detect degradation during expansion
+- Prioritize structural fixes for issues that compound (supervisor contention, cache coherence) before adding roles
+- Consider phased Phase 2 deployment (add one role-pair at a time, measure impact)
+
+### Fan-Out Amplifies Decomposition Errors Across Pipeline Stages
+
+**Skill:** systemic-thinking
+**Category:** CASCADE
+**Related:** [Sub-Pipeline Expansion Multiplies Every Existing Issue](#sub-pipeline-expansion-multiplies-every-existing-issue), [Cross-Pair Knowledge Required by Single-Pair Reviewers](#cross-pair-knowledge-required-by-single-pair-reviewers), [No Reverse Data Channel in Inter-Pair Transitions](#no-reverse-data-channel-in-inter-pair-transitions)
+
+**Issue:** Each `per-subtask` transition multiplies the task count. In the full pipeline, 1 goal produces N epics, each epic produces M user stories, each US produces P code plans, each plan produces Q coding tasks. A decomposition error at stage K propagates as a multiplicative factor across all downstream stages. Sprint serialization means each stage runs to completion before the next begins — the first signal that an epic was wrongly framed arrives from the coding sprint, 3 sprint boundaries later, having generated potentially dozens of mis-scoped tasks that each consumed agent time. The human reviews at each sprint boundary, but reviews a *completed* sprint — the error is visible only in retrospect, after the fan-out has occurred. Unlike "Sub-Pipeline Expansion Multiplies Every Existing Issue" (which concerns *system-level* issues scaling with role count), this concerns *domain-level* errors (wrong decomposition) amplifying through the fan-out topology of per-subtask transitions.
+
+**Implication:** The cost of decomposition errors grows multiplicatively with pipeline depth while detection remains constant (single reviewer at each stage), creating a structural risk gradient that steepens as the pipeline lengthens.
+
+**Current mitigation:** Sprint boundary human review provides a checkpoint between stages. Epic Plan Reviewer checklist (Phase 2 spec) includes decomposition quality gates. Sub-pipelines spec §Known System Properties acknowledges "output[] decomposition quality" as harder than artifact review.
+
+**Future options:**
+- Early sampling: downstream pair processes one `output[]` entry as a pilot before the full fan-out is committed
+- Decomposition cost estimator: flag `output[]` entries that would produce >N downstream tasks for human review before `liza proceed`
+- Cross-sprint error attribution: when downstream tasks block, trace back to the upstream `output[]` entry and accumulate error counts per upstream pair
 
 ---
 
