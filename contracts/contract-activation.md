@@ -47,7 +47,7 @@ Create symlinks:
 ```bash
 cd ~/.claude
 mkdir -p skills
-for i in ~/.liza/skills/* ; do ln -s "$i" skills/$(basename "$i") ; done
+for i in ~/.liza/skills/* ; do ln -s "$i" skills/ ; done
 ```
 
 The contract is followed more strictly if the symlink is created at every repo root.
@@ -160,7 +160,7 @@ Create symlinks:
 ```bash
 mkdir -p ~/.codex/skills
 cd ~/.codex
-for i in ~/.liza/skills/* ; do ln -s "$i" skills/$(basename "$i") ; done
+for i in ~/.liza/skills/* ; do ln -s "$i" skills/ ; done
 ```
 
 The contract is followed more strictly if the symlink is created at every repo root:
@@ -195,7 +195,7 @@ Create symlinks:
 ```bash
 mkdir -p ~/.gemini/skills
 cd ~/.gemini
-for i in ~/.liza/skills/* ; do ln -s "$i" skills/$(basename "$i") ; done
+for i in ~/.liza/skills/* ; do ln -s "$i" skills/ ; done
 ```
 
 The contract is followed more strictly if the symlink is created at every repo root:
@@ -224,7 +224,7 @@ Symlink the contract as instructions and add skills:
 mkdir -p ~/.vibe/prompts ~/.vibe/skills
 cd ~/.vibe
 ln -s ~/.liza/CORE.md prompts/liza.md
-for i in ~/.liza/skills/* ; do ln -s "$i" skills/$(basename "$i") ; done
+for i in ~/.liza/skills/* ; do ln -s "$i" skills/ ; done
 ```
 
 Modify `~/.vibe/config.toml`:
