@@ -61,7 +61,7 @@ func TestBuildBasePrompt(t *testing.T) {
 				"FIRST ACTIONS:",
 				`Query your assigned task: liza_get {"query": "tasks/task-1"}`,
 				"Read the goal spec: specs/vision.md",
-				"lessons/agents/README.md",
+				"lessons/agents/",
 				"GUARDRAILS.md",
 			},
 			wantNotContain: []string{
@@ -1053,7 +1053,7 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		"FIRST ACTIONS:",
 		`Query your assigned task: liza_get {"query": "tasks/task-42"}`,
 		"Read the goal spec: specs/vision.md",
-		"lessons/agents/README.md",
+		"lessons/agents/",
 		"GUARDRAILS.md",
 		"Execute your role's protocol",
 	})

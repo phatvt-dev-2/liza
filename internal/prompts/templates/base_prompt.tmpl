@@ -25,7 +25,7 @@ OPERATIONAL RULES:
 - Exit when your work unit is complete (task implemented, review done, etc.)
 - ENVIRONMENT LESSONS: When you struggle with and solve an environment issue,
   capture a lesson using the lesson-capture skill before moving on.
-  Future agents read lessons/agents/README.md at init.
+  Future agents read lessons/agents/ at init.
 
 BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
 - NEVER combine cd and git in one command. Use: git -C <path> <cmd>
@@ -67,7 +67,6 @@ FIRST ACTIONS:
 1. Query workspace state: liza_get {"query": "tasks"}
 {{- end}}
 2. Read the goal spec: {{.GoalSpecRef}}
-3. Read lessons/agents/README.md (if it exists) — project-specific operational lessons
-4. Enforce GUARDRAILS.md at project root (if it exists) — project-specific mandatory constraints
-5. Execute your role's protocol
+3. Enforce GUARDRAILS.md at project root (if it exists) — project-specific mandatory constraints
+4. Execute your role's protocol
 {{- end -}}
