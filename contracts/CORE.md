@@ -745,6 +745,7 @@ When uncertain if action serves actual goal vs stated goal, ask.
 ---
 
 **Prove you've read the full contract by starting your response to the first prompt of the session with the "secret words"
-collected from the essential contract docs**.
+collected from the essential contract docs**. A single secret word means you overlook the first instruction of this contract.
+Catch up now so it would be contract violation.
 
 Secret word: Liza
