@@ -3,7 +3,7 @@ name: software-architecture-review
 description: Software Architecture Review Protocol
 ---
 
-**REVIEW_FILE** = `docs/architecture/architecture-review.md`
+**REVIEW_FILE** = `specs/architecture/architecture-review.md`
 
 **Recommended Tools:** Make sure you've read ~/.liza/AGENT_TOOLS.md
 list_directory_tree and warpgrep_codebase_search (fast and token efficient semantic search) may be specifically useful.
@@ -602,7 +602,7 @@ Tag as `[concern]` or `[suggestion]` per code review protocol. Architectural dis
 
 # Persistence of Findings
 
-**ISSUES_FILE** = `docs/architectural-issues.md`
+**ISSUES_FILE** = `specs/architecture/architectural-issues.md`
 
 Significant findings (smells, structural concerns, high-priority recommendations) should be persisted to ISSUES_FILE for long-term tracking.
 
@@ -657,7 +657,7 @@ Found [N] architectural issues worth persisting:
 1. [Issue title] — [one-line summary]
 2. ...
 
-Save to docs/architectural-issues.md? (y/n/select specific)
+Save to specs/architecture/architectural-issues.md? (y/n/select specific)
 ```
 
 Wait for user confirmation before writing.

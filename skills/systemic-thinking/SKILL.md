@@ -163,7 +163,7 @@ Found [N] systemic issues to persist:
 1. [Category]: [Issue title] — [one-line implication]
 2. ...
 
-Save to docs/architectural-issues.md? (y/n/select specific)
+Save to specs/architecture/architectural-issues.md? (y/n/select specific)
 ```
 
 Wait for user confirmation before writing.
