@@ -938,6 +938,55 @@ func TestMergeWorktree_IntegrationTestFailure(t *testing.T) {
 	}
 }
 
+func TestMergeWorktree_IntegrationTestTimeout(t *testing.T) {
+	taskID := "merge-timeout"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	// Create a script that hangs forever
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatalf("Failed to create scripts dir: %v", err)
+	}
+	script := filepath.Join(scriptsDir, "integration-test.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'starting'\nsleep 3600\n"), 0755); err != nil {
+		t.Fatalf("Failed to write test script: %v", err)
+	}
+
+	// Override timeout to something short for test
+	origTimeout := DefaultIntegrationTestTimeout
+	DefaultIntegrationTestTimeout = 500 * time.Millisecond
+	t.Cleanup(func() { DefaultIntegrationTestTimeout = origTimeout })
+
+	_, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err == nil {
+		t.Fatal("Expected error for timed-out test, got nil")
+	}
+
+	var intErr *IntegrationFailedError
+	if !errors.As(err, &intErr) {
+		t.Fatalf("Expected *IntegrationFailedError, got %T: %v", err, err)
+	}
+
+	if intErr.Reason != IntegrationReasonTestsFailed {
+		t.Errorf("Reason = %q, want %q", intErr.Reason, IntegrationReasonTestsFailed)
+	}
+
+	if !strings.Contains(intErr.TestOutput, "killed after") {
+		t.Errorf("TestOutput should mention timeout, got %q", intErr.TestOutput)
+	}
+
+	// Verify state updated to INTEGRATION_FAILED
+	state := readStateForTest(t, stateFile)
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found in state")
+	}
+	if task.Status != models.TaskStatusIntegrationFailed {
+		t.Errorf("Task status = %v, want INTEGRATION_FAILED", task.Status)
+	}
+}
+
 func TestMergeWorktree_CASRetryDeterministic(t *testing.T) {
 	taskID := "merge-cas-retry"
 	agentID := "coder-1"

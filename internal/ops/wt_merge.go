@@ -2,6 +2,7 @@ package ops
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -20,6 +21,16 @@ import (
 
 // maxMergeRetries is the maximum number of CAS retry attempts for the merge loop.
 const maxMergeRetries = 3
+
+// DefaultIntegrationTestTimeout bounds how long integration tests may run
+// before the merge pipeline kills them. A hanging test without this timeout
+// would block the entire merge queue indefinitely.
+//
+// Exported var (not const) so tests can override. Not parallel-safe:
+// tests that override this must not run concurrently with other tests
+// that call MergeWorktree. Current wt_merge tests are inherently serial
+// (each creates a temp git repo), so this is safe in practice.
+var DefaultIntegrationTestTimeout = 10 * time.Minute
 
 // mergeCASRetryTestHook is a test-only hook invoked after reading integration HEAD
 // in each CAS attempt and before merge/ref-update logic runs.
@@ -339,13 +350,23 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	if _, statErr := os.Stat(integrationTestScript); statErr == nil {
 		testsRan = true
 		var combinedOutput bytes.Buffer
-		cmd := exec.Command(integrationTestScript)
+		ctx, cancel := context.WithTimeout(context.Background(), DefaultIntegrationTestTimeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, integrationTestScript)
 		cmd.Dir = projectRoot
 		cmd.Stdout = &combinedOutput
 		cmd.Stderr = &combinedOutput
+		// Kill the entire process tree on timeout (Unix: process group kill;
+		// Windows: default CommandContext kill). WaitDelay ensures cmd.Wait
+		// returns even if child processes hold pipes open after kill.
+		configProcessGroupKill(cmd)
+		cmd.WaitDelay = 5 * time.Second
 
 		if runErr := cmd.Run(); runErr != nil {
 			testOutput = combinedOutput.String()
+			if ctx.Err() == context.DeadlineExceeded {
+				testOutput += fmt.Sprintf("\n[liza] integration test killed after %s timeout", DefaultIntegrationTestTimeout)
+			}
 
 			// CAS rollback: only rewind if ref still points to our merge commit.
 			// If someone else merged on top, rewinding would drop their work.
