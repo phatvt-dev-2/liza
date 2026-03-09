@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // InspectOptions contains options for the inspect command
@@ -81,10 +82,12 @@ func isKnownEntityType(query string) bool {
 
 // isAgentIDPattern returns true if the query looks like an agent ID
 func isAgentIDPattern(query string) bool {
-	// Agent ID patterns based on role types
-	return strings.HasPrefix(query, "coder-") ||
-		strings.HasPrefix(query, "code-reviewer-") ||
-		strings.HasPrefix(query, "orchestrator-")
+	for _, role := range roles.AllRuntime() {
+		if strings.HasPrefix(query, role+"-") {
+			return true
+		}
+	}
+	return false
 }
 
 // handleFieldQuery handles queries for specific fields (direct or computed)
