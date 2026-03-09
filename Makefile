@@ -1,4 +1,4 @@
-.PHONY: build test clean install lint check-testhelpers release package build-all tidy run coverage help
+.PHONY: build test test-e2e clean install lint check-testhelpers release package build-all tidy run coverage help
 
 # Binary names
 BINARY_NAME=liza
@@ -40,6 +40,10 @@ build: sync-embedded
 # into internal/embedded/ for go:embed. Without these files the embedded package fails to compile.
 test: sync-embedded check-testhelpers
 	go test -v -race -coverprofile=coverage.out ./...
+
+# Run e2e tests (full sprint sequence with mock CLI — ~40s)
+test-e2e: sync-embedded check-testhelpers
+	go test -v -race -tags e2e -run TestFullSprintSequence ./internal/integration/ -count=1
 
 # Run tests with coverage report
 coverage: test
@@ -145,6 +149,7 @@ help:
 	@echo "Available targets:"
 	@echo "  build              - Build liza and liza-mcp binaries"
 	@echo "  test               - Run tests (includes testhelpers check)"
+	@echo "  test-e2e           - Run e2e full sprint test (~40s, requires -tags e2e)"
 	@echo "  coverage           - Run tests with coverage report"
 	@echo "  clean              - Clean build artifacts"
 	@echo "  install            - Install liza and liza-mcp binaries"

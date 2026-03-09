@@ -15,6 +15,8 @@ Running tests, coverage targets, and test utilities for the Liza Go codebase.
 | `go test -run TestFoo ./internal/db/` | Specific test |
 | `go test -run "TestBlackboard.*" ./internal/db/` | Pattern match |
 | `go test -short ./...` | Run tests with short-mode enabled (integration tests in `internal/integration/` are skipped via `testing.Short()` guards) |
+| `go test -tags e2e ./internal/integration/` | Run e2e full sprint test (gated by `//go:build e2e`, ~40s) |
+| `make test-e2e` | Same as above via Makefile target |
 
 ### Coverage
 
@@ -76,6 +78,7 @@ internal/
 └── integration/               # End-to-end tests
     ├── e2e_workflow_test.go
     ├── concurrent_operations_test.go
+    ├── full_sprint_test.go        # //go:build e2e — full pipeline test
     ├── lease_expiry_test.go
     └── sprint_and_merge_test.go
 ```
@@ -230,3 +233,11 @@ func TestFullWorkflow(t *testing.T) {
 ```
 
 Integration tests cover: init -> add-task -> claim -> submit -> review -> merge, multiple agent interaction, concurrent operations, lease expiry, and sprint lifecycle.
+
+### E2E Tests (build tag: `e2e`)
+
+The full sprint sequence test (`full_sprint_test.go`) exercises the complete supervisor pipeline — epic-planning, US-writing, code-planning, and coding — using a mock CLI executor. It's gated by the `e2e` build tag so it doesn't run in the default test suite (~40s).
+
+```bash
+go test -tags e2e -v ./internal/integration/   # or: make test-e2e
+```
