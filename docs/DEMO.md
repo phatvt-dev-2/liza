@@ -10,7 +10,11 @@ This walkthrough demonstrates Liza orchestrating a multi-agent system to build a
 
 ## Prerequisites
 
-See [Contract Activation](../contracts/contract-activation.md) for the pre-requisite setup.
+- Claude Code CLI and git installed
+- Go >= 1.25.5 installed
+- `liza` and `liza-mcp` Go binaries in PATH (see `make install`)
+
+See [Contract Activation](../contracts/contract-activation.md) for the agent settings setup (Claude Code, Codex, Gemini, etc.).
 
 ---
 
@@ -25,7 +29,7 @@ git init
 
 ## Step 2: Create Vision Spec
 
-The Planner needs a goal to decompose. Create `specs/vision.md`:
+The Orchestrator needs a goal to decompose. Create `specs/vision.md`:
 
 ```bash
 mkdir -p specs
@@ -116,13 +120,20 @@ git commit -m "Initial commit: vision spec and dev tooling"
 
 ```bash
 liza setup  # one-time: installs contracts + skills to ~/.liza/
-liza init "Build hello CLI" --spec specs/vision.md
+liza init "Build hello CLI" --spec specs/vision.md --entry-point detailed-spec
 ```
+
+The `--entry-point detailed-spec` skips the specification phase (epic planning, user stories) and goes straight to code planning → coding. For a simple hello-world, this is the right entry point.
 
 This creates:
 - `.liza/state.yaml` — the blackboard
+- `.liza/pipeline.yaml` — frozen pipeline config
 - `.liza/log.yaml` — activity log
 - `.liza/alerts.log` — watcher alerts
+- `.claude/settings.json` — Claude Code project permissions
+- `.mcp.json` — MCP server configuration (tells Claude Code how to start liza-mcp)
+- `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` — symlinks to `~/.liza/CORE.md`
+- `GUARDRAILS.md` — project-specific constraints template
 - `integration` branch — where approved work lands
 
 Verify:
@@ -132,10 +143,11 @@ cat .liza/state.yaml
 
 You should see:
 ```yaml
-version: "1.0"
+version: 1
 goal:
-  id: goal-1
-  description: "Build hello CLI per specs/vision.md"
+  id: goal-<timestamp>
+  description: "Build hello CLI"
+  spec_ref: /absolute/path/to/specs/vision.md
   status: IN_PROGRESS
 tasks: []
 agents: {}
@@ -153,21 +165,23 @@ cd hello-cli
 liza watch
 ```
 
-This monitors for anomalies and alerts. Leave it running.
+This monitors for anomalies, alerts, and auto-checkpoints on circuit-breaker triggers. Leave it running.
 
 ---
 
-## Step 7: Start the Planner (Terminal 2)
+## Step 7: Start the Orchestrator (Terminal 2)
 
 ```bash
 cd hello-cli
-liza agent planner --agent-id planner-1
+liza agent orchestrator --agent-id orchestrator-1 --log
 ```
 
-The Planner will:
+Pass `--log` to persist the agent's output to `.liza/agent-outputs/` for later analysis (see [Analyzing Agent Logs](USAGE_MULTI_AGENTS.md#analyzing-agent-logs)). Each agent command also accepts a `--cli` flag to select the coding agent: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`.
+
+The Orchestrator will:
 1. Read `specs/vision.md`
-2. Decompose the goal into tasks
-3. Create DRAFT tasks, then finalize to READY
+2. Create the initial code-planning task
+3. Monitor sprint progress and create checkpoints
 
 Watch the blackboard update:
 ```bash
@@ -175,29 +189,65 @@ Watch the blackboard update:
 watch -n 2 'liza get tasks --format table'
 ```
 
-Expected tasks (Planner decides, but likely):
-- `task-1`: Create project structure (setup.py, __init__.py)
-- `task-2`: Implement CLI argument parsing
-- `task-3`: Add greeting logic
-- `task-4`: Write tests
-
 ---
 
-## Step 8: Start the Coder (Terminal 3)
-
-Once READY tasks appear:
+## Step 8: Start the Code Planner and Code Plan Reviewer (Terminals 3-4)
 
 ```bash
 cd hello-cli
-liza agent coder --agent-id coder-1
+liza agent code-planner --agent-id code-planner-1 --log
+```
+
+```bash
+cd hello-cli
+liza agent code-plan-reviewer --agent-id code-plan-reviewer-1 --log
+```
+
+The Code Planner will:
+1. Claim the planning task
+2. Read the spec and produce a coding plan
+3. Populate `output[]` with task definitions
+4. Submit for review
+
+The Code Plan Reviewer will:
+1. Review the plan
+2. Approve or reject with feedback
+3. On approval: merge, triggering a sprint checkpoint (HUMAN GATE)
+
+At this point the system pauses. Review the plan, then transition to coding:
+```bash
+liza proceed <task-id> code-plan-to-coding
+liza resume
+```
+
+---
+
+## Step 9: Start the Coder and Code Reviewer (Terminals 5-6)
+
+Once coding tasks appear after `proceed` + `resume`:
+
+```bash
+cd hello-cli
+liza agent coder --agent-id coder-1 --log
+```
+
+```bash
+cd hello-cli
+liza agent code-reviewer --agent-id code-reviewer-1 --log
 ```
 
 The Coder will:
-1. Claim an READY task
+1. Claim a coding task
 2. Create a worktree (`.worktrees/task-N/`)
 3. Implement the task
 4. Run tests
-5. Submit for review (READY_FOR_REVIEW)
+5. Submit for review
+
+The Code Reviewer will:
+1. Claim submitted tasks
+2. Review the code
+3. Either APPROVE or REJECT with feedback
+4. If APPROVED: merge to `integration` branch
 
 Watch worktrees:
 ```bash
@@ -206,31 +256,21 @@ ls -la .worktrees/
 
 ---
 
-## Step 9: Start the Code Reviewer (Terminal 4)
-
-```bash
-cd hello-cli
-liza agent code-reviewer --agent-id code-reviewer-1
-```
-
-The Code Reviewer will:
-1. Claim READY_FOR_REVIEW tasks
-2. Review the code
-3. Either APPROVE or REJECT with feedback
-4. If APPROVED: merge to `integration` branch
-
----
-
 ## Step 10: Observe the Flow
 
-With all three agents running, watch the system:
+With all agents running, watch the system:
 
 **Task status:**
 ```bash
 watch -n 2 'liza get tasks --format table'
 ```
 
-**Blackboard state:**
+**Full blackboard state (tasks, agents, metrics, anomalies):**
+```bash
+watch -n 2 'liza get tasks --format table; echo ; echo ====== Agents ====== ; liza get agents --format table ; echo ; echo ====== Metrics ====== ; liza get metrics ; echo ; echo ====== Anomalies ====== ; liza get anomalies'
+```
+
+**System status:**
 ```bash
 watch -n 5 'liza status'
 ```
@@ -250,34 +290,32 @@ watch -n 10 'git log integration --oneline 2>/dev/null || echo "No merges yet"'
 ## Expected Flow
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Planner   │     │    Coder    │     │  Reviewer   │
-└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-       │                   │                   │
-       │ Create tasks      │                   │
-       │ DRAFT → READY │                   │
-       │───────────────────>                   │
-       │                   │                   │
-       │                   │ Claim task        │
-       │                   │ READY→IMPLEMENTING │
-       │                   │                   │
-       │                   │ Implement...      │
-       │                   │                   │
-       │                   │ Submit            │
-       │                   │ IMPLEMENTING→READY     │
-       │                   │───────────────────>
-       │                   │                   │
-       │                   │                   │ Review
-       │                   │                   │
-       │                   │          APPROVED │
-       │                   │<──────────────────│
-       │                   │                   │
-       │                   │                   │ Merge to
-       │                   │                   │ integration
-       │                   │                   │
-       │                   │ Claim next task   │
-       │                   │                   │
-      ...                 ...                 ...
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Orchestrator │  │ Code Planner │  │  Plan Review  │  │    Coder    │  │ Code Review  │
+└──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬──────┘  └──────┬───────┘
+       │                 │                 │                  │                │
+       │ Create planning │                 │                  │                │
+       │ task            │                 │                  │                │
+       │────────────────>│                 │                  │                │
+       │                 │ Write plan +    │                  │                │
+       │                 │ populate output │                  │                │
+       │                 │────────────────>│                  │                │
+       │                 │                 │ Review + Approve │                │
+       │                 │                 │ Merge            │                │
+       │                 │                 │                  │                │
+       │ ═══ HUMAN GATE: liza proceed + resume ════════════  │                │
+       │                 │                 │                  │                │
+       │                 │                 │                  │ Claim task     │
+       │                 │                 │                  │ Implement...   │
+       │                 │                 │                  │───────────────>│
+       │                 │                 │                  │                │ Review
+       │                 │                 │                  │       APPROVED │
+       │                 │                 │                  │<───────────────│
+       │                 │                 │                  │                │ Merge to
+       │                 │                 │                  │                │ integration
+       │                 │                 │                  │ Claim next     │
+       │                 │                 │                  │                │
+      ...               ...               ...               ...              ...
 ```
 
 ---
@@ -308,7 +346,7 @@ python -m pytest tests/ -v
 
 ## Example Sprint Results
 
-After a successful sprint, you'll see output like this from the Planner:
+After a successful sprint, you'll see output like this from the Orchestrator:
 
 ```
 Sprint Progress:
@@ -319,7 +357,7 @@ Sprint Progress:
   In progress: 0
 
 All 3 planned task(s) complete. Sprint done.
-Unregistering agent: planner-1
+Unregistering agent: orchestrator-1
 ```
 
 **Final Task States:**
@@ -420,28 +458,30 @@ liza stop
 # All agents will exit gracefully
 ```
 
+**Signal handling:** Agents cleanly exit on `Ctrl+C` (SIGINT) or `kill` (SIGTERM). On exit, the agent unregisters and atomically releases any active task claim so no orphaned claims are left behind.
+
 ---
 
 ## Troubleshooting
 
 **No tasks appearing?**
-- Check Planner terminal for errors
+- Check Orchestrator terminal for errors
 - Verify `specs/vision.md` exists and is readable
-- Check `.liza/log.yaml` for Planner activity
+- Check `.liza/log.yaml` for Orchestrator activity
 
 **Coder stuck?**
 - Check worktree exists: `ls .worktrees/`
-- Check task status: `liza get tasks --format table` (look for IMPLEMENTING)
-- Look for BLOCKED status with `blocked_reason`: `liza get tasks <task-id>`
+- Check task status: `liza get tasks --format table`
+- Look for BLOCKED status with `blocked_reason`: `liza get <task-id>`
 
 **Review taking too long?**
-- Check Code Reviewer terminal
-- Verify task is READY_FOR_REVIEW: `liza get tasks --format table`
+- Check reviewer terminal
+- Check task status: `liza get tasks --format table`
 
 **Debug agent interactively (-i option)**
 - Terminate the agent and release the task: `liza release-claim <task-id> --role both`
 - Get its prompt from `.liza/agent-prompts/`
-- Run `liza agent <role> --agent-id <agent-id> --cli <claude|codex|gemini|mistral> -i`
+- Run `liza agent <role> --agent-id <agent-id> --cli <claude|codex|gemini|mistral|kimi> -i`
 - Paste the prompt
 
 Codex is a nice option for debugging too because it displays everything.

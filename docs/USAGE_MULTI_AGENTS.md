@@ -17,15 +17,18 @@ See [DEMO](DEMO.md) for a full example.
 ├── MULTI_AGENT_MODE.md                # Peer-supervised Liza system
 ├── AGENT_TOOLS.md                     # Agent tool contracts
 ├── COLLABORATION_CONTINUITY.md        # Session continuity
+├── pipeline.yaml                      # Default pipeline config (role-pairs, transitions, entry-points)
 └── skills/                            # Skill definitions
     ├── code-review/SKILL.md
     ├── debugging/SKILL.md
+    ├── liza-logs/SKILL.md
     └── ...
 
 <project>/
 ├── GUARDRAILS.md                  # Project-specific constraints (optional)
 ├── .liza/
 │   ├── state.yaml                 # Current state
+│   ├── pipeline.yaml              # Frozen pipeline config (validated at init from --config)
 │   ├── log.yaml                   # Activity history
 │   └── archive/                   # Terminal-state tasks
 └── .worktrees/
@@ -81,11 +84,15 @@ liza init "[Goal description]" --spec [spec_ref]
 #   liza init "Implement retry logic"                        # uses specs/vision.md
 #   liza init "Add auth" --spec specs/auth-feature.md        # uses custom spec
 #
-# With a pipeline config (code-planning-pair → coding-pair):
-# --config defaults to ~/.liza/pipeline.yaml (installed by liza setup)
+# Pipeline config (--config defaults to ~/.liza/pipeline.yaml, installed by liza setup):
 #   liza init "Sub-pipelines phase 2" \
 #     --post-worktree-cmd "make sync-embedded" \
 #     --spec specs/build/2\ -\ Sub-pipelines\ and\ spec\ writing.md
+#
+# Entry points (--entry-point selects which sub-pipeline to start from):
+#   liza init "Build auth system" --entry-point general-objective   # full pipeline: epic → US → code-plan → code
+#   liza init "Implement from spec" --entry-point detailed-spec     # coding pipeline only: code-plan → code
+#   # If omitted, the orchestrator auto-classifies from the spec content.
 
 # Verify
 cat .liza/state.yaml
@@ -93,6 +100,7 @@ cat .liza/state.yaml
 
 `liza init` creates:
 - `.liza/state.yaml` — Blackboard state
+- `.liza/pipeline.yaml` — Frozen pipeline config (validated copy of the selected `--config`, default: `~/.liza/pipeline.yaml`)
 - `.liza/log.yaml` — Activity log
 - `.claude/settings.json` — Claude Code project permissions (Liza MCP tools, skills, git/build commands)
 - `.mcp.json` — MCP server configuration (tells Claude Code how to start liza-mcp)
@@ -103,22 +111,48 @@ cat .liza/state.yaml
 Contracts and skills live in `~/.liza/` (global, from `liza setup`), not in the project.
 Operational reference content (blackboard fields, anomaly types, etc.) is inlined directly into agent prompts.
 
-**3. Start Agents (3 terminals)**
+**3. Start Agents**
 
-Agent identity is provided via the `--agent-id` flag. IDs must follow the pattern `{role}-{number}` (e.g., `coder-1`, `code-reviewer-1`, `planner-1`).
+Agent identity is provided via the `--agent-id` flag. IDs must follow the pattern `{role}-{number}` (e.g., `coder-1`, `code-reviewer-1`, `orchestrator-1`).
 
-Terminal 1 — Planner:
-```bash
-liza agent planner --agent-id planner-1
+Roles are organized into two phases. Which agents you need depends on your entry point:
+
+```
+Roles:
+  orchestrator        - Creates and manages task breakdown
+
+  Specification phase (general-objective entry point):
+  epic-planner        - Decomposes vision into epics
+  epic-plan-reviewer  - Reviews epic decomposition
+  us-writer           - Writes user stories from epics
+  us-reviewer         - Reviews user stories
+
+  Coding phase (both entry points):
+  code-planner        - Claims and produces coding plans
+  code-plan-reviewer  - Reviews coding plans and submits verdicts
+  coder               - Claims and implements coding tasks
+  code-reviewer       - Reviews coding tasks and submits verdicts
 ```
 
-Terminal 2 — Coder:
+**Minimal setup (detailed-spec entry point) — 5 terminals:**
 ```bash
+liza agent orchestrator --agent-id orchestrator-1
+liza agent code-planner --agent-id code-planner-1
+liza agent code-plan-reviewer --agent-id code-plan-reviewer-1
 liza agent coder --agent-id coder-1
+liza agent code-reviewer --agent-id code-reviewer-1
 ```
 
-Terminal 3 — Code Reviewer:
+**Full pipeline (general-objective entry point) — 9 terminals:**
 ```bash
+liza agent orchestrator --agent-id orchestrator-1
+liza agent epic-planner --agent-id epic-planner-1
+liza agent epic-plan-reviewer --agent-id epic-plan-reviewer-1
+liza agent us-writer --agent-id us-writer-1
+liza agent us-reviewer --agent-id us-reviewer-1
+liza agent code-planner --agent-id code-planner-1
+liza agent code-plan-reviewer --agent-id code-plan-reviewer-1
+liza agent coder --agent-id coder-1
 liza agent code-reviewer --agent-id code-reviewer-1
 ```
 
@@ -127,11 +161,9 @@ Each agent command accepts a `--cli` flag to select the coding agent CLI: `claud
 Pass `--log` to persist the agent's output to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Incompatible with `-i`.
 See [Analyzing Agent Logs](#analyzing-agent-logs) for analysis tools.
 
-Note that it is possible to run multiple agents of the same roles in different terminals.
+Multiple agents of the same role can run in parallel:
 ```bash
 liza agent coder --agent-id coder-1
-```
-```bash
 liza agent coder --agent-id coder-2
 ```
 
@@ -144,6 +176,8 @@ liza watch
 ```bash
 # Watch blackboard state
 watch -n 2 'liza get tasks --format table'
+# or:
+watch -n 2 'liza get tasks --format table; echo ; echo ====== Agents ====== ; liza get agents --format table ; echo ; echo ====== Metrics ====== ; liza get metrics ; echo ; echo ====== Anomalies ====== ; liza get anomalies'
 ```
 
 **4. Human Interventions**
@@ -161,7 +195,7 @@ liza stop
 liza sprint-checkpoint
 ```
 
-**Signal handling:** Agents cleanly exit on `Ctrl+C` (SIGINT) or `kill` (SIGTERM). On exit, the agent unregisters and atomically releases any active task claim — the task returns to READY (coder) or READY_FOR_REVIEW (reviewer) — so no orphaned claims are left behind.
+**Signal handling:** Agents cleanly exit on `Ctrl+C` (SIGINT) or `kill` (SIGTERM). On exit, the agent unregisters and atomically releases any active task claim — the task returns to its initial state (doer, e.g. DRAFT_CODE) or submitted state (reviewer, e.g. CODE_READY_FOR_REVIEW) — so no orphaned claims are left behind.
 
 **5. Review Results**
 ```bash
@@ -185,37 +219,43 @@ The planner does not auto-detect changes to `vision.md` between sprints. Each sp
 
 ### Sprint Lifecycle & Human Gates
 
-Liza runs in sprints. Each sprint has a planning phase and an execution phase,
-with human checkpoints between them.
+Liza runs in sprints. Each sprint executes one role-pair (doer + reviewer) from the pipeline.
+Human checkpoints gate transitions between pairs.
+
+#### Pipeline & Entry Points
+
+The pipeline defines which role-pairs execute and how tasks flow between them:
+
+```
+general-objective entry point (full pipeline):
+  epic-planning-pair → us-writing-pair → code-planning-pair → coding-pair
+
+detailed-spec entry point (coding only):
+  code-planning-pair → coding-pair
+```
+
+Each transition between pairs is a **human gate**: the sprint completes, the human reviews, then runs `liza proceed <task-id> <transition>` followed by `liza resume`.
 
 #### Sprint Phases
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Planning Sprint                                      │
+│ Doer Sprint                                          │
 │                                                      │
-│  1. Orchestrator creates code-planning task          │
-│  2. Code Planner writes plan + populates output[]    │
-│  3. Code Plan Reviewer approves                      │
-│  4. Task merges → PLANNING_COMPLETE                  │
-│  5. Orchestrator creates coding tasks from output[]  │
-│  6. Sprint checkpoints → HUMAN GATE                  │
-│                                                      │
-│  Human reviews tasks, then: liza resume              │
-│                                                      │
-├─────────────────────────────────────────────────────┤
-│ Coding Sprint                                        │
-│                                                      │
-│  1. Coders claim and implement tasks                 │
-│  2. Code Reviewers approve                           │
-│  3. Tasks merge to integration branch                │
+│  1. Orchestrator creates task for current pair        │
+│  2. Doer claims task, does work, populates output[]   │
+│  3. Reviewer approves → task merges                  │
 │  4. All tasks done → SPRINT_COMPLETE                 │
 │  5. Sprint checkpoints → HUMAN GATE                  │
 │                                                      │
-│  Human reviews results, then: liza resume            │
+│  Human reviews results, then:                        │
+│    liza proceed <task-id> <transition>  (if next pair exists) │
+│    liza resume                          (start next sprint)   │
 │                                                      │
 └─────────────────────────────────────────────────────┘
 ```
+
+Transitions create child tasks from the parent's `output[]` entries (per-subtask cardinality) or from the parent task itself (one-to-one cardinality). Available transitions are defined in `.liza/pipeline.yaml`.
 
 #### What Humans Do at Checkpoints
 
@@ -224,12 +264,12 @@ The human reviews the sprint summary and decides:
 
 | Action | Command | When |
 |--------|---------|------|
-| Resume (next sprint) | `liza resume` | Satisfied with results, ready for next sprint |
-| Manual transition | `liza proceed <task-id> <transition>` | Expand planning output into coding tasks manually |
+| Resume (next sprint) | `liza resume` | Ready for next sprint (after proceed, or when no transition needed) |
+| Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks for the next role-pair from output[] |
 | Pause for manual work | (no command) | Want to make manual changes before continuing |
 | Abort | `liza stop` | Want to stop entirely |
 
-**`liza proceed`** is an alternative to the automated PLANNING_COMPLETE flow. It reads a task's `output[]` entries and creates child coding tasks. Use it when you want manual control over the planning-to-coding transition (e.g., to edit output entries before expansion).
+**`liza proceed`** creates child tasks from a completed task's `output[]` entries based on the pipeline transition's cardinality (`per-subtask`: one child per output entry, `one-to-one`: single child from parent). Use `liza status` to see available transitions for tasks at terminal states. After `proceed`, run `liza resume` to start the next sprint.
 
 #### Sprint Status Flow
 
@@ -259,16 +299,16 @@ The `liza` binary provides all system operations. Key commands:
 | `liza sprint-checkpoint` | Create a checkpoint (halt + summary) |
 | **Task Operations** | |
 | `liza add-task` | Add a new task to the state |
-| `liza claim-task <task-id> <agent-id>` | Atomically claim a task for a coder (creates worktree, updates state) |
-| `liza submit-for-review <task-id>` | Submit a task for review |
-| `liza submit-verdict <task-id>` | Submit a review verdict (APPROVED/REJECTED) |
+| `liza claim-task <task-id> <agent-id>` | Atomically claim a task for a doer agent (creates worktree, updates state) |
+| `liza submit-for-review <task-id> <commit-sha>` | Submit a task for review (doer agents) |
+| `liza submit-verdict <task-id> <APPROVED\|REJECTED> [reason]` | Submit a review verdict (reviewer agents; reason required for REJECTED) |
 | `liza mark-blocked <task-id>` | Mark a task as BLOCKED with reason and questions |
-| `liza handoff <task-id>` | Context-exhaustion handoff for a claimed task |
+| `liza handoff <task-id> <summary> <next-action>` | Context-exhaustion handoff for a doer agent's claimed task |
 | `liza supersede-task <task-id>` | Mark a task as SUPERSEDED by replacements |
-| `liza proceed <task-id> <transition>` | Execute inter-pair transition (e.g., code-plan-to-coding) |
+| `liza proceed <task-id> <transition>` | Execute inter-pair pipeline transition (e.g., code-plan-to-coding) |
 | **Worktree Management** | |
-| `liza wt-create <task-id>` | Create a worktree for an IMPLEMENTING task |
-| `liza wt-merge <task-id>` | Merge an approved task into the integration branch |
+| `liza wt-create <task-id>` | Create a worktree for an executing task |
+| `liza wt-merge <task-id>` | Merge an approved task into the integration branch (reviewer agents) |
 | `liza wt-delete <task-id>` | Delete a worktree for a completed/abandoned task |
 | **Recovery** | |
 | `liza recover-task <task-id>` | Recover by task ID (release claims + remove worktree/branch) |
@@ -282,7 +322,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza clear-stale-review-claims` | Clear expired review leases |
 | `liza get <query>` | Query state data (tasks, agents, etc.) |
 
-**Important:** The supervisor claims tasks *before* starting the Claude agent. This avoids interactive permission prompts in `-p` (non-interactive) mode. Agents receive their assigned task in the bootstrap prompt and should NOT call claim commands directly.
+**Important:** The supervisor claims tasks *before* starting the agent CLI. This avoids interactive permission prompts in non-interactive mode. Agents receive their assigned task in the bootstrap prompt and should NOT call claim commands directly.
 
 See [Architecture Overview](../specs/architecture/overview.md) for detailed component descriptions.
 
@@ -302,34 +342,46 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
 }
 ```
 
-**`claude-settings.json`** — Minimal permissions for Claude Code agents:
+**`claude-settings.json`** — Permissions for Claude Code agents (MCP tools shown in full, other categories truncated):
 ```json
 {
-  "additionalDirectories": [ "~/.liza" ],
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": ["liza"],
   "permissions": {
     "defaultMode": "acceptEdits",
     "allow": [
       "Read(~/.claude/**)",
-      "Read(~/.liza/**)",
       "mcp__liza__liza_get",
       "mcp__liza__liza_status",
+      "mcp__liza__liza_validate",
+      "mcp__liza__liza_version",
       "mcp__liza__liza_add_tasks",
-      "mcp__liza__liza_set_task_output",
+      "mcp__liza__liza_claim_task",
       "mcp__liza__liza_submit_for_review",
+      "mcp__liza__liza_handoff",
       "mcp__liza__liza_submit_verdict",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git status:*)",
-      "Bash(git diff:*)",
-      "WebFetch"
+      "mcp__liza__liza_mark_blocked",
+      "mcp__liza__liza_release_claim",
+      "mcp__liza__liza_supersede_task",
+      "mcp__liza__liza_set_task_output",
+      "mcp__liza__liza_wt_create",
+      "mcp__liza__liza_wt_delete",
+      "mcp__liza__liza_wt_merge",
+      "mcp__liza__liza_analyze",
+      "mcp__liza__liza_update_sprint_metrics",
+      "mcp__liza__liza_sprint_checkpoint",
+      "mcp__liza__liza_write_checkpoint",
+      "mcp__liza__liza_delete_agent"
     ]
   }
 }
 ```
 
-Both CLI commands (e.g., `liza add-task`) and MCP tools (e.g., `liza_add_tasks`) operate on the same `.liza/state.yaml` file. Claude Code agents use MCP tools for better error handling; the CLI is for manual use.
+The full template also pre-approves skills (code-review, testing, debugging, etc.), git read/write commands, build tools (go, make, python), shell utilities, and web access (WebFetch, WebSearch, LSP). See `internal/embedded/claude-settings.json` for the complete list.
 
-The root-level `claude-settings.json` and `mcp.json` are templates embedded into the binary. `liza init` writes the active copies to `.claude/settings.json` and `.mcp.json` in the project directory.
+Both CLI commands (e.g., `liza add-task`) and MCP tools (e.g., `liza_add_tasks`) operate on the same `.liza/state.yaml` file. Claude Code agents use MCP tools for better error handling; the CLI is for manual use. `liza-mcp` starts gracefully even without `.liza/` — only `liza_version` works; all other tools return `NotInitializedError`.
+
+The templates are embedded into the binary. `liza init` writes the active copies to `.claude/settings.json` and `.mcp.json` in the project directory.
 
 ### Analyzing Agent Logs
 
@@ -337,8 +389,8 @@ Logs captured with `--log` are NDJSON files (one JSON object per line) from `cla
 
 | Format | First event | Seen in | Token detail |
 |--------|-------------|---------|--------------|
-| **Rich** | `type: system` | Planner | Per-API-call breakdown (input, cache, output) |
-| **Sparse** | `type: thread.started` | Coder, Reviewer | Aggregate only (`turn.completed`) |
+| **Rich** | `type: system` | Orchestrator | Per-API-call breakdown (input, cache, output) |
+| **Sparse** | `type: thread.started` | All doer and reviewer roles | Aggregate only (`turn.completed`) |
 
 Both analysis tools auto-detect the format.
 
@@ -354,7 +406,7 @@ This works with any coding agent (Claude Code, Codex, etc.) in pairing mode. The
 
 ```bash
 # Single file
-python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/planner-1-*.txt
+python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/orchestrator-1-*.txt
 
 # Multiple files
 python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/*.txt
@@ -379,7 +431,7 @@ jq -c 'select(.item) | .item | {type, text, command, tool, usage}
 
 # Rich format: extract token usage per API call
 jq -c 'select(.type == "assistant") | {id: .message.id, usage: .message.usage}' \
-  .liza/agent-outputs/planner-1-*.txt
+  .liza/agent-outputs/orchestrator-1-*.txt
 ```
 
 ### Differences from Pairing Mode
@@ -389,7 +441,7 @@ jq -c 'select(.type == "assistant") | {id: .message.id, usage: .message.usage}' 
 | Approval | Human approves | Peer agent approves |
 | Gates | Approval request → wait | Pre-execution checkpoint → proceed |
 | Communication | Conversation | Blackboard |
-| Iteration | Human feedback | Code Reviewer feedback |
+| Iteration | Human feedback | Reviewer agent feedback |
 | Debugging | Debugging skill | Log anomaly, BLOCKED |
 | Magic Phrases | Active | Not applicable |
 | Session Init | Greet user | Silent execution |
