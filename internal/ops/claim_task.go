@@ -270,7 +270,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		}
 
 		// Verify worktree exists on disk before committing state
-		if isFreshClaim && worktreeCreated {
+		if worktreeCreated {
 			worktreePath := filepath.Join(lp.ProjectRoot(), worktreeRel)
 			if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
 				return fmt.Errorf("worktree directory does not exist: %s", worktreePath)

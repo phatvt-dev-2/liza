@@ -7,7 +7,6 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
-	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -222,17 +221,14 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 		return nil, fmt.Errorf("failed to release claim: %w", err)
 	}
 
-	// Clean up worktree and branch after successful coder release.
-	// Errors are warnings — state is already correct.
+	// Worktree and branch cleanup is deliberately deferred to the next ClaimTask,
+	// which removes stale worktrees/branches in handleReadyClaimWorktree before
+	// creating new ones. This avoids a race where ReleaseClaim's post-lock
+	// cleanup deletes a worktree that a concurrent ClaimTask just created.
+	// Orphaned worktrees in .worktrees/ are gitignored and harmless until re-claimed.
+	// See handleReadyClaimWorktree in claim_task.go for the cleanup path.
 	if releasedCoder {
-		gitWrapper := git.New(lp.ProjectRoot())
-		branchName := paths.TaskBranchPrefix + taskID
-		if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
-			log.Printf("WARNING: release-claim %s: failed to remove worktree: %v", taskID, cleanupErr)
-		}
-		if cleanupErr := gitWrapper.DeleteBranch(branchName); cleanupErr != nil {
-			log.Printf("WARNING: release-claim %s: failed to delete branch %s: %v", taskID, branchName, cleanupErr)
-		}
+		log.Printf("INFO: release-claim %s: worktree cleanup deferred to next claim", taskID)
 	}
 
 	return &ReleaseClaimResult{

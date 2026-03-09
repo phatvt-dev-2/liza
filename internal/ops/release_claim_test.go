@@ -152,18 +152,20 @@ func TestReleaseClaim_CoderClaim_ClearsWorktreeFields(t *testing.T) {
 		t.Errorf("Iteration = %d, want 0", readTask.Iteration)
 	}
 
-	// Verify git worktree and branch are cleaned up
+	// Worktree and branch persist after release — cleanup is deferred to
+	// the next ClaimTask to avoid a race with concurrent claims.
+	// See handleReadyClaimWorktree in claim_task.go.
 	branchExists, err := gitWrapper.BranchExists("task/task-1")
 	if err != nil {
 		t.Fatalf("Failed to check branch existence: %v", err)
 	}
-	if branchExists {
-		t.Error("Branch task/task-1 should be deleted after release")
+	if !branchExists {
+		t.Error("Branch task/task-1 should persist after release (deferred cleanup)")
 	}
 
 	wtDir := filepath.Join(tmpDir, ".worktrees", "task-1")
-	if _, err := os.Stat(wtDir); !os.IsNotExist(err) {
-		t.Errorf("Worktree directory should not exist after release, got err: %v", err)
+	if _, err := os.Stat(wtDir); os.IsNotExist(err) {
+		t.Error("Worktree directory should persist after release (deferred cleanup)")
 	}
 }
 
