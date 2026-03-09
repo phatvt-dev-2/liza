@@ -79,7 +79,12 @@ func TestToolSchemaRequiredMatchesHandlerExtraction(t *testing.T) {
 		t.Fatalf("parse tool registrations: %v", err)
 	}
 
-	usageByHandler, err := parseHandlerParamUsages(filepath.Join(mcpDir, "handlers.go"))
+	usageByHandler, err := parseHandlerParamUsages(
+		filepath.Join(mcpDir, "handlers_helpers.go"),
+		filepath.Join(mcpDir, "handlers_readonly.go"),
+		filepath.Join(mcpDir, "handlers_mutation.go"),
+		filepath.Join(mcpDir, "handlers_complex.go"),
+	)
 	if err != nil {
 		t.Fatalf("parse handler parameter extraction: %v", err)
 	}
@@ -151,7 +156,12 @@ func TestToolSchemaRequiredMatchesHandlerExtraction(t *testing.T) {
 
 func TestHandlerParamExtractionKnownPatterns(t *testing.T) {
 	mcpDir := mcpSourceDir(t)
-	usageByHandler, err := parseHandlerParamUsages(filepath.Join(mcpDir, "handlers.go"))
+	usageByHandler, err := parseHandlerParamUsages(
+		filepath.Join(mcpDir, "handlers_helpers.go"),
+		filepath.Join(mcpDir, "handlers_readonly.go"),
+		filepath.Join(mcpDir, "handlers_mutation.go"),
+		filepath.Join(mcpDir, "handlers_complex.go"),
+	)
 	if err != nil {
 		t.Fatalf("parse handler parameter extraction: %v", err)
 	}
@@ -259,26 +269,27 @@ func parseRegisteredToolHandlers(path string) (map[string]string, error) {
 	return toolHandlers, nil
 }
 
-func parseHandlerParamUsages(path string) (map[string]handlerParamUsage, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		return nil, err
-	}
-
+func parseHandlerParamUsages(paths ...string) (map[string]handlerParamUsage, error) {
 	helperFuncs := map[string]*ast.FuncDecl{}
 	handlerFuncs := map[string]*ast.FuncDecl{}
 
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
+	fset := token.NewFileSet()
+	for _, path := range paths {
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return nil, err
 		}
-		if fn.Recv == nil {
-			helperFuncs[fn.Name.Name] = fn
-			continue
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if fn.Recv == nil {
+				helperFuncs[fn.Name.Name] = fn
+				continue
+			}
+			handlerFuncs[fn.Name.Name] = fn
 		}
-		handlerFuncs[fn.Name.Name] = fn
 	}
 
 	helperRequired := map[string]fieldSet{}
