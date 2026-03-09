@@ -74,7 +74,7 @@ type handlerParamUsage struct {
 func TestToolSchemaRequiredMatchesHandlerExtraction(t *testing.T) {
 	mcpDir := mcpSourceDir(t)
 
-	toolHandlers, err := parseRegisteredToolHandlers(filepath.Join(mcpDir, "server.go"))
+	toolHandlers, err := parseRegisteredToolHandlers(filepath.Join(mcpDir, "server_registration.go"))
 	if err != nil {
 		t.Fatalf("parse tool registrations: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestToolSchemaRequiredMatchesHandlerExtraction(t *testing.T) {
 
 		handlerName, ok := toolHandlers[toolName]
 		if !ok {
-			t.Fatalf("tool %q not mapped to a handler in server.go registration", toolName)
+			t.Fatalf("tool %q not mapped to a handler in server_registration.go", toolName)
 		}
 
 		handlerUsage, ok := usageByHandler[handlerName]
