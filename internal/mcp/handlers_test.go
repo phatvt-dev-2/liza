@@ -1283,7 +1283,8 @@ func TestHandleWtCreate(t *testing.T) {
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
 	result, err := server.handleWtCreate(map[string]any{
-		"task_id": "task-1",
+		"task_id":  "task-1",
+		"agent_id": "coder-1",
 	})
 
 	if err != nil {
@@ -1345,8 +1346,9 @@ func TestHandleWtCreateFresh(t *testing.T) {
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
 	result, err := server.handleWtCreate(map[string]any{
-		"task_id": "task-1",
-		"fresh":   true,
+		"task_id":  "task-1",
+		"agent_id": "coder-1",
+		"fresh":    true,
 	})
 
 	if err != nil {
@@ -1396,7 +1398,8 @@ func TestHandleWtDelete(t *testing.T) {
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
 	result, err := server.handleWtDelete(map[string]any{
-		"task_id": "task-1",
+		"task_id":  "task-1",
+		"agent_id": "coder-1",
 	})
 
 	if err != nil {
@@ -1453,7 +1456,8 @@ func TestHandleWtCreateRequiresClaimed(t *testing.T) {
 
 	// Try to create worktree for READY task
 	_, err := server.handleWtCreate(map[string]any{
-		"task_id": "task-1",
+		"task_id":  "task-1",
+		"agent_id": "coder-1",
 	})
 
 	if err == nil {
@@ -1472,7 +1476,7 @@ func TestHandleAnalyze(t *testing.T) {
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	result, err := server.handleAnalyze(map[string]any{})
+	result, err := server.handleAnalyze(map[string]any{"agent_id": "orchestrator-1"})
 
 	if err != nil {
 		t.Fatalf("handleAnalyze failed: %v", err)
@@ -1496,7 +1500,7 @@ func TestHandleUpdateSprintMetrics(t *testing.T) {
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	result, err := server.handleUpdateSprintMetrics(map[string]any{})
+	result, err := server.handleUpdateSprintMetrics(map[string]any{"agent_id": "orchestrator-1"})
 
 	if err != nil {
 		t.Fatalf("handleUpdateSprintMetrics failed: %v", err)
@@ -1551,7 +1555,7 @@ func TestHandleClearStaleReviews(t *testing.T) {
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	result, err := server.handleClearStaleReviews(map[string]any{})
+	result, err := server.handleClearStaleReviews(map[string]any{"agent_id": "orchestrator-1"})
 
 	if err != nil {
 		t.Fatalf("handleClearStaleReviews failed: %v", err)
@@ -1604,9 +1608,10 @@ func TestHandleDeleteAgent(t *testing.T) {
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
 	result, err := server.handleDeleteAgent(map[string]any{
-		"agent_id": "inactive-agent",
-		"force":    true,
-		"reason":   "Cleanup inactive agent",
+		"target_agent_id": "inactive-agent",
+		"agent_id":        "orchestrator-1",
+		"force":           true,
+		"reason":          "Cleanup inactive agent",
 	})
 
 	if err != nil {
@@ -1641,18 +1646,19 @@ func TestHandleDeleteAgentWithMissingParams(t *testing.T) {
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	// Try to delete agent without reason
+	// Try to delete agent without agent_id (caller)
 	_, err := server.handleDeleteAgent(map[string]any{
-		"agent_id": "coder-1",
-		// missing reason
+		"target_agent_id": "coder-1",
+		"reason":          "test",
+		// missing agent_id (caller)
 	})
 
 	if err == nil {
-		t.Error("Expected error when deleting agent without reason")
+		t.Error("Expected error when deleting agent without agent_id")
 	}
 
-	if !strings.Contains(err.Error(), "reason parameter required") {
-		t.Errorf("Expected 'reason parameter required' error, got: %v", err)
+	if !strings.Contains(err.Error(), "agent_id parameter required") {
+		t.Errorf("Expected 'agent_id parameter required' error, got: %v", err)
 	}
 }
 
@@ -1663,7 +1669,7 @@ func TestHandleSprintCheckpoint(t *testing.T) {
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	result, err := server.handleSprintCheckpoint(map[string]any{})
+	result, err := server.handleSprintCheckpoint(map[string]any{"agent_id": "orchestrator-1"})
 
 	if err != nil {
 		t.Fatalf("handleSprintCheckpoint failed: %v", err)
@@ -2103,6 +2109,57 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			handler: server.handleSubmitVerdict,
 			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "foobar-1"},
 			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
+		},
+		// --- Access control for newly protected handlers ---
+		// Admin ops: require orchestrator
+		{
+			name:    "analyze rejects coder",
+			handler: server.handleAnalyze,
+			params:  map[string]any{"agent_id": "coder-1"},
+			wantErr: "requires one of [orchestrator] roles",
+		},
+		{
+			name:    "sprint_checkpoint rejects coder",
+			handler: server.handleSprintCheckpoint,
+			params:  map[string]any{"agent_id": "coder-1"},
+			wantErr: "requires one of [orchestrator] roles",
+		},
+		{
+			name:    "update_sprint_metrics rejects coder",
+			handler: server.handleUpdateSprintMetrics,
+			params:  map[string]any{"agent_id": "coder-1"},
+			wantErr: "requires one of [orchestrator] roles",
+		},
+		{
+			name:    "clear_stale_reviews rejects coder",
+			handler: server.handleClearStaleReviews,
+			params:  map[string]any{"agent_id": "coder-1"},
+			wantErr: "requires one of [orchestrator] roles",
+		},
+		{
+			name:    "delete_agent rejects coder caller",
+			handler: server.handleDeleteAgent,
+			params:  map[string]any{"target_agent_id": "coder-1", "agent_id": "coder-2", "reason": "test"},
+			wantErr: "requires one of [orchestrator] roles",
+		},
+		// Worktree ops: require doer role
+		{
+			name:    "wt_create rejects orchestrator",
+			handler: server.handleWtCreate,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "orchestrator-1"},
+			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
+		},
+		{
+			name:    "wt_create rejects reviewer",
+			handler: server.handleWtCreate,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
+			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
+		},
+		{
+			name:    "wt_delete rejects reviewer",
+			handler: server.handleWtDelete,
+			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
+			wantErr: "requires one of [coder code-planner epic-planner us-writer orchestrator] roles",
 		},
 	}
 

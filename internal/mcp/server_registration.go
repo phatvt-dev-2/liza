@@ -338,7 +338,7 @@ func (s *Server) registerComplexOperations() {
 	// liza_wt_create tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_wt_create",
-		Description: "Create git worktree for a claimed task",
+		Description: "Create git worktree for a claimed task. Requires coder, code-planner, epic-planner, or us-writer role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -346,20 +346,24 @@ func (s *Server) registerComplexOperations() {
 					Type:        "string",
 					Description: "Task ID to create worktree for",
 				},
+				"agent_id": {
+					Type:        "string",
+					Description: "Agent ID performing the action",
+				},
 				"fresh": {
 					Type:        "boolean",
 					Description: "Delete and recreate existing worktree",
 					Default:     false,
 				},
 			},
-			Required: []string{"task_id"},
+			Required: []string{"task_id", "agent_id"},
 		},
 	}, s.handleWtCreate)
 
 	// liza_wt_delete tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_wt_delete",
-		Description: "Delete git worktree for a task",
+		Description: "Delete git worktree for a task. Requires coder, code-planner, epic-planner, us-writer, or orchestrator role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
@@ -367,8 +371,12 @@ func (s *Server) registerComplexOperations() {
 					Type:        "string",
 					Description: "Task ID to delete worktree for",
 				},
+				"agent_id": {
+					Type:        "string",
+					Description: "Agent ID performing the action",
+				},
 			},
-			Required: []string{"task_id"},
+			Required: []string{"task_id", "agent_id"},
 		},
 	}, s.handleWtDelete)
 
@@ -395,36 +403,64 @@ func (s *Server) registerComplexOperations() {
 	// liza_analyze tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_analyze",
-		Description: "Run circuit breaker analysis on task patterns",
+		Description: "Run circuit breaker analysis on task patterns. Requires orchestrator role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
+			Properties: map[string]protocol.Property{
+				"agent_id": {
+					Type:        "string",
+					Description: "Agent ID performing the action",
+				},
+			},
+			Required: []string{"agent_id"},
 		},
 	}, s.handleAnalyze)
 
 	// liza_update_sprint_metrics tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_update_sprint_metrics",
-		Description: "Recompute sprint metrics from current state",
+		Description: "Recompute sprint metrics from current state. Requires orchestrator role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
+			Properties: map[string]protocol.Property{
+				"agent_id": {
+					Type:        "string",
+					Description: "Agent ID performing the action",
+				},
+			},
+			Required: []string{"agent_id"},
 		},
 	}, s.handleUpdateSprintMetrics)
 
 	// liza_sprint_checkpoint tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_sprint_checkpoint",
-		Description: "Create sprint checkpoint for human review. Pauses all agents and generates a sprint summary report.",
+		Description: "Create sprint checkpoint for human review. Pauses all agents and generates a sprint summary report. Requires orchestrator role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
+			Properties: map[string]protocol.Property{
+				"agent_id": {
+					Type:        "string",
+					Description: "Agent ID performing the action",
+				},
+			},
+			Required: []string{"agent_id"},
 		},
 	}, s.handleSprintCheckpoint)
 
 	// liza_clear_stale_review_claims tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_clear_stale_review_claims",
-		Description: "Clear expired review leases",
+		Description: "Clear expired review leases. Requires orchestrator role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
+			Properties: map[string]protocol.Property{
+				"agent_id": {
+					Type:        "string",
+					Description: "Agent ID performing the action",
+				},
+			},
+			Required: []string{"agent_id"},
 		},
 	}, s.handleClearStaleReviews)
 
@@ -503,13 +539,17 @@ func (s *Server) registerComplexOperations() {
 	// liza_delete_agent tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_delete_agent",
-		Description: "Delete an agent from the workspace",
+		Description: "Delete an agent from the workspace. Requires orchestrator role.",
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 			Properties: map[string]protocol.Property{
-				"agent_id": {
+				"target_agent_id": {
 					Type:        "string",
 					Description: "Agent ID to delete",
+				},
+				"agent_id": {
+					Type:        "string",
+					Description: "Agent ID performing the deletion (must have orchestrator role)",
 				},
 				"reason": {
 					Type:        "string",
@@ -521,7 +561,7 @@ func (s *Server) registerComplexOperations() {
 					Default:     false,
 				},
 			},
-			Required: []string{"agent_id", "reason"},
+			Required: []string{"target_agent_id", "agent_id", "reason"},
 		},
 	}, s.handleDeleteAgent)
 }

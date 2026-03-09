@@ -28,11 +28,11 @@ ORCHESTRATOR COMMANDS:
 - liza_supersede_task — Supersede task
   Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "orchestrator-1"}
 - liza_wt_delete — Delete worktree for abandoned/superseded/blocked tasks
-  Tool parameters: {"task_id": "..."}
+  Tool parameters: {"task_id": "...", "agent_id": "orchestrator-1"}
 - liza_sprint_checkpoint — Create sprint checkpoint for human review (pauses all agents)
-  Tool parameters: {}
+  Tool parameters: {"agent_id": "orchestrator-1"}
 - liza_update_sprint_metrics — Recompute sprint metrics from current state
-  Tool parameters: {}
+  Tool parameters: {"agent_id": "orchestrator-1"}
 
 ANOMALY LOGGING:
 | Event | Type | Required Fields |

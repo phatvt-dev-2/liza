@@ -270,8 +270,16 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 // handleDeleteAgent implements the liza_delete_agent tool
 // Maps to: liza delete agent
 func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {
+	targetAgentID, err := requireString(params, "target_agent_id")
+	if err != nil {
+		return nil, err
+	}
+
 	agentID, err := requireString(params, "agent_id")
 	if err != nil {
+		return nil, err
+	}
+	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
 		return nil, err
 	}
 
@@ -282,7 +290,7 @@ func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {
 
 	force, _ := params["force"].(bool)
 
-	result, err := ops.DeleteAgent(s.projectRoot, agentID, force, false, reason)
+	result, err := ops.DeleteAgent(s.projectRoot, targetAgentID, force, false, reason)
 	if err != nil {
 		return nil, fmt.Errorf("delete agent failed: %w", err)
 	}

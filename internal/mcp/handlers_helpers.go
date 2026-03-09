@@ -155,6 +155,24 @@ func requireDoerRole(agentID string) error {
 	return nil
 }
 
+// requireDoerOrOrchestratorRole validates agent ID format and that it has a doer or orchestrator role.
+// Used for operations like wt-delete that doers perform on their own tasks
+// but the orchestrator also performs for cleanup of superseded/blocked tasks.
+func requireDoerOrOrchestratorRole(agentID string) error {
+	if err := identity.ValidateFormat(agentID); err != nil {
+		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
+	}
+	role, _ := identity.ExtractRole(agentID)
+	if roles.IsDoerRole(role) || role == roles.RuntimeOrchestrator {
+		return nil
+	}
+	doers := roles.DoerRoles()
+	allowed := make([]string, len(doers)+1)
+	copy(allowed, doers)
+	allowed[len(doers)] = roles.RuntimeOrchestrator
+	return &RoleError{Expected: allowed, Got: role, AgentID: agentID}
+}
+
 // requireReviewerRole validates agent ID format and that it has a reviewer role.
 func requireReviewerRole(agentID string) error {
 	if err := identity.ValidateFormat(agentID); err != nil {

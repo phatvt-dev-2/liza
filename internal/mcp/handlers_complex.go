@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // handleWtCreate implements the liza_wt_create tool
@@ -12,6 +13,14 @@ import (
 func (s *Server) handleWtCreate(params map[string]any) (any, error) {
 	taskID, err := requireString(params, "task_id")
 	if err != nil {
+		return nil, err
+	}
+
+	agentID, err := requireString(params, "agent_id")
+	if err != nil {
+		return nil, err
+	}
+	if err := requireDoerRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -34,6 +43,14 @@ func (s *Server) handleWtCreate(params map[string]any) (any, error) {
 func (s *Server) handleWtDelete(params map[string]any) (any, error) {
 	taskID, err := requireString(params, "task_id")
 	if err != nil {
+		return nil, err
+	}
+
+	agentID, err := requireString(params, "agent_id")
+	if err != nil {
+		return nil, err
+	}
+	if err := requireDoerOrOrchestratorRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -77,6 +94,14 @@ func (s *Server) handleWtMerge(params map[string]any) (any, error) {
 // handleAnalyze implements the liza_analyze tool
 // Maps to: liza analyze
 func (s *Server) handleAnalyze(params map[string]any) (any, error) {
+	agentID, err := requireString(params, "agent_id")
+	if err != nil {
+		return nil, err
+	}
+	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
+		return nil, err
+	}
+
 	result, err := ops.Analyze(s.projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("analyze failed: %w", err)
@@ -93,6 +118,14 @@ func (s *Server) handleAnalyze(params map[string]any) (any, error) {
 // handleSprintCheckpoint implements the liza_sprint_checkpoint tool
 // Maps to: liza checkpoint
 func (s *Server) handleSprintCheckpoint(params map[string]any) (any, error) {
+	agentID, err := requireString(params, "agent_id")
+	if err != nil {
+		return nil, err
+	}
+	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
+		return nil, err
+	}
+
 	result, err := ops.SprintCheckpoint(s.projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("checkpoint failed: %w", err)
@@ -105,6 +138,14 @@ func (s *Server) handleSprintCheckpoint(params map[string]any) (any, error) {
 // handleUpdateSprintMetrics implements the liza_update_sprint_metrics tool
 // Maps to: liza update-sprint-metrics
 func (s *Server) handleUpdateSprintMetrics(params map[string]any) (any, error) {
+	agentID, err := requireString(params, "agent_id")
+	if err != nil {
+		return nil, err
+	}
+	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
+		return nil, err
+	}
+
 	metrics, err := ops.UpdateSprintMetrics(s.projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("update sprint metrics failed: %w", err)
@@ -126,6 +167,14 @@ func (s *Server) handleUpdateSprintMetrics(params map[string]any) (any, error) {
 // handleClearStaleReviews implements the liza_clear_stale_review_claims tool
 // Maps to: liza clear-stale-review-claims
 func (s *Server) handleClearStaleReviews(params map[string]any) (any, error) {
+	agentID, err := requireString(params, "agent_id")
+	if err != nil {
+		return nil, err
+	}
+	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
+		return nil, err
+	}
+
 	count, err := ops.ClearStaleReviewClaims(s.projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("clear stale review claims failed: %w", err)
