@@ -33,13 +33,21 @@ func TestWtCreateCommand(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:        "task not IMPLEMENTING",
+			name:       "create worktree for CODE_PLANNING task",
+			taskID:     "task-cp",
+			taskStatus: models.TaskStatusCodePlanning,
+			fresh:      false,
+			existingWT: false,
+			wantErr:    false,
+		},
+		{
+			name:        "task not in executing state",
 			taskID:      "task-2",
 			taskStatus:  models.TaskStatusReady,
 			fresh:       false,
 			existingWT:  false,
 			wantErr:     true,
-			errContains: "not IMPLEMENTING",
+			errContains: "not in an executing state",
 		},
 		{
 			name:       "worktree already exists without fresh",

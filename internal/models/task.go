@@ -384,7 +384,7 @@ func IsExecutingStatus(task *Task, pr PipelineResolver) bool {
 		executing, err := pr.ExecutingStatus(task.RolePair)
 		return err == nil && task.Status == executing
 	}
-	return task.Status == TaskStatusImplementing
+	return task.Status == TaskStatusImplementing || task.Status == TaskStatusCodePlanning
 }
 
 // checkDependencies returns true if all dependencies of the task are satisfied (MERGED).

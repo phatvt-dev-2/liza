@@ -49,10 +49,31 @@ func TestCreateWorktree_WrongStatus(t *testing.T) {
 
 	_, err := CreateWorktree(tmpDir, "task-1", false)
 	if err == nil {
-		t.Fatal("Expected error for non-IMPLEMENTING task")
+		t.Fatal("Expected error for non-executing task")
 	}
-	if !strings.Contains(err.Error(), "not IMPLEMENTING") {
-		t.Errorf("Error = %q, want to contain 'not IMPLEMENTING'", err.Error())
+	if !strings.Contains(err.Error(), "not in an executing state") {
+		t.Errorf("Error = %q, want to contain 'not in an executing state'", err.Error())
+	}
+}
+
+func TestCreateWorktree_CodePlanningStatus(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusCodePlanning, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := CreateWorktree(tmpDir, "task-1", false)
+	if err != nil {
+		t.Fatalf("CreateWorktree() for CODE_PLANNING task: unexpected error: %v", err)
+	}
+	if result.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
 	}
 }
 

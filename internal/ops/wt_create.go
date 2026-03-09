@@ -22,9 +22,9 @@ type CreateWorktreeResult struct {
 	Warnings       []string
 }
 
-// CreateWorktree provisions a git worktree from the integration branch for an
-// IMPLEMENTING task and records its base_commit. When fresh is true, deletes
-// any existing worktree first (for reassignment). No terminal I/O.
+// CreateWorktree provisions a git worktree from the integration branch for a
+// task in an executing state and records its base_commit. When fresh is true,
+// deletes any existing worktree first (for reassignment). No terminal I/O.
 func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResult, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID is required")
@@ -40,8 +40,9 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 		return nil, err
 	}
 
-	if task.Status != models.TaskStatusImplementing {
-		return nil, fmt.Errorf("task %s is not IMPLEMENTING (status: %s)", taskID, task.Status)
+	pr := LoadResolverForModels(projectRoot)
+	if !models.IsExecutingStatus(task, pr) {
+		return nil, fmt.Errorf("task %s is not in an executing state (status: %s)", taskID, task.Status)
 	}
 
 	integrationBranch := state.Config.IntegrationBranch

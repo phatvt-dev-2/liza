@@ -96,7 +96,7 @@ The `liza` CLI uses a consistent exit code taxonomy:
 
 | Command | Exit 1 | Exit 3 | Exit 4 |
 |---------|--------|--------|--------|
-| `liza wt-create` | Task not IMPLEMENTING | Worktree creation failed | — |
+| `liza wt-create` | Task not in an executing state | Worktree creation failed | — |
 | `liza wt-merge` | Task not APPROVED, SHA mismatch | Merge conflict (detected via merge-tree) | — |
 | `liza validate` | Schema violation found | — | — |
 
