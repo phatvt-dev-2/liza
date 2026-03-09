@@ -54,7 +54,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 **Purpose:** Core domain model. Task lifecycle state machine, agent state, sprint tracking.
 
 **Observations:**
-- `State` struct is the central data type — serialized to/from `state.yaml`. `state.go` is 937 LOC with 20+ structs — cohesive (all YAML-serialized state types) *(pass 13: was 631)*
+- `State` struct is the central data type — serialized to/from `state.yaml`. ~~`state.go` is 937 LOC with 20+ structs~~ *(P1.2 resolved: split into `state.go` (43), `task.go` (431), `agent.go` (51), `sprint.go` (137), `config.go` (132), `history.go` (163) — commit `82258fe`)*
 - `Task` struct has 30+ fields covering full lifecycle
 - `TaskType` → role workflow registry (`taskWorkflows` map)
 - `IsClaimable()` encodes claiming rules with dependency checking
@@ -105,6 +105,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - Accepts `io.Writer` for non-fatal warnings (nil defaults to `io.Discard`)
 - Exported shims `ValidateAgentInvariants()` and `ValidateAnomalies()` expose individual validators for existing `commands/` test callsites
 - Used by: `commands/validate.go` (CLI `liza validate`), `ops/add_task.go` (post-write validation)
+- ~~`validate.go` (658 LOC) — single monolithic validation file~~ *(P1.3 resolved: split into `validate.go` (114, orchestration + shared helpers), `validate_task.go` (372), `validate_agent.go` (42), `validate_deps.go` (84), `validate_entity.go` (75), `validate_sprint.go` (88) — commit `d53a2f0`)*
 
 #### ops (`internal/ops/`) — ~5,900 LOC production, ~12,070 LOC test *(health check: was ~3,750/~6,450)*
 
@@ -159,8 +160,8 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 **Purpose:** MCP JSON-RPC server exposing tools and resources to AI agents.
 
 **Observations:**
-- `server.go` (854 LOC): tool/resource registration, request dispatch. `registerMutationTools()` is 242 LOC of declarative tool schema definitions — LOC is mostly boilerplate, not algorithmic complexity. `GetTool()`, `GetHandler()`, `ToolNames()` accessors added for test introspection *(pass 2, Complexity lens; `642f94e`; pass 13: was 757)*
-- `handlers.go` (918 LOC, 40+ functions): tool implementations delegating to `ops` package for mutations, `commands` package for read-only queries. Each handler is thin. *(pass 2; pass 5: updated LOC and ops import; pass 13: was ~600, grew with Phase 2 role handlers)*
+- ~~`server.go` (854 LOC): tool/resource registration, request dispatch~~ *(P1.1 resolved: split into `server.go` (130), `server_protocol.go` (243), `server_registration.go` (527) — commit `fd145e9`)*. `registerMutationTools()` is 242 LOC of declarative tool schema definitions — LOC is mostly boilerplate, not algorithmic complexity. `GetTool()`, `GetHandler()`, `ToolNames()` accessors added for test introspection *(pass 2, Complexity lens; `642f94e`; pass 13: was 757)*
+- ~~`handlers.go` (918 LOC, 40+ functions)~~ *(P1.1 resolved: split into `handlers_helpers.go` (303), `handlers_readonly.go` (131), `handlers_mutation.go` (291), `handlers_complex.go` (217) — original deleted, commit `3544574`)*: tool implementations delegating to `ops` package for mutations, `commands` package for read-only queries. Each handler is thin. *(pass 2; pass 5: updated LOC and ops import; pass 13: was ~600, grew with Phase 2 role handlers)*
 - `protocol/` subpackage (232 LOC): clean DTO types, stdio transport, error codes
 - 4 registration categories: read-only tools, read-only resources, mutation tools, complex operations
 - Clean adapter boundary: mcp translates JSON-RPC into `ops` calls (mutations) and `commands` calls (queries), adds error classification, holds no business logic *(pass 3, Boundaries lens; pass 5: updated — handlers now import ops directly for all mutations)*
@@ -198,6 +199,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - Frontmatter management for CLAUDE.md files
 - `WriteClaudeSettings()` and `WriteMCPSettings()` accept `io.Reader` parameter, defaulting to `os.Stdin` when nil
 - `WriteMCPSettings()`, `mergeMCPSettings()`, `PlanGlobalFiles()` — previously at 0% coverage due to stdin coupling *(pass 4, Coverage lens)*; stdin coupling now resolved via `io.Reader` injection
+- `consistency_test.go` (126 LOC): byte-exact comparison of repo masters vs embedded copies (contracts, skills, claude-settings.json, mcp.json). Wired into `make check-embedded` → `make lint` *(P1.4 — commits `47e5597`, `bab9a78`)*
 
 #### paths (`internal/paths/`) — ~276 LOC *(health check: was 257)*
 
@@ -350,11 +352,11 @@ prompts/ (stable — imports ops for queries, see boundary smell)
 | File | LOC | Longest Function (LOC) | Max Nesting Depth | Branch Density (ifs/LOC) | Notes |
 |------|-----|----------------------|-------------------|------------------------|-------|
 | main.go | 1,462 | init (126) | 2 | — | Organizational only — 34 cobra commands *(health check: was 1,275)* |
-| state.go | 937 | — | 2 | — | 20+ cohesive structs *(health check: was 631)* |
-| handlers.go | 918 | — | 3 | — | 40+ thin handlers *(health check: was 603)* |
-| server.go | 854 | registerMutationTools (242) | 2 | — | Declarative schema definitions *(health check: was 715)* |
+| ~~state.go~~ | ~~937~~ | — | 2 | — | ~~20+ cohesive structs~~ *(P1.2: split into 6 files, largest `task.go` 431 LOC — `82258fe`)* |
+| ~~handlers.go~~ | ~~918~~ | — | 3 | — | ~~40+ thin handlers~~ *(P1.1: split into 4 files, largest `handlers_helpers.go` 303 LOC — `3544574`)* |
+| ~~server.go~~ | ~~854~~ | ~~registerMutationTools (242)~~ | 2 | — | ~~Declarative schema definitions~~ *(P1.1: split into 3 files, largest `server_registration.go` 527 LOC — `fd145e9`)* |
 | **ops/claim_task.go** | **655** | **ClaimTask (~345)** | **6** | **1:7.3 (90 ifs)** | **Highest complexity** *(health check: was 299; pass 13: branch density quantified)* |
-| statevalidate/validate.go | 658 | validateTaskInvariants (142) | 3 | — | Sequential if-chain *(health check: was 463)* |
+| ~~statevalidate/validate.go~~ | ~~658~~ | ~~validateTaskInvariants (142)~~ | 3 | — | ~~Sequential if-chain~~ *(P1.3: split into 6 files, largest `validate_task.go` 372 LOC — `d53a2f0`)* |
 | watch.go | 645 | — | 3 | 1:10.4 (62 ifs) | 17 health checks *(health check: was 516; pass 13: branch density)* |
 | supervisor.go | 637 | RunSupervisor (186) | 5 | 1:8.0 (80 ifs) | Main event loop *(health check: was 302; pass 13: branch density)* |
 | prompts/builder.go | 598 | — | 2 | — | 23 functions, template-driven *(pass 13: was 258 — grew with Phase 2 roles)* |

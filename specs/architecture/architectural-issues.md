@@ -1190,6 +1190,13 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 
 **Implication:** Contract drift between delivery paths is silent — agents may operate under different behavioral rules than the system operator believes are active, with no error signal.
 
+**Partial mitigation (P1.4, commits `47e5597`, `bab9a78`):** `TestArtifactConsistency` in `internal/embedded/consistency_test.go` performs byte-exact comparison of repo master files against their embedded copies (contracts, skills, claude-settings.json, mcp.json). Wired into `make lint` via `make check-embedded`. This catches repo→embedded drift at build time, but does not address embedded→installed (`~/.liza/`) drift or runtime version mismatch.
+
+**Remaining gaps:**
+- Installed copies (`~/.liza/`) can still drift from both repo and embedded versions
+- No runtime compatibility check between binary version and installed contract version
+- `state.yaml`'s `version: 1` field remains inert
+
 **Future options:**
 - Content hash in contract files, verified at agent startup
 - `liza validate` checks embedded vs installed contract consistency
