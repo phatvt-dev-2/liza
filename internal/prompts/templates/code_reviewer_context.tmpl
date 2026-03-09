@@ -76,6 +76,8 @@ INSTRUCTIONS:
 4. Apply the code-review skill to the full diff
 5. If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
 6. TDD QUALITY (code tasks): Tests must cover done_when criteria — REJECT if tests are superficial or don't exercise the actual requirements
+   Exception: mechanical test updates (file-path strings, import paths) caused by
+   structural refactoring are NOT behavioral test changes — do not reject for these.
 7. Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
 8. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
 {{- if .HasPriorRejection}}

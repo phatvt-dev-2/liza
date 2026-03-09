@@ -99,9 +99,13 @@ COMMIT WORKFLOW:
    Tests must be discoverable via standard runners (e.g. pytest, go test) — not just runnable when explicitly named.
 4. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
 5. TDD waiver: For cosmetic-only changes (comment fixes, formatting), set tdd_not_required in checkpoint with justification
-6. Use the clean-code skill at the end of the implementation
-7. Validate ALL done_when criteria are met
-8. If context exhaustion is near (~90%): run liza_handoff with summary + next_action, then exit with code 42
+6. Mechanical test updates: For structural refactoring (file split/move), updating test
+   file-path references or imports to reflect the new file layout is in-scope and does
+   not trigger the TDD requirement in item 3. The test's invariant (what it validates)
+   must be preserved.
+7. Use the clean-code skill at the end of the implementation
+8. Validate ALL done_when criteria are met
+9. If context exhaustion is near (~90%): run liza_handoff with summary + next_action, then exit with code 42
 
 --- SUBMISSION (MANDATORY - DO NOT SKIP) ---
 After implementation and tests pass, you MUST submit for review:

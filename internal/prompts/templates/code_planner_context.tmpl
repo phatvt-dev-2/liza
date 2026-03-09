@@ -64,6 +64,12 @@ large task costs more than a review cycle on a small, focused task.
 Declare dependency order between tasks — no circular or missing dependencies.
 Verify the plan covers ALL spec requirements — gaps will be rejected.
 
+REFACTORING TASKS:
+When a task is pure structural refactoring (file split/move with no behavior change),
+done_when MUST distinguish behavioral test changes (not expected) from mechanical test
+updates (expected). Mechanical updates (file-path strings, import paths) that preserve
+the test's invariant are expected and in-scope — include affected test files in scope.
+
 IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
 2. For EACH coding task in your plan, call liza_set_task_output with structured entries.

@@ -543,6 +543,8 @@ func TestBuildCoderContext(t *testing.T) {
 				"files were modified by this hook",
 				"TDD (code tasks): Write tests FIRST",
 				"Tests are MANDATORY for code tasks",
+				"Mechanical test updates: For structural refactoring",
+				"not trigger the TDD requirement in item 3",
 				"--- SUBMISSION (MANDATORY - DO NOT SKIP) ---",
 				"you MUST submit for review",
 				"git -C /project/.worktrees/task-1 rev-parse HEAD",
@@ -774,6 +776,7 @@ func TestBuildReviewerContext(t *testing.T) {
 				"Run tests:",
 				"Apply the code-review skill",
 				"TDD QUALITY (code tasks): Tests must cover done_when criteria",
+				"mechanical test updates (file-path strings, import paths) caused by",
 				"REJECTION FORMAT (if rejecting):",
 				"Blockers:",
 				"Concerns:",
@@ -1597,6 +1600,8 @@ func TestBuildCodePlannerContext(t *testing.T) {
 		"WORKTREE: /project/.worktrees/task-plan-1",
 		"liza_submit_for_review",
 		"liza_write_checkpoint",
+		"REFACTORING TASKS:",
+		"done_when MUST distinguish behavioral test changes (not expected) from mechanical test",
 	}
 	for _, want := range wantContains {
 		if !strings.Contains(prompt, want) {
