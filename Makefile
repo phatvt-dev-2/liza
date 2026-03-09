@@ -1,4 +1,4 @@
-.PHONY: build test test-e2e clean install lint check-testhelpers release package build-all tidy run coverage help
+.PHONY: build test test-e2e clean install lint check-testhelpers check-embedded release package build-all tidy run coverage help
 
 # Binary names
 BINARY_NAME=liza
@@ -82,8 +82,14 @@ check-testhelpers:
 	fi
 	@echo "✓ No testhelpers in production code"
 
+# Check that embedded copies match repo master files
+check-embedded: sync-embedded
+	@echo "Checking embedded artifact consistency..."
+	@go test ./internal/embedded/ -run TestArtifactConsistency -count=1
+	@echo "✓ Embedded artifacts are consistent with masters"
+
 # Run linters
-lint: sync-embedded check-testhelpers
+lint: sync-embedded check-testhelpers check-embedded
 	go fmt ./...
 	go vet ./...
 
@@ -155,6 +161,7 @@ help:
 	@echo "  install            - Install liza and liza-mcp binaries"
 	@echo "  lint               - Run linters (includes testhelpers check)"
 	@echo "  check-testhelpers  - Verify testhelpers not in production code"
+	@echo "  check-embedded     - Verify embedded copies match repo masters"
 	@echo "  tidy               - Tidy dependencies"
 	@echo "  run                - Build and run the liza binary"
 	@echo "  build-all          - Build both binaries for multiple platforms"
