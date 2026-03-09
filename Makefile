@@ -83,13 +83,13 @@ check-testhelpers:
 	@echo "✓ No testhelpers in production code"
 
 # Check that embedded copies match repo master files
-check-embedded: sync-embedded
+check-embedded:
 	@echo "Checking embedded artifact consistency..."
 	@go test ./internal/embedded/ -run TestArtifactConsistency -count=1
 	@echo "✓ Embedded artifacts are consistent with masters"
 
 # Run linters
-lint: sync-embedded check-testhelpers check-embedded
+lint: check-testhelpers check-embedded
 	go fmt ./...
 	go vet ./...
 
