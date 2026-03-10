@@ -526,10 +526,10 @@ func TestFormatStatusDashboard(t *testing.T) {
 					Active:   7,
 					Terminal: 3,
 					ByStatus: map[string]int{
-						"READY":            2,
-						"IMPLEMENTING":     3,
-						"READY_FOR_REVIEW": 2,
-						"MERGED":           3,
+						"DRAFT_CODE":            2,
+						"IMPLEMENTING_CODE":     3,
+						"CODE_READY_FOR_REVIEW": 2,
+						"MERGED":                3,
 					},
 					Claimable:     2,
 					Reviewable:    2,
@@ -575,7 +575,7 @@ func TestFormatStatusDashboard(t *testing.T) {
 				"=== TASKS ===",
 				"Total: 10 (7 active, 3 terminal)",
 				"By Status:",
-				"IMPLEMENTING: 3",
+				"IMPLEMENTING_CODE: 3",
 				"Claimable: 2 tasks",
 				"Reviewable: 2 tasks",
 				"=== AGENTS ===",
@@ -726,7 +726,7 @@ func TestFormatStatusDashboard(t *testing.T) {
 					Total:         3,
 					Active:        3,
 					Terminal:      0,
-					ByStatus:      map[string]int{"READY": 3},
+					ByStatus:      map[string]int{"DRAFT_CODE": 3},
 					Claimable:     0,
 					Reviewable:    0,
 					BlockedByDeps: 3,
@@ -779,18 +779,18 @@ func TestWriteTasksSection(t *testing.T) {
 			tasks: taskStatus{
 				Total: 5, Active: 3, Terminal: 2,
 				ByStatus: map[string]int{
-					"READY":        2,
-					"IMPLEMENTING": 1,
-					"MERGED":       2,
+					"DRAFT_CODE":        2,
+					"IMPLEMENTING_CODE": 1,
+					"MERGED":            2,
 				},
 				Claimable: 2, Reviewable: 0, BlockedByDeps: 0,
 			},
 			expect: "=== TASKS ===\n" +
 				"Total: 5 (3 active, 2 terminal)\n" +
 				"\nBy Status:\n" +
-				"  IMPLEMENTING: 1\n" +
+				"  DRAFT_CODE: 2\n" +
+				"  IMPLEMENTING_CODE: 1\n" +
 				"  MERGED: 2\n" +
-				"  READY: 2\n" +
 				"\nClaimable: 2 tasks\n" +
 				"Reviewable: 0 tasks\n" +
 				"\n",
@@ -799,7 +799,7 @@ func TestWriteTasksSection(t *testing.T) {
 			name: "blocked by deps line appears when nonzero",
 			tasks: taskStatus{
 				Total: 3, Active: 3, Terminal: 0,
-				ByStatus:      map[string]int{"READY": 3},
+				ByStatus:      map[string]int{"DRAFT_CODE": 3},
 				Claimable:     0,
 				Reviewable:    0,
 				BlockedByDeps: 2,
@@ -807,7 +807,7 @@ func TestWriteTasksSection(t *testing.T) {
 			expect: "=== TASKS ===\n" +
 				"Total: 3 (3 active, 0 terminal)\n" +
 				"\nBy Status:\n" +
-				"  READY: 3\n" +
+				"  DRAFT_CODE: 3\n" +
 				"\nClaimable: 0 tasks\n" +
 				"Reviewable: 0 tasks\n" +
 				"Blocked by dependencies: 2 tasks\n" +

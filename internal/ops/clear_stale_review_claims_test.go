@@ -79,7 +79,7 @@ func TestClearStaleReviewClaims_ExpiredLease(t *testing.T) {
 		t.Fatal("Task not found")
 	}
 	if task.Status != models.TaskStatusReadyForReview {
-		t.Errorf("Status = %v, want READY_FOR_REVIEW", task.Status)
+		t.Errorf("Status = %v, want CODE_READY_FOR_REVIEW", task.Status)
 	}
 	if task.ReviewingBy != nil {
 		t.Errorf("ReviewingBy should be nil, got %v", *task.ReviewingBy)

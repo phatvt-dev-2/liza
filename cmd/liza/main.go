@@ -109,7 +109,7 @@ var validateCmd = &cobra.Command{
 	Short: "Validate state.yaml against schema rules",
 	Long: `Validate the state.yaml file against all 43+ validation rules including:
 - Required fields and task state invariants
-- Dependency validation (existence, circularity, MERGED deps for IMPLEMENTING tasks)
+- Dependency validation (existence, circularity, MERGED deps for executing tasks)
 - Agent validation (WORKING must have current_task)
 - Lease expiry checking with grace periods
 - Spec file reference validation
@@ -135,8 +135,8 @@ Returns detailed error messages if validation fails.`,
 
 var wtCreateCmd = &cobra.Command{
 	Use:   "wt-create <task-id>",
-	Short: "Create a worktree for an IMPLEMENTING task",
-	Long: `Create a git worktree for an IMPLEMENTING task from the integration branch.
+	Short: "Create a worktree for a claimed task",
+	Long: `Create a git worktree for a task in executing status from the integration branch.
 
 The worktree is created in .worktrees/<task-id> and a new branch task/<task-id>
 is created from the integration branch. The task's base_commit is recorded for
@@ -170,8 +170,8 @@ For safety, deletion is only allowed for tasks in the following states:
   - SUPERSEDED: Task has been superseded by another task
   - MERGED: Task is complete (worktree should already be cleaned)
 
-This prevents accidental destruction of in-progress work. If the task is
-IMPLEMENTING or READY_FOR_REVIEW, deletion is not allowed as the coder may be
+This prevents accidental destruction of in-progress work. If the task is in
+an executing or submitted status, deletion is not allowed as the coder may be
 actively working in the worktree.
 
 The worktree directory and branch are removed, and task.worktree is set to null.`,
@@ -243,7 +243,7 @@ var claimTaskCmd = &cobra.Command{
 	Long: `Claim a task for a doer agent using the three-phase claim pattern.
 
 Supports claiming from multiple source states:
-  - Initial state: normal new claim (e.g. READY, DRAFT_CODE, DRAFT_CODING_PLAN, DRAFT_EPIC_PLAN, DRAFT_US)
+  - Initial state: normal new claim (e.g. DRAFT_CODE, DRAFT_CODING_PLAN, DRAFT_EPIC_PLAN, DRAFT_US)
   - Rejected state: re-claim (same doer preserves worktree, different doer gets fresh)
   - INTEGRATION_FAILED: any doer can claim (worktree preserved for conflict resolution)
 
@@ -275,12 +275,12 @@ Used by doer agents to submit completed work for review.
 
 Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
-  - Task must be in an executing status (resolved from pipeline config or legacy IMPLEMENTING)
+  - Task must be in an executing status (resolved from pipeline config)
   - Task must be assigned to the submitting agent
   - <commit-sha> must exactly match current worktree HEAD before rebase
 
 Updates:
-  - status = READY_FOR_REVIEW
+  - status = role-pair's submitted status (e.g. CODE_READY_FOR_REVIEW, CODING_PLAN_TO_REVIEW)
   - review_commit = post-rebase worktree HEAD
   - Adds history entry with event "submitted_for_review"`,
 	Args: cobra.ExactArgs(2),
@@ -309,7 +309,7 @@ var handoffCmd = &cobra.Command{
 
 Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
-  - Task must be in an executing status (resolved from pipeline config or legacy IMPLEMENTING)
+  - Task must be in an executing status (resolved from pipeline config)
   - Task must be assigned to the submitting agent
 
 Updates:
@@ -346,18 +346,18 @@ Used by reviewer agents to approve or reject work.
 
 Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
-  - Task must be in a submitted status (resolved from pipeline config or legacy READY_FOR_REVIEW)
+  - Task must be in a reviewing status (resolved from pipeline config)
   - For REJECTED verdicts, a rejection reason is required
 
 For APPROVED verdict:
-  - status = APPROVED
+  - status = role-pair's approved status (e.g. CODE_APPROVED, CODING_PLAN_APPROVED)
   - approved_by = <agent-id>
   - Clear rejection_reason
   - Clear reviewing_by and review_lease_expires
   - Add history entry with event "approved"
 
 For REJECTED verdict:
-  - status = REJECTED
+  - status = role-pair's rejected status (e.g. CODE_REJECTED, CODING_PLAN_REJECTED)
   - rejection_reason = <reason>
   - Increment review_cycles_current and review_cycles_total
   - Clear reviewing_by and review_lease_expires
@@ -397,7 +397,7 @@ Per the blocking protocol (specs/architecture/roles.md), use this when:
 
 Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
-  - Task must be in IMPLEMENTING status
+  - Task must be in an executing status (e.g. IMPLEMENTING_CODE, CODE_PLANNING)
   - Only the assigned agent can mark a task as blocked
   - Requires a reason and 1-3 clarifying questions
 
@@ -513,7 +513,7 @@ var updateSprintMetricsCmd = &cobra.Command{
 
 Metrics computed:
   - tasks_done: Count of terminal tasks (MERGED, ABANDONED, SUPERSEDED)
-  - tasks_in_progress: Count of active tasks (IMPLEMENTING, READY_FOR_REVIEW, REJECTED, INTEGRATION_FAILED)
+  - tasks_in_progress: Count of active tasks (executing, submitted, rejected, INTEGRATION_FAILED)
   - tasks_blocked: Count of BLOCKED tasks
   - iterations_total: Sum of iterations_total from all agents
   - review_cycles_total: Sum of review_cycles_total from all tasks
@@ -587,7 +587,7 @@ Press Ctrl+C to stop watching.`,
 var clearStaleReviewClaimsCmd = &cobra.Command{
 	Use:   "clear-stale-review-claims",
 	Short: "Clear expired review leases",
-	Long: `Find and clear expired review leases on REVIEWING tasks.
+	Long: `Find and clear expired review leases on tasks in reviewing status.
 
 When a Code Reviewer crashes mid-review, reviewing_by and review_lease_expires
 remain set. This command clears expired claims so other reviewers can claim the task.
@@ -1144,7 +1144,7 @@ var supersedeTaskCmd = &cobra.Command{
 Used by orchestrator when rescoping blocked, rejected, or problematic tasks.
 
 Requirements:
-  - Task must be in BLOCKED, REJECTED, or READY status
+  - Task must be in BLOCKED, rejected, or initial status
   - At least one replacement task ID must be provided
   - Rescope reason must explain why the task is being superseded
 

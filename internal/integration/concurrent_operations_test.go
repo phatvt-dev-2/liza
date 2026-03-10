@@ -180,6 +180,7 @@ func TestConcurrentStateModifications(t *testing.T) {
 	// Setup minimal state
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	bb := testhelpers.WriteInitialState(t, statePath, state)
@@ -247,6 +248,7 @@ func TestConcurrentReadsDuringWrite(t *testing.T) {
 	// Setup
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	bb := testhelpers.WriteInitialState(t, statePath, state)

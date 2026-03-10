@@ -133,6 +133,7 @@ func TestWtMergeCommand(t *testing.T) {
 			// Setup git repo and liza directory
 			testhelpers.SetupTestGitRepo(t, tmpDir)
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Ensure we're on a branch (SetupTestGitRepo may create detached HEAD)
 			cmd := exec.Command("git", "-C", tmpDir, "checkout", "-b", "integration")
@@ -412,6 +413,7 @@ func TestWtMergeCommand_PreventsDuplicateFailedBy(t *testing.T) {
 	// Setup git repo and liza directory
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create integration branch
 	cmd := exec.Command("git", "-C", tmpDir, "checkout", "-b", "integration")

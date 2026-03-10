@@ -245,7 +245,7 @@ func TestBuildPrompt_CollectiveScoping(t *testing.T) {
 		"COLLECTIVE PLAN SCOPING",
 		"1 of 3 in the current sprint",
 		"specs/vision.md",
-		"task-2: Add user API [READY]",
+		"task-2: Add user API [DRAFT_CODE]",
 		"task-3: Add tests [MERGED]",
 	}
 	for _, want := range wantContains {
@@ -402,7 +402,7 @@ func TestBuildPrompt_CollectiveScopingOrdinal(t *testing.T) {
 	if !strings.Contains(prompt, "task-1: Add auth [MERGED]") {
 		t.Error("buildPrompt() should include task-1 as sibling")
 	}
-	if !strings.Contains(prompt, "task-3: Add tests [READY]") {
+	if !strings.Contains(prompt, "task-3: Add tests [DRAFT_CODE]") {
 		t.Error("buildPrompt() should include task-3 as sibling")
 	}
 }

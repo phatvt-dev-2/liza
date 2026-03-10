@@ -357,6 +357,7 @@ func TestHandleRequest_ToolCall_AddTaskPostWriteValidationFailure(t *testing.T) 
 			ID:          "invalid-existing-task",
 			Description: "Invalid existing task",
 			Status:      models.TaskStatusImplementing, // missing required IMPLEMENTING fields
+			RolePair:    "coding-pair",
 			Priority:    1,
 			SpecRef:     "specs/test-spec.md",
 			DoneWhen:    "done",
@@ -379,12 +380,13 @@ func TestHandleRequest_ToolCall_AddTaskPostWriteValidationFailure(t *testing.T) 
 			"arguments": map[string]any{
 				"tasks": []any{
 					map[string]any{
-						"id":       "task-post-write-validation",
-						"desc":     "Task should trigger post-write validation failure",
-						"spec":     "specs/test-spec.md",
-						"done":     "done",
-						"scope":    "scope",
-						"priority": 1,
+						"id":        "task-post-write-validation",
+						"desc":      "Task should trigger post-write validation failure",
+						"spec":      "specs/test-spec.md",
+						"done":      "done",
+						"scope":     "scope",
+						"priority":  1,
+						"role_pair": "coding-pair",
 					},
 				},
 				"agent_id": "orchestrator-1",
@@ -566,14 +568,14 @@ func TestClassifyError(t *testing.T) {
 			wantMsg:  "validation failed: precondition not met",
 		},
 		{
-			name:     "not REVIEWING",
-			err:      errors.New("task is not REVIEWING"),
+			name:     "not REVIEWING_CODE",
+			err:      errors.New("task is not REVIEWING_CODE"),
 			wantCode: protocol.ValidationError,
 			wantMsg:  "validation failed: precondition not met",
 		},
 		{
-			name:     "not READY_FOR_REVIEW",
-			err:      errors.New("task is not READY_FOR_REVIEW"),
+			name:     "not CODE_READY_FOR_REVIEW",
+			err:      errors.New("task is not CODE_READY_FOR_REVIEW"),
 			wantCode: protocol.ValidationError,
 			wantMsg:  "validation failed: precondition not met",
 		},

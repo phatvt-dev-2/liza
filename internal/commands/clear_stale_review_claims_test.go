@@ -196,6 +196,7 @@ func TestClearStaleReviewClaimsCommand(t *testing.T) {
 
 			// Setup liza directory
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			logFile := paths.New(tmpDir).LogPath()
 
 			// Create initial state

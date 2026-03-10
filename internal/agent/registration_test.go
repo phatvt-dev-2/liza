@@ -148,6 +148,7 @@ func TestRegisterAgent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			state := testhelpers.CreateValidState()
 			if tt.existingAgent != nil {
@@ -201,6 +202,7 @@ func TestRegisterAgent(t *testing.T) {
 func TestRegisterAgentConcurrent(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	bb := testhelpers.WriteInitialState(t, statePath, state)
@@ -272,6 +274,7 @@ func TestRegisterAgentConcurrent(t *testing.T) {
 func TestUnregisterAgent(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	agentID := "coder-1"
@@ -300,6 +303,7 @@ func TestUnregisterAgent(t *testing.T) {
 func TestRegisterAgentStoresPID(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	bb := testhelpers.WriteInitialState(t, statePath, state)
@@ -339,6 +343,7 @@ func TestRegisterAgentStoresPID(t *testing.T) {
 func TestOrchestratorStatusTransitions(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	// No tasks - triggers INITIAL_PLANNING work for orchestrator
@@ -409,6 +414,7 @@ func TestOrchestratorStatusTransitions(t *testing.T) {
 func TestSetAgentToPlanningStatusNonExistent(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	testhelpers.WriteInitialState(t, statePath, state)
@@ -430,6 +436,7 @@ func TestSetAgentToPlanningStatusNonExistent(t *testing.T) {
 func TestResetAgentToIdle_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	testhelpers.WriteInitialState(t, statePath, state)
@@ -450,6 +457,7 @@ func TestResetAgentToIdle_NotFound(t *testing.T) {
 func TestResetAgentAfterExit_WaitingWithoutCurrentTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	agentID := "coder-1"
@@ -485,6 +493,7 @@ func TestResetAgentAfterExit_WaitingWithoutCurrentTask(t *testing.T) {
 func TestResetAgentAfterExit_WaitingWithCurrentTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	agentID := "coder-1"
@@ -520,6 +529,7 @@ func TestResetAgentAfterExit_WaitingWithCurrentTask(t *testing.T) {
 func TestResetAgentAfterExit_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	testhelpers.WriteInitialState(t, statePath, state)
@@ -540,6 +550,7 @@ func TestResetAgentAfterExit_NotFound(t *testing.T) {
 func TestResetAgentAfterExit_ReviewerReleasesTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	agentID := "code-reviewer-1"
@@ -604,6 +615,7 @@ func TestResetAgentAfterExit_ReviewerReleasesTask(t *testing.T) {
 func TestResetAgentAfterExit_CoderReleasesTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	agentID := "coder-1"
@@ -664,6 +676,7 @@ func TestResetAgentAfterExit_CoderReleasesTask(t *testing.T) {
 func TestResetAgentAfterExit_HandoffPreservesTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	agentID := "coder-1"
@@ -724,6 +737,7 @@ func TestResetAgentAfterExit_HandoffPreservesTask(t *testing.T) {
 func TestResetAgentAfterExit_NoCurrentTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	agentID := "coder-1"

@@ -165,7 +165,7 @@ func TestClaimReviewerTask_Success(t *testing.T) {
 		t.Fatal("Task not found")
 	}
 	if task.Status != models.TaskStatusReviewing {
-		t.Errorf("Task status = %v, want REVIEWING", task.Status)
+		t.Errorf("Task status = %v, want REVIEWING_CODE", task.Status)
 	}
 	if task.ReviewingBy == nil || *task.ReviewingBy != "code-reviewer-1" {
 		t.Error("Task ReviewingBy should be code-reviewer-1")
@@ -179,7 +179,7 @@ func TestClaimReviewerTask_Success(t *testing.T) {
 		t.Fatal("Agent not found")
 	}
 	if agent.Status != models.AgentStatusReviewing {
-		t.Errorf("Agent status = %v, want REVIEWING", agent.Status)
+		t.Errorf("Agent status = %v, want REVIEWING_CODE", agent.Status)
 	}
 	if agent.CurrentTask == nil || *agent.CurrentTask != "task-1" {
 		t.Error("Agent CurrentTask should be task-1")

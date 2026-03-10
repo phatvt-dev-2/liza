@@ -93,6 +93,7 @@ func TestWtCreateCommand(t *testing.T) {
 			// Setup git repo and liza directory
 			testhelpers.SetupTestGitRepo(t, tmpDir)
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Create initial state
 			now := time.Now().UTC()
@@ -256,6 +257,7 @@ func TestWtCreateCommand_PostWorktreeCmd(t *testing.T) {
 
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	agent := "coder-1"
@@ -334,6 +336,7 @@ func TestWtCreateCommand_NoPostWorktreeCmd(t *testing.T) {
 
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	agent := "coder-1"
@@ -413,6 +416,7 @@ func TestWtCreateCommandIntegration(t *testing.T) {
 	// Setup git repo and liza directory
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create initial state with IMPLEMENTING task
 	now := time.Now().UTC()

@@ -73,12 +73,12 @@ type TaskStatus string
 
 const (
 	TaskStatusDraft             TaskStatus = "DRAFT"
-	TaskStatusReady             TaskStatus = "READY"
-	TaskStatusImplementing      TaskStatus = "IMPLEMENTING"
-	TaskStatusReadyForReview    TaskStatus = "READY_FOR_REVIEW"
-	TaskStatusReviewing         TaskStatus = "REVIEWING"
-	TaskStatusRejected          TaskStatus = "REJECTED"
-	TaskStatusApproved          TaskStatus = "APPROVED"
+	TaskStatusReady             TaskStatus = "DRAFT_CODE"
+	TaskStatusImplementing      TaskStatus = "IMPLEMENTING_CODE"
+	TaskStatusReadyForReview    TaskStatus = "CODE_READY_FOR_REVIEW"
+	TaskStatusReviewing         TaskStatus = "REVIEWING_CODE"
+	TaskStatusRejected          TaskStatus = "CODE_REJECTED"
+	TaskStatusApproved          TaskStatus = "CODE_APPROVED"
 	TaskStatusMerged            TaskStatus = "MERGED"
 	TaskStatusBlocked           TaskStatus = "BLOCKED"
 	TaskStatusAbandoned         TaskStatus = "ABANDONED"

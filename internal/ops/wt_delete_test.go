@@ -35,11 +35,11 @@ func TestDeleteWorktree_WrongStatus(t *testing.T) {
 		name   string
 		status models.TaskStatus
 	}{
-		{"IMPLEMENTING", models.TaskStatusImplementing},
-		{"READY_FOR_REVIEW", models.TaskStatusReadyForReview},
-		{"REVIEWING", models.TaskStatusReviewing},
-		{"APPROVED", models.TaskStatusApproved},
-		{"READY", models.TaskStatusReady},
+		{"IMPLEMENTING_CODE", models.TaskStatusImplementing},
+		{"CODE_READY_FOR_REVIEW", models.TaskStatusReadyForReview},
+		{"REVIEWING_CODE", models.TaskStatusReviewing},
+		{"CODE_APPROVED", models.TaskStatusApproved},
+		{"DRAFT_CODE", models.TaskStatusReady},
 	}
 
 	for _, tt := range statuses {

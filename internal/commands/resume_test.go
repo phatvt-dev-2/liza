@@ -65,6 +65,7 @@ func TestResumeCommand(t *testing.T) {
 			// Setup test environment
 			tmpDir := t.TempDir()
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Create initial state with specified mode
 			state := testhelpers.CreateValidState()
@@ -130,6 +131,7 @@ func TestResumeCommand(t *testing.T) {
 func TestResumeCommand_ArchiveWriteFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Make archive directory unwritable so writeSprintArchive fails.
 	archiveDir := filepath.Join(tmpDir, ".liza", "archive")

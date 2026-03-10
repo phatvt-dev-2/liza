@@ -13,6 +13,7 @@ import (
 type TaskInput struct {
 	ID          string   `yaml:"id"`
 	Type        string   `yaml:"type,omitempty"`
+	RolePair    string   `yaml:"role_pair,omitempty"`
 	Description string   `yaml:"description"`
 	SpecRef     string   `yaml:"spec_ref"`
 	DoneWhen    string   `yaml:"done_when"`
@@ -42,6 +43,7 @@ func AddTaskCommand(statePath, logPath string, input *TaskInput, orchestratorID 
 	opsInput := &ops.AddTaskInput{
 		ID:          input.ID,
 		Type:        input.Type,
+		RolePair:    input.RolePair,
 		Description: input.Description,
 		SpecRef:     input.SpecRef,
 		DoneWhen:    input.DoneWhen,

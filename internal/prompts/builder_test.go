@@ -139,6 +139,7 @@ func TestBuildBasePrompt(t *testing.T) {
 
 func TestBuildOrchestratorContext(t *testing.T) {
 	now := time.Now().UTC()
+	projectRoot := setupPipelineConfig(t)
 
 	tests := []struct {
 		name         string
@@ -153,7 +154,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				state.Tasks = []models.Task{}
 				return state
 			}(),
-			config: OrchestratorContextConfig{},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
 			wantContains: []string{
 				"=== ORCHESTRATOR CONTEXT ===",
 				"WAKE TRIGGER: INITIAL_PLANNING",
@@ -176,8 +177,8 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				`liza_update_sprint_metrics — Recompute sprint metrics`,
 				`Tool parameters: {"agent_id": "orchestrator-1"}`,
 				"This is initial planning",
-				"Create exactly one task for the appropriate planner",
-				"role_pair\": \"code-planning-pair\"",
+				"Classify the input document and choose the appropriate entry-point",
+				"AVAILABLE ENTRY-POINTS:",
 				"Exactly one task is created",
 			},
 		},
@@ -191,7 +192,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: OrchestratorContextConfig{},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
 			wantContains: []string{
 				"WAKE TRIGGER: BLOCKED_TASKS",
 				"- Total tasks: 2",
@@ -209,7 +210,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: OrchestratorContextConfig{},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
 			wantContains: []string{
 				"WAKE TRIGGER: INTEGRATION_FAILED",
 				"- Integration failed: 1",
@@ -225,7 +226,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				state.Tasks = []models.Task{task}
 				return state
 			}(),
-			config: OrchestratorContextConfig{},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
 			wantContains: []string{
 				"WAKE TRIGGER: HYPOTHESIS_EXHAUSTED",
 				"- Hypothesis exhausted: 1",
@@ -254,7 +255,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: OrchestratorContextConfig{},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
 			wantContains: []string{
 				"WAKE TRIGGER: IMMEDIATE_DISCOVERY",
 				"- Immediate discoveries: 1",
@@ -274,7 +275,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: OrchestratorContextConfig{},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
 			wantContains: []string{
 				"- Total tasks: 5",
 				"- Merged: 1",
@@ -293,7 +294,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: OrchestratorContextConfig{},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
 			wantContains: []string{
 				"WAKE TRIGGER: SPRINT_COMPLETE",
 				"- Total tasks: 2",
@@ -527,8 +528,8 @@ func TestBuildCoderContext(t *testing.T) {
 				"SCOPE:",
 				"Add auth module to backend",
 				"CODER STATE TRANSITIONS:",
-				"IMPLEMENTING → READY_FOR_REVIEW",
-				"IMPLEMENTING → BLOCKED",
+				"IMPLEMENTING_CODE → CODE_READY_FOR_REVIEW",
+				"IMPLEMENTING_CODE → BLOCKED",
 				"CODER TOOLS:",
 				"liza_submit_for_review",
 				"liza_handoff",
@@ -551,7 +552,7 @@ func TestBuildCoderContext(t *testing.T) {
 				"liza_submit_for_review",
 				"\"task_id\": \"task-1\"",
 				"\"agent_id\": \"coder-1\"",
-				"READY_FOR_REVIEW",
+				"CODE_READY_FOR_REVIEW",
 			},
 		},
 		{
@@ -765,8 +766,8 @@ func TestBuildReviewerContext(t *testing.T) {
 				"DONE WHEN:",
 				"Users can login",
 				"REVIEWER STATE TRANSITIONS:",
-				"REVIEWING → APPROVED",
-				"REVIEWING → REJECTED",
+				"REVIEWING_CODE → CODE_APPROVED",
+				"REVIEWING_CODE → CODE_REJECTED",
 				"REVIEWER TOOL:",
 				"liza_submit_verdict",
 				"ANOMALY LOGGING:",
@@ -877,12 +878,13 @@ func TestBuildReviewerContext(t *testing.T) {
 }
 
 func TestOrchestratorPromptHasAutonomyGuidance(t *testing.T) {
+	projectRoot := setupPipelineConfig(t)
 	state := &models.State{
 		Tasks: []models.Task{},
 		Goal:  models.Goal{SpecRef: ".liza/specs/goal.md", Description: "Test goal"},
 	}
 
-	config := OrchestratorContextConfig{}
+	config := OrchestratorContextConfig{ProjectRoot: projectRoot}
 	prompt, err := BuildOrchestratorContext(state, config)
 	if err != nil {
 		t.Fatalf("BuildOrchestratorContext() error: %v", err)
@@ -1160,8 +1162,8 @@ func TestCoderContext_CollectiveScopingRendered(t *testing.T) {
 		TotalPlanTasks: 3,
 		TaskOrdinal:    1,
 		SiblingTasks: []SiblingTaskSummary{
-			{ID: "task-2", Description: "Add user API", Status: "READY"},
-			{ID: "task-3", Description: "Add tests", Status: "IMPLEMENTING"},
+			{ID: "task-2", Description: "Add user API", Status: "DRAFT_CODE"},
+			{ID: "task-3", Description: "Add tests", Status: "IMPLEMENTING_CODE"},
 		},
 	}
 
@@ -1179,8 +1181,8 @@ func TestCoderContext_CollectiveScopingRendered(t *testing.T) {
 		"Do NOT silently modify out-of-scope files",
 		"spec_gap anomaly",
 		"SIBLING TASKS (for context only",
-		"task-2: Add user API [READY]",
-		"task-3: Add tests [IMPLEMENTING]",
+		"task-2: Add user API [DRAFT_CODE]",
+		"task-3: Add tests [IMPLEMENTING_CODE]",
 	}
 	for _, want := range wantContains {
 		if !strings.Contains(result, want) {
@@ -1296,7 +1298,7 @@ func TestReviewerContext_ScopeExtensionsRendered(t *testing.T) {
 		TotalPlanTasks: 2,
 		TaskOrdinal:    1,
 		SiblingTasks: []SiblingTaskSummary{
-			{ID: "task-2", Description: "Add user API", Status: "READY"},
+			{ID: "task-2", Description: "Add user API", Status: "DRAFT_CODE"},
 		},
 	}
 
@@ -1397,7 +1399,7 @@ func TestCoderContext_CollectiveScopingNonFirstTask(t *testing.T) {
 		TaskOrdinal:    3,
 		SiblingTasks: []SiblingTaskSummary{
 			{ID: "task-1", Description: "Add auth", Status: "MERGED"},
-			{ID: "task-2", Description: "Add user API", Status: "IMPLEMENTING"},
+			{ID: "task-2", Description: "Add user API", Status: "IMPLEMENTING_CODE"},
 		},
 	}
 
@@ -1437,7 +1439,7 @@ func TestReviewerContext_CollectiveScopingNonFirstTask(t *testing.T) {
 		TaskOrdinal:    2,
 		SiblingTasks: []SiblingTaskSummary{
 			{ID: "task-1", Description: "Add auth", Status: "MERGED"},
-			{ID: "task-3", Description: "Add tests", Status: "READY"},
+			{ID: "task-3", Description: "Add tests", Status: "DRAFT_CODE"},
 		},
 	}
 
@@ -1456,6 +1458,7 @@ func TestReviewerContext_CollectiveScopingNonFirstTask(t *testing.T) {
 
 func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 	now := time.Now().UTC()
+	projectRoot := setupPipelineConfig(t)
 
 	tests := []struct {
 		name         string
@@ -1553,7 +1556,7 @@ func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := OrchestratorContextConfig{}
+			config := OrchestratorContextConfig{ProjectRoot: projectRoot}
 			prompt, err := BuildOrchestratorContext(tt.state, config)
 			if err != nil {
 				t.Fatalf("BuildOrchestratorContext() error: %v", err)

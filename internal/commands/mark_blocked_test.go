@@ -184,6 +184,7 @@ func TestMarkBlockedCommand(t *testing.T) {
 			// Create temporary directory for test
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Initialize state
 			initialState := &models.State{

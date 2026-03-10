@@ -53,6 +53,7 @@ func TestAddTaskCommand(t *testing.T) {
 					ID:          "task-1",
 					Description: "Prerequisite task",
 					Status:      models.TaskStatusReady,
+					RolePair:    "coding-pair",
 					Priority:    1,
 					Created:     time.Now().UTC(),
 					SpecRef:     "specs/vision.md",
@@ -88,6 +89,7 @@ func TestAddTaskCommand(t *testing.T) {
 					ID:          "task-1",
 					Description: "Existing task",
 					Status:      models.TaskStatusReady,
+					RolePair:    "coding-pair",
 					Priority:    1,
 					Created:     time.Now().UTC(),
 					SpecRef:     "specs/vision.md",
@@ -174,6 +176,7 @@ func TestAddTaskCommand(t *testing.T) {
 
 			// Setup liza directory and spec file
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			logFile := paths.New(tmpDir).LogPath()
 			testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
 
@@ -232,6 +235,7 @@ func TestAddTaskCommand(t *testing.T) {
 			// Create task input
 			input := &TaskInput{
 				ID:          tt.taskID,
+				RolePair:    "coding-pair",
 				Description: tt.description,
 				SpecRef:     tt.specRef,
 				DoneWhen:    tt.doneWhen,
@@ -470,6 +474,7 @@ func TestAddTaskCommandFromFile(t *testing.T) {
 
 	// Setup liza directory and spec file
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	logFile := paths.New(tmpDir).LogPath()
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
 
@@ -490,6 +495,7 @@ func TestAddTaskCommandFromFile(t *testing.T) {
 				ID:          "task-0",
 				Description: "Prerequisite task 0",
 				Status:      models.TaskStatusMerged,
+				RolePair:    "coding-pair",
 				Priority:    1,
 				Created:     now,
 				SpecRef:     "specs/vision.md",
@@ -501,6 +507,7 @@ func TestAddTaskCommandFromFile(t *testing.T) {
 				ID:          "task-1",
 				Description: "Prerequisite task 1",
 				Status:      models.TaskStatusMerged,
+				RolePair:    "coding-pair",
 				Priority:    1,
 				Created:     now,
 				SpecRef:     "specs/vision.md",
@@ -552,6 +559,7 @@ func TestAddTaskCommandFromFile(t *testing.T) {
 	taskFileContent := `id: task-from-file
 description: Task loaded from file
 spec_ref: specs/vision.md
+role_pair: coding-pair
 done_when: |
   This task is done when:
   - All tests pass
@@ -652,6 +660,7 @@ func TestAddTaskCommandTaskType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			logFile := paths.New(tmpDir).LogPath()
 			testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
 
@@ -664,6 +673,7 @@ func TestAddTaskCommandTaskType(t *testing.T) {
 
 			input := &TaskInput{
 				ID:          "task-1",
+				RolePair:    "coding-pair",
 				Type:        tt.taskType,
 				Description: "Test task",
 				SpecRef:     "specs/vision.md",
@@ -709,6 +719,7 @@ func TestAddTaskCommandValidation(t *testing.T) {
 
 	// Setup liza directory
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	logFile := paths.New(tmpDir).LogPath()
 
 	// Create initial state with invalid data to verify validation runs
@@ -766,6 +777,7 @@ func TestAddTaskCommandValidation(t *testing.T) {
 	// Create task input
 	input := &TaskInput{
 		ID:          "task-1",
+		RolePair:    "coding-pair",
 		Description: "Test task",
 		SpecRef:     "specs/vision.md",
 		DoneWhen:    "Done",

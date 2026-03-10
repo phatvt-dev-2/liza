@@ -107,6 +107,7 @@ func TestWtDeleteCommand(t *testing.T) {
 			// Setup git repo and liza directory
 			testhelpers.SetupTestGitRepo(t, tmpDir)
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Create initial state
 			now := time.Now().UTC()
@@ -274,6 +275,7 @@ func TestWtDeleteCommandIntegration(t *testing.T) {
 	// Setup git repo and liza directory
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create initial state with BLOCKED task
 	now := time.Now().UTC()

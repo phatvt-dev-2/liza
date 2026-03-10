@@ -65,6 +65,7 @@ func TestWaitForCoderWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			lizaDir := filepath.Dir(statePath)
 
 			state := testhelpers.CreateValidState()
@@ -133,6 +134,7 @@ func TestWaitForReviewerWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			projectRoot := tmpDir
 
 			state := testhelpers.CreateValidState()
@@ -220,6 +222,7 @@ func TestWaitForCodePlannerWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			lizaDir := filepath.Dir(statePath)
 
 			state := testhelpers.CreateValidState()
@@ -270,6 +273,7 @@ func TestWaitForCodePlanReviewerWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			projectRoot := tmpDir
 
 			state := testhelpers.CreateValidState()
@@ -333,6 +337,7 @@ func TestWaitForOrchestratorWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			lizaDir := filepath.Dir(statePath)
 
 			state := testhelpers.CreateValidState()
@@ -366,6 +371,7 @@ func TestWaitForOrchestratorWork(t *testing.T) {
 func TestOrchestratorRespectsMaxWaitConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaDir := filepath.Dir(statePath)
 
 	// Create state with no work available
@@ -460,6 +466,7 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			lizaDir := filepath.Dir(statePath)
 
 			// Write initial state with no work
@@ -526,6 +533,7 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 func TestWaitForWorkCancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaDir := filepath.Dir(statePath)
 
 	// Create state with no work
@@ -567,6 +575,7 @@ func TestWaitForWorkCancellation(t *testing.T) {
 func TestWaitForWorkTimeout(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaDir := filepath.Dir(statePath)
 
 	// Create state with no work
@@ -603,6 +612,7 @@ func TestWaitForWorkTimeout(t *testing.T) {
 func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaDir := filepath.Dir(statePath)
 
 	state := testhelpers.CreateValidState()
@@ -663,6 +673,7 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 func TestWaitForWorkPollingAbortStateMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaDir := filepath.Dir(statePath)
 
 	state := testhelpers.CreateValidState()
@@ -727,6 +738,7 @@ func TestWaitForWorkPollingAbortStateMode(t *testing.T) {
 func TestAbortPrecedenceOverWork(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaDir := filepath.Dir(statePath)
 
 	now := time.Now().UTC()
@@ -910,6 +922,7 @@ func TestWaitForEpicPlannerWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			writePhase2PipelineConfig(t, tmpDir)
 			projectRoot := tmpDir
 
@@ -980,6 +993,7 @@ func TestWaitForEpicPlanReviewerWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			writePhase2PipelineConfig(t, tmpDir)
 			projectRoot := tmpDir
 
@@ -1050,6 +1064,7 @@ func TestWaitForUSWriterWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			writePhase2PipelineConfig(t, tmpDir)
 			projectRoot := tmpDir
 
@@ -1120,6 +1135,7 @@ func TestWaitForUSReviewerWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			writePhase2PipelineConfig(t, tmpDir)
 			projectRoot := tmpDir
 
@@ -1145,6 +1161,7 @@ func TestWaitForUSReviewerWork(t *testing.T) {
 func TestWaitForCoderWorkDetectsResumableHandoff(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaDir := filepath.Dir(statePath)
 
 	now := time.Now().UTC()

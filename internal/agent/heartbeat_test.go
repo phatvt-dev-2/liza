@@ -59,6 +59,7 @@ func TestHeartbeat(t *testing.T) {
 			// Create temp directory and state
 			tmpDir := t.TempDir()
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Create initial state with agent
 			initialState := testhelpers.CreateValidState()
@@ -155,6 +156,7 @@ func TestHeartbeat(t *testing.T) {
 func TestHeartbeatWithInvalidAgent(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create state without the agent
 	initialState := testhelpers.CreateValidState()
@@ -207,6 +209,7 @@ func TestHeartbeatWithInvalidStatePath(t *testing.T) {
 func TestHeartbeatStop(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	initialState := testhelpers.CreateValidState()
 	now := time.Now().UTC()
@@ -321,6 +324,7 @@ func TestHeartbeatConfig(t *testing.T) {
 func TestHeartbeatConcurrency(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create state with multiple agents
 	initialState := testhelpers.CreateValidState()
@@ -447,6 +451,7 @@ func TestHeartbeatIntervalFromConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Create state with specific heartbeat interval
 			initialState := testhelpers.CreateValidState()

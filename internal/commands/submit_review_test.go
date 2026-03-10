@@ -132,6 +132,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 			// Create temporary directory for test
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Initialize state
 			initialState := &models.State{
@@ -182,6 +183,7 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Get current branch and ensure we're on integration
 	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
@@ -301,6 +303,7 @@ func TestSubmitForReview_RebaseConflict(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Ensure we're on integration branch
 	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
@@ -407,6 +410,7 @@ func TestSubmitForReview_FetchFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create a worktree
 	g := git.New(tmpDir)
@@ -491,6 +495,7 @@ func TestSubmitForReview_WorktreeGone(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create a worktree then delete it
 	g := git.New(tmpDir)
@@ -567,6 +572,7 @@ func TestSubmitForReview_DetachedHead(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create a worktree
 	g := git.New(tmpDir)

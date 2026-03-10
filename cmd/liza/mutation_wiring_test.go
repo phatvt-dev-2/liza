@@ -115,7 +115,7 @@ func TestMutationCommandWiring(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected wt-merge error, got nil")
 		}
-		if !strings.Contains(err.Error(), "task must be in an approved state to merge (current status: READY)") {
+		if !strings.Contains(err.Error(), "task must be in an approved state to merge (current status: DRAFT_CODE)") {
 			t.Fatalf("unexpected wt-merge error: %v", err)
 		}
 	})
@@ -158,6 +158,7 @@ func setupMutationTestProject(t *testing.T, mutateState func(*models.State)) (st
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
 
 	state := testhelpers.CreateValidState()
 	if mutateState != nil {

@@ -94,6 +94,7 @@ func TestMockCLIExecution(t *testing.T) {
 func TestExit42RestartTracker_ExponentialBackoffAndCap(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	now := time.Now().UTC()
 
 	agentID := "coder-1"
@@ -150,6 +151,7 @@ func TestExit42RestartTracker_ExponentialBackoffAndCap(t *testing.T) {
 func TestExit42RestartTracker_Blocking(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	now := time.Now().UTC()
 
 	agentID := "coder-1"
@@ -213,6 +215,7 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 func TestRunAgent_ExtractedOps_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	now := time.Now().UTC()
 
 	state := testhelpers.CreateValidState()
@@ -245,6 +248,7 @@ func TestRunAgent_ExtractedOps_Integration(t *testing.T) {
 func TestResumeHandoff_ExtractedOp_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	now := time.Now().UTC()
 
 	state := testhelpers.CreateValidState()
@@ -287,6 +291,7 @@ func TestResumeHandoff_ExtractedOp_Integration(t *testing.T) {
 func TestResumeHandoff_NotFound_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	now := time.Now().UTC()
 
 	state := testhelpers.CreateValidState()
@@ -324,6 +329,7 @@ func TestExtractedOps_BehavioralParity(t *testing.T) {
 	t.Run("ClaimReviewerTask finds highest priority task", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+		testhelpers.SetupPipelineConfig(t, tmpDir)
 		now := time.Now().UTC()
 
 		state := testhelpers.CreateValidState()
@@ -357,6 +363,7 @@ func TestExtractedOps_BehavioralParity(t *testing.T) {
 	t.Run("ResumeHandoff uses correct worktree", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+		testhelpers.SetupPipelineConfig(t, tmpDir)
 		now := time.Now().UTC()
 
 		state := testhelpers.CreateValidState()
@@ -394,6 +401,7 @@ func TestExtractedOps_BehavioralParity(t *testing.T) {
 func BenchmarkClaimReviewerTask(b *testing.B) {
 	tmpDir := b.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(&testing.T{}, tmpDir)
+	testhelpers.SetupPipelineConfig(&testing.T{}, tmpDir)
 	now := time.Now().UTC()
 
 	state := testhelpers.CreateValidState()
@@ -418,6 +426,7 @@ func BenchmarkClaimReviewerTask(b *testing.B) {
 func BenchmarkResumeHandoff(b *testing.B) {
 	tmpDir := b.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(&testing.T{}, tmpDir)
+	testhelpers.SetupPipelineConfig(&testing.T{}, tmpDir)
 	now := time.Now().UTC()
 
 	state := testhelpers.CreateValidState()

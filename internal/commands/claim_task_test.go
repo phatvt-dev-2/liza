@@ -156,6 +156,7 @@ func TestClaimTaskCommand(t *testing.T) {
 
 			// Create .liza directory
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Create initial state
 			now := time.Now().UTC()
@@ -452,6 +453,7 @@ func TestClaimTaskCommandIntegration(t *testing.T) {
 
 	// Create .liza directory
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create initial state with READY task
 	now := time.Now().UTC()

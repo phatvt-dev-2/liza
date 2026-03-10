@@ -787,6 +787,7 @@ func TestWatchCommand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			alertsLog := paths.New(tmpDir).AlertsLogPath()
 
 			state := tt.setupFunc(t, tmpDir)
@@ -830,6 +831,7 @@ func TestCheckSprintStalled(t *testing.T) {
 	t.Run("sprint stalled - all blocked - triggers checkpoint", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+		testhelpers.SetupPipelineConfig(t, tmpDir)
 		lizaPaths := paths.New(tmpDir)
 
 		state := testhelpers.CreateValidState()
@@ -880,6 +882,7 @@ func TestCheckSprintStalled(t *testing.T) {
 	t.Run("mix of terminal and blocked - triggers checkpoint", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+		testhelpers.SetupPipelineConfig(t, tmpDir)
 
 		state := testhelpers.CreateValidState()
 		state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
@@ -943,6 +946,7 @@ func TestCheckSprintStalled(t *testing.T) {
 		// so a resumed-but-still-stalled sprint gets a fresh checkpoint.
 		tmpDir := t.TempDir()
 		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+		testhelpers.SetupPipelineConfig(t, tmpDir)
 
 		state := testhelpers.CreateValidState()
 		state.Sprint.Scope.Planned = []string{"task-1"}
@@ -1013,6 +1017,7 @@ func TestCheckSprintStalled(t *testing.T) {
 	t.Run("throttling - second call does not re-trigger", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+		testhelpers.SetupPipelineConfig(t, tmpDir)
 
 		state := testhelpers.CreateValidState()
 		state.Sprint.Scope.Planned = []string{"task-1"}
@@ -1053,6 +1058,7 @@ func TestCheckSprintStalled(t *testing.T) {
 func TestRunChecks_AutoSprintCheckpointOnCircuitBreakerPattern(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaPaths := paths.New(tmpDir)
 
 	now := time.Now().UTC()
@@ -1160,6 +1166,7 @@ func TestRunChecks_AutoSprintCheckpointOnCircuitBreakerPattern(t *testing.T) {
 func TestRunChecks_NoCircuitBreakerEscalationBelowThreshold(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaPaths := paths.New(tmpDir)
 
 	now := time.Now().UTC()
@@ -1228,6 +1235,7 @@ func TestRunChecks_NoCircuitBreakerEscalationBelowThreshold(t *testing.T) {
 func TestRunChecks_CircuitBreakerErrorDoesNotDropOtherAlerts(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaPaths := paths.New(tmpDir)
 
 	// Force ops.Analyze report write failure: report path exists as a directory.

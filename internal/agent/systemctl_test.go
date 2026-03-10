@@ -58,6 +58,7 @@ func TestIsSystemStopped(t *testing.T) {
 func TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 
@@ -112,6 +113,7 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder(t *testi
 func TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 
@@ -167,6 +169,7 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded(t *testing.T
 func TestVerifyOrchestratorStateChanges_IntegrationFailedNotHandled(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 
@@ -225,6 +228,7 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedNotHandled(t *testing.T
 func TestVerifyOrchestratorStateChanges_IntegrationFailedMixedOutcomes(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 

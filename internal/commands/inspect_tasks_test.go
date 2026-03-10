@@ -564,7 +564,7 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 		{
 			ID:           "task-1",
 			Description:  "No dependencies",
-			Status:       "READY",
+			Status:       "DRAFT_CODE",
 			Priority:     1,
 			DependsOn:    nil,
 			Age:          "1h ago",
@@ -573,7 +573,7 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 		{
 			ID:           "task-2",
 			Description:  "Single dependency",
-			Status:       "READY",
+			Status:       "DRAFT_CODE",
 			Priority:     2,
 			DependsOn:    []string{"task-1"},
 			Age:          "30m ago",
@@ -582,7 +582,7 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 		{
 			ID:           "task-3",
 			Description:  "Multiple dependencies",
-			Status:       "READY",
+			Status:       "DRAFT_CODE",
 			Priority:     3,
 			DependsOn:    []string{"task-1", "task-2"},
 			Age:          "15m ago",
@@ -621,7 +621,7 @@ func TestFormatTaskValue_WithDependencies(t *testing.T) {
 			task: taskInfo{
 				ID:           "task-1",
 				Description:  "Test task",
-				Status:       "READY",
+				Status:       "DRAFT_CODE",
 				Priority:     1,
 				DependsOn:    nil,
 				Age:          "1h ago",
@@ -637,7 +637,7 @@ func TestFormatTaskValue_WithDependencies(t *testing.T) {
 			task: taskInfo{
 				ID:           "task-2",
 				Description:  "Test task",
-				Status:       "READY",
+				Status:       "DRAFT_CODE",
 				Priority:     1,
 				DependsOn:    []string{},
 				Age:          "1h ago",
@@ -653,7 +653,7 @@ func TestFormatTaskValue_WithDependencies(t *testing.T) {
 			task: taskInfo{
 				ID:           "task-3",
 				Description:  "Test task",
-				Status:       "READY",
+				Status:       "DRAFT_CODE",
 				Priority:     1,
 				DependsOn:    []string{"task-1"},
 				Age:          "1h ago",
@@ -672,7 +672,7 @@ func TestFormatTaskValue_WithDependencies(t *testing.T) {
 			task: taskInfo{
 				ID:           "task-4",
 				Description:  "Test task",
-				Status:       "READY",
+				Status:       "DRAFT_CODE",
 				Priority:     1,
 				DependsOn:    []string{"task-1", "task-2", "task-3"},
 				Age:          "1h ago",

@@ -14,6 +14,7 @@ func TestClaimCoderTask_BasicPrioritySelection(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -48,6 +49,7 @@ func TestClaimCoderTask_SamePriorityRandomSelection(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -87,6 +89,7 @@ func TestClaimCoderTask_RespectsClaimability(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -129,6 +132,7 @@ func TestClaimCoderTask_RejectedTasksPriority(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -165,6 +169,7 @@ func TestClaimCoderTask_IntegrationFailedPriority(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -204,6 +209,7 @@ func TestClaimCoderTask_AllSamePriority(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -242,6 +248,7 @@ func TestClaimCoderTask_MixedPriorities(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -285,6 +292,7 @@ func TestClaimCoderTask_NoClaimableTasks(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -315,6 +323,7 @@ func TestClaimCoderTask_EmptyTaskList(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{} // Empty
@@ -337,6 +346,7 @@ func TestClaimReviewerTask_BasicPrioritySelection(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -371,6 +381,7 @@ func TestClaimReviewerTask_SamePriorityRandomSelection(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -410,6 +421,7 @@ func TestClaimReviewerTask_SkipsClaimedReviewTasks(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -445,6 +457,7 @@ func TestClaimReviewerTask_ReclaimsExpiredLease(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -484,6 +497,7 @@ func TestClaimReviewerTask_NoReviewableTasks(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -554,6 +568,7 @@ func TestClaimDoerTask_RetriesOnFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()

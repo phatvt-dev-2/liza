@@ -13,6 +13,7 @@ func TestInspectCommand(t *testing.T) {
 	// Create test state
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create a valid state
 	now := time.Now()
@@ -158,7 +159,7 @@ func TestInspectCommand(t *testing.T) {
 				Format:      "table",
 				ProjectRoot: tmpDir,
 			},
-			wantContains: []string{"task-1", "task-2", "IMPLEMENTING", "MERGED"},
+			wantContains: []string{"task-1", "task-2", "IMPLEMENTING_CODE", "MERGED"},
 			wantErr:      false,
 		},
 		{
@@ -168,7 +169,7 @@ func TestInspectCommand(t *testing.T) {
 				Format:      "value",
 				ProjectRoot: tmpDir,
 			},
-			wantContains: []string{"task-1", "Test task 1", "IMPLEMENTING"},
+			wantContains: []string{"task-1", "Test task 1", "IMPLEMENTING_CODE"},
 			wantErr:      false,
 		},
 		{

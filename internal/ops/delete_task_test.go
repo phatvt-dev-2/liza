@@ -64,9 +64,9 @@ func TestCheckDeleteTask_StatusBlocked(t *testing.T) {
 		wantErrMsg string
 	}{
 		{"MERGED", models.TaskStatusMerged, nil, "cannot delete MERGED task"},
-		{"IMPLEMENTING with active lease", models.TaskStatusImplementing, &validLease, "actively being worked on"},
-		{"READY_FOR_REVIEW", models.TaskStatusReadyForReview, nil, "under review"},
-		{"REVIEWING", models.TaskStatusReviewing, nil, "under review"},
+		{"IMPLEMENTING_CODE with active lease", models.TaskStatusImplementing, &validLease, "actively being worked on"},
+		{"CODE_READY_FOR_REVIEW", models.TaskStatusReadyForReview, nil, "under review"},
+		{"REVIEWING_CODE", models.TaskStatusReviewing, nil, "under review"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -337,9 +337,9 @@ func TestDeleteTask_StatusBlocked(t *testing.T) {
 		wantErrMsg string
 	}{
 		{"MERGED", models.TaskStatusMerged, nil, "cannot delete MERGED task"},
-		{"IMPLEMENTING with active lease", models.TaskStatusImplementing, &validLease, "actively being worked on"},
-		{"READY_FOR_REVIEW", models.TaskStatusReadyForReview, nil, "under review"},
-		{"REVIEWING", models.TaskStatusReviewing, nil, "under review"},
+		{"IMPLEMENTING_CODE with active lease", models.TaskStatusImplementing, &validLease, "actively being worked on"},
+		{"CODE_READY_FOR_REVIEW", models.TaskStatusReadyForReview, nil, "under review"},
+		{"REVIEWING_CODE", models.TaskStatusReviewing, nil, "under review"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

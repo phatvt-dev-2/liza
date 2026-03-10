@@ -106,12 +106,13 @@ func TestConcurrentAddTask(t *testing.T) {
 			_, errors[i] = server.handleAddTasks(map[string]any{
 				"tasks": []any{
 					map[string]any{
-						"id":       fmt.Sprintf("task-concurrent-%d", i),
-						"desc":     fmt.Sprintf("Concurrent task %d", i),
-						"spec":     "specs/test-spec.md",
-						"done":     "Task is complete",
-						"scope":    "Test concurrent adds",
-						"priority": 1,
+						"id":        fmt.Sprintf("task-concurrent-%d", i),
+						"desc":      fmt.Sprintf("Concurrent task %d", i),
+						"spec":      "specs/test-spec.md",
+						"done":      "Task is complete",
+						"scope":     "Test concurrent adds",
+						"priority":  1,
+						"role_pair": "coding-pair",
 					},
 				},
 				"agent_id": "orchestrator-1",
@@ -167,12 +168,13 @@ func TestConcurrentAddTaskSameID(t *testing.T) {
 		result1, err1 = server.handleAddTasks(map[string]any{
 			"tasks": []any{
 				map[string]any{
-					"id":       "task-duplicate",
-					"desc":     "Duplicate task from goroutine 1",
-					"spec":     "specs/test-spec.md",
-					"done":     "Task is complete",
-					"scope":    "Test duplicate",
-					"priority": 1,
+					"id":        "task-duplicate",
+					"desc":      "Duplicate task from goroutine 1",
+					"spec":      "specs/test-spec.md",
+					"done":      "Task is complete",
+					"scope":     "Test duplicate",
+					"priority":  1,
+					"role_pair": "coding-pair",
 				},
 			},
 			"agent_id": "orchestrator-1",
@@ -184,12 +186,13 @@ func TestConcurrentAddTaskSameID(t *testing.T) {
 		result2, err2 = server.handleAddTasks(map[string]any{
 			"tasks": []any{
 				map[string]any{
-					"id":       "task-duplicate",
-					"desc":     "Duplicate task from goroutine 2",
-					"spec":     "specs/test-spec.md",
-					"done":     "Task is complete",
-					"scope":    "Test duplicate",
-					"priority": 1,
+					"id":        "task-duplicate",
+					"desc":      "Duplicate task from goroutine 2",
+					"spec":      "specs/test-spec.md",
+					"done":      "Task is complete",
+					"scope":     "Test duplicate",
+					"priority":  1,
+					"role_pair": "coding-pair",
 				},
 			},
 			"agent_id": "orchestrator-1",

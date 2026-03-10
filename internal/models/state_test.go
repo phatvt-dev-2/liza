@@ -1577,21 +1577,6 @@ func TestIsClaimable_Pipeline_WithDependencies(t *testing.T) {
 	})
 }
 
-func TestIsClaimable_Pipeline_NilResolver_FallsBackToLegacy(t *testing.T) {
-	// Pipeline task with nil resolver should fall back to legacy path.
-	// Legacy path won't recognize custom statuses, so it should return false.
-	task := Task{Status: "DRAFT_CODE", RolePair: "coding-pair"}
-	if task.IsClaimable(RoleCoder, nil, nil) {
-		t.Error("expected not claimable with nil resolver and custom status")
-	}
-
-	// But legacy statuses should still work even with RolePair set when resolver is nil.
-	task2 := Task{Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"}
-	if !task2.IsClaimable(RoleCoder, nil, nil) {
-		t.Error("expected claimable via legacy path with nil resolver")
-	}
-}
-
 func TestAllPlannedTasksTerminal_WithCodingPlanApproved(t *testing.T) {
 	now := time.Now().UTC()
 	mkTask := func(id string, status TaskStatus) Task {

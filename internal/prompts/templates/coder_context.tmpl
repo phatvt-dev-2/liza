@@ -44,10 +44,10 @@ Resume from this point before starting any new approach.
 {{- end}}
 
 CODER STATE TRANSITIONS:
-- IMPLEMENTING → READY_FOR_REVIEW (submit for review)
-- IMPLEMENTING → BLOCKED (spec ambiguity, assumption budget exceeded)
-- REJECTED → IMPLEMENTING (address reviewer feedback, re-submit)
-- INTEGRATION_FAILED → IMPLEMENTING (fix merge conflicts, re-submit)
+- IMPLEMENTING_CODE → CODE_READY_FOR_REVIEW (submit for review)
+- IMPLEMENTING_CODE → BLOCKED (spec ambiguity, assumption budget exceeded)
+- CODE_REJECTED → IMPLEMENTING_CODE (address reviewer feedback, re-submit)
+- INTEGRATION_FAILED → IMPLEMENTING_CODE (fix merge conflicts, re-submit)
 Stop triggers: spec ambiguity → BLOCKED, assumption budget exceeded → BLOCKED, same rejection reason twice → BLOCKED (escalate)
 LIMITS: Iteration and review cycle limits are enforced — task escalates to BLOCKED when exceeded.
 
@@ -111,7 +111,7 @@ COMMIT WORKFLOW:
 After implementation and tests pass, you MUST submit for review:
 1. Get commit SHA: git -C {{.WorktreePath}} rev-parse HEAD
 2. Execute liza_submit_for_review: {"task_id": "{{.Task.ID}}", "commit_sha": "<SHA from step 1>", "agent_id": "{{.Config.AgentID}}"}
-3. Verify confirmation: status changed to READY_FOR_REVIEW
+3. Verify confirmation: status changed to CODE_READY_FOR_REVIEW
 
 ❌ FAILURE MODE: Completing work, saying "ready for review", then exiting WITHOUT calling the tool.
 The tool call IS the deliverable. Work without tool execution = nothing happened.

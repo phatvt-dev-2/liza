@@ -204,7 +204,7 @@ func TestReleaseClaim_ReviewerClaim(t *testing.T) {
 		t.Fatal("Task not found")
 	}
 	if readTask.Status != models.TaskStatusReadyForReview {
-		t.Errorf("Status = %v, want READY_FOR_REVIEW", readTask.Status)
+		t.Errorf("Status = %v, want CODE_READY_FOR_REVIEW", readTask.Status)
 	}
 	if readTask.ReviewingBy != nil {
 		t.Error("ReviewingBy should be nil")

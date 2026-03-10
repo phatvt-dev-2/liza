@@ -124,6 +124,7 @@ func TestSupersedeTaskCommand(t *testing.T) {
 			tmpDir := t.TempDir()
 			testhelpers.SetupTestGitRepo(t, tmpDir)
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Create initial state with test task
 			now := time.Now().UTC()
@@ -300,6 +301,7 @@ func TestSupersedeTaskCommand_RaceCondition(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create initial state with BLOCKED task
 	now := time.Now().UTC()
@@ -427,6 +429,7 @@ func TestSupersedeTaskCommand_ValidationIntegration(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create initial state with BLOCKED task
 	now := time.Now().UTC()
@@ -444,6 +447,7 @@ func TestSupersedeTaskCommand_ValidationIntegration(t *testing.T) {
 			{
 				ID:          "task-1",
 				Status:      models.TaskStatusBlocked,
+				RolePair:    "coding-pair",
 				Description: "Test task description",
 				SpecRef:     "README.md",
 				DoneWhen:    "Test completion criteria",
@@ -502,6 +506,7 @@ func TestSupersedeTaskCommand_LeaseFieldsCleared(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create initial state with BLOCKED task that has stale lease fields
 	now := time.Now().UTC()

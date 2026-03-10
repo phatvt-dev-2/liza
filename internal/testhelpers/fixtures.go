@@ -182,6 +182,7 @@ func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) m
 		DoneWhen:    "Task is complete",
 		Scope:       "Test scope",
 		History:     []models.TaskHistoryEntry{},
+		RolePair:    inferRolePair(status),
 	}
 
 	switch status {
@@ -349,5 +350,23 @@ func RegisterTestAgent(t *testing.T, bb *db.Blackboard, agentID, role string) {
 	})
 	if err != nil {
 		t.Fatalf("Failed to register agent %s: %v", agentID, err)
+	}
+}
+
+// inferRolePair returns the role-pair for role-pair-specific statuses.
+// Meta-states (MERGED, BLOCKED, ABANDONED, SUPERSEDED, INTEGRATION_FAILED, DRAFT)
+// return empty string — tests needing pipeline operations on these must set RolePair explicitly.
+func inferRolePair(status models.TaskStatus) string {
+	switch status {
+	case models.TaskStatusReady, models.TaskStatusImplementing,
+		models.TaskStatusReadyForReview, models.TaskStatusReviewing,
+		models.TaskStatusRejected, models.TaskStatusApproved:
+		return "coding-pair"
+	case models.TaskStatusDraftCodingPlan, models.TaskStatusCodePlanning,
+		models.TaskStatusCodingPlanToReview, models.TaskStatusReviewingCodingPlan,
+		models.TaskStatusCodingPlanApproved, models.TaskStatusCodingPlanRejected:
+		return "code-planning-pair"
+	default:
+		return ""
 	}
 }

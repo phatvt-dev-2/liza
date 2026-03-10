@@ -116,6 +116,7 @@ func TestHasPendingMerges(t *testing.T) {
 			// Setup test blackboard with tasks (no pipeline config = legacy mode)
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
@@ -137,6 +138,7 @@ func TestHasPendingMerges(t *testing.T) {
 func TestHasPendingMerges_Pipeline(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Install frozen pipeline config
 	src, err := os.ReadFile(findPipelineTestdata(t))
@@ -227,6 +229,7 @@ func TestHasPendingMerges_Pipeline(t *testing.T) {
 func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Install Phase 2 frozen pipeline config
 	src, err := os.ReadFile(findPhase2PipelineTestdata(t))
@@ -344,6 +347,7 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 func TestLogTaskSubmissionIfCompleted_Phase2Pipeline(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Install Phase 2 frozen pipeline config
 	src, err := os.ReadFile(findPhase2PipelineTestdata(t))

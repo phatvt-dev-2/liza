@@ -65,6 +65,7 @@ func TestStopCommand(t *testing.T) {
 			// Setup test environment
 			tmpDir := t.TempDir()
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			// Create initial state with specified mode
 			state := testhelpers.CreateValidState()

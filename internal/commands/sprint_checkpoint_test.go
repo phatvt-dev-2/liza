@@ -90,6 +90,7 @@ func TestSprintCheckpointCommand(t *testing.T) {
 			// Setup test environment
 			tmpDir := t.TempDir()
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			lizaDir := paths.New(tmpDir).LizaDir()
 
 			// Create initial state with specified status

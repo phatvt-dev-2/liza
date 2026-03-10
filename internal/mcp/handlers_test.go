@@ -21,6 +21,7 @@ func setupTestWorkspace(t *testing.T) (string, func()) {
 
 	// Setup .liza directory
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create state with test tasks
 	state := testhelpers.CreateValidState()
@@ -321,6 +322,7 @@ func setupTestWorkspaceWithGit(t *testing.T) (string, func()) {
 
 	// Setup .liza directory
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create state with test data
 	state := testhelpers.CreateValidState()
@@ -375,12 +377,13 @@ func TestHandleAddTasks(t *testing.T) {
 	result, err := server.handleAddTasks(map[string]any{
 		"tasks": []any{
 			map[string]any{
-				"id":       "task-new",
-				"desc":     "New test task",
-				"spec":     "specs/test-spec.md",
-				"done":     "Task is complete",
-				"scope":    "Add new feature",
-				"priority": 1,
+				"id":        "task-new",
+				"desc":      "New test task",
+				"spec":      "specs/test-spec.md",
+				"done":      "Task is complete",
+				"scope":     "Add new feature",
+				"priority":  1,
+				"role_pair": "coding-pair",
 			},
 		},
 		"agent_id": "orchestrator-1",
@@ -456,18 +459,20 @@ func TestHandleAddTasksBatch(t *testing.T) {
 	result, err := server.handleAddTasks(map[string]any{
 		"tasks": []any{
 			map[string]any{
-				"id":    "batch-1",
-				"desc":  "First batch task",
-				"spec":  "specs/test-spec.md",
-				"done":  "Done",
-				"scope": "scope",
+				"id":        "batch-1",
+				"desc":      "First batch task",
+				"spec":      "specs/test-spec.md",
+				"done":      "Done",
+				"scope":     "scope",
+				"role_pair": "coding-pair",
 			},
 			map[string]any{
-				"id":    "batch-2",
-				"desc":  "Second batch task",
-				"spec":  "specs/test-spec.md",
-				"done":  "Done",
-				"scope": "scope",
+				"id":        "batch-2",
+				"desc":      "Second batch task",
+				"spec":      "specs/test-spec.md",
+				"done":      "Done",
+				"scope":     "scope",
+				"role_pair": "coding-pair",
 			},
 		},
 		"agent_id": "orchestrator-1",
@@ -524,11 +529,12 @@ func TestHandleAddTasksBatchPartialFailure(t *testing.T) {
 	_, err := server.handleAddTasks(map[string]any{
 		"tasks": []any{
 			map[string]any{
-				"id":    "existing-task",
-				"desc":  "Pre-existing",
-				"spec":  "specs/test-spec.md",
-				"done":  "Done",
-				"scope": "scope",
+				"id":        "existing-task",
+				"desc":      "Pre-existing",
+				"spec":      "specs/test-spec.md",
+				"done":      "Done",
+				"scope":     "scope",
+				"role_pair": "coding-pair",
 			},
 		},
 		"agent_id": "orchestrator-1",
@@ -541,18 +547,20 @@ func TestHandleAddTasksBatchPartialFailure(t *testing.T) {
 	result, err := server.handleAddTasks(map[string]any{
 		"tasks": []any{
 			map[string]any{
-				"id":    "new-task",
-				"desc":  "A new task",
-				"spec":  "specs/test-spec.md",
-				"done":  "Done",
-				"scope": "scope",
+				"id":        "new-task",
+				"desc":      "A new task",
+				"spec":      "specs/test-spec.md",
+				"done":      "Done",
+				"scope":     "scope",
+				"role_pair": "coding-pair",
 			},
 			map[string]any{
-				"id":    "existing-task",
-				"desc":  "Duplicate",
-				"spec":  "specs/test-spec.md",
-				"done":  "Done",
-				"scope": "scope",
+				"id":        "existing-task",
+				"desc":      "Duplicate",
+				"spec":      "specs/test-spec.md",
+				"done":      "Done",
+				"scope":     "scope",
+				"role_pair": "coding-pair",
 			},
 		},
 		"agent_id": "orchestrator-1",
@@ -1230,12 +1238,13 @@ func TestMutationsLoggedCorrectly(t *testing.T) {
 	_, err := server.handleAddTasks(map[string]any{
 		"tasks": []any{
 			map[string]any{
-				"id":       "task-logged",
-				"desc":     "Task for log test",
-				"spec":     "specs/test-spec.md",
-				"done":     "Task is complete",
-				"scope":    "Test logging",
-				"priority": 1,
+				"id":        "task-logged",
+				"desc":      "Task for log test",
+				"spec":      "specs/test-spec.md",
+				"done":      "Task is complete",
+				"scope":     "Test logging",
+				"priority":  1,
+				"role_pair": "coding-pair",
 			},
 		},
 		"agent_id": "orchestrator-1",

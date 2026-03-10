@@ -169,6 +169,7 @@ var stringErrorRules = []struct {
 	{
 		patterns: []string{
 			"not IMPLEMENTING", "not REVIEWING", "not READY_FOR_REVIEW",
+			"not CODE_READY_FOR_REVIEW", "not CODE_APPROVED",
 			"not APPROVED", "must be", "is required", "invalid task ID",
 			"validation failed", "must include", "mandatory",
 		},

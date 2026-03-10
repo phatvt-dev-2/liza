@@ -347,6 +347,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 
 			// Setup liza directory and write state
 			statePath, _ := testhelpers.SetupLizaDir(t, tempDir)
+			testhelpers.SetupPipelineConfig(t, tempDir)
 			bb := testhelpers.WriteInitialState(t, statePath, state)
 
 			// Run update-sprint-metrics command

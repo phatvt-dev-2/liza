@@ -42,6 +42,7 @@ func TestValidateCommand_RequiredFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			state := tt.setupState()
 			testhelpers.WriteInitialState(t, statePath, state)
@@ -74,6 +75,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 					ID:          "task-1",
 					Description: "Test",
 					Status:      models.TaskStatusDraft,
+					RolePair:    "coding-pair",
 					AssignedTo:  &agent,
 					Created:     time.Now().UTC(),
 					SpecRef:     "specs/test.md",
@@ -91,6 +93,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 					ID:          "task-1",
 					Description: "Test",
 					Status:      models.TaskStatusImplementing,
+					RolePair:    "coding-pair",
 					Created:     time.Now().UTC(),
 					SpecRef:     "specs/test.md",
 					DoneWhen:    "Complete",
@@ -98,7 +101,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 				}
 			},
 			wantErr:     true,
-			errContains: "IMPLEMENTING task without assigned_to",
+			errContains: "IMPLEMENTING_CODE task without assigned_to",
 		},
 		{
 			name: "IMPLEMENTING without worktree",
@@ -110,6 +113,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 					ID:           "task-1",
 					Description:  "Test",
 					Status:       models.TaskStatusImplementing,
+					RolePair:     "coding-pair",
 					AssignedTo:   &agent,
 					LeaseExpires: &leaseExpires,
 					BaseCommit:   &baseCommit,
@@ -120,7 +124,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 				}
 			},
 			wantErr:     true,
-			errContains: "IMPLEMENTING task without worktree",
+			errContains: "IMPLEMENTING_CODE task without worktree",
 		},
 		{
 			name: "READY_FOR_REVIEW without review_commit",
@@ -129,6 +133,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 					ID:          "task-1",
 					Description: "Test",
 					Status:      models.TaskStatusReadyForReview,
+					RolePair:    "coding-pair",
 					Created:     time.Now().UTC(),
 					SpecRef:     "specs/test.md",
 					DoneWhen:    "Complete",
@@ -146,6 +151,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 					ID:          "task-1",
 					Description: "Test",
 					Status:      models.TaskStatusApproved,
+					RolePair:    "coding-pair",
 					ApprovedBy:  &approvedBy,
 					// ReviewCommit intentionally nil
 					Created:  time.Now().UTC(),
@@ -164,6 +170,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 					ID:               "task-1",
 					Description:      "Test",
 					Status:           models.TaskStatusBlocked,
+					RolePair:         "coding-pair",
 					Created:          time.Now().UTC(),
 					SpecRef:          "specs/test.md",
 					DoneWhen:         "Complete",
@@ -181,6 +188,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 					ID:          "task-1",
 					Description: "Test",
 					Status:      models.TaskStatusRejected,
+					RolePair:    "coding-pair",
 					Created:     time.Now().UTC(),
 					SpecRef:     "specs/test.md",
 					DoneWhen:    "Complete",
@@ -196,6 +204,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			state := testhelpers.CreateValidState()
 			state.Tasks = []models.Task{tt.setupTask()}
@@ -229,6 +238,7 @@ func TestValidateCommand_Dependencies(t *testing.T) {
 						ID:          "task-1",
 						Description: "Test",
 						Status:      models.TaskStatusReady,
+						RolePair:    "coding-pair",
 						DependsOn:   []string{"task-nonexistent"},
 						Created:     time.Now().UTC(),
 						SpecRef:     "specs/test.md",
@@ -252,6 +262,7 @@ func TestValidateCommand_Dependencies(t *testing.T) {
 						ID:          "task-2",
 						Description: "Dependency",
 						Status:      models.TaskStatusReady, // Not MERGED
+						RolePair:    "coding-pair",
 						Created:     time.Now().UTC(),
 						SpecRef:     "specs/test.md",
 						DoneWhen:    "Complete",
@@ -261,6 +272,7 @@ func TestValidateCommand_Dependencies(t *testing.T) {
 						ID:           "task-1",
 						Description:  "Test",
 						Status:       models.TaskStatusImplementing,
+						RolePair:     "coding-pair",
 						AssignedTo:   &agent,
 						Worktree:     &worktree,
 						BaseCommit:   &baseCommit,
@@ -282,6 +294,7 @@ func TestValidateCommand_Dependencies(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.setupTasks()
@@ -338,6 +351,7 @@ func TestValidateCommand_AgentInvariants(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			state := testhelpers.CreateValidState()
 			state.Agents = tt.setupAgent()
@@ -437,6 +451,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 						ID:           "task-1",
 						Description:  "Test 1",
 						Status:       models.TaskStatusImplementing,
+						RolePair:     "coding-pair",
 						AssignedTo:   &agent,
 						Worktree:     &worktree1,
 						BaseCommit:   &baseCommit,
@@ -450,6 +465,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 						ID:           "task-2",
 						Description:  "Test 2",
 						Status:       models.TaskStatusImplementing,
+						RolePair:     "coding-pair",
 						AssignedTo:   &agent,
 						Worktree:     &worktree2,
 						BaseCommit:   &baseCommit,
@@ -477,6 +493,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 						ID:              "task-1",
 						Description:     "Rejected task",
 						Status:          models.TaskStatusRejected,
+						RolePair:        "coding-pair",
 						AssignedTo:      &agent,
 						RejectionReason: &rejectionReason,
 						Created:         time.Now().UTC(),
@@ -488,6 +505,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 						ID:           "task-2",
 						Description:  "Active task",
 						Status:       models.TaskStatusImplementing,
+						RolePair:     "coding-pair",
 						AssignedTo:   &agent,
 						Worktree:     &worktree,
 						BaseCommit:   &baseCommit,
@@ -507,6 +525,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.setupTasks()
@@ -538,6 +557,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 func TestValidateCommand_SpecFileValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create a spec file
 	specFile := testhelpers.CreateSpecFile(t, tmpDir, "test.md", "# Test Spec\n")

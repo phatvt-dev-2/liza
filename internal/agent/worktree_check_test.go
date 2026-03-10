@@ -17,6 +17,7 @@ func TestEnsureReviewerWorktree_Exists(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	now := time.Now().UTC()
@@ -40,6 +41,7 @@ func TestEnsureReviewerWorktree_MissingRecoverable(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	now := time.Now().UTC()
@@ -92,6 +94,7 @@ func TestEnsureReviewerWorktree_MissingRecoverable_RunsPostWorktreeCmd(t *testin
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	now := time.Now().UTC()
@@ -131,6 +134,7 @@ func TestEnsureReviewerWorktree_MissingAlreadyRecovered(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	now := time.Now().UTC()
@@ -193,6 +197,7 @@ func TestEnsureReviewerWorktree_MissingBranchGone(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	now := time.Now().UTC()
