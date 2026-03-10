@@ -220,7 +220,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 **Observations:**
 - `config.go` (317 LOC): YAML parsing with strict mode (`KnownFields(true)`), comprehensive validation (role-pair references, state uniqueness, transition ref format, sub-pipeline membership, entry point validity)
 - `resolver.go` (324 LOC): Query interface over validated config — `TransitionMap()` generates full state machine, `AvailableTransitions()` filters by status + executed set, `SprintTerminalStates()` with lazy-cached `TransitionSourcePairs()`
-- `LoadFrozen()` loads from `.liza/pipeline.yaml` — returns `nil, nil` for legacy (no-pipeline) mode
+- `LoadFrozen()` loads from `.liza/pipeline.yaml`
 - Imports only `models` — clean leaf-adjacent position in dependency graph
 - 7 consumers: `ops/` (release_claim, pipeline_ops, proceed), `agent/` (registration), `commands/` (init), `statevalidate/`, `prompts/`
 - Well-tested: 1,569 LOC tests (2.4:1 ratio)
@@ -434,10 +434,6 @@ All prompt text lives in `.tmpl` files, cleanly separated from Go logic. 14 temp
 #### Well-Classified Error System
 
 The `LockError` taxonomy (5 types with `classifyLockError()` mapping syscall errors) and the MCP error code mapping provide actionable error information at system boundaries. Error wrapping with `%w` is used consistently.
-
-#### Explicit Task State Machine *(pass 2)*
-
-The `taskTransitions` map (state.go:109-122) with `CanTransition()` and `Transition()` methods provides a complete, explicit state machine. All production code uses `Transition()` (13 call sites); only test fixtures set status directly. This was a known gap resolved since pass 1.
 
 #### Clean MCP Adapter Boundary *(pass 3, Boundaries lens)*
 
@@ -686,11 +682,13 @@ func IsXStatus(task *Task, pr PipelineResolver) bool {
     return task.Status == TaskStatusX || task.Status == TaskStatusY
 }
 ```
-Only the resolver method name and legacy fallback statuses differ.
+~~Only the resolver method name and legacy fallback statuses differ.~~
 
-**Impact:** Low. The functions are small and clear individually. However, adding a new pipeline-aware status check requires copy-pasting the same pattern. The triplication also contributes to the 0%-coverage cluster noted in pass 15 — three identical patterns, all untested.
+~~**Impact:** Low. The functions are small and clear individually. However, adding a new pipeline-aware status check requires copy-pasting the same pattern. The triplication also contributes to the 0%-coverage cluster noted in pass 15 — three identical patterns, all untested.~~
 
-**Direction:** A parameterized `checkPipelineStatus(task, pr, resolverFn, legacyStatuses...)` helper would collapse three functions into one. Low priority — the pattern is unlikely to grow beyond ~5 variants.
+~~**Direction:** A parameterized `checkPipelineStatus(task, pr, resolverFn, legacyStatuses...)` helper would collapse three functions into one. Low priority — the pattern is unlikely to grow beyond ~5 variants.~~
+
+*(Partially resolved in `581d377`: legacy fallback branches removed — all three functions now use pipeline resolver only. The structural triplication remains (three functions with identical shape differing by resolver method), but the legacy fallback half of each function is gone. The parameterization suggestion is still valid but lower priority.)*
 
 #### Smell: Worktree path construction duplication *(pass 16, Duplication lens)*
 
@@ -832,33 +830,6 @@ These are not security-sensitive (they contain operational messages like "task n
 
 **Direction:** Update the comment to accurately describe the behavior: "Most branches use sanitized messages. PreconditionError and RoleError pass operational reason strings for client-actionable feedback." This is a documentation fix, not a code change.
 
-#### Smell: Dual transition system coupling *(pass 17, Coupling lens)*
-
-**Signal:** Two independent transition systems coexist:
-1. **Hardcoded** — `models.taskTransitions` map with `CanTransition()` / `Transition()`
-2. **Pipeline-driven** — `pipeline.Resolver.TransitionMap()` + `ops.BuildPipelineTransitions()` with `TransitionWith()`
-
-In 7+ ops files (claim_task, release_claim, submit_verdict, submit_review, mark_blocked, recover_agent, recover_task), the pattern is:
-```go
-var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
-resolver, _, _ := loadResolver(projectRoot)
-if resolver != nil {
-    pipelineTransitions = BuildPipelineTransitions(resolver)
-}
-// Later:
-if pipelineTransitions != nil {
-    task.TransitionWith(status, pipelineTransitions)
-} else {
-    task.Transition(status)  // uses hardcoded taskTransitions
-}
-```
-
-The two transition maps must be semantically consistent for shared statuses (BLOCKED, ABANDONED, SUPERSEDED, MERGED, INTEGRATION_FAILED) but have no shared validation beyond the pipeline config's own validation. `BuildPipelineTransitions()` manually replicates cross-cutting meta-state transitions that are independently hardcoded in `models.taskTransitions`.
-
-**Impact:** Low-medium. The pattern is correct and well-tested, but the coupling is architectural: every ops function that does state transitions must independently decide which transition system to use. The meta-state transitions in `BuildPipelineTransitions()` (lines 83-95) are a second source of truth for transitions also defined in `models.taskTransitions`. If the meta-state behavior changes (e.g., allowing BLOCKED → READY), both systems need updating independently.
-
-**Direction:** Accept for now — the duality is a deliberate bridge between legacy (hardcoded) and pipeline-driven modes. Long-term, when legacy mode is retired, the hardcoded `taskTransitions` can be removed and `TransitionWith` becomes the only path. In the interim, a validation test that verifies shared meta-state transitions are consistent between the two systems would catch drift.
-
 #### Smell: Role mapping bidirectionality unverified *(pass 17, Coupling lens)*
 
 **Signal:** `roles/roles.go` maintains two maps that must stay synchronized:
@@ -987,7 +958,7 @@ This is the concrete code-level manifestation of two existing issues in `archite
 | Observer (Watcher) | `internal/db/watcher.go` | Event-driven state change notification via fsnotify |
 | Strategy (claimRelease) | `internal/ops/release_claim.go` | Parameterized coder/reviewer claim release — eliminates duplication between two nearly-identical release flows *(pass 5, Duplication lens: notable counterexample)* |
 | Registry | `internal/models/`, `internal/roles/` | Task type → role workflow mapping; unified role constants with runtime↔workflow mapping |
-| State Machine | `internal/models/` | Explicit `taskTransitions` map with `CanTransition()`/`Transition()` *(pass 2: added)* |
+| State Machine | `internal/models/`, `internal/ops/` | ~~Explicit `taskTransitions` map with `CanTransition()`/`Transition()`~~ Pipeline-driven only: `TransitionWith()` using `BuildPipelineTransitions()` *(pass 2: added; `581d377`: hardcoded map removed)* |
 | Circuit Breaker | `internal/analysis/` | Pattern detection on anomalies triggers system pause |
 | Heartbeat/Lease | `internal/agent/heartbeat.go` | Agent liveness detection via periodic lease extension |
 | Embed | `internal/embedded/` | Contract/skill files embedded in binary via `go:embed` |
@@ -1082,11 +1053,10 @@ The 24.3% uncovered code concentrates in three patterns:
 | **Low** | `extractOutputEntries` validation gap *(Adversarial pass, data flow)* | Accepts empty required fields (`desc`, `done_when`, `scope`) unlike parallel `extractTaskInputs` which validates | Add validation consistent with `extractTaskInputs` |
 | **Low** | Timestamp `time.Now()` inconsistency in `wt_merge.go` *(Adversarial pass, data flow)* | Lines 102, 413 use `time.Now()` while all other ops files use `time.Now().UTC()` | Change to `time.Now().UTC()` — two-line fix |
 | **Low** | `classifyError` comment contradicts behavior *(Adversarial pass, data flow)* | Comment claims "raw err.Error() is never exposed" but `PreconditionError.Reason` and `RoleError.Error()` are passed directly | Update comment to accurately describe which errors pass operational strings |
-| **Low** | Dual transition system coupling *(pass 17, Coupling lens)* | Two independent transition maps (hardcoded `taskTransitions` + pipeline-driven `BuildPipelineTransitions`) with 7+ ops files branching between them; shared meta-states duplicated without cross-validation | Add test verifying meta-state consistency; retire hardcoded transitions when legacy mode removed |
 | **Low** | Role mapping bidirectionality unverified *(pass 17, Coupling lens)* | `runtimeToWorkflow` / `workflowToRuntime` maps (9 entries each) manually synchronized; missing entry causes runtime failure | Add 10-line test verifying bidirectional consistency |
 | **Low** | CLI Executor concrete coupling *(pass 17, Coupling lens)* | `DefaultCLIExecutor.Execute()` switch statement hardcodes 5 CLI tools + per-tool flags; `mistral→vibe` rename hardcoded; adding CLIs requires code modification in two functions | Accept if CLI set is stable; consider data-driven profiles if growing |
 | **Low** | Scattered timeout constants *(pass 17, Coupling lens)* | 8+ timeout/interval values across 5 packages (filelock, db, agent, mcp/protocol) bypass `models.Config` centralization pattern; some values duplicated (5s in two packages) | Document as reference table; extract inline values to named constants |
-| **Low** | Pipeline-aware status check triplication *(pass 16, Duplication lens)* | 3 identical functions in `models/state.go:215-239` differing only in resolver method and legacy statuses; contributes to 0%-coverage cluster | Parameterize into `checkPipelineStatus(task, pr, resolverFn, legacyStatuses...)` helper |
+| **Low** | Pipeline-aware status check triplication *(pass 16, Duplication lens — partially resolved `581d377`)* | 3 functions with identical shape differing only in resolver method; legacy fallback branches removed but structural triplication remains | Parameterize into `checkPipelineStatus(task, pr, resolverFn)` helper |
 | **Low** | Worktree path helper not reused *(pass 16, Duplication lens)* | 4 sites inline `filepath.Join(paths.WorktreesDirName, taskID)` despite `git.GetWorktreeRelPath()` at `worktree.go:304` | Use `GetWorktreeRelPath()` at remaining sites; add `GetWorktreeBranchName()` to `paths/` |
 | **Low** | Dual logging undocumented *(pass 16, Duplication lens)* | 21+ `log.Printf` in `ops/` alongside formal `internal/log/` Logger; two streams (stderr vs `.liza/logs/`) with no documented contract | Document the dual-purpose split; consider structured wrapper for `log.Printf` warnings |
 | **Low** | `statevalidate` composition gap *(pass 15, Coverage lens)* | Data-integrity package at 55.1% — entry-point validators all at 0% while inner validators are well-covered | Table-driven tests calling `ValidateStateFile` with various malformed states |

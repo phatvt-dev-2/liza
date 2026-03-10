@@ -23,7 +23,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Mode Selection Trigger Coupled to Prompt Lexeme](#mode-selection-trigger-coupled-to-prompt-lexeme)
   - [Role Pair Field as Single Point of Configuration Truth](#role-pair-field-as-single-point-of-configuration-truth)
 - [Systemic Tensions](#systemic-tensions)
-  - [Two-Track State Mutation](#two-track-state-mutation)
   - [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency)
   - [Role-Boundary Severity Drift](#role-boundary-severity-drift)
   - [Merge Execution Authority Split](#merge-execution-authority-split)
@@ -31,7 +30,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows)
   - [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic)
   - [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime)
-  - [Dual Transition Map Coupling](#dual-transition-map-coupling)
   - [Orchestrator Role Dissolution Without Replacement](#orchestrator-role-dissolution-without-replacement)
   - [Cross-Pair Knowledge Required by Single-Pair Reviewers](#cross-pair-knowledge-required-by-single-pair-reviewers)
 - [Feedback Loops](#feedback-loops)
@@ -118,7 +116,6 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | ASSUMPTION | [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified) |
 | **medium** | BLIND SPOT | [Retrospective Findings Don't Feed Forward to Next Sprint](#retrospective-findings-dont-feed-forward-to-next-sprint) |
 | **medium** | STRESS POINT | [Manual Sprint Transitions as Scaling Bottleneck](#manual-sprint-transitions-as-scaling-bottleneck) |
-| **medium** | TENSION | [Two-Track State Mutation](#two-track-state-mutation) (partially resolved) |
 | **medium** | TENSION | [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency) |
 | **medium** | TENSION | [Merge Execution Authority Split](#merge-execution-authority-split) |
 | **medium** | TENSION | [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope) |
@@ -157,11 +154,10 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | TRAJECTORY | [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface) |
 | **low** | TENSION | [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic) |
 | **low** | TENSION | [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime) |
-| **low** | TENSION | [Dual Transition Map Coupling](#dual-transition-map-coupling) |
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
 | **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
 
-**Counts:** 17 high, 30 medium, 15 low — 62 open issues total.
+**Counts:** 17 high, 29 medium, 14 low — 60 open issues total.
 
 ---
 
@@ -207,18 +203,6 @@ Single points of failure with no redundancy or validation mechanism.
 ## Systemic Tensions
 
 Design contradictions that create structural friction.
-
-### Two-Track State Mutation
-
-**Skill:** systemic-thinking
-**Category:** TENSION
-**Status:** PARTIALLY RESOLVED (`ac4ce6f5`)
-
-**Issue:** The `ops` extraction that resolved "Commands Presentation+Logic Coupling" was structurally incomplete. All task lifecycle mutations from CLI and MCP consumers route through `ops` — a clean business logic layer with typed inputs, structured results, and three-phase validation for claiming. But the `agent` package — the third and most critical consumer — ~~mutates both task and agent state directly via `bb.Modify` in `claimReviewerTask`, `resumeHandoffTask`,~~ `registerAgent`, `resetAgentAfterExit`, and `setAgentToPlanningStatus`. ~~This creates two mutation tracks: `ops` (validated, structured, reusable across CLI/MCP/agent) and `agent` (inline closures, only callable from the supervisor). The reviewer claiming path is the most consequential — it transitions task status, sets `reviewing_by`, updates agent state, and captures return values via closure variables, all in a single `Modify` closure with no structured result type and no way for MCP or CLI to invoke the same logic.~~ *(partially resolved: `ac4ce6f5` — reviewer claiming and handoff resumption extracted to `ops.ClaimReviewerTask` and `ops.ResumeHandoff` with structured input/result types and comprehensive test coverage)*
-
-**Remaining gap:** Agent lifecycle management (`registerAgent`, `resetAgentAfterExit`, `setAgentToPlanningStatus`) still mutates state via inline `bb.Modify` closures in the `agent` package. These are agent-identity operations (not task-lifecycle), so the boundary may be intentional.
-
-**Implication:** The ops layer is now the source of truth for all task lifecycle mutations including reviewer claiming. Agent lifecycle management remains a second mutation track, but with narrower scope (agent state only, not task transitions).
 
 **Future options:**
 - Extract `ops.RegisterAgent` / `ops.UnregisterAgent` for agent lifecycle
@@ -338,36 +322,6 @@ Design contradictions that create structural friction.
 - Move `DetectOrchestratorWakeTriggers` to `models/diagnostics.go` (already partially serves as query home)
 - Have the status command call through `ops` rather than reaching into `agent` directly
 - Extract to a query layer alongside the MCP cross-layer read functions
-
-### Dual Transition Map Coupling
-
-**Skill:** software-architecture-review
-**Category:** TENSION
-**Related:** [Two-Track State Mutation](#two-track-state-mutation), [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows)
-
-**Issue:** Two independent task transition systems coexist:
-1. **Hardcoded** — `models.taskTransitions` map with `CanTransition()` / `Transition()` (covers coding-pair and code-planning-pair states)
-2. **Pipeline-driven** — `pipeline.Resolver.TransitionMap()` extended by `ops.BuildPipelineTransitions()`, used via `TransitionWith()`
-
-In 7+ ops files, a manual branching pattern selects between them:
-```go
-if pipelineTransitions != nil {
-    task.TransitionWith(status, pipelineTransitions)
-} else {
-    task.Transition(status)  // hardcoded fallback
-}
-```
-
-Cross-cutting meta-state transitions (BLOCKED → SUPERSEDED/ABANDONED, INTEGRATION_FAILED → executing states, terminal states) are independently defined in both `models.taskTransitions` (lines 146-150) and `ops.BuildPipelineTransitions()` (lines 83-95). No shared validation verifies the two systems agree on meta-state behavior.
-
-**Implication:** Modifying meta-state transition rules (e.g., allowing BLOCKED → READY) requires updating both systems independently. The branching pattern in 7+ ops files means every state-transition operation must correctly select the transition system based on pipeline availability — a cross-cutting concern threaded manually through each function.
-
-**Current mitigation:** Both systems are well-tested independently. The hardcoded map is the legacy path; pipeline-driven is the modern path. The pattern is correct today.
-
-**Future options:**
-- Add a cross-validation test that verifies shared meta-states are consistent between the two systems
-- When legacy mode is retired, remove `taskTransitions` and make `TransitionWith` the only path
-- Extract meta-state transitions to a shared constant used by both systems
 
 ---
 

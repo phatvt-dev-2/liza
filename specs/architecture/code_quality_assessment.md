@@ -44,14 +44,14 @@ Liza is a hybrid multi-agent coding orchestrator: Go-based deterministic supervi
 ### State Machine & Models (`internal/models/`) ★★★★★
 
 **Strengths:**
-- **Explicit state machine**: 13 task states with forbidden transitions hardcoded — no implicit state changes possible
-- **Pipeline-aware extensibility**: Custom state names via YAML pipeline config, not just hardcoded enums
+- **Explicit state machine**: 13 task states with pipeline-driven transitions via `TransitionWith()` — no implicit state changes possible
+- **Pipeline-driven extensibility**: Custom state names via YAML pipeline config with `Resolver` providing runtime query interface
 - **Complete audit trail**: Every task mutation appended to `History[]` with timestamps and actor IDs
 - **Lease-based concurrency**: Time-bounded claims with stale detection prevent zombie agents
 - **Thorough model tests**: 1,788 lines of tests for 937 lines of production code (1.9:1)
 
 **Concerns:**
-- The distinction between hardcoded states and pipeline-declared states adds cognitive overhead for contributors
+- ~~The distinction between hardcoded states and pipeline-declared states adds cognitive overhead for contributors~~ *(Resolved — `581d377`: hardcoded `taskTransitions` map, `CanTransition()`, `Transition()` removed; pipeline-only)*
 
 ### Operations Layer (`internal/ops/`) ★★★★☆
 
@@ -62,7 +62,7 @@ Liza is a hybrid multi-agent coding orchestrator: Go-based deterministic supervi
 - **Compare-and-swap for git refs**: Prevents lost updates during concurrent merges
 
 **Concerns:**
-- `claim_task.go` (655 LOC) and `proceed.go` (533 LOC) are on the large side — both handle multiple code paths (pipeline vs legacy, various role types)
+- ~~`claim_task.go` (655 LOC) and `proceed.go` (533 LOC) are on the large side — both handle multiple code paths (pipeline vs legacy, various role types)~~ *(Partially resolved — `581d377`: legacy code paths removed, reducing LOC and branching; files still handle multiple role types)*
 - The proceed operation's complexity reflects genuine domain complexity (multi-phase pipeline transitions) but could benefit from method extraction
 
 ### MCP Server (`internal/mcp/`) ★★★★☆

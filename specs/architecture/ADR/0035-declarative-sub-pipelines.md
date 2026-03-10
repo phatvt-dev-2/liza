@@ -92,12 +92,12 @@ Generic mechanisms tested once beat special-cased code duplicated per sub-pipeli
 - Adding new sub-pipelines requires YAML + prompt templates, not code changes
 - Pipeline structure is visible, reviewable, and testable as configuration
 - Resolver provides a single query interface — eliminates scattered status comparisons
-- Backward compatible — goals without pipeline config use hardcoded legacy paths
+- ~~Backward compatible — goals without pipeline config use hardcoded legacy paths~~ *(stale: pipeline config is now mandatory — `581d377`)*
 
 **Limitations accepted:**
 - Config validation is at load time, not compile time — misconfigurations surface at `liza init`
 - The intra-pair flow is deliberately not configurable — this is a feature, not a limitation
-- Legacy (non-pipeline) code paths must be maintained for backward compatibility
+- ~~Legacy (non-pipeline) code paths must be maintained for backward compatibility~~ *(stale: legacy paths removed — `581d377`)*
 
 **Supersedes:** State machine portions of ADR-0019 (Task Lifecycle State Machine Evolution) and ADR-0020 (Explicit Task Workflow Contract).
 
