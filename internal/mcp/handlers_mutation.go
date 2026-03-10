@@ -229,12 +229,12 @@ func (s *Server) handleReleaseClaim(params map[string]any) (any, error) {
 
 	var msg string
 	switch {
-	case result.ReleasedReviewer && result.ReleasedCoder:
-		msg = "Released reviewer and coder claims for task " + result.TaskID
+	case result.ReleasedReviewer && result.ReleasedDoer:
+		msg = "Released reviewer and doer claims for task " + result.TaskID
 	case result.ReleasedReviewer:
 		msg = "Released reviewer claim for task " + result.TaskID
-	case result.ReleasedCoder:
-		msg = "Released coder claim for task " + result.TaskID
+	case result.ReleasedDoer:
+		msg = "Released doer claim for task " + result.TaskID
 	default:
 		msg = "Claim released for task " + result.TaskID
 	}

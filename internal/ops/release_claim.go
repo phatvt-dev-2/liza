@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ReleaseClaimResult contains the outcome of releasing a claim.
@@ -17,7 +18,7 @@ type ReleaseClaimResult struct {
 	TaskID           string
 	Role             string
 	ReleasedReviewer bool
-	ReleasedCoder    bool
+	ReleasedDoer     bool
 }
 
 // claimRelease describes the field access pattern for one role's claim on a task.
@@ -45,13 +46,13 @@ var reviewerRelease = claimRelease{
 	activeLeaseMsg:  "review lease still valid until %s, use --force to clear",
 }
 
-var coderRelease = claimRelease{
+var doerRelease = claimRelease{
 	hasClaimFn:     func(t *models.Task) bool { return t.AssignedTo != nil || t.LeaseExpires != nil },
 	agentFieldFn:   func(t *models.Task) *string { return t.AssignedTo },
 	leaseFieldFn:   func(t *models.Task) *time.Time { return t.LeaseExpires },
 	activeStatus:   models.TaskStatusImplementing,
 	releasedStatus: models.TaskStatusReady,
-	eventName:      "coder_claim_released",
+	eventName:      "doer_claim_released",
 	clearFn: func(t *models.Task) {
 		t.AssignedTo = nil
 		t.LeaseExpires = nil
@@ -60,7 +61,7 @@ var coderRelease = claimRelease{
 		t.Iteration = 0
 	},
 	missingLeaseMsg: "lease expires missing for task %s, use --force to clear",
-	activeLeaseMsg:  "coder lease still valid until %s, use --force to clear",
+	activeLeaseMsg:  "doer lease still valid until %s, use --force to clear",
 }
 
 // ResolveReleaseStatuses returns the active/released status pairs for doer and
@@ -85,14 +86,14 @@ func ResolveReleaseStatuses(task *models.Task, resolver *pipeline.Resolver) (doe
 	return
 }
 
-// resolveClaimReleaseStatuses returns coder and reviewer claimRelease configs with
+// resolveClaimReleaseStatuses returns doer and reviewer claimRelease configs with
 // pipeline-resolved active/released statuses when the task has a RolePair and a
 // resolver is available.
-func resolveClaimReleaseStatuses(task *models.Task, resolver *pipeline.Resolver) (coder claimRelease, reviewer claimRelease) {
-	coder = coderRelease
+func resolveClaimReleaseStatuses(task *models.Task, resolver *pipeline.Resolver) (doer claimRelease, reviewer claimRelease) {
+	doer = doerRelease
 	reviewer = reviewerRelease
-	coder.activeStatus, coder.releasedStatus, reviewer.activeStatus, reviewer.releasedStatus = ResolveReleaseStatuses(task, resolver)
-	return coder, reviewer
+	doer.activeStatus, doer.releasedStatus, reviewer.activeStatus, reviewer.releasedStatus = ResolveReleaseStatuses(task, resolver)
+	return doer, reviewer
 }
 
 // releaseOneClaim executes the 9-step release sequence for a single role's claim.
@@ -138,15 +139,15 @@ func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, p
 	return true, nil
 }
 
-// ReleaseClaim releases reviewer, coder, or both claims on a task. Without
+// ReleaseClaim releases reviewer, doer, or both claims on a task. Without
 // force, refuses if lease is still valid. No terminal I/O.
 func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID string) (*ReleaseClaimResult, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID is required")
 	}
 
-	if role != "code-reviewer" && role != "coder" && role != "both" {
-		return nil, fmt.Errorf("role must be code-reviewer, coder, or both, got: %s", role)
+	if role != roles.ClaimReviewer && role != roles.ClaimDoer && role != roles.ClaimBoth {
+		return nil, fmt.Errorf("role must be reviewer, doer, or both, got: %s", role)
 	}
 
 	if agentID == "" {
@@ -161,7 +162,7 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 	bb := db.For(lp.StatePath())
 
 	releasedReviewer := false
-	releasedCoder := false
+	releasedDoer := false
 
 	now := time.Now().UTC()
 
@@ -181,7 +182,7 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 		// Resolve pipeline-aware statuses for claim release
 		effectiveCoderRelease, effectiveReviewerRelease := resolveClaimReleaseStatuses(task, resolver)
 
-		if role == "code-reviewer" || role == "both" {
+		if role == roles.ClaimReviewer || role == roles.ClaimBoth {
 			released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, force, agentID, reason, now)
 			if err != nil {
 				return err
@@ -189,15 +190,15 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 			releasedReviewer = released
 		}
 
-		if role == "coder" || role == "both" {
+		if role == roles.ClaimDoer || role == roles.ClaimBoth {
 			released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, force, agentID, reason, now)
 			if err != nil {
 				return err
 			}
-			releasedCoder = released
+			releasedDoer = released
 		}
 
-		if !releasedReviewer && !releasedCoder {
+		if !releasedReviewer && !releasedDoer {
 			return fmt.Errorf("no claims to release for task %s", taskID)
 		}
 
@@ -214,7 +215,7 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 	// cleanup deletes a worktree that a concurrent ClaimTask just created.
 	// Orphaned worktrees in .worktrees/ are gitignored and harmless until re-claimed.
 	// See handleReadyClaimWorktree in claim_task.go for the cleanup path.
-	if releasedCoder {
+	if releasedDoer {
 		log.Printf("INFO: release-claim %s: worktree cleanup deferred to next claim", taskID)
 	}
 
@@ -222,6 +223,6 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 		TaskID:           taskID,
 		Role:             role,
 		ReleasedReviewer: releasedReviewer,
-		ReleasedCoder:    releasedCoder,
+		ReleasedDoer:     releasedDoer,
 	}, nil
 }

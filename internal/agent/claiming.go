@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 func claimDoerTask(projectRoot, agentID, workflowRole string, bb *db.Blackboard) (taskID, worktree string, err error) {
@@ -104,7 +105,7 @@ func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Bl
 // propagating errors. Used in supervisor recovery paths for transient failures
 // where blockReviewerTask was NOT called.
 func releaseReviewerClaimQuietly(projectRoot, taskID, agentID string) {
-	_, err := ops.ReleaseClaim(projectRoot, taskID, "code-reviewer", true, "supervisor: worktree check transient failure", agentID)
+	_, err := ops.ReleaseClaim(projectRoot, taskID, roles.ClaimReviewer, true, "supervisor: worktree check transient failure", agentID)
 	if err != nil {
 		GetLogger().Warn("Failed to release reviewer claim during recovery",
 			"task_id", taskID, "error", err)

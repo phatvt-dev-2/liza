@@ -129,7 +129,7 @@ func TestMutationCommandWiring(t *testing.T) {
 		})
 
 		t.Setenv("LIZA_AGENT_ID", "coder-99")
-		err := executeRootCommand(t, projectRoot, "release-claim", "task-release-claim", "--role", "coder", "--force", "--changed-by", "auditor-7")
+		err := executeRootCommand(t, projectRoot, "release-claim", "task-release-claim", "--role", "doer", "--force", "--changed-by", "auditor-7")
 		if err != nil {
 			t.Fatalf("release-claim execute failed: %v", err)
 		}
@@ -143,8 +143,8 @@ func TestMutationCommandWiring(t *testing.T) {
 			t.Fatalf("expected history entry for released claim")
 		}
 		last := task.History[len(task.History)-1]
-		if last.Event != "coder_claim_released" {
-			t.Fatalf("history event = %s, want coder_claim_released", last.Event)
+		if last.Event != "doer_claim_released" {
+			t.Fatalf("history event = %s, want doer_claim_released", last.Event)
 		}
 		if last.Agent == nil || *last.Agent != "auditor-7" {
 			t.Fatalf("history agent = %v, want auditor-7", last.Agent)

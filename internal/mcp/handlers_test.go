@@ -1036,7 +1036,7 @@ func TestHandleReleaseClaim(t *testing.T) {
 
 	result, err := server.handleReleaseClaim(map[string]any{
 		"task_id":  "task-1",
-		"role":     "coder",
+		"role":     "doer",
 		"reason":   "Need to work on something else",
 		"agent_id": "coder-1",
 		"force":    true,
@@ -1102,33 +1102,33 @@ func TestHandleReleaseClaim_RoleValidation(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "coder releasing coder claim succeeds",
+			name:    "coder releasing doer claim succeeds",
 			agentID: "coder-1",
-			role:    "coder",
+			role:    "doer",
 			wantErr: "", // no error
 		},
 		{
 			name:    "coder releasing reviewer claim rejected",
 			agentID: "coder-1",
-			role:    "code-reviewer",
-			wantErr: "can only release coder claims",
+			role:    "reviewer",
+			wantErr: "can only release doer claims",
 		},
 		{
 			name:    "coder releasing both rejected",
 			agentID: "coder-1",
 			role:    "both",
-			wantErr: "can only release coder claims",
+			wantErr: "can only release doer claims",
 		},
 		{
-			name:    "reviewer releasing coder claim rejected",
+			name:    "reviewer releasing doer claim rejected",
 			agentID: "code-reviewer-1",
-			role:    "coder",
-			wantErr: "can only release code-reviewer claims",
+			role:    "doer",
+			wantErr: "can only release reviewer claims",
 		},
 		{
-			name:    "orchestrator releasing coder claim succeeds",
+			name:    "orchestrator releasing doer claim succeeds",
 			agentID: "orchestrator-1",
-			role:    "coder",
+			role:    "doer",
 			wantErr: "", // no error
 		},
 		{

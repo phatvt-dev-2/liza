@@ -197,12 +197,12 @@ func authorizeClaimRelease(agentID, claimRole string) error {
 	case roles.RuntimeOrchestrator:
 		return nil
 	case roles.RuntimeCoder, roles.RuntimeCodePlanner:
-		if claimRole != "coder" {
-			return fmt.Errorf("agent %s (role %s) can only release coder claims", agentID, agentRole)
+		if claimRole != roles.ClaimDoer {
+			return fmt.Errorf("agent %s (role %s) can only release doer claims", agentID, agentRole)
 		}
 	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
-		if claimRole != "code-reviewer" {
-			return fmt.Errorf("agent %s (role %s) can only release code-reviewer claims", agentID, agentRole)
+		if claimRole != roles.ClaimReviewer {
+			return fmt.Errorf("agent %s (role %s) can only release reviewer claims", agentID, agentRole)
 		}
 	default:
 		return fmt.Errorf("agent %s has unrecognized role %q for claim release", agentID, agentRole)

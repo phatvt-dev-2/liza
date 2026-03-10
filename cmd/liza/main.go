@@ -433,14 +433,14 @@ Effects:
 var releaseClaimCmd = &cobra.Command{
 	Use:   "release-claim <task-id>",
 	Short: "Manually release claims on a task",
-	Long: `Manually release claims on a task (code-reviewer, coder, or both).
+	Long: `Manually release claims on a task (doer, reviewer, or both).
 
 Used to release task claims manually when needed, such as when an agent
 crashes or a lease needs to be freed.
 
-Roles:
-  - code-reviewer: Release review claim (reviewing_by, review_lease_expires). Works for any reviewer role.
-  - coder: Release doer claim (assigned_to, lease_expires) and reset to initial state. Works for any doer role.
+Claim types:
+  - reviewer: Release review claim (reviewing_by, review_lease_expires). Works for any reviewer role.
+  - doer: Release doer claim (assigned_to, lease_expires) and reset to initial state. Works for any doer role.
   - both: Release both reviewer and doer claims
 
 Safety:
@@ -460,7 +460,7 @@ Agent ID for audit trail:
 		full, _ := cmd.Flags().GetBool("full")
 
 		if full { // --full is an alias for --role both
-			role = "both"
+			role = roles.ClaimBoth
 		}
 
 		agentID := resolveChangedBy(cmd)
@@ -1375,8 +1375,8 @@ func init() {
 	markBlockedCmd.MarkFlagRequired("questions")
 
 	// Release-claim command flags
-	releaseClaimCmd.Flags().String("role", "code-reviewer", "role to release (code-reviewer, coder, both)")
-	releaseClaimCmd.Flags().Bool("full", false, "release both reviewer and coder claims (alias for --role both)")
+	releaseClaimCmd.Flags().String("role", roles.ClaimReviewer, "claim type to release (doer, reviewer, both)")
+	releaseClaimCmd.Flags().Bool("full", false, "release both doer and reviewer claims (alias for --role both)")
 	releaseClaimCmd.Flags().Bool("force", false, "force release even if lease is still valid")
 	releaseClaimCmd.Flags().String("reason", "manual release", "reason for releasing the claim")
 

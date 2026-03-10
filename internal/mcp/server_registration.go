@@ -284,7 +284,7 @@ func (s *Server) registerMutationTools() {
 				},
 				"role": {
 					Type:        "string",
-					Description: "Role releasing the claim (coder, code-reviewer)",
+					Description: "Claim type to release (doer, reviewer, both)",
 				},
 				"agent_id": {
 					Type:        "string",

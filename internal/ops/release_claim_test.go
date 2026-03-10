@@ -21,12 +21,12 @@ func TestReleaseClaim_Validation(t *testing.T) {
 		errContains string
 	}{
 		{
-			name: "empty task ID", role: "coder",
+			name: "empty task ID", role: "doer",
 			errContains: "task ID is required",
 		},
 		{
 			name: "invalid role", taskID: "t1", role: "invalid",
-			errContains: "role must be code-reviewer, coder, or both",
+			errContains: "role must be reviewer, doer, or both",
 		},
 	}
 
@@ -54,13 +54,13 @@ func TestReleaseClaim_CoderClaim(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := ReleaseClaim(tmpDir, "task-1", "coder", true, "manual cleanup", "human")
+	result, err := ReleaseClaim(tmpDir, "task-1", "doer", true, "manual cleanup", "human")
 	if err != nil {
 		t.Fatalf("ReleaseClaim() error: %v", err)
 	}
 
-	if !result.ReleasedCoder {
-		t.Error("ReleasedCoder should be true")
+	if !result.ReleasedDoer {
+		t.Error("ReleasedDoer should be true")
 	}
 	if result.ReleasedReviewer {
 		t.Error("ReleasedReviewer should be false")
@@ -94,8 +94,8 @@ func TestReleaseClaim_CoderClaim(t *testing.T) {
 
 	// Verify history entry
 	lastHistory := readTask.History[len(readTask.History)-1]
-	if lastHistory.Event != "coder_claim_released" {
-		t.Errorf("History event = %q, want %q", lastHistory.Event, "coder_claim_released")
+	if lastHistory.Event != "doer_claim_released" {
+		t.Errorf("History event = %q, want %q", lastHistory.Event, "doer_claim_released")
 	}
 }
 
@@ -122,12 +122,12 @@ func TestReleaseClaim_CoderClaim_ClearsWorktreeFields(t *testing.T) {
 		t.Fatalf("Failed to create worktree: %v", err)
 	}
 
-	result, err := ReleaseClaim(tmpDir, "task-1", "coder", true, "manual cleanup", "human")
+	result, err := ReleaseClaim(tmpDir, "task-1", "doer", true, "manual cleanup", "human")
 	if err != nil {
 		t.Fatalf("ReleaseClaim() error: %v", err)
 	}
-	if !result.ReleasedCoder {
-		t.Fatal("ReleasedCoder should be true")
+	if !result.ReleasedDoer {
+		t.Fatal("ReleasedDoer should be true")
 	}
 
 	bb := db.New(stateFile)
@@ -184,7 +184,7 @@ func TestReleaseClaim_ReviewerClaim(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := ReleaseClaim(tmpDir, "task-1", "code-reviewer", true, "timeout", "human")
+	result, err := ReleaseClaim(tmpDir, "task-1", "reviewer", true, "timeout", "human")
 	if err != nil {
 		t.Fatalf("ReleaseClaim() error: %v", err)
 	}
@@ -244,8 +244,8 @@ func TestReleaseClaim_BothClaims(t *testing.T) {
 		t.Fatalf("ReleaseClaim() error: %v", err)
 	}
 
-	if !result.ReleasedCoder {
-		t.Error("ReleasedCoder should be true")
+	if !result.ReleasedDoer {
+		t.Error("ReleasedDoer should be true")
 	}
 	if !result.ReleasedReviewer {
 		t.Error("ReleasedReviewer should be true")
@@ -262,7 +262,7 @@ func TestReleaseClaim_NoClaims(t *testing.T) {
 	state.Tasks = []models.Task{task}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := ReleaseClaim(tmpDir, "task-1", "coder", true, "reason", "human")
+	_, err := ReleaseClaim(tmpDir, "task-1", "doer", true, "reason", "human")
 	testhelpers.RequireErrorContains(t, err, "no claims to release")
 }
 
@@ -273,7 +273,7 @@ func TestReleaseClaim_TaskNotFound(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := ReleaseClaim(tmpDir, "nonexistent", "coder", false, "", "human")
+	_, err := ReleaseClaim(tmpDir, "nonexistent", "doer", false, "", "human")
 	if err == nil {
 		t.Fatal("Expected error for nonexistent task")
 	}
@@ -295,7 +295,7 @@ func TestReleaseClaim_ActiveLease_NoForce(t *testing.T) {
 	state.Tasks = []models.Task{task}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := ReleaseClaim(tmpDir, "task-1", "coder", false, "", "human")
+	_, err := ReleaseClaim(tmpDir, "task-1", "doer", false, "", "human")
 	testhelpers.RequireErrorContains(t, err, "lease still valid")
 }
 
@@ -315,7 +315,7 @@ func TestReleaseClaim_DefaultAgentAndReason(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// Empty agentID and reason should get defaults
-	_, err := ReleaseClaim(tmpDir, "task-1", "coder", true, "", "")
+	_, err := ReleaseClaim(tmpDir, "task-1", "doer", true, "", "")
 	if err != nil {
 		t.Fatalf("ReleaseClaim() error: %v", err)
 	}
@@ -340,12 +340,12 @@ func TestReleaseClaim_PipelineCoderClaim(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := ReleaseClaim(tmpDir, "task-1", "coder", true, "pipeline test", "human")
+	result, err := ReleaseClaim(tmpDir, "task-1", "doer", true, "pipeline test", "human")
 	if err != nil {
 		t.Fatalf("ReleaseClaim() error: %v", err)
 	}
-	if !result.ReleasedCoder {
-		t.Error("ReleasedCoder should be true")
+	if !result.ReleasedDoer {
+		t.Error("ReleasedDoer should be true")
 	}
 
 	bb := db.New(stateFile)
@@ -386,7 +386,7 @@ func TestReleaseClaim_PipelineReviewerClaim(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := ReleaseClaim(tmpDir, "task-1", "code-reviewer", true, "pipeline test", "human")
+	result, err := ReleaseClaim(tmpDir, "task-1", "reviewer", true, "pipeline test", "human")
 	if err != nil {
 		t.Fatalf("ReleaseClaim() error: %v", err)
 	}

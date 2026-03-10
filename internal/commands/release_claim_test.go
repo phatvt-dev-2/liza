@@ -24,7 +24,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:    "release expired reviewer claim",
 			taskID:  "t1",
-			role:    "code-reviewer",
+			role:    "reviewer",
 			force:   false,
 			reason:  "manual release",
 			agentID: "human",
@@ -68,7 +68,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:    "release expired coder claim",
 			taskID:  "t2",
-			role:    "coder",
+			role:    "doer",
 			force:   false,
 			reason:  "manual release",
 			agentID: "human",
@@ -102,8 +102,8 @@ func TestReleaseClaimCommand(t *testing.T) {
 				if len(task.History) != 1 {
 					t.Fatalf("expected 1 history entry, got %d", len(task.History))
 				}
-				if task.History[0].Event != "coder_claim_released" {
-					t.Errorf("expected event coder_claim_released, got %s", task.History[0].Event)
+				if task.History[0].Event != "doer_claim_released" {
+					t.Errorf("expected event doer_claim_released, got %s", task.History[0].Event)
 				}
 			},
 		},
@@ -150,7 +150,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:       "error on valid reviewer lease without force",
 			taskID:     "t4",
-			role:       "code-reviewer",
+			role:       "reviewer",
 			force:      false,
 			reason:     "manual release",
 			agentID:    "human",
@@ -178,7 +178,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:    "force release valid reviewer lease",
 			taskID:  "t5",
-			role:    "code-reviewer",
+			role:    "reviewer",
 			force:   true,
 			reason:  "emergency release",
 			agentID: "admin",
@@ -211,14 +211,14 @@ func TestReleaseClaimCommand(t *testing.T) {
 			},
 		},
 		{
-			name:       "error on valid coder lease without force",
+			name:       "error on valid doer lease without force",
 			taskID:     "t6",
-			role:       "coder",
+			role:       "doer",
 			force:      false,
 			reason:     "manual release",
 			agentID:    "human",
 			wantErr:    true,
-			wantErrMsg: "coder lease still valid",
+			wantErrMsg: "doer lease still valid",
 			setupState: func(s *models.State) {
 				assignedTo := "coder-1"
 				leaseExpires := time.Now().UTC().Add(1 * time.Hour) // still valid
@@ -239,7 +239,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:    "force release valid coder lease",
 			taskID:  "t7",
-			role:    "coder",
+			role:    "doer",
 			force:   true,
 			reason:  "emergency release",
 			agentID: "admin",
@@ -291,7 +291,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:       "missing task ID",
 			taskID:     "",
-			role:       "coder",
+			role:       "doer",
 			force:      false,
 			reason:     "manual release",
 			agentID:    "human",
@@ -306,12 +306,12 @@ func TestReleaseClaimCommand(t *testing.T) {
 			reason:     "manual release",
 			agentID:    "human",
 			wantErr:    true,
-			wantErrMsg: "role must be code-reviewer, coder, or both",
+			wantErrMsg: "role must be reviewer, doer, or both",
 		},
 		{
 			name:       "task not found",
 			taskID:     "nonexistent",
-			role:       "coder",
+			role:       "doer",
 			force:      false,
 			reason:     "manual release",
 			agentID:    "human",
@@ -324,7 +324,7 @@ func TestReleaseClaimCommand(t *testing.T) {
 		{
 			name:    "coder claim release doesn't change READY_FOR_REVIEW status",
 			taskID:  "t9",
-			role:    "coder",
+			role:    "doer",
 			force:   false,
 			reason:  "manual release",
 			agentID: "human",

@@ -21,6 +21,15 @@ const (
 	RuntimeUSReviewer       = "us-reviewer"
 )
 
+// Claim-type selectors used by ReleaseClaim to indicate which claim slot to release.
+// These are NOT role names — a code-planner releases its claim with ClaimDoer,
+// a code-plan-reviewer with ClaimReviewer.
+const (
+	ClaimDoer     = "doer"
+	ClaimReviewer = "reviewer"
+	ClaimBoth     = "both"
+)
+
 // Workflow role names used in task workflow definitions.
 // These are the underscore forms stored in models.
 const (

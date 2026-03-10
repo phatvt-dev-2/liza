@@ -17,8 +17,8 @@ func ReleaseClaimCommand(projectRoot, taskID, role string, force bool, reason, a
 	if result.ReleasedReviewer {
 		fmt.Printf("Released review claim for %s\n", result.TaskID)
 	}
-	if result.ReleasedCoder {
-		fmt.Printf("Released coder claim for %s\n", result.TaskID)
+	if result.ReleasedDoer {
+		fmt.Printf("Released doer claim for %s\n", result.TaskID)
 	}
 	return nil
 }
