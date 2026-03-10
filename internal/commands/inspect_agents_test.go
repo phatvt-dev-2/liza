@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/render"
 	"gopkg.in/yaml.v3"
 )
 
@@ -672,9 +673,9 @@ func TestFormatAgentJSON_IncludesPID(t *testing.T) {
 		ContextPercent:     45,
 	}
 
-	output, err := formatJSON(agent)
+	output, err := render.FormatJSON(agent)
 	if err != nil {
-		t.Fatalf("formatJSON() error = %v", err)
+		t.Fatalf("render.FormatJSON() error = %v", err)
 	}
 
 	// Parse JSON to verify fields
@@ -705,9 +706,9 @@ func TestFormatAgentYAML_IncludesPID(t *testing.T) {
 		ContextPercent:     45,
 	}
 
-	output, err := formatYAML(agent)
+	output, err := render.FormatYAML(agent)
 	if err != nil {
-		t.Fatalf("formatYAML() error = %v", err)
+		t.Fatalf("render.FormatYAML() error = %v", err)
 	}
 
 	// Parse YAML to verify fields

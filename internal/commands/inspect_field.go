@@ -6,6 +6,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/render"
 )
 
 // GetField accesses direct state fields using dot notation
@@ -209,10 +210,10 @@ func getSprintComputedField(state *models.State, field string) (any, error) {
 	switch field {
 	case "elapsed":
 		duration := calculateSprintElapsed(&state.Sprint)
-		return formatDuration(duration), nil
+		return render.FormatDuration(duration), nil
 	case "remaining":
 		duration := calculateSprintRemaining(&state.Sprint)
-		return formatDuration(duration), nil
+		return render.FormatDuration(duration), nil
 	case "progress_percent":
 		if len(state.Tasks) == 0 {
 			return 0.0, nil
@@ -239,13 +240,13 @@ func getAgentComputedField(state *models.State, agentID, field string) (any, err
 	switch field {
 	case "time_since_heartbeat":
 		duration := calculateTimeSinceHeartbeat(&agent)
-		return formatDuration(duration), nil
+		return render.FormatDuration(duration), nil
 	case "time_on_task":
 		// Find the task assigned to this agent
 		for _, task := range state.Tasks {
 			if task.AssignedTo != nil && *task.AssignedTo == agentID {
 				duration := calculateTimeOnTask(&task)
-				return formatDuration(duration), nil
+				return render.FormatDuration(duration), nil
 			}
 		}
 		return "0s", nil
@@ -264,11 +265,11 @@ func getTaskComputedField(state *models.State, taskID, field string) (any, error
 	switch field {
 	case "age":
 		duration := calculateTaskAge(task)
-		return formatDuration(duration), nil
+		return render.FormatDuration(duration), nil
 	case "time_in_status":
 		// Find the most recent status change in history
 		duration := calculateTimeOnTask(task)
-		return formatDuration(duration), nil
+		return render.FormatDuration(duration), nil
 	default:
 		return nil, &errors.NotFoundError{Entity: "task", ID: taskID, Field: field}
 	}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/render"
 )
 
 // inspectAnomaliesOptions contains options for anomaly inspection
@@ -61,7 +62,7 @@ func buildAnomalyInfo(anomaly models.Anomaly) anomalyInfo {
 
 	// Compute age (time since anomaly occurred)
 	age := time.Since(anomaly.Timestamp)
-	info.Age = formatDuration(age)
+	info.Age = render.FormatDuration(age)
 
 	return info
 }
@@ -101,9 +102,9 @@ func formatAnomaliesOutput(anomalies []anomalyInfo, format string) (string, erro
 
 	switch format {
 	case "json":
-		return formatJSON(anomalies)
+		return render.FormatJSON(anomalies)
 	case "yaml":
-		return formatYAML(anomalies)
+		return render.FormatYAML(anomalies)
 	case "table":
 		return formatAnomaliesTable(anomalies), nil
 	case "value":
@@ -136,5 +137,5 @@ func formatAnomaliesTable(anomalies []anomalyInfo) string {
 		})
 	}
 
-	return formatTable(headers, rows)
+	return render.FormatTable(headers, rows)
 }

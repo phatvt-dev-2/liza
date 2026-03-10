@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/render"
 )
 
 // StatusOptions contains options for the status command
@@ -117,9 +118,9 @@ func StatusCommand(opts StatusOptions) (string, error) {
 
 	switch opts.Format {
 	case "json":
-		return formatJSON(status)
+		return render.FormatJSON(status)
 	case "yaml":
-		return formatYAML(status)
+		return render.FormatYAML(status)
 	default: // "dashboard" or empty
 		return formatStatusDashboard(status)
 	}
@@ -264,7 +265,7 @@ func buildAgentStatuses(state *models.State) []agentStatus {
 		}
 
 		timeSince := now.Sub(agent.Heartbeat)
-		as.TimeSinceHeartbeat = formatDuration(timeSince)
+		as.TimeSinceHeartbeat = render.FormatDuration(timeSince)
 		as.ProcessStatus = getProcessStatus(agent.PID)
 		as.PID = agent.PID
 
@@ -401,7 +402,7 @@ func writeAgentsSection(b *strings.Builder, agents []agentStatus) {
 			agent.ProcessStatus,
 		}
 	}
-	b.WriteString(formatTable(headers, rows))
+	b.WriteString(render.FormatTable(headers, rows))
 	b.WriteString("\n\n")
 }
 
@@ -444,5 +445,5 @@ func formatStatusDashboard(data statusData) (string, error) {
 		AnomalyList:        anomalyList,
 		TransitionsSection: transitionsBuf.String(),
 	}
-	return executeCommandTemplate("status_dashboard", tmplData)
+	return render.ExecuteTemplate("status_dashboard", tmplData)
 }

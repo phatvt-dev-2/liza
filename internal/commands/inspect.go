@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/render"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -151,15 +152,15 @@ func asString(result any, err error) (string, error) {
 func formatOutput(data any, format string) (string, error) {
 	switch format {
 	case "json":
-		return formatJSON(data)
+		return render.FormatJSON(data)
 	case "yaml":
-		return formatYAML(data)
+		return render.FormatYAML(data)
 	case "value":
-		return formatValue(data)
+		return render.FormatValue(data)
 	case "table":
 		// Table format requires specific structure
 		return "", fmt.Errorf("table format requires entity query (e.g., 'liza inspect tasks')")
 	default:
-		return formatValue(data)
+		return render.FormatValue(data)
 	}
 }

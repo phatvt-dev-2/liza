@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/render"
 )
 
 // inspectAgentsOptions contains options for agent inspection
@@ -122,18 +123,18 @@ func buildAgentInfo(agentID string, agent *models.Agent, currentTask *models.Tas
 
 	// Compute time since last heartbeat
 	timeSinceHeartbeat := calculateTimeSinceHeartbeat(agent)
-	info.TimeSinceHeartbeat = formatDuration(timeSinceHeartbeat)
+	info.TimeSinceHeartbeat = render.FormatDuration(timeSinceHeartbeat)
 
 	// Compute time on task (if agent is working on a task)
 	if currentTask != nil {
 		timeOnTask := calculateTimeOnTask(currentTask)
-		info.TimeOnTask = formatDuration(timeOnTask)
+		info.TimeOnTask = render.FormatDuration(timeOnTask)
 	}
 
 	// Format lease expiry if present
 	if agent.LeaseExpires != nil {
 		remaining := time.Until(*agent.LeaseExpires)
-		formatted := formatDuration(remaining)
+		formatted := render.FormatDuration(remaining)
 		info.LeaseExpires = &formatted
 	}
 
@@ -149,9 +150,9 @@ func formatAgentsOutput(agents []agentInfo, format string) (string, error) {
 
 	switch format {
 	case "json":
-		return formatJSON(agents)
+		return render.FormatJSON(agents)
 	case "yaml":
-		return formatYAML(agents)
+		return render.FormatYAML(agents)
 	case "table":
 		return formatAgentsTable(agents), nil
 	case "value":
@@ -171,9 +172,9 @@ func formatAgentOutput(agent agentInfo, format string) (string, error) {
 
 	switch format {
 	case "json":
-		return formatJSON(agent)
+		return render.FormatJSON(agent)
 	case "yaml":
-		return formatYAML(agent)
+		return render.FormatYAML(agent)
 	case "value":
 		return formatAgentValue(agent)
 	case "table":
@@ -226,10 +227,10 @@ func formatAgentsTable(agents []agentInfo) string {
 		})
 	}
 
-	return formatTable(headers, rows)
+	return render.FormatTable(headers, rows)
 }
 
 // formatAgentValue formats a single agent as key-value pairs
 func formatAgentValue(agent agentInfo) (string, error) {
-	return executeCommandTemplate("agent_value", agent)
+	return render.ExecuteTemplate("agent_value", agent)
 }

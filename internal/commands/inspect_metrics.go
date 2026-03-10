@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/render"
 )
 
 // inspectMetricsOptions contains options for metrics inspection
@@ -163,9 +164,9 @@ func formatMetricsOutput(metrics metricsInfo, format string) (string, error) {
 
 	switch format {
 	case "json":
-		return formatJSON(metrics)
+		return render.FormatJSON(metrics)
 	case "yaml":
-		return formatYAML(metrics)
+		return render.FormatYAML(metrics)
 	case "value":
 		return formatMetricsValue(metrics)
 	case "table":
@@ -185,9 +186,9 @@ func formatAgentMetricsOutput(metrics []AgentMetricsInfo, format string) (string
 
 	switch format {
 	case "json":
-		return formatJSON(metrics)
+		return render.FormatJSON(metrics)
 	case "yaml":
-		return formatYAML(metrics)
+		return render.FormatYAML(metrics)
 	case "table":
 		return formatAgentMetricsTable(metrics), nil
 	case "value":
@@ -200,7 +201,7 @@ func formatAgentMetricsOutput(metrics []AgentMetricsInfo, format string) (string
 
 // formatMetricsValue formats sprint metrics as key-value pairs
 func formatMetricsValue(metrics metricsInfo) (string, error) {
-	return executeCommandTemplate("metrics_value", metrics)
+	return render.ExecuteTemplate("metrics_value", metrics)
 }
 
 // formatAgentMetricsTable formats per-agent metrics as a table
@@ -224,5 +225,5 @@ func formatAgentMetricsTable(metrics []AgentMetricsInfo) string {
 		})
 	}
 
-	return formatTable(headers, rows)
+	return render.FormatTable(headers, rows)
 }

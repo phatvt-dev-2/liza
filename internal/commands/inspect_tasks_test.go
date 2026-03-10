@@ -8,6 +8,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/render"
 )
 
 func TestInspectTasks(t *testing.T) {
@@ -477,7 +478,7 @@ func TestCalculateTimeInStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			duration := calculateTimeInStatus(tt.task)
-			formatted := formatDuration(duration)
+			formatted := render.FormatDuration(duration)
 			if !strings.Contains(formatted, tt.expectedContains) {
 				t.Errorf("expected duration to contain '%s', got '%s'", tt.expectedContains, formatted)
 			}

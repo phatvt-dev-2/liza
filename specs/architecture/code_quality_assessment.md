@@ -4,10 +4,6 @@
 * Repository: liza
 * Author: Claude Code - Opus 4.6
 
-Prompt:
-> Read the XXXX project code quality assessments (Claude and Codex versions).
-> Produce a similar report for Liza, adapting the structure to the specificities of this project.
-
 ## Repository Metrics Dashboard
 
 - **Production Code**: 23,424 lines of Go across 138 files
@@ -115,8 +111,7 @@ None
 - **Consistent patterns**: Each command follows the same structure (flag parsing → ops call → output formatting)
 
 **Concerns:**
-- `watch.go` (645 LOC) and `status.go` (444 LOC) contain significant presentation logic
-- Some commands have grown to include formatting helpers that could live in a `render` or `display` package
+- `watch.go` (645 LOC) and `status.go` (444 LOC) are large files (watch.go is ~99% business logic; status.go delegates formatting to `internal/render/`)
 
 ### Prompt Building (`internal/prompts/`) ★★★★☆
 
@@ -250,9 +245,12 @@ This is Liza's core IP and most distinctive feature.
 - Risk: Medium — may block PRs that touch hard-to-test code paths
 - Impact: Formalizes the already-strong testing culture
 
-#### 2.2 Extract Command Presentation Logic
-- Move formatting/rendering helpers from `watch.go` (645 LOC) and `status.go` (444 LOC) into a `render` or `display` package
-- Risk: Medium — touches widely-used commands
+#### 2.2 Extract Command Presentation Logic ✅
+- Extracted shared formatting infrastructure (`FormatJSON`, `FormatYAML`, `FormatValue`, `FormatTable`, `ExecuteTemplate`, `FormatDuration`) into `internal/render/` package
+- Templates moved from `commands/templates/` to `render/templates/`
+- Domain-specific helpers (`formatKeyValue`, `formatDashboard`, `dashboardSection`) remain in `commands/format_helpers.go` (no production callers outside commands)
+- `watch.go` analyzed and intentionally left alone: ~99% business logic, only `alert.String()` is presentation (a one-liner)
+- Risk: Medium — touched 16 files across commands package with phased execution and compile gates
 - Impact: Establishes clear boundary between business logic and presentation
 
 #### 2.3 Python Test Coverage

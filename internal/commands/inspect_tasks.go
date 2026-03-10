@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/render"
 )
 
 // inspectTasksOptions contains options for task inspection
@@ -91,12 +92,12 @@ func buildTaskInfo(task *models.Task) taskInfo {
 		Output:          task.Output,
 	}
 
-	info.Age = formatDuration(calculateTaskAge(task))
-	info.TimeInStatus = formatDuration(calculateTimeInStatus(task))
+	info.Age = render.FormatDuration(calculateTaskAge(task))
+	info.TimeInStatus = render.FormatDuration(calculateTimeInStatus(task))
 
 	if task.LeaseExpires != nil {
 		remaining := time.Until(*task.LeaseExpires)
-		formatted := formatDuration(remaining)
+		formatted := render.FormatDuration(remaining)
 		info.LeaseExpires = &formatted
 	}
 
@@ -150,9 +151,9 @@ func formatTasksOutput(tasks []taskInfo, format string) (string, error) {
 
 	switch format {
 	case "json":
-		return formatJSON(tasks)
+		return render.FormatJSON(tasks)
 	case "yaml":
-		return formatYAML(tasks)
+		return render.FormatYAML(tasks)
 	case "table":
 		return formatTasksTable(tasks), nil
 	case "value":
@@ -170,9 +171,9 @@ func formatTaskOutput(task taskInfo, format string) (string, error) {
 
 	switch format {
 	case "json":
-		return formatJSON(task)
+		return render.FormatJSON(task)
 	case "yaml":
-		return formatYAML(task)
+		return render.FormatYAML(task)
 	case "value":
 		return formatTaskValue(task), nil
 	case "table":
@@ -225,7 +226,7 @@ func formatTasksTable(tasks []taskInfo) string {
 		})
 	}
 
-	return formatTable(headers, rows)
+	return render.FormatTable(headers, rows)
 }
 
 // formatTaskValue formats a single task as key-value pairs
