@@ -12,6 +12,17 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+// testBuildPrompt creates a strategy for config.Role and builds the prompt.
+// Strategy creation failure is always fatal; BuildPrompt errors are returned.
+func testBuildPrompt(t *testing.T, state *models.State, config SupervisorConfig, taskID string) (string, error) {
+	t.Helper()
+	strategy, err := NewRoleStrategy(config.Role)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy(%q) error = %v", config.Role, err)
+	}
+	return strategy.BuildPrompt(state, config, taskID)
+}
+
 // TestBuildPrompt tests the buildPrompt function
 func TestBuildPrompt(t *testing.T) {
 	now := time.Now().UTC()
@@ -142,7 +153,7 @@ func TestBuildPrompt(t *testing.T) {
 				InitialTask: tt.initialTask,
 			}
 
-			prompt, err := buildPrompt(state, config, tt.taskID)
+			prompt, err := testBuildPrompt(t, state, config, tt.taskID)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildPrompt() error = %v, wantErr %v", err, tt.wantErr)
@@ -237,9 +248,9 @@ func TestBuildPrompt_CollectiveScoping(t *testing.T) {
 		StatePath:   filepath.Join(tmpDir, "state.yaml"),
 	}
 
-	prompt, err := buildPrompt(state, config, "task-1")
+	prompt, err := testBuildPrompt(t, state, config, "task-1")
 	if err != nil {
-		t.Fatalf("buildPrompt() error: %v", err)
+		t.Fatalf("BuildPrompt() error: %v", err)
 	}
 
 	// Should contain scoping section with correct ordinal and sibling tasks
@@ -308,9 +319,9 @@ func TestBuildPrompt_NoScopingForSinglePlannedTask(t *testing.T) {
 		StatePath:   filepath.Join(tmpDir, "state.yaml"),
 	}
 
-	prompt, err := buildPrompt(state, config, "task-1")
+	prompt, err := testBuildPrompt(t, state, config, "task-1")
 	if err != nil {
-		t.Fatalf("buildPrompt() error: %v", err)
+		t.Fatalf("BuildPrompt() error: %v", err)
 	}
 
 	if strings.Contains(prompt, "COLLECTIVE PLAN SCOPING") {
@@ -385,9 +396,9 @@ func TestBuildPrompt_CollectiveScopingOrdinal(t *testing.T) {
 	}
 
 	// Build prompt for task-2 (second in plan)
-	prompt, err := buildPrompt(state, config, "task-2")
+	prompt, err := testBuildPrompt(t, state, config, "task-2")
 	if err != nil {
-		t.Fatalf("buildPrompt() error: %v", err)
+		t.Fatalf("BuildPrompt() error: %v", err)
 	}
 
 	if !strings.Contains(prompt, "2 of 3 in the current sprint") {
@@ -476,9 +487,9 @@ func TestBuildPrompt_NoScopingForUnplannedTask(t *testing.T) {
 		StatePath:   filepath.Join(tmpDir, "state.yaml"),
 	}
 
-	prompt, err := buildPrompt(state, config, "task-3-replacement")
+	prompt, err := testBuildPrompt(t, state, config, "task-3-replacement")
 	if err != nil {
-		t.Fatalf("buildPrompt() error: %v", err)
+		t.Fatalf("BuildPrompt() error: %v", err)
 	}
 
 	if strings.Contains(prompt, "COLLECTIVE PLAN SCOPING") {

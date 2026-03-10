@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -232,12 +231,6 @@ func exit42TaskProgressSignature(task *models.Task) string {
 	return string(payload)
 }
 
-// isDoerRuntime delegates to roles.IsDoerRole.
-func isDoerRuntime(role string) bool { return roles.IsDoerRole(role) }
-
-// isReviewerRuntime delegates to roles.IsReviewerRole.
-func isReviewerRuntime(role string) bool { return roles.IsReviewerRole(role) }
-
 // CLIExecutor interface for testing (mock vs real CLI)
 type CLIExecutor interface {
 	Execute(ctx context.Context, cliName string, agentID string, prompt string, projectRoot string) (exitCode int, err error)
@@ -392,6 +385,11 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return err
 	}
 
+	strategy, err := NewRoleStrategy(config.Role)
+	if err != nil {
+		return err
+	}
+
 	if err := registerAgent(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800); err != nil {
 		return err
 	}
@@ -406,21 +404,9 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 	// Set execution timeout if not configured
 	if config.ExecutionTimeout == 0 {
-		// Default timeouts based on role category
-		switch {
-		case isReviewerRuntime(config.Role):
-			config.ExecutionTimeout = 30 * time.Minute
-		case isDoerRuntime(config.Role):
-			config.ExecutionTimeout = 2 * time.Hour
-		case config.Role == roles.RuntimeOrchestrator:
-			config.ExecutionTimeout = 4 * time.Hour
-		default:
-			config.ExecutionTimeout = 2 * time.Hour
-		}
+		config.ExecutionTimeout = strategy.DefaultTimeout()
 	}
 
-	const maxMergeRetries = 3
-	mergeRetries := 0
 	exit42Tracker := newExit42RestartTracker()
 
 	for {
@@ -441,44 +427,17 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			return err
 		}
 
-		// Handle approved merges (reviewer only)
-		if isReviewerRuntime(config.Role) {
-			pr, prErr := ops.LoadResolverForModels(config.ProjectRoot)
-			if prErr != nil {
-				GetLogger().Warn("Failed to load pipeline resolver — skipping merge handling", "error", prErr)
-			} else if err := handleApprovedMerges(config.ProjectRoot, config.AgentID, bb, pr); err != nil {
-				GetLogger().Warn("Merge handler error", "error", err)
-			}
-
-			// Execute pipeline transitions on newly-merged tasks
-			if err := handleAvailableTransitions(config.ProjectRoot); err != nil {
-				GetLogger().Warn("Transition handler error", "error", err)
-			}
-
-			// If there are still pending merges (transient errors), retry with
-			// backoff up to a max count, then proceed to waitForWork
-			if hasPendingMerges(bb, config.AgentID, pr) {
-				mergeRetries++
-				if mergeRetries <= maxMergeRetries {
-					delay := time.Duration(mergeRetries) * time.Second
-					GetLogger().Info("Pending merges remain, retrying after delay",
-						"agent_id", config.AgentID,
-						"retry", mergeRetries,
-						"delay", delay)
-					time.Sleep(delay)
-					continue
-				}
-				GetLogger().Warn("Max merge retries reached, proceeding to wait for work",
-					"agent_id", config.AgentID,
-					"retries", mergeRetries)
-				mergeRetries = 0
-			} else {
-				mergeRetries = 0
-			}
+		// Pre-work (reviewer: merge handling; others: no-op)
+		shouldContinue, err := strategy.PreWork(ctx, bb, config)
+		if err != nil {
+			return err
+		}
+		if shouldContinue {
+			continue
 		}
 
 		// Wait for work
-		hasWork, err := waitForWork(ctx, bb, config.ProjectRoot, config.Role, config, pollInterval, maxWait)
+		hasWork, err := strategy.WaitForWork(ctx, bb, config, pollInterval, maxWait)
 		if err != nil {
 			return err
 		}
@@ -487,75 +446,25 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			return nil
 		}
 
-		// Claim task (doer/reviewer roles only)
-		var taskID string
-		var claimedTaskID string // Track claimed task for completion logging
-		if isDoerRuntime(config.Role) {
-			workflowRole, convErr := roles.ToWorkflow(config.Role)
-			if convErr != nil {
-				return fmt.Errorf("unknown doer role: %s", config.Role)
-			}
-
-			taskID, _, err = claimDoerTask(config.ProjectRoot, config.AgentID, workflowRole, bb)
-			if err != nil {
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			claimedTaskID = taskID
-		} else if isReviewerRuntime(config.Role) {
-			workflowRole, convErr := roles.ToWorkflow(config.Role)
-			if convErr != nil {
-				return fmt.Errorf("unknown reviewer role: %s", config.Role)
-			}
-
-			var reviewCommit string
-			taskID, _, reviewCommit, err = claimReviewerTaskForRole(config.ProjectRoot, config.AgentID, workflowRole, 1800, bb)
-			if err != nil {
-				time.Sleep(5 * time.Second)
-				continue // Race condition, retry
-			}
-
-			// Log successful reviewer claim
-			GetLogger().Info("Reviewer claimed task for review",
-				"agent_id", config.AgentID,
-				"task_id", taskID,
-				"review_commit", reviewCommit)
-
-			// Verify worktree exists before launching agent.
-			_, wtErr := ensureReviewerWorktree(config.ProjectRoot, bb, taskID, config.AgentID)
-			if wtErr != nil {
-				GetLogger().Warn("Reviewer worktree check failed",
-					"task_id", taskID, "error", wtErr)
-				if !errors.Is(wtErr, errTaskBlocked) {
-					// Transient error (bb.Read, BranchExists, AttachWorktree).
-					// blockReviewerTask was NOT called, so the reviewer claim
-					// and agent state are still dangling — release them.
-					releaseReviewerClaimQuietly(config.ProjectRoot, taskID, config.AgentID)
-				}
-				// For errTaskBlocked, blockReviewerTask already cleared
-				// claim fields and released agent state.
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			// If recovered==true, worktree was recreated from the existing
-			// branch. The claim and reviewCommit are still valid — proceed
-			// directly to launch the agent.
+		// Claim task
+		taskID, claimedTaskID, err := strategy.ClaimTask(config, bb)
+		if err != nil {
+			time.Sleep(5 * time.Second)
+			continue
 		}
 
-		// Set orchestrator status to PLANNING
-		if config.Role == roles.RuntimeOrchestrator {
-			if err := setAgentToOrchestratingStatus(bb, config.AgentID); err != nil {
-				GetLogger().Warn("Failed to set orchestrator status", "error", err, "agent_id", config.AgentID)
-			}
+		// Pre-execution (orchestrator: PLANNING status; others: no-op)
+		if err := strategy.PreExecution(bb, config); err != nil {
+			GetLogger().Warn("Pre-execution failed", "error", err, "agent_id", config.AgentID)
 		}
 
 		// Build and save prompt
-		state, err := bb.Read()
+		stateBefore, err := bb.Read()
 		if err != nil {
 			return fmt.Errorf("failed to read state for prompt: %w", err)
 		}
 
-		prompt, err := buildPrompt(state, config, taskID)
+		prompt, err := strategy.BuildPrompt(stateBefore, config, taskID)
 		if err != nil {
 			return fmt.Errorf("failed to build prompt: %w", err)
 		}
@@ -582,35 +491,9 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		switch exitCode {
 		case 0:
 			GetLogger().Info("Agent completed, checking for more work")
-
-			// Log task submission if it happened (doer roles only)
-			if isDoerRuntime(config.Role) && claimedTaskID != "" {
-				doerPR, doerPRErr := ops.LoadResolverForModels(config.ProjectRoot)
-				if doerPRErr != nil {
-					GetLogger().Warn("Failed to load pipeline resolver — skipping submission log", "error", doerPRErr)
-				} else if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID, doerPR); err != nil {
-					GetLogger().Warn("Failed to log task submission", "error", err, "task_id", claimedTaskID)
-				}
+			if err := strategy.PostExecution(bb, config, taskID, claimedTaskID, stateBefore); err != nil {
+				GetLogger().Warn("Post-execution error", "error", err)
 			}
-
-			// Verify expected state changes for orchestrator
-			if config.Role == roles.RuntimeOrchestrator {
-				detCtx, detErr := ops.LoadDetectionContext(config.ProjectRoot)
-				var pipelineTerminals []models.TaskStatus
-				var planningPairs map[string]bool
-				if detErr != nil {
-					GetLogger().Warn("Failed to load detection context", "error", detErr)
-				} else {
-					pipelineTerminals = detCtx.SprintTerminals
-					planningPairs = detCtx.PlanningPairs
-				}
-				if err := verifyOrchestratorStateChanges(bb, state, pipelineTerminals, planningPairs); err != nil {
-					GetLogger().Warn("Orchestrator state verification failed",
-						"error", err,
-						"hint", "Agent may not have executed required commands - check prompt file")
-				}
-			}
-
 			exit42Tracker.reset(taskID)
 		case 42:
 			restartTaskID := claimedTaskID
