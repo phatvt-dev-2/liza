@@ -2,12 +2,13 @@ package mcp
 
 import (
 	"github.com/liza-mas/liza/internal/mcp/protocol"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
-// registerTool registers a tool with its handler
+// registerTool registers a tool with its handler, automatically wrapping it with logging middleware.
 func (s *Server) registerTool(tool protocol.Tool, handler ToolHandler) {
 	s.tools[tool.Name] = tool
-	s.handlers[tool.Name] = handler
+	s.handlers[tool.Name] = withLogging(s.logger, tool.Name, handler)
 }
 
 // registerResource registers a resource
@@ -99,6 +100,10 @@ func (s *Server) registerReadOnlyResources() {
 
 // registerMutationTools registers Phase 2 mutation tools
 func (s *Server) registerMutationTools() {
+	var checkOrchestrator RoleChecker = func(id string) error {
+		return requireRole(id, roles.RuntimeOrchestrator)
+	}
+
 	// liza_add_tasks tool (batch endpoint)
 	s.registerTool(protocol.Tool{
 		Name:        "liza_add_tasks",
@@ -160,7 +165,7 @@ func (s *Server) registerMutationTools() {
 			},
 			Required: []string{"task_id", "agent_id"},
 		},
-	}, s.handleClaimTask)
+	}, withRole(s.handleClaimTask, requireDoerRole))
 
 	// liza_submit_for_review tool
 	s.registerTool(protocol.Tool{
@@ -184,7 +189,7 @@ func (s *Server) registerMutationTools() {
 			},
 			Required: []string{"task_id", "commit_sha", "agent_id"},
 		},
-	}, s.handleSubmitForReview)
+	}, withRole(s.handleSubmitForReview, requireDoerRole))
 
 	// liza_handoff tool
 	s.registerTool(protocol.Tool{
@@ -212,7 +217,7 @@ func (s *Server) registerMutationTools() {
 			},
 			Required: []string{"task_id", "summary", "next_action", "agent_id"},
 		},
-	}, s.handleHandoff)
+	}, withRole(s.handleHandoff, requireDoerRole))
 
 	// liza_submit_verdict tool
 	s.registerTool(protocol.Tool{
@@ -241,7 +246,7 @@ func (s *Server) registerMutationTools() {
 			},
 			Required: []string{"task_id", "verdict", "agent_id"},
 		},
-	}, s.handleSubmitVerdict)
+	}, withRole(s.handleSubmitVerdict, requireReviewerRole))
 
 	// liza_mark_blocked tool
 	s.registerTool(protocol.Tool{
@@ -330,11 +335,15 @@ func (s *Server) registerMutationTools() {
 			},
 			Required: []string{"task_id", "reason", "agent_id"},
 		},
-	}, s.handleSupersede)
+	}, withRole(s.handleSupersede, checkOrchestrator))
 }
 
 // registerComplexOperations registers Phase 3 complex operation tools
 func (s *Server) registerComplexOperations() {
+	var checkOrchestrator RoleChecker = func(id string) error {
+		return requireRole(id, roles.RuntimeOrchestrator)
+	}
+
 	// liza_wt_create tool
 	s.registerTool(protocol.Tool{
 		Name:        "liza_wt_create",
@@ -358,7 +367,7 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"task_id", "agent_id"},
 		},
-	}, s.handleWtCreate)
+	}, withRole(s.handleWtCreate, requireDoerRole))
 
 	// liza_wt_delete tool
 	s.registerTool(protocol.Tool{
@@ -378,7 +387,7 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"task_id", "agent_id"},
 		},
-	}, s.handleWtDelete)
+	}, withRole(s.handleWtDelete, requireDoerOrOrchestratorRole))
 
 	// liza_wt_merge tool
 	s.registerTool(protocol.Tool{
@@ -398,7 +407,7 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"task_id", "agent_id"},
 		},
-	}, s.handleWtMerge)
+	}, withRole(s.handleWtMerge, requireReviewerRole))
 
 	// liza_analyze tool
 	s.registerTool(protocol.Tool{
@@ -414,7 +423,7 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"agent_id"},
 		},
-	}, s.handleAnalyze)
+	}, withRole(s.handleAnalyze, checkOrchestrator))
 
 	// liza_update_sprint_metrics tool
 	s.registerTool(protocol.Tool{
@@ -430,7 +439,7 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"agent_id"},
 		},
-	}, s.handleUpdateSprintMetrics)
+	}, withRole(s.handleUpdateSprintMetrics, checkOrchestrator))
 
 	// liza_sprint_checkpoint tool
 	s.registerTool(protocol.Tool{
@@ -446,7 +455,7 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"agent_id"},
 		},
-	}, s.handleSprintCheckpoint)
+	}, withRole(s.handleSprintCheckpoint, checkOrchestrator))
 
 	// liza_clear_stale_review_claims tool
 	s.registerTool(protocol.Tool{
@@ -462,7 +471,7 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"agent_id"},
 		},
-	}, s.handleClearStaleReviews)
+	}, withRole(s.handleClearStaleReviews, checkOrchestrator))
 
 	// liza_write_checkpoint tool
 	s.registerTool(protocol.Tool{
@@ -510,7 +519,7 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"task_id", "agent_id", "intent", "validation_plan", "files_to_modify"},
 		},
-	}, s.handleWriteCheckpoint)
+	}, withRole(s.handleWriteCheckpoint, requireDoerRole))
 
 	// liza_set_task_output tool
 	s.registerTool(protocol.Tool{
@@ -534,7 +543,7 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"task_id", "agent_id", "output"},
 		},
-	}, s.handleSetTaskOutput)
+	}, withRole(s.handleSetTaskOutput, requireDoerRole))
 
 	// liza_delete_agent tool
 	s.registerTool(protocol.Tool{
@@ -563,5 +572,5 @@ func (s *Server) registerComplexOperations() {
 			},
 			Required: []string{"target_agent_id", "agent_id", "reason"},
 		},
-	}, s.handleDeleteAgent)
+	}, withRole(s.handleDeleteAgent, checkOrchestrator))
 }

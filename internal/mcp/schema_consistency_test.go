@@ -113,25 +113,34 @@ func TestToolSchemaRequiredMatchesHandlerExtraction(t *testing.T) {
 			continue
 		}
 
-		handlerName, ok := toolHandlers[toolName]
+		reg, ok := toolHandlers[toolName]
 		if !ok {
 			t.Fatalf("tool %q not mapped to a handler in server_registration.go", toolName)
 		}
 
-		handlerUsage, ok := usageByHandler[handlerName]
+		handlerUsage, ok := usageByHandler[reg.handlerName]
 		if !ok {
-			t.Fatalf("handler %q for tool %q not found in handlers.go", handlerName, toolName)
+			t.Fatalf("handler %q for tool %q not found in handlers.go", reg.handlerName, toolName)
+		}
+
+		// withRole middleware extracts and validates agent_id before the handler runs.
+		// Merge its requirements so the consistency check accounts for middleware-level extraction.
+		effectiveRequired := handlerUsage.required.clone()
+		effectiveExtracted := handlerUsage.extracted.clone()
+		if reg.hasWithRole {
+			effectiveRequired.add("agent_id")
+			effectiveExtracted.add("agent_id")
 		}
 
 		schemaRequired := newFieldSet(tool.InputSchema.Required...)
 
-		schemaOnly := diffFieldSets(schemaRequired, handlerUsage.required)
-		handlerOnly := diffFieldSets(handlerUsage.required, schemaRequired)
+		schemaOnly := diffFieldSets(schemaRequired, effectiveRequired)
+		handlerOnly := diffFieldSets(effectiveRequired, schemaRequired)
 		if len(schemaOnly) > 0 || len(handlerOnly) > 0 {
 			t.Errorf(
 				"tool %q (handler %q) required-field mismatch:\n  schema only: %v\n  handler only: %v",
 				toolName,
-				handlerName,
+				reg.handlerName,
 				schemaOnly,
 				handlerOnly,
 			)
@@ -142,12 +151,12 @@ func TestToolSchemaRequiredMatchesHandlerExtraction(t *testing.T) {
 			declaredSchemaFields.add(name)
 		}
 
-		undeclaredExtracted := diffFieldSets(handlerUsage.extracted, declaredSchemaFields)
+		undeclaredExtracted := diffFieldSets(effectiveExtracted, declaredSchemaFields)
 		if len(undeclaredExtracted) > 0 {
 			t.Errorf(
 				"tool %q (handler %q) extracts fields missing from schema declaration: %v",
 				toolName,
-				handlerName,
+				reg.handlerName,
 				undeclaredExtracted,
 			)
 		}
@@ -229,14 +238,19 @@ func TestHandlerParamExtractionKnownPatterns(t *testing.T) {
 	}
 }
 
-func parseRegisteredToolHandlers(path string) (map[string]string, error) {
+type toolRegistration struct {
+	handlerName string
+	hasWithRole bool // true when handler is wrapped with withRole middleware
+}
+
+func parseRegisteredToolHandlers(path string) (map[string]toolRegistration, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	toolHandlers := map[string]string{}
+	toolHandlers := map[string]toolRegistration{}
 	ast.Inspect(file, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -262,11 +276,22 @@ func parseRegisteredToolHandlers(path string) (map[string]string, error) {
 			return true
 		}
 
-		toolHandlers[toolName] = handlerName
+		hasWithRole := isWithRoleCall(call.Args[1])
+		toolHandlers[toolName] = toolRegistration{handlerName: handlerName, hasWithRole: hasWithRole}
 		return true
 	})
 
 	return toolHandlers, nil
+}
+
+// isWithRoleCall returns true if the expression is a withRole(...) call.
+func isWithRoleCall(expr ast.Expr) bool {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	fn, ok := call.Fun.(*ast.Ident)
+	return ok && fn.Name == "withRole"
 }
 
 func parseHandlerParamUsages(paths ...string) (map[string]handlerParamUsage, error) {
@@ -511,6 +536,12 @@ func extractHandlerName(expr ast.Expr) string {
 		return value.Sel.Name
 	case *ast.Ident:
 		return value.Name
+	case *ast.CallExpr:
+		// Handle withRole(s.handleFoo, checker) — extract handler from first arg
+		if fn, ok := value.Fun.(*ast.Ident); ok && fn.Name == "withRole" && len(value.Args) >= 1 {
+			return extractHandlerName(value.Args[0])
+		}
+		return ""
 	default:
 		return ""
 	}

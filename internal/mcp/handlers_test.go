@@ -1655,8 +1655,9 @@ func TestHandleDeleteAgentWithMissingParams(t *testing.T) {
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	// Try to delete agent without agent_id (caller)
-	_, err := server.handleDeleteAgent(map[string]any{
+	// Try to delete agent without agent_id (caller) — goes through middleware
+	handler := server.handlers["liza_delete_agent"]
+	_, err := handler(map[string]any{
 		"target_agent_id": "coder-1",
 		"reason":          "test",
 		// missing agent_id (caller)
@@ -2005,176 +2006,180 @@ func TestHandleRoleEnforcement(t *testing.T) {
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
 	tests := []struct {
-		name    string
-		handler func(map[string]any) (any, error)
-		params  map[string]any
-		wantErr string
+		name     string
+		toolName string
+		params   map[string]any
+		wantErr  string
 	}{
 		{
-			name:    "claim_task rejects reviewer",
-			handler: server.handleClaimTask,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
+			name:     "claim_task rejects reviewer",
+			toolName: "liza_claim_task",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
+			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
 		},
 		{
-			name:    "submit_for_review rejects reviewer",
-			handler: server.handleSubmitForReview,
-			params:  map[string]any{"task_id": "task-1", "commit_sha": "abc123", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
+			name:     "submit_for_review rejects reviewer",
+			toolName: "liza_submit_for_review",
+			params:   map[string]any{"task_id": "task-1", "commit_sha": "abc123", "agent_id": "code-reviewer-1"},
+			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
 		},
 		{
-			name:    "handoff rejects reviewer",
-			handler: server.handleHandoff,
-			params:  map[string]any{"task_id": "task-1", "summary": "s", "next_action": "n", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
+			name:     "handoff rejects reviewer",
+			toolName: "liza_handoff",
+			params:   map[string]any{"task_id": "task-1", "summary": "s", "next_action": "n", "agent_id": "code-reviewer-1"},
+			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
 		},
 		{
-			name:    "submit_verdict rejects coder",
-			handler: server.handleSubmitVerdict,
-			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "coder-1"},
-			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
+			name:     "submit_verdict rejects coder",
+			toolName: "liza_submit_verdict",
+			params:   map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "coder-1"},
+			wantErr:  "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
 		},
 		{
-			name:    "wt_merge rejects coder",
-			handler: server.handleWtMerge,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "coder-1"},
-			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
+			name:     "wt_merge rejects coder",
+			toolName: "liza_wt_merge",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "coder-1"},
+			wantErr:  "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
 		},
 		{
-			name:    "add_tasks rejects coder",
-			handler: server.handleAddTasks,
-			params:  map[string]any{"tasks": []any{map[string]any{"id": "t-new", "desc": "d", "spec": "specs/test-spec.md", "done": "d", "scope": "s"}}, "agent_id": "coder-1"},
-			wantErr: "requires one of [orchestrator] roles",
+			name:     "add_tasks rejects coder",
+			toolName: "liza_add_tasks",
+			params:   map[string]any{"tasks": []any{map[string]any{"id": "t-new", "desc": "d", "spec": "specs/test-spec.md", "done": "d", "scope": "s"}}, "agent_id": "coder-1"},
+			wantErr:  "requires one of [orchestrator] roles",
 		},
 		{
-			name:    "supersede rejects coder",
-			handler: server.handleSupersede,
-			params:  map[string]any{"task_id": "task-1", "reason": "r", "agent_id": "coder-1"},
-			wantErr: "requires one of [orchestrator] roles",
+			name:     "supersede rejects coder",
+			toolName: "liza_supersede_task",
+			params:   map[string]any{"task_id": "task-1", "reason": "r", "agent_id": "coder-1"},
+			wantErr:  "requires one of [orchestrator] roles",
 		},
 		{
-			name:    "write_checkpoint rejects reviewer",
-			handler: server.handleWriteCheckpoint,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
-			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
+			name:     "write_checkpoint rejects reviewer",
+			toolName: "liza_write_checkpoint",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
+			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
 		},
 		{
-			name:    "write_checkpoint accepts epic-planner (passes role check)",
-			handler: server.handleWriteCheckpoint,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "epic-planner-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
-			wantErr: "write checkpoint failed", // passes role check, fails downstream
+			name:     "write_checkpoint accepts epic-planner (passes role check)",
+			toolName: "liza_write_checkpoint",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "epic-planner-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
+			wantErr:  "write checkpoint failed", // passes role check, fails downstream
 		},
 		{
-			name:    "write_checkpoint accepts us-writer (passes role check)",
-			handler: server.handleWriteCheckpoint,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "us-writer-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
-			wantErr: "write checkpoint failed", // passes role check, fails downstream
+			name:     "write_checkpoint accepts us-writer (passes role check)",
+			toolName: "liza_write_checkpoint",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "us-writer-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
+			wantErr:  "write checkpoint failed", // passes role check, fails downstream
 		},
 		{
-			name:    "set_task_output accepts epic-planner (passes role check)",
-			handler: server.handleSetTaskOutput,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "epic-planner-1", "output": []any{map[string]any{"desc": "d", "done_when": "dw", "scope": "s"}}},
-			wantErr: "set task output failed", // passes role check, fails downstream
+			name:     "set_task_output accepts epic-planner (passes role check)",
+			toolName: "liza_set_task_output",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "epic-planner-1", "output": []any{map[string]any{"desc": "d", "done_when": "dw", "scope": "s"}}},
+			wantErr:  "set task output failed", // passes role check, fails downstream
 		},
 		{
-			name:    "set_task_output accepts us-writer (passes role check)",
-			handler: server.handleSetTaskOutput,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "us-writer-1", "output": []any{map[string]any{"desc": "d", "done_when": "dw", "scope": "s"}}},
-			wantErr: "set task output failed", // passes role check, fails downstream
+			name:     "set_task_output accepts us-writer (passes role check)",
+			toolName: "liza_set_task_output",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "us-writer-1", "output": []any{map[string]any{"desc": "d", "done_when": "dw", "scope": "s"}}},
+			wantErr:  "set task output failed", // passes role check, fails downstream
 		},
 		{
-			name:    "submit_verdict accepts epic-plan-reviewer (passes role check)",
-			handler: server.handleSubmitVerdict,
-			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "epic-plan-reviewer-1"},
-			wantErr: "submit verdict failed", // passes role check, fails downstream
+			name:     "submit_verdict accepts epic-plan-reviewer (passes role check)",
+			toolName: "liza_submit_verdict",
+			params:   map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "epic-plan-reviewer-1"},
+			wantErr:  "submit verdict failed", // passes role check, fails downstream
 		},
 		{
-			name:    "submit_verdict accepts us-reviewer (passes role check)",
-			handler: server.handleSubmitVerdict,
-			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "us-reviewer-1"},
-			wantErr: "submit verdict failed", // passes role check, fails downstream
+			name:     "submit_verdict accepts us-reviewer (passes role check)",
+			toolName: "liza_submit_verdict",
+			params:   map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "us-reviewer-1"},
+			wantErr:  "submit verdict failed", // passes role check, fails downstream
 		},
 		{
-			name:    "wt_merge accepts us-reviewer (passes role check)",
-			handler: server.handleWtMerge,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "us-reviewer-1"},
-			wantErr: "merge failed", // passes role check, fails downstream
+			name:     "wt_merge accepts us-reviewer (passes role check)",
+			toolName: "liza_wt_merge",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "us-reviewer-1"},
+			wantErr:  "merge failed", // passes role check, fails downstream
 		},
 		// Malformed agent ID cases
 		{
-			name:    "claim_task rejects malformed ID (no number)",
-			handler: server.handleClaimTask,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "coder"},
-			wantErr: "invalid agent ID",
+			name:     "claim_task rejects malformed ID (no number)",
+			toolName: "liza_claim_task",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "coder"},
+			wantErr:  "invalid agent ID",
 		},
 		{
-			name:    "claim_task rejects malformed ID (non-numeric suffix)",
-			handler: server.handleClaimTask,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "coder-abc"},
-			wantErr: "invalid agent ID",
+			name:     "claim_task rejects malformed ID (non-numeric suffix)",
+			toolName: "liza_claim_task",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "coder-abc"},
+			wantErr:  "invalid agent ID",
 		},
 		{
-			name:    "submit_verdict rejects unknown role",
-			handler: server.handleSubmitVerdict,
-			params:  map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "foobar-1"},
-			wantErr: "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
+			name:     "submit_verdict rejects unknown role",
+			toolName: "liza_submit_verdict",
+			params:   map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "foobar-1"},
+			wantErr:  "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
 		},
 		// --- Access control for newly protected handlers ---
 		// Admin ops: require orchestrator
 		{
-			name:    "analyze rejects coder",
-			handler: server.handleAnalyze,
-			params:  map[string]any{"agent_id": "coder-1"},
-			wantErr: "requires one of [orchestrator] roles",
+			name:     "analyze rejects coder",
+			toolName: "liza_analyze",
+			params:   map[string]any{"agent_id": "coder-1"},
+			wantErr:  "requires one of [orchestrator] roles",
 		},
 		{
-			name:    "sprint_checkpoint rejects coder",
-			handler: server.handleSprintCheckpoint,
-			params:  map[string]any{"agent_id": "coder-1"},
-			wantErr: "requires one of [orchestrator] roles",
+			name:     "sprint_checkpoint rejects coder",
+			toolName: "liza_sprint_checkpoint",
+			params:   map[string]any{"agent_id": "coder-1"},
+			wantErr:  "requires one of [orchestrator] roles",
 		},
 		{
-			name:    "update_sprint_metrics rejects coder",
-			handler: server.handleUpdateSprintMetrics,
-			params:  map[string]any{"agent_id": "coder-1"},
-			wantErr: "requires one of [orchestrator] roles",
+			name:     "update_sprint_metrics rejects coder",
+			toolName: "liza_update_sprint_metrics",
+			params:   map[string]any{"agent_id": "coder-1"},
+			wantErr:  "requires one of [orchestrator] roles",
 		},
 		{
-			name:    "clear_stale_reviews rejects coder",
-			handler: server.handleClearStaleReviews,
-			params:  map[string]any{"agent_id": "coder-1"},
-			wantErr: "requires one of [orchestrator] roles",
+			name:     "clear_stale_reviews rejects coder",
+			toolName: "liza_clear_stale_review_claims",
+			params:   map[string]any{"agent_id": "coder-1"},
+			wantErr:  "requires one of [orchestrator] roles",
 		},
 		{
-			name:    "delete_agent rejects coder caller",
-			handler: server.handleDeleteAgent,
-			params:  map[string]any{"target_agent_id": "coder-1", "agent_id": "coder-2", "reason": "test"},
-			wantErr: "requires one of [orchestrator] roles",
+			name:     "delete_agent rejects coder caller",
+			toolName: "liza_delete_agent",
+			params:   map[string]any{"target_agent_id": "coder-1", "agent_id": "coder-2", "reason": "test"},
+			wantErr:  "requires one of [orchestrator] roles",
 		},
 		// Worktree ops: require doer role
 		{
-			name:    "wt_create rejects orchestrator",
-			handler: server.handleWtCreate,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "orchestrator-1"},
-			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
+			name:     "wt_create rejects orchestrator",
+			toolName: "liza_wt_create",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "orchestrator-1"},
+			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
 		},
 		{
-			name:    "wt_create rejects reviewer",
-			handler: server.handleWtCreate,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner epic-planner us-writer] roles",
+			name:     "wt_create rejects reviewer",
+			toolName: "liza_wt_create",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
+			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
 		},
 		{
-			name:    "wt_delete rejects reviewer",
-			handler: server.handleWtDelete,
-			params:  map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
-			wantErr: "requires one of [coder code-planner epic-planner us-writer orchestrator] roles",
+			name:     "wt_delete rejects reviewer",
+			toolName: "liza_wt_delete",
+			params:   map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
+			wantErr:  "requires one of [coder code-planner epic-planner us-writer orchestrator] roles",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.handler(tt.params)
+			handler := server.handlers[tt.toolName]
+			if handler == nil {
+				t.Fatalf("no handler registered for %s", tt.toolName)
+			}
+			_, err := handler(tt.params)
 			if err == nil {
 				t.Fatal("Expected role enforcement error, got nil")
 			}

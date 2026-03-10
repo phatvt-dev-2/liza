@@ -65,9 +65,6 @@ func (s *Server) handleClaimTask(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireDoerRole(agentID); err != nil {
-		return nil, err
-	}
 
 	result, err := ops.ClaimTask(s.projectRoot, taskID, agentID)
 	if err != nil {
@@ -98,10 +95,6 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireDoerRole(agentID); err != nil {
-		return nil, err
-	}
-
 	result, err := ops.SubmitForReview(s.projectRoot, taskID, commitSHA, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("submit for review failed: %w", err)
@@ -115,9 +108,6 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 func (s *Server) handleHandoff(params map[string]any) (any, error) {
 	taskID, agentID, err := requireTaskAndAgent(params)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireDoerRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -154,10 +144,6 @@ func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {
 
 	agentID, err := requireString(params, "agent_id")
 	if err != nil {
-		return nil, err
-	}
-
-	if err := requireReviewerRole(agentID); err != nil {
 		return nil, err
 	}
 
@@ -248,9 +234,6 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
-		return nil, err
-	}
 
 	reason, err := requireString(params, "reason")
 	if err != nil {
@@ -272,14 +255,6 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {
 	targetAgentID, err := requireString(params, "target_agent_id")
 	if err != nil {
-		return nil, err
-	}
-
-	agentID, err := requireString(params, "agent_id")
-	if err != nil {
-		return nil, err
-	}
-	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
 		return nil, err
 	}
 

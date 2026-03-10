@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"os"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/mcp/protocol"
@@ -14,6 +16,7 @@ import (
 type Server struct {
 	projectRoot string
 	logPath     string
+	logger      *slog.Logger
 	bb          *db.Blackboard
 	tools       map[string]protocol.Tool
 	resources   map[string]protocol.Resource
@@ -25,6 +28,7 @@ func NewServer(projectRoot, logPath string) *Server {
 	s := &Server{
 		projectRoot: projectRoot,
 		logPath:     logPath,
+		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		bb:          db.For(paths.New(projectRoot).StatePath()),
 		tools:       make(map[string]protocol.Tool),
 		resources:   make(map[string]protocol.Resource),

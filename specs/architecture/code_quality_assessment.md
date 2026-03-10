@@ -70,7 +70,7 @@ Liza is a hybrid multi-agent coding orchestrator: Go-based deterministic supervi
 - **Graceful degradation**: Missing `.liza` directory returns structured errors instead of crashing
 
 **Concerns:**
-- No handler-level middleware (logging, timing, validation could be extracted)
+- ~~No handler-level middleware~~ — resolved: `withLogging` and `withRole` middleware extracted into `middleware.go`
 
 ### Agent Supervision (`internal/agent/`) ★★★★☆
 
