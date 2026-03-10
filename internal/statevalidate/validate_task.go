@@ -79,8 +79,8 @@ func validateTaskStates(state *models.State, projectRoot string, skipSpecFileChe
 }
 
 // statusClassifier resolves whether a TaskStatus belongs to a given lifecycle
-// phase, combining hardcoded legacy statuses with pipeline-declared ones.
-// Built once and shared by validateTaskInvariants and validateDependencies.
+// phase using pipeline-declared statuses. Built once and shared by
+// validateTaskInvariants and validateDependencies.
 type statusClassifier struct {
 	executing []models.TaskStatus
 	initial   []models.TaskStatus
@@ -91,8 +91,7 @@ type statusClassifier struct {
 }
 
 // newStatusClassifier constructs a statusClassifier from a pipeline resolver
-// and configuration. Returns an empty classifier when no pipeline is configured
-// (legacy goals), falling back to hardcoded status checks only.
+// and configuration. Returns an empty classifier when resolver or config is nil.
 func newStatusClassifier(resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) statusClassifier {
 	sc := statusClassifier{}
 	if resolver == nil || cfg == nil {
@@ -356,7 +355,7 @@ func requiresCompletionFields(status models.TaskStatus, resolver *pipeline.Resol
 	if status == models.TaskStatusSuperseded || status == models.TaskStatusAbandoned {
 		return false
 	}
-	// Legacy draft states
+	// Hardcoded draft states (also covered by pipeline initial states below)
 	if status == models.TaskStatusDraft || status == models.TaskStatusDraftCodingPlan {
 		return false
 	}

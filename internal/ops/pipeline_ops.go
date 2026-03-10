@@ -182,11 +182,6 @@ func loadPipelineBundle(projectRoot string) (*pipelineBundle, error) {
 	}, nil
 }
 
-// initialTaskStatusWithResolver returns the initial task status for a role-pair.
-func initialTaskStatusWithResolver(rolePair string, resolver *pipeline.Resolver) (models.TaskStatus, error) {
-	return resolver.InitialStatus(rolePair)
-}
-
 // LoadPipelineTransitions loads the pipeline config and builds the transition map.
 // Exported for use by the agent package.
 func LoadPipelineTransitions(projectRoot string) (map[models.TaskStatus][]models.TaskStatus, error) {

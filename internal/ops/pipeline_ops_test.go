@@ -353,21 +353,21 @@ func TestInitialTaskStatus_PipelineGoal(t *testing.T) {
 	}
 
 	// Pipeline goal: coding-pair → DRAFT_CODE
-	status, err := initialTaskStatusWithResolver("coding-pair", resolver)
+	status, err := resolver.InitialStatus("coding-pair")
 	if err != nil {
-		t.Fatalf("initialTaskStatusWithResolver(coding-pair) error: %v", err)
+		t.Fatalf("resolver.InitialStatus(coding-pair) error: %v", err)
 	}
 	if status != models.TaskStatus("DRAFT_CODE") {
-		t.Errorf("initialTaskStatus(coding-pair) = %v, want DRAFT_CODE", status)
+		t.Errorf("InitialStatus(coding-pair) = %v, want DRAFT_CODE", status)
 	}
 
 	// Pipeline goal: code-planning-pair → DRAFT_CODING_PLAN
-	status, err = initialTaskStatusWithResolver("code-planning-pair", resolver)
+	status, err = resolver.InitialStatus("code-planning-pair")
 	if err != nil {
-		t.Fatalf("initialTaskStatusWithResolver(code-planning-pair) error: %v", err)
+		t.Fatalf("resolver.InitialStatus(code-planning-pair) error: %v", err)
 	}
 	if status != models.TaskStatus("DRAFT_CODING_PLAN") {
-		t.Errorf("initialTaskStatus(code-planning-pair) = %v, want DRAFT_CODING_PLAN", status)
+		t.Errorf("InitialStatus(code-planning-pair) = %v, want DRAFT_CODING_PLAN", status)
 	}
 }
 
@@ -379,7 +379,7 @@ func TestInitialTaskStatus_UnknownRolePair(t *testing.T) {
 		t.Fatalf("loadResolver error: %v", err)
 	}
 
-	_, err = initialTaskStatusWithResolver("nonexistent-pair", resolver)
+	_, err = resolver.InitialStatus("nonexistent-pair")
 	if err == nil {
 		t.Fatal("expected error for unknown role-pair")
 	}

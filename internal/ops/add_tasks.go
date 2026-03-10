@@ -118,7 +118,7 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 
 	bb := db.For(statePath)
 
-	initialStatus, err := initialTaskStatusWithResolver(input.RolePair, resolver)
+	initialStatus, err := resolver.InitialStatus(input.RolePair)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve initial status for role-pair %q: %w", input.RolePair, err)
 	}

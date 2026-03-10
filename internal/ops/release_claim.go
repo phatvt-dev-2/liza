@@ -87,7 +87,7 @@ func ResolveReleaseStatuses(task *models.Task, resolver *pipeline.Resolver) (doe
 
 // resolveClaimReleaseStatuses returns coder and reviewer claimRelease configs with
 // pipeline-resolved active/released statuses when the task has a RolePair and a
-// resolver is available. Falls back to legacy defaults otherwise.
+// resolver is available.
 func resolveClaimReleaseStatuses(task *models.Task, resolver *pipeline.Resolver) (coder claimRelease, reviewer claimRelease) {
 	coder = coderRelease
 	reviewer = reviewerRelease

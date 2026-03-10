@@ -86,12 +86,9 @@ func (s *State) AllPlannedTasksTerminal() bool {
 }
 
 // AllPlannedTasksTerminalWith checks if all planned tasks are sprint-terminal.
-// For tasks with a role_pair, uses pipeline-defined terminal states in addition to
-// universal terminals (MERGED, ABANDONED, SUPERSEDED). Legacy tasks (no role_pair)
-// always use the standard IsSprintTerminal check.
-//
-// When pipelineTerminals is nil, only universal terminal states are recognized —
-// this is the correct fallback for legacy projects with no pipeline config.
+// Uses pipeline-defined terminal states in addition to universal terminals
+// (MERGED, ABANDONED, SUPERSEDED). When pipelineTerminals is nil, only universal
+// terminal states are recognized.
 func (s *State) AllPlannedTasksTerminalWith(pipelineTerminals []TaskStatus) bool {
 	if len(s.Sprint.Scope.Planned) == 0 {
 		return false

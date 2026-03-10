@@ -73,7 +73,7 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // DetectOrchestratorWakeTriggers detects conditions that should wake the orchestrator.
 // pipelineTerminals provides pipeline-defined sprint-terminal states (from ops.SprintTerminalStates).
 // planningPairs provides role-pairs that are transition sources (from ops.TransitionSourcePairs).
-// Pass nil for either to use legacy fallback behavior.
+// Pass nil for either to use fallback behavior.
 //
 // Returns the highest-priority trigger and count of items for that trigger.
 // Priority order:
@@ -157,7 +157,7 @@ func countImmediateDiscoveries(state *models.State) int {
 // misclassification as PLANNING_COMPLETE during normal coding sprints.
 //
 // planningPairs provides the set of role-pairs that are transition sources.
-// When nil (legacy projects), falls back to hardcoded "code-planning-pair".
+// When nil, falls back to hardcoded "code-planning-pair".
 func countMergedPlanningTasksWithOutput(state *models.State, planningPairs map[string]bool) int {
 	count := 0
 	for _, taskID := range state.Sprint.Scope.Planned {

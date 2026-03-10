@@ -31,7 +31,7 @@ func ValidateStateFile(statePath string, skipSpecFileCheck bool, warnWriter io.W
 		return fmt.Errorf("failed to read state file: %w", err)
 	}
 
-	// Load pipeline resolver (nil for legacy goals)
+	// Load pipeline resolver
 	var resolver *pipeline.Resolver
 	cfg, cfgErr := pipeline.LoadFrozen(projectRoot)
 	if cfgErr != nil {

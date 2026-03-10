@@ -492,11 +492,10 @@ type wakeTemplateData struct {
 }
 
 // buildWakeTemplateData constructs entry-point-aware template data for the
-// INITIAL_PLANNING wake trigger. When a pipeline config exists, it resolves
-// entry-points to role-pairs and display names. Without a pipeline config
-// (legacy goals), the template falls back to hardcoded code-planning-pair.
+// INITIAL_PLANNING wake trigger. Resolves entry-points from the pipeline config
+// to role-pairs and display names.
 //
-// Returns an error if the pipeline config exists but is malformed, or if an
+// Returns an error if the pipeline config is missing/malformed, or if an
 // explicit entry-point was specified but not found in the config.
 func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) (wakeTemplateData, error) {
 	data := wakeTemplateData{
@@ -507,9 +506,6 @@ func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) (wak
 	cfg, err := pipeline.LoadFrozen(projectRoot)
 	if err != nil {
 		return data, err
-	}
-	if cfg == nil {
-		return data, nil // legacy goal — no pipeline config
 	}
 
 	// Build sorted entry-point list for deterministic template output.

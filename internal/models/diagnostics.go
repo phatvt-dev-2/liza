@@ -51,8 +51,7 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 	}
 
 	for _, task := range state.Tasks {
-		// Pipeline tasks with a resolver: use pipeline-only path to avoid
-		// fragile skip-lists that must track all legacy statuses.
+		// Pipeline path: use resolver to classify statuses dynamically.
 		if task.RolePair != "" && pr != nil {
 			if isBlockedByDepsPipeline(&task, pr, mergedIDs) {
 				blockedByDeps++
@@ -63,7 +62,7 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 			continue
 		}
 
-		// Legacy path.
+		// Fallback: hardcoded status checks when resolver is unavailable.
 		if task.Status == TaskStatusReady ||
 			task.Status == TaskStatusRejected ||
 			task.Status == TaskStatusIntegrationFailed {
@@ -139,7 +138,7 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 	activelyReviewing := 0
 
 	for _, task := range state.Tasks {
-		// Pipeline tasks with a resolver: use pipeline-only path.
+		// Pipeline path: use resolver to classify statuses dynamically.
 		if task.RolePair != "" && pr != nil {
 			// Gate by reviewer role: only count tasks whose pipeline reviewer
 			// matches the code-reviewer runtime role.
@@ -168,11 +167,10 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 			continue
 		}
 
-		// Legacy submitted states.
+		// Fallback: hardcoded status checks when resolver is unavailable.
 		if task.Status == TaskStatusReadyForReview && task.EffectiveType().HasRole(RoleCodeReviewer) {
 			unassigned++
 		}
-		// Legacy reviewing states.
 		if task.Status == TaskStatusReviewing && task.EffectiveType().HasRole(RoleCodeReviewer) {
 			if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
 				expiredLeases++

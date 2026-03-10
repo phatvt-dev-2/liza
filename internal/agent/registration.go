@@ -177,7 +177,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 }
 
 // loadPipelineForRelease loads pipeline resolver and transitions, logging
-// warnings on failure. Returns nil values for legacy (no pipeline) projects.
+// warnings on failure. Returns nil values when pipeline config is unreadable.
 func loadPipelineForRelease(projectRoot string) (map[models.TaskStatus][]models.TaskStatus, *pipeline.Resolver) {
 	if projectRoot == "" {
 		return nil, nil

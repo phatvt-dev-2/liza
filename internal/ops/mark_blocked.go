@@ -18,8 +18,7 @@ type MarkBlockedResult struct {
 
 // MarkBlocked transitions a task from an executing status to BLOCKED. Only the
 // assigned agent can block its own task. Requires reason and 1-3 clarifying
-// questions per the blocking protocol. Pipeline-aware: supports both legacy
-// IMPLEMENTING status and pipeline-defined executing statuses. No terminal I/O.
+// questions per the blocking protocol. Uses pipeline-defined executing statuses.
 func MarkBlocked(projectRoot, taskID, reason string, questions []string, agentID string) (*MarkBlockedResult, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID is required")
