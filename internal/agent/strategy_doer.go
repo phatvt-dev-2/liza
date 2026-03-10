@@ -21,6 +21,12 @@ func (s *doerStrategy) DefaultTimeout() time.Duration {
 	return 2 * time.Hour
 }
 
+func (s *doerStrategy) WaitConfig(state *models.State) (pollInterval, maxWait time.Duration) {
+	poll := nonZeroOr(state.Config.CoderPollInterval, models.DefaultCoderPollInterval)
+	max := nonZeroOr(state.Config.CoderMaxWait, models.DefaultCoderMaxWait)
+	return time.Duration(poll) * time.Second, time.Duration(max) * time.Second
+}
+
 func (s *doerStrategy) PreWork(_ context.Context, _ *db.Blackboard, _ SupervisorConfig) (bool, error) {
 	return false, nil
 }

@@ -371,7 +371,7 @@ to dispatch based on entry-points.
   - Add `waitForEpicPlannerWork()`, `waitForUSWriterWork()` (same pattern as `waitForCodePlannerWork`)
   - Add `waitForEpicPlanReviewerWork()`, `waitForUSReviewerWork()` (same pattern as `waitForCodePlanReviewerWork`)
   - Extend `waitForWork()` switch with 4 new cases
-  - Extend `getRoleWaitConfig()` with new reviewer/doer role mappings
+  - Wait config resolved per-strategy via `RoleStrategy.WaitConfig()` (no central switch to extend)
   - Extend `isResumableHandoff()` to check for new doer executing statuses (pipeline-aware — already handled by existing pipeline resolver check)
 - `prompt.go` → `buildPrompt()`:
   - Add cases for `RuntimeEpicPlanner`, `RuntimeEpicPlanReviewer`, `RuntimeUSWriter`, `RuntimeUSReviewer`

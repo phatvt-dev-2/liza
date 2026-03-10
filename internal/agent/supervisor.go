@@ -400,7 +400,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	pollInterval, maxWait := getRoleWaitConfig(state, config.Role)
+	pollInterval, maxWait := strategy.WaitConfig(state)
 
 	// Set execution timeout if not configured
 	if config.ExecutionTimeout == 0 {

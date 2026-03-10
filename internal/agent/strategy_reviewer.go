@@ -34,6 +34,12 @@ func (s *reviewerStrategy) DefaultTimeout() time.Duration {
 	return 30 * time.Minute
 }
 
+func (s *reviewerStrategy) WaitConfig(state *models.State) (pollInterval, maxWait time.Duration) {
+	poll := nonZeroOr(state.Config.ReviewerPollInterval, models.DefaultReviewerPollInterval)
+	max := nonZeroOr(state.Config.ReviewerMaxWait, models.DefaultReviewerMaxWait)
+	return time.Duration(poll) * time.Second, time.Duration(max) * time.Second
+}
+
 func (s *reviewerStrategy) PreWork(_ context.Context, bb *db.Blackboard, config SupervisorConfig) (bool, error) {
 	logger := GetLogger()
 

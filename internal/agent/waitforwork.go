@@ -8,7 +8,6 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // loadResolver loads the pipeline resolver for work detection, logging a warning
@@ -27,27 +26,6 @@ func nonZeroOr(val, fallback int) int {
 		return val
 	}
 	return fallback
-}
-
-// getRoleWaitConfig returns poll interval and max wait based on role-specific config.
-// Falls back to shell-script parity defaults when config values are unset.
-func getRoleWaitConfig(state *models.State, role string) (pollInterval, maxWait time.Duration) {
-	var pollSeconds, maxWaitSeconds int
-
-	switch role {
-	case roles.RuntimeOrchestrator:
-		pollSeconds = nonZeroOr(state.Config.OrchestratorPollInterval, models.DefaultOrchestratorPollInterval)
-		maxWaitSeconds = nonZeroOr(state.Config.OrchestratorMaxWait, models.DefaultOrchestratorMaxWait)
-	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer,
-		roles.RuntimeEpicPlanReviewer, roles.RuntimeUSReviewer:
-		pollSeconds = nonZeroOr(state.Config.ReviewerPollInterval, models.DefaultReviewerPollInterval)
-		maxWaitSeconds = nonZeroOr(state.Config.ReviewerMaxWait, models.DefaultReviewerMaxWait)
-	default:
-		pollSeconds = nonZeroOr(state.Config.CoderPollInterval, models.DefaultCoderPollInterval)
-		maxWaitSeconds = nonZeroOr(state.Config.CoderMaxWait, models.DefaultCoderMaxWait)
-	}
-
-	return time.Duration(pollSeconds) * time.Second, time.Duration(maxWaitSeconds) * time.Second
 }
 
 // workCheckFunc checks if work is available for an agent role.

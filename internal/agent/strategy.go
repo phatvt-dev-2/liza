@@ -15,6 +15,10 @@ type RoleStrategy interface {
 	// DefaultTimeout returns the execution timeout when SupervisorConfig.ExecutionTimeout is unset.
 	DefaultTimeout() time.Duration
 
+	// WaitConfig returns the poll interval and max wait for this role,
+	// resolved from state configuration with role-appropriate defaults.
+	WaitConfig(state *models.State) (pollInterval, maxWait time.Duration)
+
 	// PreWork runs actions before waiting for work (e.g., merge handling for reviewers).
 	// Returns shouldContinue=true to restart the loop iteration (e.g., pending merge retry).
 	PreWork(ctx context.Context, bb *db.Blackboard, config SupervisorConfig) (shouldContinue bool, err error)

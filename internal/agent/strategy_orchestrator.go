@@ -17,6 +17,12 @@ func (s *orchestratorStrategy) DefaultTimeout() time.Duration {
 	return 4 * time.Hour
 }
 
+func (s *orchestratorStrategy) WaitConfig(state *models.State) (pollInterval, maxWait time.Duration) {
+	poll := nonZeroOr(state.Config.OrchestratorPollInterval, models.DefaultOrchestratorPollInterval)
+	max := nonZeroOr(state.Config.OrchestratorMaxWait, models.DefaultOrchestratorMaxWait)
+	return time.Duration(poll) * time.Second, time.Duration(max) * time.Second
+}
+
 func (s *orchestratorStrategy) PreWork(_ context.Context, _ *db.Blackboard, _ SupervisorConfig) (bool, error) {
 	return false, nil
 }

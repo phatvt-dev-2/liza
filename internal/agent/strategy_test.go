@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -108,6 +109,89 @@ func TestDefaultTimeout(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWaitConfig verifies each role resolves the correct config keys and defaults.
+func TestWaitConfig(t *testing.T) {
+	tests := []struct {
+		role        string
+		wantPoll    time.Duration
+		wantMaxWait time.Duration
+	}{
+		// Doer roles use Coder defaults
+		{roles.RuntimeCoder, 30 * time.Second, 1800 * time.Second},
+		{roles.RuntimeCodePlanner, 30 * time.Second, 1800 * time.Second},
+		{roles.RuntimeEpicPlanner, 30 * time.Second, 1800 * time.Second},
+		{roles.RuntimeUSWriter, 30 * time.Second, 1800 * time.Second},
+		// Reviewer roles use Reviewer defaults
+		{roles.RuntimeCodeReviewer, 30 * time.Second, 1800 * time.Second},
+		{roles.RuntimeCodePlanReviewer, 30 * time.Second, 1800 * time.Second},
+		{roles.RuntimeEpicPlanReviewer, 30 * time.Second, 1800 * time.Second},
+		{roles.RuntimeUSReviewer, 30 * time.Second, 1800 * time.Second},
+		// Orchestrator uses Orchestrator defaults
+		{roles.RuntimeOrchestrator, 60 * time.Second, 1800 * time.Second},
+	}
+
+	zeroState := &models.State{}
+
+	for _, tt := range tests {
+		t.Run(tt.role+"/defaults", func(t *testing.T) {
+			s, err := NewRoleStrategy(tt.role)
+			if err != nil {
+				t.Fatalf("NewRoleStrategy(%q) error = %v", tt.role, err)
+			}
+			poll, maxWait := s.WaitConfig(zeroState)
+			if poll != tt.wantPoll {
+				t.Errorf("WaitConfig() poll = %v, want %v", poll, tt.wantPoll)
+			}
+			if maxWait != tt.wantMaxWait {
+				t.Errorf("WaitConfig() maxWait = %v, want %v", maxWait, tt.wantMaxWait)
+			}
+		})
+	}
+
+	// Verify each category reads the correct config keys (not each other's).
+	t.Run("custom_config/doer", func(t *testing.T) {
+		state := &models.State{Config: models.Config{CoderPollInterval: 5, CoderMaxWait: 60}}
+		s, _ := NewRoleStrategy(roles.RuntimeCoder)
+		poll, maxWait := s.WaitConfig(state)
+		if poll != 5*time.Second || maxWait != 60*time.Second {
+			t.Errorf("doer WaitConfig() = (%v, %v), want (5s, 1m0s)", poll, maxWait)
+		}
+	})
+
+	t.Run("custom_config/reviewer", func(t *testing.T) {
+		state := &models.State{Config: models.Config{ReviewerPollInterval: 10, ReviewerMaxWait: 120}}
+		s, _ := NewRoleStrategy(roles.RuntimeCodeReviewer)
+		poll, maxWait := s.WaitConfig(state)
+		if poll != 10*time.Second || maxWait != 120*time.Second {
+			t.Errorf("reviewer WaitConfig() = (%v, %v), want (10s, 2m0s)", poll, maxWait)
+		}
+	})
+
+	t.Run("custom_config/orchestrator", func(t *testing.T) {
+		state := &models.State{Config: models.Config{OrchestratorPollInterval: 15, OrchestratorMaxWait: 300}}
+		s, _ := NewRoleStrategy(roles.RuntimeOrchestrator)
+		poll, maxWait := s.WaitConfig(state)
+		if poll != 15*time.Second || maxWait != 300*time.Second {
+			t.Errorf("orchestrator WaitConfig() = (%v, %v), want (15s, 5m0s)", poll, maxWait)
+		}
+	})
+
+	// Cross-contamination: doer config should NOT affect reviewer or orchestrator
+	t.Run("custom_config/isolation", func(t *testing.T) {
+		state := &models.State{Config: models.Config{CoderPollInterval: 99, CoderMaxWait: 99}}
+		reviewer, _ := NewRoleStrategy(roles.RuntimeCodeReviewer)
+		poll, _ := reviewer.WaitConfig(state)
+		if poll == 99*time.Second {
+			t.Error("reviewer should not read CoderPollInterval")
+		}
+		orch, _ := NewRoleStrategy(roles.RuntimeOrchestrator)
+		poll, _ = orch.WaitConfig(state)
+		if poll == 99*time.Second {
+			t.Error("orchestrator should not read CoderPollInterval")
+		}
+	})
 }
 
 // TestDoerPreWork_IsNoOp verifies doer PreWork returns (false, nil).
