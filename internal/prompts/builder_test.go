@@ -284,6 +284,30 @@ func TestBuildOrchestratorContext(t *testing.T) {
 			},
 		},
 		{
+			name: "planning complete trigger",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-plan-1", "task-code-1"}
+				planningTask := testhelpers.BuildTaskByStatus("task-plan-1", models.TaskStatusMerged, now)
+				planningTask.RolePair = "code-planning-pair"
+				planningTask.Output = []models.OutputEntry{
+					{Desc: "Implement auth", DoneWhen: "Auth works", Scope: "internal/auth"},
+				}
+				codingTask := testhelpers.BuildTaskByStatus("task-code-1", models.TaskStatusMerged, now)
+				state.Tasks = []models.Task{planningTask, codingTask}
+				return state
+			}(),
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
+			wantContains: []string{
+				"WAKE TRIGGER: PLANNING_COMPLETE",
+				"- Total tasks: 2",
+				"- Merged: 2",
+				"Planning sprint tasks have been merged with output[] entries",
+				"Pipeline transitions are handled automatically by the supervisor",
+				`liza_sprint_checkpoint`,
+			},
+		},
+		{
 			name: "sprint complete trigger",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
@@ -1550,6 +1574,28 @@ func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 				"execute liza_add_tasks tool NOW",
 				"fallback state edit + liza_validate",
 				"All discovered items must be processed and all tools executed in this session",
+			},
+		},
+		{
+			name: "PLANNING_COMPLETE has checkpoint language",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Sprint.Scope.Planned = []string{"task-plan-1", "task-code-1"}
+				planningTask := testhelpers.BuildTaskByStatus("task-plan-1", models.TaskStatusMerged, now)
+				planningTask.RolePair = "code-planning-pair"
+				planningTask.Output = []models.OutputEntry{
+					{Desc: "Implement feature", DoneWhen: "Feature works", Scope: "internal/"},
+				}
+				codingTask := testhelpers.BuildTaskByStatus("task-code-1", models.TaskStatusMerged, now)
+				state.Tasks = []models.Task{planningTask, codingTask}
+				return state
+			}(),
+			wantTrigger: "PLANNING_COMPLETE",
+			wantContains: []string{
+				"Planning sprint tasks have been merged with output[] entries",
+				"Pipeline transitions are handled automatically by the supervisor",
+				"FULL autonomy to execute MCP tools immediately",
+				"liza_sprint_checkpoint",
 			},
 		},
 	}

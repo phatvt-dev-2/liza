@@ -117,10 +117,10 @@ None
 
 **Strengths:**
 - **Template-based agent initialization**: Structured bootstrap prompts with embedded contracts, role definitions, and task context
-- `builder.go` (598 LOC) generates complete agent initialization context
+- `builder.go` (422 LOC) generates agent initialization context; `wake.go` (181 LOC) encapsulates wake trigger subsystem
 
 **Concerns:**
-- Single large file — could be decomposed into template sections (role prompt, task prompt, tool config)
+- ~~Single large file — could be decomposed into template sections~~ *(Resolved — wake trigger subsystem extracted to `wake.go`)*
 
 ---
 
@@ -286,4 +286,4 @@ The project's primary challenge is not code quality but **cognitive surface area
 
 **Overall Rating: A (Excellent)**
 
-The P1 refactoring resolved MCP handler, state model, and validation file-level concentration concerns. Several files remain in the 500-655 LOC range (`claim_task.go`, `supervisor.go`, `watch.go`, `builder.go`, `proceed.go`) but reflect genuine domain complexity. The remaining improvement areas (coverage enforcement, Python test coverage, fuzz testing) are P2/P3 items that don't affect the core runtime's quality.
+The P1 refactoring resolved MCP handler, state model, and validation file-level concentration concerns. The prompt building subsystem was further decomposed by extracting wake trigger logic into `wake.go`. Several files remain in the 500-655 LOC range (`claim_task.go`, `supervisor.go`, `watch.go`, `proceed.go`) but reflect genuine domain complexity. The remaining improvement areas (coverage enforcement, Python test coverage, fuzz testing) are P2/P3 items that don't affect the core runtime's quality.
