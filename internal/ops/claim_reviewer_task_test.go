@@ -52,6 +52,7 @@ func TestClaimReviewerTask_DefaultLeaseDuration(t *testing.T) {
 		{
 			ID:           "task-1",
 			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
 			Worktree:     &worktree,
 			ReviewCommit: &reviewCommit,
 			Created:      now,
@@ -118,6 +119,7 @@ func TestClaimReviewerTask_Success(t *testing.T) {
 		{
 			ID:           "task-1",
 			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
 			Priority:     1,
 			Worktree:     &worktree,
 			ReviewCommit: &reviewCommit,
@@ -201,6 +203,7 @@ func TestClaimReviewerTask_PrioritySelection(t *testing.T) {
 		{
 			ID:           "task-low",
 			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
 			Priority:     3,
 			Worktree:     &worktree1,
 			ReviewCommit: &reviewCommit1,
@@ -209,6 +212,7 @@ func TestClaimReviewerTask_PrioritySelection(t *testing.T) {
 		{
 			ID:           "task-high",
 			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
 			Priority:     1,
 			Worktree:     &worktree2,
 			ReviewCommit: &reviewCommit2,
@@ -247,6 +251,7 @@ func TestClaimReviewerTask_TieBreaking(t *testing.T) {
 		{
 			ID:           "task-new",
 			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
 			Priority:     2,
 			Worktree:     &worktree2,
 			ReviewCommit: &reviewCommit2,
@@ -255,6 +260,7 @@ func TestClaimReviewerTask_TieBreaking(t *testing.T) {
 		{
 			ID:           "task-old",
 			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
 			Priority:     2,
 			Worktree:     &worktree1,
 			ReviewCommit: &reviewCommit1,
@@ -292,6 +298,7 @@ func TestClaimReviewerTask_MissingReviewCommit(t *testing.T) {
 		{
 			ID:       "task-1",
 			Status:   models.TaskStatusReadyForReview,
+			RolePair: "coding-pair",
 			Priority: 1,
 			Worktree: &worktree,
 			// ReviewCommit intentionally nil
@@ -331,6 +338,7 @@ func TestClaimReviewerTask_SkipsAlreadyReviewing(t *testing.T) {
 		{
 			ID:                 "task-reviewing",
 			Status:             models.TaskStatusReviewing,
+			RolePair:           "coding-pair",
 			Priority:           1, // High priority but already claimed
 			Worktree:           &worktree1,
 			ReviewCommit:       &reviewCommit1,
@@ -341,6 +349,7 @@ func TestClaimReviewerTask_SkipsAlreadyReviewing(t *testing.T) {
 		{
 			ID:           "task-available",
 			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
 			Priority:     3, // Lower priority but available
 			Worktree:     &worktree2,
 			ReviewCommit: &reviewCommit2,

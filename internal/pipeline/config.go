@@ -60,13 +60,27 @@ type TransitionDef struct {
 }
 
 // LoadFrozen loads the frozen pipeline config from .liza/pipeline.yaml.
-// Returns nil, nil when no pipeline config exists (legacy goal).
+// Returns an error when no pipeline config exists (pipeline is mandatory).
 func LoadFrozen(projectRoot string) (*PipelineConfig, error) {
 	path := filepath.Join(projectRoot, ".liza", "pipeline.yaml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, nil
+		return nil, fmt.Errorf("pipeline config not found at %s (run 'liza init' to create workspace)", path)
 	}
 	return Load(path)
+}
+
+// LoadFromBytes parses and validates a pipeline config from raw YAML bytes.
+func LoadFromBytes(data []byte) (*PipelineConfig, error) {
+	var cfg PipelineConfig
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("parsing pipeline config: %w", err)
+	}
+	if err := validate(&cfg); err != nil {
+		return nil, fmt.Errorf("validating pipeline config: %w", err)
+	}
+	return &cfg, nil
 }
 
 // Load parses and validates a pipeline config from the given path.

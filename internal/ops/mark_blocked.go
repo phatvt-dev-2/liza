@@ -41,20 +41,20 @@ func MarkBlocked(projectRoot, taskID, reason string, questions []string, agentID
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
 
-	// Load pipeline config once for pipeline-aware status checks and transitions.
-	var pipelineExecuting []models.TaskStatus
-	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
-	resolver, _, _ := loadResolver(projectRoot)
-	if resolver != nil {
-		for _, rpName := range resolver.RolePairNames() {
-			if es, err := resolver.ExecutingStatus(rpName); err == nil {
-				pipelineExecuting = append(pipelineExecuting, es)
-			}
-		}
-		pipelineTransitions = BuildPipelineTransitions(resolver)
+	// Load pipeline config for status checks and transitions.
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
+	var pipelineExecuting []models.TaskStatus
+	for _, rpName := range resolver.RolePairNames() {
+		if es, err := resolver.ExecutingStatus(rpName); err == nil {
+			pipelineExecuting = append(pipelineExecuting, es)
+		}
+	}
+	pipelineTransitions := BuildPipelineTransitions(resolver)
 
-	err := bb.Modify(func(state *models.State) error {
+	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
@@ -68,15 +68,8 @@ func MarkBlocked(projectRoot, taskID, reason string, questions []string, agentID
 			return fmt.Errorf("only the assigned agent can mark task as blocked")
 		}
 
-		// Use pipeline-aware transition if available, otherwise hardcoded.
-		if pipelineTransitions != nil {
-			if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
-				return err
-			}
-		} else {
-			if err := task.Transition(models.TaskStatusBlocked); err != nil {
-				return err
-			}
+		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
+			return err
 		}
 		task.BlockedReason = &reason
 		task.BlockedQuestions = questions

@@ -41,16 +41,6 @@ type transitionDef struct {
 	doerDisplayName string
 }
 
-// knownTransitions is the hardcoded transition registry.
-// Future step 5 will replace this with YAML config.
-var knownTransitions = map[string]transitionDef{
-	"code-plan-to-coding": {
-		requiredStatus: models.TaskStatusMerged,
-		targetStatus:   models.TaskStatusDraft,
-		cardinality:    "per-subtask",
-	},
-}
-
 // Proceed executes a manual inter-pair transition on a source task.
 // It creates child tasks from the source's output[] entries and records
 // the transition in the source's transitions_executed map.
@@ -240,15 +230,10 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 // supervisor crashes between merge and transition, the next run will pick up the
 // pending transition. The idempotency guard in proceedInner (TransitionsExecuted map)
 // prevents duplicate child creation.
-//
-// Returns nil, nil for legacy projects (no pipeline config).
 func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 	resolver, cfg, err := loadResolver(projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
-	}
-	if resolver == nil {
-		return nil, nil // Legacy project — no pipeline config
 	}
 
 	statePath := paths.New(projectRoot).StatePath()
@@ -419,26 +404,17 @@ func validateOutputEntry(entry models.OutputEntry, index int) error {
 }
 
 // AvailableTransitions returns the available manual transitions for a task.
-// For pipeline-configured goals, transitions are read from the frozen config.
-// For legacy goals, transitions are read from the hardcoded knownTransitions map.
+// Transitions are read from the frozen pipeline config.
 // Returns nil if no transitions are available.
 func AvailableTransitions(task *models.Task, projectRoot string) []string {
 	resolver, _, err := loadResolver(projectRoot)
-	if err == nil && resolver != nil {
-		return resolver.AvailableTransitions(task.Status, task.TransitionsExecuted)
+	if err != nil {
+		return nil
 	}
-	// Legacy path
-	var available []string
-	for name, tDef := range knownTransitions {
-		if task.Status == tDef.requiredStatus && !task.TransitionsExecuted[name] {
-			available = append(available, name)
-		}
-	}
-	return available
+	return resolver.AvailableTransitions(task.Status, task.TransitionsExecuted)
 }
 
-// resolveTransitionDef looks up a transition definition, trying the pipeline config
-// first (if present) and falling back to the legacy knownTransitions map.
+// resolveTransitionDef looks up a transition definition from the pipeline config.
 // Only manual transitions are allowed — auto transitions are reserved for supervisor
 // execution via ExecuteAvailableTransitions.
 func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, error) {
@@ -447,34 +423,19 @@ func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, er
 		return transitionDef{}, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
 
-	if resolver != nil {
-		// Pipeline path: verify transition exists and check trigger type
-		td, err := resolver.Transition(transitionName)
-		if err != nil {
-			names := allTransitionNames(cfg)
-			return transitionDef{}, fmt.Errorf("unknown transition %q (available: %s)", transitionName, strings.Join(names, ", "))
-		}
-
-		// Only manual transitions are executable via liza proceed.
-		// Auto transitions are reserved for supervisor execution.
-		if td.Trigger != "manual" {
-			return transitionDef{}, fmt.Errorf("transition %q has trigger %q; only manual transitions can be executed via proceed", transitionName, td.Trigger)
-		}
-
-		return buildTransitionDefFromPipeline(resolver, cfg, transitionName)
-	}
-
-	// Legacy path
-	td, ok := knownTransitions[transitionName]
-	if !ok {
-		names := make([]string, 0, len(knownTransitions))
-		for name := range knownTransitions {
-			names = append(names, name)
-		}
-		slices.Sort(names)
+	td, err := resolver.Transition(transitionName)
+	if err != nil {
+		names := allTransitionNames(cfg)
 		return transitionDef{}, fmt.Errorf("unknown transition %q (available: %s)", transitionName, strings.Join(names, ", "))
 	}
-	return td, nil
+
+	// Only manual transitions are executable via liza proceed.
+	// Auto transitions are reserved for supervisor execution.
+	if td.Trigger != "manual" {
+		return transitionDef{}, fmt.Errorf("transition %q has trigger %q; only manual transitions can be executed via proceed", transitionName, td.Trigger)
+	}
+
+	return buildTransitionDefFromPipeline(resolver, cfg, transitionName)
 }
 
 // resolvePhaseRef resolves a phase reference to a concrete TaskStatus.

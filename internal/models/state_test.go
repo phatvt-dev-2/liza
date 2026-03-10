@@ -73,138 +73,6 @@ func TestTaskTerminalStates(t *testing.T) {
 	}
 }
 
-func TestTaskTransitionMapCompleteness(t *testing.T) {
-	// Every valid status must have an entry in the transition map.
-	allStatuses := []TaskStatus{
-		TaskStatusDraft, TaskStatusReady, TaskStatusImplementing,
-		TaskStatusReadyForReview, TaskStatusReviewing, TaskStatusRejected,
-		TaskStatusApproved, TaskStatusMerged, TaskStatusBlocked,
-		TaskStatusAbandoned, TaskStatusSuperseded, TaskStatusIntegrationFailed,
-		TaskStatusDraftCodingPlan, TaskStatusCodePlanning,
-		TaskStatusCodingPlanToReview, TaskStatusReviewingCodingPlan,
-		TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected,
-	}
-	for _, s := range allStatuses {
-		if _, ok := taskTransitions[s]; !ok {
-			t.Errorf("status %s missing from taskTransitions map", s)
-		}
-	}
-}
-
-func TestTaskTransitionMapTargetsValid(t *testing.T) {
-	// Every target in the map must be a valid TaskStatus.
-	for from, targets := range taskTransitions {
-		for _, to := range targets {
-			if !to.IsValid() {
-				t.Errorf("taskTransitions[%s] contains invalid target %s", from, to)
-			}
-		}
-	}
-}
-
-func TestTerminalStatesHaveNoTransitions(t *testing.T) {
-	terminals := []TaskStatus{TaskStatusMerged, TaskStatusAbandoned, TaskStatusSuperseded}
-	for _, s := range terminals {
-		targets := taskTransitions[s]
-		if len(targets) != 0 {
-			t.Errorf("terminal status %s has non-empty transition targets: %v", s, targets)
-		}
-	}
-}
-
-func TestCanTransition(t *testing.T) {
-	tests := []struct {
-		from TaskStatus
-		to   TaskStatus
-		want bool
-	}{
-		// Valid edges
-		{TaskStatusDraft, TaskStatusReady, true},
-		{TaskStatusDraft, TaskStatusAbandoned, true},
-		{TaskStatusReady, TaskStatusImplementing, true},
-		{TaskStatusReady, TaskStatusSuperseded, true},
-		{TaskStatusReady, TaskStatusAbandoned, true},
-		{TaskStatusImplementing, TaskStatusReadyForReview, true},
-		{TaskStatusImplementing, TaskStatusBlocked, true},
-		{TaskStatusImplementing, TaskStatusReady, true},
-		{TaskStatusImplementing, TaskStatusIntegrationFailed, true},
-		{TaskStatusReadyForReview, TaskStatusReviewing, true},
-		{TaskStatusReviewing, TaskStatusApproved, true},
-		{TaskStatusReviewing, TaskStatusRejected, true},
-		{TaskStatusReviewing, TaskStatusReadyForReview, true},
-		{TaskStatusRejected, TaskStatusImplementing, true},
-		{TaskStatusRejected, TaskStatusBlocked, true},
-		{TaskStatusRejected, TaskStatusSuperseded, true},
-		{TaskStatusRejected, TaskStatusAbandoned, true},
-		{TaskStatusApproved, TaskStatusMerged, true},
-		{TaskStatusApproved, TaskStatusIntegrationFailed, true},
-		{TaskStatusBlocked, TaskStatusSuperseded, true},
-		{TaskStatusBlocked, TaskStatusAbandoned, true},
-		{TaskStatusIntegrationFailed, TaskStatusImplementing, true},
-		{TaskStatusIntegrationFailed, TaskStatusAbandoned, true},
-
-		// Invalid edges
-		{TaskStatusDraft, TaskStatusImplementing, false},
-		{TaskStatusReady, TaskStatusApproved, false},
-		{TaskStatusImplementing, TaskStatusMerged, false},
-		{TaskStatusReadyForReview, TaskStatusApproved, false},
-		{TaskStatusApproved, TaskStatusReady, false},
-		{TaskStatusMerged, TaskStatusReady, false},
-		{TaskStatusAbandoned, TaskStatusReady, false},
-		{TaskStatusSuperseded, TaskStatusReady, false},
-
-		// Unknown status
-		{TaskStatus("UNKNOWN"), TaskStatusReady, false},
-	}
-
-	for _, tt := range tests {
-		name := string(tt.from) + "→" + string(tt.to)
-		t.Run(name, func(t *testing.T) {
-			got := tt.from.CanTransition(tt.to)
-			if got != tt.want {
-				t.Errorf("CanTransition(%s, %s) = %v, want %v", tt.from, tt.to, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestTaskTransition(t *testing.T) {
-	t.Run("valid transition", func(t *testing.T) {
-		task := Task{ID: "task-1", Status: TaskStatusDraft}
-		err := task.Transition(TaskStatusReady)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if task.Status != TaskStatusReady {
-			t.Errorf("status = %s, want READY", task.Status)
-		}
-	})
-
-	t.Run("invalid transition returns error", func(t *testing.T) {
-		task := Task{ID: "task-42", Status: TaskStatusDraft}
-		err := task.Transition(TaskStatusMerged)
-		if err == nil {
-			t.Fatal("expected error for invalid transition")
-		}
-		want := "invalid task transition: DRAFT → MERGED (task task-42)"
-		if err.Error() != want {
-			t.Errorf("error = %q, want %q", err.Error(), want)
-		}
-		// Status must not change on error
-		if task.Status != TaskStatusDraft {
-			t.Errorf("status changed to %s on failed transition", task.Status)
-		}
-	})
-
-	t.Run("terminal state rejects all transitions", func(t *testing.T) {
-		task := Task{ID: "task-99", Status: TaskStatusMerged}
-		err := task.Transition(TaskStatusReady)
-		if err == nil {
-			t.Fatal("expected error transitioning from terminal state")
-		}
-	})
-}
-
 func TestAgentStatusConstants(t *testing.T) {
 	validStatuses := []AgentStatus{
 		AgentStatusStarting,
@@ -528,6 +396,17 @@ priority: 1
 }
 
 func TestIsClaimableWithRole(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "coder",         // runtime form
+		reviewer:  "code-reviewer", // runtime form
+		initial:   TaskStatusReady,
+		rejected:  TaskStatusRejected,
+		submitted: TaskStatusReadyForReview,
+		reviewing: TaskStatusReviewing,
+		executing: TaskStatusImplementing,
+		approved:  TaskStatusApproved,
+	}
+
 	tests := []struct {
 		name      string
 		task      Task
@@ -536,37 +415,37 @@ func TestIsClaimableWithRole(t *testing.T) {
 	}{
 		{
 			name:      "coder can claim READY coding task",
-			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding},
+			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 			role:      RoleCoder,
 			claimable: true,
 		},
 		{
 			name:      "coder can claim REJECTED coding task",
-			task:      Task{Status: TaskStatusRejected, Type: TaskTypeCoding},
+			task:      Task{Status: TaskStatusRejected, Type: TaskTypeCoding, RolePair: "coding-pair"},
 			role:      RoleCoder,
 			claimable: true,
 		},
 		{
 			name:      "coder cannot claim READY_FOR_REVIEW task",
-			task:      Task{Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
+			task:      Task{Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
 			role:      RoleCoder,
 			claimable: false,
 		},
 		{
 			name:      "code_reviewer can claim READY_FOR_REVIEW coding task",
-			task:      Task{Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
+			task:      Task{Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
 			role:      RoleCodeReviewer,
 			claimable: true,
 		},
 		{
 			name:      "code_reviewer cannot claim READY task",
-			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding},
+			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 			role:      RoleCodeReviewer,
 			claimable: false,
 		},
 		{
 			name:      "orchestrator cannot claim any task",
-			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding},
+			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 			role:      RoleOrchestrator,
 			claimable: false,
 		},
@@ -580,7 +459,7 @@ func TestIsClaimableWithRole(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(tt.role, nil, nil)
+			result := tt.task.IsClaimable(tt.role, nil, pr)
 			if result != tt.claimable {
 				t.Errorf("IsClaimable(%q) = %v, want %v", tt.role, result, tt.claimable)
 			}
@@ -589,6 +468,17 @@ func TestIsClaimableWithRole(t *testing.T) {
 }
 
 func TestTaskClaimability(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "coder",         // runtime form
+		reviewer:  "code-reviewer", // runtime form
+		initial:   TaskStatusReady,
+		rejected:  TaskStatusRejected,
+		submitted: TaskStatusReadyForReview,
+		reviewing: TaskStatusReviewing,
+		executing: TaskStatusImplementing,
+		approved:  TaskStatusApproved,
+	}
+
 	tests := []struct {
 		name      string
 		task      Task
@@ -598,6 +488,7 @@ func TestTaskClaimability(t *testing.T) {
 			name: "READY with no dependencies",
 			task: Task{
 				Status:    TaskStatusReady,
+				RolePair:  "coding-pair",
 				DependsOn: []string{},
 			},
 			claimable: true,
@@ -605,7 +496,8 @@ func TestTaskClaimability(t *testing.T) {
 		{
 			name: "READY with nil dependencies",
 			task: Task{
-				Status: TaskStatusReady,
+				Status:   TaskStatusReady,
+				RolePair: "coding-pair",
 			},
 			claimable: true,
 		},
@@ -613,6 +505,7 @@ func TestTaskClaimability(t *testing.T) {
 			name: "REJECTED is claimable",
 			task: Task{
 				Status:    TaskStatusRejected,
+				RolePair:  "coding-pair",
 				DependsOn: []string{},
 			},
 			claimable: true,
@@ -621,6 +514,7 @@ func TestTaskClaimability(t *testing.T) {
 			name: "INTEGRATION_FAILED is claimable",
 			task: Task{
 				Status:    TaskStatusIntegrationFailed,
+				RolePair:  "coding-pair",
 				DependsOn: []string{},
 			},
 			claimable: true,
@@ -628,21 +522,24 @@ func TestTaskClaimability(t *testing.T) {
 		{
 			name: "DRAFT is not claimable",
 			task: Task{
-				Status: TaskStatusDraft,
+				Status:   TaskStatusDraft,
+				RolePair: "coding-pair",
 			},
 			claimable: false,
 		},
 		{
 			name: "IMPLEMENTING is not claimable",
 			task: Task{
-				Status: TaskStatusImplementing,
+				Status:   TaskStatusImplementing,
+				RolePair: "coding-pair",
 			},
 			claimable: false,
 		},
 		{
 			name: "MERGED is not claimable",
 			task: Task{
-				Status: TaskStatusMerged,
+				Status:   TaskStatusMerged,
+				RolePair: "coding-pair",
 			},
 			claimable: false,
 		},
@@ -650,7 +547,7 @@ func TestTaskClaimability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(RoleCoder, nil, nil) // nil means all dependencies are satisfied
+			result := tt.task.IsClaimable(RoleCoder, nil, pr) // nil allTasks means all dependencies are satisfied
 			if result != tt.claimable {
 				t.Errorf("IsClaimable() = %v, want %v", result, tt.claimable)
 			}
@@ -659,11 +556,22 @@ func TestTaskClaimability(t *testing.T) {
 }
 
 func TestTaskClaimabilityWithDependencies(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "coder",         // runtime form
+		reviewer:  "code-reviewer", // runtime form
+		initial:   TaskStatusReady,
+		rejected:  TaskStatusRejected,
+		submitted: TaskStatusReadyForReview,
+		reviewing: TaskStatusReviewing,
+		executing: TaskStatusImplementing,
+		approved:  TaskStatusApproved,
+	}
+
 	// Mock function that checks if dependencies are satisfied
 	allTasks := []Task{
-		{ID: "task-1", Status: TaskStatusMerged},
-		{ID: "task-2", Status: TaskStatusReady},
-		{ID: "task-3", Status: TaskStatusMerged},
+		{ID: "task-1", Status: TaskStatusMerged, RolePair: "coding-pair"},
+		{ID: "task-2", Status: TaskStatusReady, RolePair: "coding-pair"},
+		{ID: "task-3", Status: TaskStatusMerged, RolePair: "coding-pair"},
 	}
 
 	tests := []struct {
@@ -676,6 +584,7 @@ func TestTaskClaimabilityWithDependencies(t *testing.T) {
 			task: Task{
 				ID:        "task-4",
 				Status:    TaskStatusReady,
+				RolePair:  "coding-pair",
 				DependsOn: []string{"task-1", "task-3"},
 			},
 			claimable: true,
@@ -685,6 +594,7 @@ func TestTaskClaimabilityWithDependencies(t *testing.T) {
 			task: Task{
 				ID:        "task-5",
 				Status:    TaskStatusReady,
+				RolePair:  "coding-pair",
 				DependsOn: []string{"task-1", "task-2"}, // task-2 is READY
 			},
 			claimable: false,
@@ -693,7 +603,7 @@ func TestTaskClaimabilityWithDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(RoleCoder, allTasks, nil)
+			result := tt.task.IsClaimable(RoleCoder, allTasks, pr)
 			if result != tt.claimable {
 				t.Errorf("IsClaimable() = %v, want %v", result, tt.claimable)
 			}
@@ -1153,49 +1063,6 @@ func TestFindTaskIndex(t *testing.T) {
 	})
 }
 
-func TestCodePlanningTransitions(t *testing.T) {
-	tests := []struct {
-		from TaskStatus
-		to   TaskStatus
-		want bool
-	}{
-		// Valid code-planning pair transitions
-		{TaskStatusDraftCodingPlan, TaskStatusCodePlanning, true},
-		{TaskStatusDraftCodingPlan, TaskStatusAbandoned, true},
-		{TaskStatusCodePlanning, TaskStatusCodingPlanToReview, true},
-		{TaskStatusCodePlanning, TaskStatusBlocked, true},
-		{TaskStatusCodePlanning, TaskStatusDraftCodingPlan, true},
-		{TaskStatusCodePlanning, TaskStatusIntegrationFailed, true},
-		{TaskStatusCodingPlanToReview, TaskStatusReviewingCodingPlan, true},
-		{TaskStatusReviewingCodingPlan, TaskStatusCodingPlanApproved, true},
-		{TaskStatusReviewingCodingPlan, TaskStatusCodingPlanRejected, true},
-		{TaskStatusReviewingCodingPlan, TaskStatusCodingPlanToReview, true},
-		{TaskStatusCodingPlanRejected, TaskStatusDraftCodingPlan, true},
-		{TaskStatusCodingPlanRejected, TaskStatusBlocked, true},
-		{TaskStatusCodingPlanRejected, TaskStatusSuperseded, true},
-		{TaskStatusCodingPlanRejected, TaskStatusAbandoned, true},
-
-		// CODING_PLAN_APPROVED → MERGED (mirrors APPROVED)
-		{TaskStatusCodingPlanApproved, TaskStatusMerged, true},
-		{TaskStatusCodingPlanApproved, TaskStatusIntegrationFailed, true},
-		{TaskStatusCodingPlanApproved, TaskStatusDraftCodingPlan, false},
-
-		// Invalid cross-pair transitions
-		{TaskStatusDraftCodingPlan, TaskStatusImplementing, false},
-		{TaskStatusCodePlanning, TaskStatusReadyForReview, false},
-	}
-
-	for _, tt := range tests {
-		name := string(tt.from) + "→" + string(tt.to)
-		t.Run(name, func(t *testing.T) {
-			got := tt.from.CanTransition(tt.to)
-			if got != tt.want {
-				t.Errorf("CanTransition(%s, %s) = %v, want %v", tt.from, tt.to, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestCodingPlanApprovedIsNotSprintTerminal(t *testing.T) {
 	// CODING_PLAN_APPROVED is no longer sprint-terminal — MERGED is the universal terminal.
 	if TaskStatusCodingPlanApproved.IsSprintTerminal() {
@@ -1394,6 +1261,17 @@ func TestRoleConstants_CodePlanning(t *testing.T) {
 }
 
 func TestIsClaimable_CodePlanningRoles(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "code-planner",       // runtime form
+		reviewer:  "code-plan-reviewer", // runtime form
+		initial:   TaskStatusDraftCodingPlan,
+		rejected:  TaskStatusCodingPlanRejected,
+		submitted: TaskStatusCodingPlanToReview,
+		reviewing: TaskStatusReviewingCodingPlan,
+		executing: TaskStatusCodePlanning,
+		approved:  TaskStatusCodingPlanApproved,
+	}
+
 	tests := []struct {
 		name      string
 		task      Task
@@ -1407,10 +1285,10 @@ func TestIsClaimable_CodePlanningRoles(t *testing.T) {
 			claimable: true,
 		},
 		{
-			name:      "code_planner cannot claim CODING_PLAN_REJECTED directly",
+			name:      "code_planner can claim CODING_PLAN_REJECTED",
 			task:      Task{Status: TaskStatusCodingPlanRejected, RolePair: "code-planning-pair"},
 			role:      RoleCodePlanner,
-			claimable: false,
+			claimable: true,
 		},
 		{
 			name:      "code_plan_reviewer can claim CODING_PLAN_TO_REVIEW",
@@ -1446,7 +1324,7 @@ func TestIsClaimable_CodePlanningRoles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.task.IsClaimable(tt.role, nil, nil)
+			result := tt.task.IsClaimable(tt.role, nil, pr)
 			if result != tt.claimable {
 				t.Errorf("IsClaimable(%q) = %v, want %v", tt.role, result, tt.claimable)
 			}

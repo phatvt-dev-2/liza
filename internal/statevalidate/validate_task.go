@@ -133,23 +133,23 @@ func containsStatus(list []models.TaskStatus, s models.TaskStatus) bool {
 }
 
 func (sc *statusClassifier) IsExecuting(s models.TaskStatus) bool {
-	return s == models.TaskStatusImplementing || s == models.TaskStatusCodePlanning || containsStatus(sc.executing, s)
+	return containsStatus(sc.executing, s)
 }
 
 func (sc *statusClassifier) IsInitial(s models.TaskStatus) bool {
-	return s == models.TaskStatusDraft || s == models.TaskStatusReady || s == models.TaskStatusDraftCodingPlan || containsStatus(sc.initial, s)
+	return containsStatus(sc.initial, s)
 }
 
 func (sc *statusClassifier) IsSubmitted(s models.TaskStatus) bool {
-	return s == models.TaskStatusReadyForReview || s == models.TaskStatusCodingPlanToReview || containsStatus(sc.submitted, s)
+	return containsStatus(sc.submitted, s)
 }
 
 func (sc *statusClassifier) IsReviewing(s models.TaskStatus) bool {
-	return s == models.TaskStatusReviewing || s == models.TaskStatusReviewingCodingPlan || containsStatus(sc.reviewing, s)
+	return containsStatus(sc.reviewing, s)
 }
 
 func (sc *statusClassifier) IsApproved(s models.TaskStatus) bool {
-	return s == models.TaskStatusApproved || s == models.TaskStatusCodingPlanApproved || containsStatus(sc.approved, s)
+	return containsStatus(sc.approved, s)
 }
 
 func (sc *statusClassifier) IsRejected(s models.TaskStatus) bool {

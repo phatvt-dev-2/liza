@@ -64,14 +64,10 @@ var coderRelease = claimRelease{
 }
 
 // ResolveReleaseStatuses returns the active/released status pairs for doer and
-// reviewer claims, resolving from the pipeline when the task has a RolePair.
-// Falls back to legacy defaults (IMPLEMENTING→READY, REVIEWING→READY_FOR_REVIEW).
+// reviewer claims, resolving from the pipeline config.
+// Returns zero-value statuses when task has no RolePair or resolver is nil.
 func ResolveReleaseStatuses(task *models.Task, resolver *pipeline.Resolver) (doerActive, doerReleased, reviewerActive, reviewerReleased models.TaskStatus) {
-	doerActive = models.TaskStatusImplementing
-	doerReleased = models.TaskStatusReady
-	reviewerActive = models.TaskStatusReviewing
-	reviewerReleased = models.TaskStatusReadyForReview
-	if resolver == nil || task.RolePair == "" {
+	if task.RolePair == "" || resolver == nil {
 		return
 	}
 	initial, initialErr := resolver.InitialStatus(task.RolePair)
@@ -120,15 +116,9 @@ func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, p
 		}
 	}
 
-	if task.Status == cfg.activeStatus {
-		if pipelineTransitions != nil {
-			if err := task.TransitionWith(cfg.releasedStatus, pipelineTransitions); err != nil {
-				return false, err
-			}
-		} else {
-			if err := task.Transition(cfg.releasedStatus); err != nil {
-				return false, err
-			}
+	if task.Status == cfg.activeStatus && pipelineTransitions != nil {
+		if err := task.TransitionWith(cfg.releasedStatus, pipelineTransitions); err != nil {
+			return false, err
 		}
 	}
 
@@ -175,15 +165,12 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 
 	now := time.Now().UTC()
 
-	// Load pipeline resolver for pipeline-aware status resolution
-	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
+	// Load pipeline resolver for status resolution
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
-	if resolver != nil {
-		pipelineTransitions = BuildPipelineTransitions(resolver)
-	}
+	pipelineTransitions := BuildPipelineTransitions(resolver)
 
 	err := bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)

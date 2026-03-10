@@ -600,12 +600,9 @@ pipeline:
 }
 
 func TestLoadFrozen_NoFile(t *testing.T) {
-	cfg, err := LoadFrozen(t.TempDir())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg != nil {
-		t.Fatal("expected nil config for missing file")
+	_, err := LoadFrozen(t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for missing pipeline config")
 	}
 }
 

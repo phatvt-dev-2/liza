@@ -299,8 +299,9 @@ func TestValidateDependencies_PipelineExecutingMetDeps(t *testing.T) {
 	}
 }
 
-func TestValidateDependencies_LegacyExecutingUnmetDeps(t *testing.T) {
-	// Legacy (no resolver) — IMPLEMENTING with unmet deps should still fail
+func TestValidateDependencies_ExecutingUnmetDeps(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
 	state := testhelpers.CreateValidState()
 	now := time.Now().UTC()
 	assignee := "coder-1"
@@ -315,13 +316,15 @@ func TestValidateDependencies_LegacyExecutingUnmetDeps(t *testing.T) {
 			Status:      models.TaskStatusDraft,
 			Priority:    1,
 			Created:     now,
+			RolePair:    "coding-pair",
 		},
 		{
 			ID:           "task-impl",
-			Description:  "Legacy implementing task with unmet dep",
+			Description:  "Executing task with unmet dep",
 			Status:       models.TaskStatusImplementing,
 			Priority:     1,
 			Created:      now,
+			RolePair:     "coding-pair",
 			AssignedTo:   &assignee,
 			Worktree:     &worktree,
 			BaseCommit:   &baseCommit,
@@ -331,9 +334,9 @@ func TestValidateDependencies_LegacyExecutingUnmetDeps(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"dep-task", "task-impl"}
 
-	err := validateDependencies(state, "", true, nil, nil)
+	err := validateDependencies(state, "", true, resolver, cfg)
 	if err == nil {
-		t.Fatal("Expected error for legacy IMPLEMENTING task with unmet dependencies")
+		t.Fatal("Expected error for IMPLEMENTING task with unmet dependencies")
 	}
 	if !strings.Contains(err.Error(), "unmet dependencies") {
 		t.Errorf("Error = %q, want to contain 'unmet dependencies'", err.Error())

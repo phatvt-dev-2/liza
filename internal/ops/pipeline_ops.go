@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/liza-mas/liza/internal/models"
@@ -8,14 +9,10 @@ import (
 )
 
 // loadResolver loads the frozen pipeline config for the given project root.
-// Returns (nil, nil, nil) for legacy goals (no pipeline.yaml).
 func loadResolver(projectRoot string) (*pipeline.Resolver, *pipeline.PipelineConfig, error) {
 	cfg, err := pipeline.LoadFrozen(projectRoot)
 	if err != nil {
 		return nil, nil, err
-	}
-	if cfg == nil {
-		return nil, nil, nil
 	}
 	return pipeline.NewResolver(cfg), cfg, nil
 }
@@ -80,7 +77,7 @@ func BuildPipelineTransitions(r *pipeline.Resolver) map[models.TaskStatus][]mode
 		executingStatuses = append(executingStatuses, ls.executing)
 
 		// Cross-cutting additions per lifecycle phase:
-		tm[ls.initial] = append(tm[ls.initial], models.TaskStatusAbandoned)
+		tm[ls.initial] = append(tm[ls.initial], models.TaskStatusAbandoned, models.TaskStatusSuperseded)
 		tm[ls.executing] = append(tm[ls.executing], models.TaskStatusBlocked, ls.initial, models.TaskStatusIntegrationFailed)
 		tm[ls.reviewing] = append(tm[ls.reviewing], ls.submitted)
 		tm[ls.rejected] = append(tm[ls.rejected], ls.executing, models.TaskStatusBlocked, models.TaskStatusSuperseded, models.TaskStatusAbandoned)
@@ -105,68 +102,64 @@ type PipelineDetectionContext struct {
 }
 
 // LoadDetectionContext loads pipeline config once and returns both sprint-terminal
-// states and transition-source pairs. Returns nil for legacy projects.
-func LoadDetectionContext(projectRoot string) *PipelineDetectionContext {
+// states and transition-source pairs.
+func LoadDetectionContext(projectRoot string) (*PipelineDetectionContext, error) {
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
-		log.Printf("WARNING: failed to load pipeline config for detection context: %v", err)
-		return nil
-	}
-	if resolver == nil {
-		return nil // Legacy project — no pipeline config
+		return nil, fmt.Errorf("loading pipeline config for detection context: %w", err)
 	}
 	return &PipelineDetectionContext{
 		SprintTerminals: resolver.SprintTerminalStates(),
 		PlanningPairs:   resolver.TransitionSourcePairs(),
-	}
+	}, nil
 }
 
 // SprintTerminalStates returns pipeline-defined sprint-terminal states for a project.
-// Returns nil for legacy projects (no pipeline config). On config load error, logs a
-// warning and returns nil (falls back to universal terminal states).
-func SprintTerminalStates(projectRoot string) []models.TaskStatus {
-	ctx := LoadDetectionContext(projectRoot)
-	if ctx == nil {
-		return nil
+func SprintTerminalStates(projectRoot string) ([]models.TaskStatus, error) {
+	ctx, err := LoadDetectionContext(projectRoot)
+	if err != nil {
+		return nil, err
 	}
-	return ctx.SprintTerminals
+	return ctx.SprintTerminals, nil
 }
 
 // TransitionSourcePairs returns the set of role-pair names that are transition
-// sources in the pipeline config. Returns nil for legacy projects (no pipeline config).
-func TransitionSourcePairs(projectRoot string) map[string]bool {
-	ctx := LoadDetectionContext(projectRoot)
-	if ctx == nil {
-		return nil
+// sources in the pipeline config.
+func TransitionSourcePairs(projectRoot string) (map[string]bool, error) {
+	ctx, err := LoadDetectionContext(projectRoot)
+	if err != nil {
+		return nil, err
 	}
-	return ctx.PlanningPairs
+	return ctx.PlanningPairs, nil
 }
 
 // IsPlanningPair reports whether a role-pair is a transition source ("planning pair").
 // planningPairs is the set from TransitionSourcePairs / LoadDetectionContext.
-// When nil (legacy), falls back to hardcoded "code-planning-pair".
+// When planningPairs is nil (legacy projects without pipeline config), falls back
+// to recognizing "code-planning-pair" as the only planning pair.
 func IsPlanningPair(rolePair string, planningPairs map[string]bool) bool {
-	if planningPairs != nil {
-		return planningPairs[rolePair]
+	if planningPairs == nil {
+		return rolePair == "code-planning-pair"
 	}
-	return rolePair == "code-planning-pair"
+	return planningPairs[rolePair]
 }
 
-// allPlannedTasksTerminalForProject checks if all planned tasks are sprint-terminal,
-// consulting the pipeline config when available. For legacy projects (no pipeline.yaml),
-// falls back to universal terminal states only.
-func allPlannedTasksTerminalForProject(s *models.State, projectRoot string) bool {
-	return s.AllPlannedTasksTerminalWith(SprintTerminalStates(projectRoot))
+// allPlannedTasksTerminalForProject checks if all planned tasks are sprint-terminal.
+func allPlannedTasksTerminalForProject(s *models.State, projectRoot string) (bool, error) {
+	terminals, err := SprintTerminalStates(projectRoot)
+	if err != nil {
+		return false, err
+	}
+	return s.AllPlannedTasksTerminalWith(terminals), nil
 }
 
 // LoadResolverForModels loads the pipeline resolver as a models.PipelineResolver.
-// Returns nil for legacy projects (no pipeline.yaml) or on error.
-func LoadResolverForModels(projectRoot string) models.PipelineResolver {
+func LoadResolverForModels(projectRoot string) (models.PipelineResolver, error) {
 	resolver, _, err := loadResolver(projectRoot)
-	if err != nil || resolver == nil {
-		return nil
+	if err != nil {
+		return nil, err
 	}
-	return resolver
+	return resolver, nil
 }
 
 // pipelineBundle holds the resolver, interface, and transition map from a single config load.
@@ -177,26 +170,29 @@ type pipelineBundle struct {
 }
 
 // loadPipelineBundle loads the pipeline config once and returns the resolver interface
-// and pre-built transition map. Returns nil for legacy projects.
-func loadPipelineBundle(projectRoot string) *pipelineBundle {
+// and pre-built transition map.
+func loadPipelineBundle(projectRoot string) (*pipelineBundle, error) {
 	resolver, _, err := loadResolver(projectRoot)
-	if err != nil || resolver == nil {
-		return nil
+	if err != nil {
+		return nil, err
 	}
 	return &pipelineBundle{
 		pr:          resolver,
 		transitions: BuildPipelineTransitions(resolver),
-	}
+	}, nil
 }
 
-// initialTaskStatusWithResolver returns the initial task status for a role-pair,
-// consulting the pipeline config when available.
-func initialTaskStatusWithResolver(rolePair string, resolver *pipeline.Resolver) models.TaskStatus {
-	if resolver != nil && rolePair != "" {
-		status, err := resolver.InitialStatus(rolePair)
-		if err == nil {
-			return status
-		}
+// initialTaskStatusWithResolver returns the initial task status for a role-pair.
+func initialTaskStatusWithResolver(rolePair string, resolver *pipeline.Resolver) (models.TaskStatus, error) {
+	return resolver.InitialStatus(rolePair)
+}
+
+// LoadPipelineTransitions loads the pipeline config and builds the transition map.
+// Exported for use by the agent package.
+func LoadPipelineTransitions(projectRoot string) (map[models.TaskStatus][]models.TaskStatus, error) {
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil {
+		return nil, err
 	}
-	return initialTaskStatus(rolePair)
+	return BuildPipelineTransitions(resolver), nil
 }

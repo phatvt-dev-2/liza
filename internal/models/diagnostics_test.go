@@ -7,6 +7,17 @@ import (
 )
 
 func TestCountClaimableTasks(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "coder",         // runtime form
+		reviewer:  "code-reviewer", // runtime form
+		initial:   TaskStatusReady,
+		rejected:  TaskStatusRejected,
+		submitted: TaskStatusReadyForReview,
+		reviewing: TaskStatusReviewing,
+		executing: TaskStatusImplementing,
+		approved:  TaskStatusApproved,
+	}
+
 	tests := []struct {
 		name  string
 		state *State
@@ -23,7 +34,7 @@ func TestCountClaimableTasks(t *testing.T) {
 			name: "one READY coding task for coder",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: RoleCoder,
@@ -33,7 +44,7 @@ func TestCountClaimableTasks(t *testing.T) {
 			name: "READY task not claimable by reviewer",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: RoleCodeReviewer,
@@ -43,10 +54,10 @@ func TestCountClaimableTasks(t *testing.T) {
 			name: "mixed statuses",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding},
-					{ID: "t2", Status: TaskStatusImplementing, Type: TaskTypeCoding},
-					{ID: "t3", Status: TaskStatusRejected, Type: TaskTypeCoding},
-					{ID: "t4", Status: TaskStatusMerged, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t2", Status: TaskStatusImplementing, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t3", Status: TaskStatusRejected, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t4", Status: TaskStatusMerged, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: RoleCoder,
@@ -56,8 +67,8 @@ func TestCountClaimableTasks(t *testing.T) {
 			name: "READY_FOR_REVIEW claimable by reviewer",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
-					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: RoleCodeReviewer,
@@ -67,8 +78,8 @@ func TestCountClaimableTasks(t *testing.T) {
 			name: "blocked by unsatisfied dependency",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, DependsOn: []string{"t2"}},
-					{ID: "t2", Status: TaskStatusImplementing, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair", DependsOn: []string{"t2"}},
+					{ID: "t2", Status: TaskStatusImplementing, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: RoleCoder,
@@ -78,8 +89,8 @@ func TestCountClaimableTasks(t *testing.T) {
 			name: "dependency satisfied",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, DependsOn: []string{"t2"}},
-					{ID: "t2", Status: TaskStatusMerged, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair", DependsOn: []string{"t2"}},
+					{ID: "t2", Status: TaskStatusMerged, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: RoleCoder,
@@ -89,7 +100,7 @@ func TestCountClaimableTasks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CountClaimableTasks(tt.state, tt.role, nil)
+			got := CountClaimableTasks(tt.state, tt.role, pr)
 			if got != tt.want {
 				t.Errorf("CountClaimableTasks() = %d, want %d", got, tt.want)
 			}
@@ -98,6 +109,17 @@ func TestCountClaimableTasks(t *testing.T) {
 }
 
 func TestCountReviewableTasks(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "coder",         // runtime form
+		reviewer:  "code-reviewer", // runtime form
+		initial:   TaskStatusReady,
+		rejected:  TaskStatusRejected,
+		submitted: TaskStatusReadyForReview,
+		reviewing: TaskStatusReviewing,
+		executing: TaskStatusImplementing,
+		approved:  TaskStatusApproved,
+	}
+
 	tests := []struct {
 		name  string
 		state *State
@@ -114,7 +136,7 @@ func TestCountReviewableTasks(t *testing.T) {
 			name: "one READY_FOR_REVIEW coding task",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: RoleCodeReviewer,
@@ -124,7 +146,7 @@ func TestCountReviewableTasks(t *testing.T) {
 			name: "REVIEWING tasks not counted",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReviewing, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: RoleCodeReviewer,
@@ -134,7 +156,7 @@ func TestCountReviewableTasks(t *testing.T) {
 			name: "wrong role not counted",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: "orchestrator",
@@ -144,9 +166,9 @@ func TestCountReviewableTasks(t *testing.T) {
 			name: "multiple reviewable tasks",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
-					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
-					{ID: "t3", Status: TaskStatusReady, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t3", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			role: RoleCodeReviewer,
@@ -156,7 +178,7 @@ func TestCountReviewableTasks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CountReviewableTasks(tt.state, tt.role, nil)
+			got := CountReviewableTasks(tt.state, tt.role, pr)
 			if got != tt.want {
 				t.Errorf("CountReviewableTasks() = %d, want %d", got, tt.want)
 			}
@@ -165,6 +187,17 @@ func TestCountReviewableTasks(t *testing.T) {
 }
 
 func TestGetCoderWorkDiagnostics(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "coder",         // runtime form
+		reviewer:  "code-reviewer", // runtime form
+		initial:   TaskStatusReady,
+		rejected:  TaskStatusRejected,
+		submitted: TaskStatusReadyForReview,
+		reviewing: TaskStatusReviewing,
+		executing: TaskStatusImplementing,
+		approved:  TaskStatusApproved,
+	}
+
 	tests := []struct {
 		name         string
 		state        *State
@@ -179,8 +212,8 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			name: "claimable tasks found",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding},
-					{ID: "t2", Status: TaskStatusReady, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t2", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			wantContains: []string{"Found 2 claimable task(s)"},
@@ -189,8 +222,8 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			name: "blocked by dependencies reported",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, DependsOn: []string{"t2"}},
-					{ID: "t2", Status: TaskStatusImplementing, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair", DependsOn: []string{"t2"}},
+					{ID: "t2", Status: TaskStatusImplementing, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			wantContains: []string{"No claimable tasks", "1 blocked by dependencies"},
@@ -199,8 +232,8 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			name: "in-progress tasks reported",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusImplementing, Type: TaskTypeCoding},
-					{ID: "t2", Status: TaskStatusReviewing, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusImplementing, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t2", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			wantContains: []string{"No claimable tasks", "2 in progress"},
@@ -209,9 +242,9 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			name: "both blocked and in-progress reported",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, DependsOn: []string{"t3"}},
-					{ID: "t2", Status: TaskStatusImplementing, Type: TaskTypeCoding},
-					{ID: "t3", Status: TaskStatusApproved, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair", DependsOn: []string{"t3"}},
+					{ID: "t2", Status: TaskStatusImplementing, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t3", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			wantContains: []string{"No claimable tasks", "1 blocked by dependencies", "2 in progress"},
@@ -220,7 +253,7 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetCoderWorkDiagnostics(tt.state, nil)
+			got := GetCoderWorkDiagnostics(tt.state, pr)
 			for _, want := range tt.wantContains {
 				if !strings.Contains(got, want) {
 					t.Errorf("GetCoderWorkDiagnostics() = %q, want it to contain %q", got, want)
@@ -231,6 +264,17 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 }
 
 func TestGetReviewerWorkDiagnostics(t *testing.T) {
+	pr := &mockPipelineResolver{
+		doer:      "coder",         // runtime form
+		reviewer:  "code-reviewer", // runtime form
+		initial:   TaskStatusReady,
+		rejected:  TaskStatusRejected,
+		submitted: TaskStatusReadyForReview,
+		reviewing: TaskStatusReviewing,
+		executing: TaskStatusImplementing,
+		approved:  TaskStatusApproved,
+	}
+
 	now := time.Now().UTC()
 	pastTime := now.Add(-10 * time.Minute)
 	futureTime := now.Add(10 * time.Minute)
@@ -249,8 +293,8 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			name: "unassigned reviewable tasks",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
-					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			wantContains: []string{"Found 2 reviewable task(s)"},
@@ -259,8 +303,8 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			name: "expired lease reported alongside reviewable",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding},
-					{ID: "t2", Status: TaskStatusReviewing, Type: TaskTypeCoding, ReviewLeaseExpires: &pastTime},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t2", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &pastTime},
 				},
 			},
 			wantContains: []string{"Found 1 reviewable task(s)", "1 with stale leases"},
@@ -269,7 +313,7 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			name: "expired lease with no reviewable",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReviewing, Type: TaskTypeCoding, ReviewLeaseExpires: &pastTime},
+					{ID: "t1", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &pastTime},
 				},
 			},
 			wantContains: []string{"No reviewable tasks", "1 with stale leases"},
@@ -278,7 +322,7 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			name: "actively reviewing reported",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReviewing, Type: TaskTypeCoding, ReviewLeaseExpires: &futureTime},
+					{ID: "t1", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &futureTime},
 				},
 			},
 			wantContains: []string{"No reviewable tasks", "1 actively being reviewed"},
@@ -287,7 +331,7 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			name: "reviewing with nil lease counts as active",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReviewing, Type: TaskTypeCoding},
+					{ID: "t1", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
 			wantContains: []string{"No reviewable tasks", "1 actively being reviewed"},
@@ -296,7 +340,7 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetReviewerWorkDiagnostics(tt.state, nil)
+			got := GetReviewerWorkDiagnostics(tt.state, pr)
 			for _, want := range tt.wantContains {
 				if !strings.Contains(got, want) {
 					t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain %q", got, want)

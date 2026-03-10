@@ -9,6 +9,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 // TestBuildPrompt tests the buildPrompt function
@@ -131,6 +132,7 @@ func TestBuildPrompt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 			config := SupervisorConfig{
 				Role:        tt.role,
 				AgentID:     tt.role + "-1",

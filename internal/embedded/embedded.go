@@ -43,6 +43,12 @@ var guardrailsTemplateContent []byte
 //go:embed "pipeline.yaml"
 var pipelineConfigContent []byte
 
+// PipelineConfigContent returns the raw embedded pipeline.yaml content.
+// Used by init to auto-freeze when --config is not provided.
+func PipelineConfigContent() []byte {
+	return pipelineConfigContent
+}
+
 // PlanGlobalFiles returns the list of absolute paths that WriteGlobalFiles would create,
 // without actually writing anything. Useful for pre-flight checks and verbose output.
 func PlanGlobalFiles(targetDir string) []string {

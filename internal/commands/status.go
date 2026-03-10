@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"slices"
 	"strings"
@@ -150,7 +151,10 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 		data.Config.PausedBy = state.Config.ModeChangedBy
 	}
 
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr, prErr := ops.LoadResolverForModels(projectRoot)
+	if prErr != nil {
+		log.Printf("WARNING: status: failed to load pipeline resolver: %v", prErr)
+	}
 	data.Tasks = buildTaskStatus(state, pr)
 	data.Agents = buildAgentStatuses(state)
 	data.OrchestratorState = buildOrchestratorStatus(state, projectRoot)
@@ -272,10 +276,10 @@ func buildAgentStatuses(state *models.State) []agentStatus {
 
 // buildOrchestratorStatus determines orchestrator state
 func buildOrchestratorStatus(state *models.State, projectRoot string) orchestratorStatus {
-	detCtx := ops.LoadDetectionContext(projectRoot)
+	detCtx, detErr := ops.LoadDetectionContext(projectRoot)
 	var pipelineTerminals []models.TaskStatus
 	var planningPairs map[string]bool
-	if detCtx != nil {
+	if detErr == nil {
 		pipelineTerminals = detCtx.SprintTerminals
 		planningPairs = detCtx.PlanningPairs
 	}

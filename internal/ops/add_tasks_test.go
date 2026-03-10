@@ -88,6 +88,7 @@ func TestAddTask_Success(t *testing.T) {
 			ID:          "dep-1",
 			Description: "Dependency 1",
 			Status:      models.TaskStatusMerged,
+			RolePair:    "coding-pair",
 			Priority:    1,
 			SpecRef:     "specs/vision.md",
 			DoneWhen:    "done",
@@ -99,6 +100,7 @@ func TestAddTask_Success(t *testing.T) {
 			ID:          "dep-2",
 			Description: "Dependency 2",
 			Status:      models.TaskStatusMerged,
+			RolePair:    "coding-pair",
 			Priority:    1,
 			SpecRef:     "specs/vision.md",
 			DoneWhen:    "done",
@@ -116,6 +118,7 @@ func TestAddTask_Success(t *testing.T) {
 		DoneWhen:    "Tests pass",
 		Scope:       "internal/ops",
 		Priority:    2,
+		RolePair:    "coding-pair",
 		DependsOn:   []string{"dep-1", " dep-2 ", ""},
 	}
 
@@ -187,6 +190,7 @@ func TestAddTask_DefaultOrchestratorID(t *testing.T) {
 	input := &AddTaskInput{
 		ID: "task-1", Description: "d", SpecRef: "specs/vision.md",
 		DoneWhen: "w", Scope: "sc", Priority: 1,
+		RolePair: "coding-pair",
 	}
 
 	// Empty orchestratorID should default to "orchestrator-1"
@@ -291,13 +295,13 @@ func TestAddTask_RolePairValidation(t *testing.T) {
 			errContains: []string{"unknown role_pair", "nonexistent-pair", "code-planning-pair", "coding-pair"},
 		},
 		{
-			name: "unknown task type mentions role_pair",
+			name: "unknown task type mentions valid types",
 			input: AddTaskInput{
 				ID: "t3", Description: "d", SpecRef: "specs/feature.md",
 				DoneWhen: "w", Scope: "sc", Priority: 1,
 				Type: "planning",
 			},
-			errContains: []string{"unknown task type", "planning", "role_pair", "code-planning-pair"},
+			errContains: []string{"unknown task type", "planning"},
 		},
 	}
 
@@ -369,13 +373,14 @@ func TestAddTask_DuplicateID(t *testing.T) {
 
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{
-		{ID: "task-1", Description: "existing", Status: models.TaskStatusReady},
+		{ID: "task-1", Description: "existing", Status: models.TaskStatusReady, RolePair: "coding-pair"},
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	input := &AddTaskInput{
 		ID: "task-1", Description: "d", SpecRef: "s",
 		DoneWhen: "w", Scope: "sc", Priority: 1,
+		RolePair: "coding-pair",
 	}
 
 	_, err := AddTask(stateFile, logFile, input, "orchestrator-1")
@@ -399,6 +404,7 @@ func TestAddTask_PostWriteValidationFailure(t *testing.T) {
 		ID:          "invalid-existing-task",
 		Description: "Invalid existing task",
 		Status:      models.TaskStatusImplementing, // missing assigned_to/worktree/base_commit
+		RolePair:    "coding-pair",
 		Priority:    1,
 		SpecRef:     "specs/vision.md",
 		DoneWhen:    "done",
@@ -415,6 +421,7 @@ func TestAddTask_PostWriteValidationFailure(t *testing.T) {
 		DoneWhen:    "tests pass",
 		Scope:       "internal/ops",
 		Priority:    1,
+		RolePair:    "coding-pair",
 	}
 
 	_, err := AddTask(stateFile, logFile, input, "orchestrator-1")
@@ -445,6 +452,7 @@ func TestAddTasks_PartialSuccess(t *testing.T) {
 		ID:          "dup-task",
 		Description: "Existing task",
 		Status:      models.TaskStatusReady,
+		RolePair:    "coding-pair",
 		Priority:    1,
 		SpecRef:     "specs/vision.md",
 		DoneWhen:    "done",
@@ -464,6 +472,7 @@ func TestAddTasks_PartialSuccess(t *testing.T) {
 				DoneWhen:    "Tests pass",
 				Scope:       "internal/ops",
 				Priority:    1,
+				RolePair:    "coding-pair",
 			},
 			{
 				ID:          "dup-task",
@@ -472,6 +481,7 @@ func TestAddTasks_PartialSuccess(t *testing.T) {
 				DoneWhen:    "done",
 				Scope:       "scope",
 				Priority:    1,
+				RolePair:    "coding-pair",
 			},
 		},
 	}

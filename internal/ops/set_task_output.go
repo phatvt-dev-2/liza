@@ -44,17 +44,15 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 
-	// Collect pipeline executing statuses (if pipeline config exists)
-	var pipelineExecuting []models.TaskStatus
+	// Collect pipeline executing statuses
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
 		return fmt.Errorf("failed to load pipeline config: %w", err)
 	}
-	if resolver != nil {
-		for _, rpName := range resolver.RolePairNames() {
-			if es, err := resolver.ExecutingStatus(rpName); err == nil {
-				pipelineExecuting = append(pipelineExecuting, es)
-			}
+	var pipelineExecuting []models.TaskStatus
+	for _, rpName := range resolver.RolePairNames() {
+		if es, err := resolver.ExecutingStatus(rpName); err == nil {
+			pipelineExecuting = append(pipelineExecuting, es)
 		}
 	}
 

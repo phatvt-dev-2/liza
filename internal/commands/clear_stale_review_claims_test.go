@@ -259,7 +259,7 @@ func TestClearStaleReviewClaimsCommandErrors(t *testing.T) {
 				return "/nonexistent/path"
 			},
 			wantErr:     true,
-			errContains: "failed to clear stale review claims",
+			errContains: "failed to load pipeline config",
 		},
 	}
 

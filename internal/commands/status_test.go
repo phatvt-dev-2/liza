@@ -9,14 +9,24 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+func setupPipelineRoot(t *testing.T) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+	testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	return tmpDir
+}
+
 func TestBuildStatusData(t *testing.T) {
 	now := time.Now().UTC()
+	pipelineRoot := setupPipelineRoot(t)
 
 	tests := []struct {
-		name     string
-		state    *models.State
-		detailed bool
-		validate func(t *testing.T, data statusData)
+		name        string
+		state       *models.State
+		detailed    bool
+		projectRoot string
+		validate    func(t *testing.T, data statusData)
 	}{
 		{
 			name: "empty state with no agents",
@@ -49,7 +59,8 @@ func TestBuildStatusData(t *testing.T) {
 				}
 				return state
 			}(),
-			detailed: false,
+			detailed:    false,
+			projectRoot: pipelineRoot,
 			validate: func(t *testing.T, data statusData) {
 				if data.Tasks.Total != 5 {
 					t.Errorf("expected 5 total tasks, got %d", data.Tasks.Total)
@@ -213,7 +224,8 @@ func TestBuildStatusData(t *testing.T) {
 				}
 				return state
 			}(),
-			detailed: false,
+			detailed:    false,
+			projectRoot: pipelineRoot,
 			validate: func(t *testing.T, data statusData) {
 				if data.WorkQueues.Coder.Available != 1 {
 					t.Errorf("expected 1 available coder task, got %d", data.WorkQueues.Coder.Available)
@@ -366,7 +378,7 @@ func TestBuildStatusData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data := buildStatusData(tt.state, tt.detailed, "")
+			data := buildStatusData(tt.state, tt.detailed, tt.projectRoot)
 			tt.validate(t, data)
 		})
 	}
@@ -453,10 +465,12 @@ func TestBuildStatusData_AgentProcessStatus(t *testing.T) {
 
 func TestBuildStatusData_WorkQueuesReason(t *testing.T) {
 	now := time.Now().UTC()
+	pipelineRoot := setupPipelineRoot(t)
 
 	tests := []struct {
 		name           string
 		state          *models.State
+		projectRoot    string
 		expectCoderMsg string
 	}{
 		{
@@ -468,6 +482,7 @@ func TestBuildStatusData_WorkQueuesReason(t *testing.T) {
 				}
 				return state
 			}(),
+			projectRoot:    pipelineRoot,
 			expectCoderMsg: "No claimable tasks",
 		},
 		{
@@ -479,13 +494,14 @@ func TestBuildStatusData_WorkQueuesReason(t *testing.T) {
 				}
 				return state
 			}(),
+			projectRoot:    pipelineRoot,
 			expectCoderMsg: "Found 1 claimable task(s)",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data := buildStatusData(tt.state, false, "")
+			data := buildStatusData(tt.state, false, tt.projectRoot)
 
 			if !strings.Contains(data.WorkQueues.Coder.Reason, tt.expectCoderMsg) {
 				t.Errorf("expected coder reason to contain %q, got %q", tt.expectCoderMsg, data.WorkQueues.Coder.Reason)

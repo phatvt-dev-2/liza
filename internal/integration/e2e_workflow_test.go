@@ -63,6 +63,7 @@ func setupIntegrationTest(t *testing.T, projectDir string, taskIDs []string) (*d
 	for _, taskID := range taskIDs {
 		taskInput := &commands.TaskInput{
 			ID:          taskID,
+			RolePair:    "coding-pair",
 			Description: "Test feature " + taskID,
 			DoneWhen:    "Done",
 			Scope:       "Feature",
@@ -241,6 +242,7 @@ func TestTaskDependencyWorkflow(t *testing.T) {
 	// Add task-2 (depends on task-1) — custom deps, can't use helper
 	task2Input := &commands.TaskInput{
 		ID:          "task-2",
+		RolePair:    "coding-pair",
 		Description: "Dependent feature",
 		DoneWhen:    "Done",
 		Scope:       "Dependent",

@@ -237,6 +237,7 @@ func setupMergeTestRepo(t *testing.T, taskID, agentID string) (string, string) {
 		SpecRef:      "README.md",
 		DoneWhen:     "Done",
 		Scope:        "Test",
+		RolePair:     "coding-pair",
 		Worktree:     &worktreePath,
 		AssignedTo:   &agentID,
 		BaseCommit:   &baseCommit,
@@ -711,103 +712,6 @@ func TestMergeWorktree_PipelineCodingPairApproved(t *testing.T) {
 	}
 	if mergedTask.Worktree != nil {
 		t.Errorf("Worktree should be nil after merge, got %v", *mergedTask.Worktree)
-	}
-}
-
-// TestMergeWorktree_LegacyTaskWithPipelineConfig verifies that legacy APPROVED tasks
-// (no role_pair) still merge correctly even when a pipeline config exists.
-// Regression test for: TransitionWith uses pipeline map which lacks legacy APPROVED.
-func TestMergeWorktree_LegacyTaskWithPipelineConfig(t *testing.T) {
-	taskID := "merge-legacy-with-pipeline"
-	agentID := "code-reviewer-1"
-
-	// Use setupPipelineTest to get a project WITH frozen pipeline config
-	tmpDir, stateFile := setupPipelineTest(t)
-
-	// Create integration branch
-	cmd := exec.Command("git", "-C", tmpDir, "checkout", "-b", "integration")
-	output, err := cmd.CombinedOutput()
-	if err != nil && !strings.Contains(string(output), "already exists") {
-		t.Fatalf("Failed to create integration branch: %v\nOutput: %s", err, output)
-	}
-
-	now := time.Now().UTC()
-	initialState := testhelpers.CreateValidState()
-	initialState.Config.IntegrationBranch = "integration"
-
-	// Create worktree
-	wtDir := filepath.Join(tmpDir, ".worktrees", taskID)
-	if err := os.MkdirAll(filepath.Dir(wtDir), 0755); err != nil {
-		t.Fatalf("Failed to create worktrees directory: %v", err)
-	}
-	cmd = exec.Command("git", "-C", tmpDir, "worktree", "add", wtDir, "integration", "-b", "task/"+taskID)
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to create worktree: %v", err)
-	}
-
-	// Make a commit in the worktree
-	testFile := filepath.Join(wtDir, "legacy-"+taskID+".txt")
-	if err := os.WriteFile(testFile, []byte("legacy content\n"), 0644); err != nil {
-		t.Fatalf("Failed to write file: %v", err)
-	}
-	cmd = exec.Command("git", "-C", wtDir, "add", ".")
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to git add: %v", err)
-	}
-	cmd = exec.Command("git", "-C", wtDir, "commit", "-m", "Legacy task "+taskID)
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to git commit: %v", err)
-	}
-
-	// Get worktree HEAD SHA
-	cmd = exec.Command("git", "-C", wtDir, "rev-parse", "HEAD")
-	shaOutput, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("Failed to get commit SHA: %v", err)
-	}
-	wtCommit := strings.TrimSpace(string(shaOutput))
-
-	worktreePath := filepath.Join(".worktrees", taskID)
-	baseCommit := "base123"
-	approvedBy := agentID
-	// Legacy task: APPROVED status, NO role_pair
-	task := models.Task{
-		ID:           taskID,
-		Description:  "Legacy task (no role_pair)",
-		Status:       models.TaskStatusApproved,
-		Priority:     1,
-		Created:      now,
-		SpecRef:      "README.md",
-		DoneWhen:     "Done",
-		Scope:        "test",
-		Worktree:     &worktreePath,
-		AssignedTo:   testhelpers.StringPtr("coder-1"),
-		BaseCommit:   &baseCommit,
-		ReviewCommit: &wtCommit,
-		ApprovedBy:   &approvedBy,
-		History:      []models.TaskHistoryEntry{},
-	}
-
-	initialState.Tasks = append(initialState.Tasks, task)
-	testhelpers.WriteInitialState(t, stateFile, initialState)
-
-	result, err := MergeWorktree(tmpDir, taskID, agentID)
-	if err != nil {
-		t.Fatalf("MergeWorktree() unexpected error for legacy task with pipeline config: %v", err)
-	}
-
-	if result.TaskID != taskID {
-		t.Errorf("TaskID = %q, want %q", result.TaskID, taskID)
-	}
-
-	// Verify state updated to MERGED
-	state := readStateForTest(t, stateFile)
-	mergedTask := state.FindTask(taskID)
-	if mergedTask == nil {
-		t.Fatal("Task not found in state")
-	}
-	if mergedTask.Status != models.TaskStatusMerged {
-		t.Errorf("Task status = %v, want MERGED", mergedTask.Status)
 	}
 }
 
@@ -1380,6 +1284,7 @@ func TestMergeWorktree_MissingWorktreeNoReviewCommit(t *testing.T) {
 		{
 			ID:           "task-1",
 			Status:       models.TaskStatusApproved,
+			RolePair:     "coding-pair",
 			Worktree:     nil,
 			ReviewCommit: nil,
 			ApprovedBy:   &approvedBy,

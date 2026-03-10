@@ -32,7 +32,7 @@ func claimDoerTask(projectRoot, agentID, workflowRole string, bb *db.Blackboard)
 		return "", "", fmt.Errorf("failed to read state: %w", err)
 	}
 
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr := loadResolver(projectRoot)
 
 	var candidates []*models.Task
 	for i := range state.Tasks {

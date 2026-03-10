@@ -11,6 +11,16 @@ import (
 	"github.com/liza-mas/liza/internal/roles"
 )
 
+// loadResolver loads the pipeline resolver for work detection, logging a warning
+// on failure. Returns nil on error (callers treat nil as "no work visible").
+func loadResolver(projectRoot string) models.PipelineResolver {
+	pr, err := ops.LoadResolverForModels(projectRoot)
+	if err != nil {
+		GetLogger().Warn("Failed to load pipeline resolver for work detection", "error", err)
+	}
+	return pr
+}
+
 // nonZeroOr returns val if positive, otherwise fallback.
 func nonZeroOr(val, fallback int) int {
 	if val > 0 {
@@ -242,7 +252,7 @@ func waitForWorkPolling(
 
 // waitForCoderWork waits for claimable tasks or resumable handoff tasks.
 func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr := loadResolver(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			claimable := models.CountClaimableTasks(s, models.RoleCoder, pr)
@@ -263,7 +273,7 @@ func waitForCoderWork(ctx context.Context, bb *db.Blackboard, projectRoot, agent
 }
 
 func waitForCodePlannerWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr := loadResolver(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			claimable := models.CountClaimableTasks(s, models.RoleCodePlanner, pr)
@@ -275,15 +285,7 @@ func waitForCodePlannerWork(ctx context.Context, bb *db.Blackboard, projectRoot,
 }
 
 func isResumableHandoff(task *models.Task, agentID string, pr models.PipelineResolver) bool {
-	isExecuting := task.Status == models.TaskStatusImplementing || task.Status == models.TaskStatusCodePlanning
-	// For pipeline tasks, also check pipeline-defined executing status.
-	if !isExecuting && task.RolePair != "" && pr != nil {
-		executing, err := pr.ExecutingStatus(task.RolePair)
-		if err == nil && task.Status == executing {
-			isExecuting = true
-		}
-	}
-	return isExecuting &&
+	return models.IsExecutingStatus(task, pr) &&
 		task.HandoffPending &&
 		task.AssignedTo != nil &&
 		*task.AssignedTo == agentID
@@ -307,7 +309,7 @@ func waitForReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot str
 		GetLogger().Info("Cleared stale review claims before reviewer wait", "count", cleared)
 	}
 
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr := loadResolver(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			count := models.CountReviewableTasks(s, models.RoleCodeReviewer, pr)
@@ -323,7 +325,7 @@ func waitForCodePlanReviewerWork(ctx context.Context, bb *db.Blackboard, project
 		GetLogger().Info("Cleared stale review claims before code-plan-reviewer wait", "count", cleared)
 	}
 
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr := loadResolver(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			count := models.CountReviewableTasks(s, models.RoleCodePlanReviewer, pr)
@@ -335,7 +337,7 @@ func waitForCodePlanReviewerWork(ctx context.Context, bb *db.Blackboard, project
 }
 
 func waitForEpicPlannerWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr := loadResolver(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			claimable := models.CountClaimableTasks(s, models.RoleEpicPlanner, pr)
@@ -352,7 +354,7 @@ func waitForEpicPlanReviewerWork(ctx context.Context, bb *db.Blackboard, project
 		GetLogger().Info("Cleared stale review claims before epic-plan-reviewer wait", "count", cleared)
 	}
 
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr := loadResolver(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			count := models.CountReviewableTasks(s, models.RoleEpicPlanReviewer, pr)
@@ -364,7 +366,7 @@ func waitForEpicPlanReviewerWork(ctx context.Context, bb *db.Blackboard, project
 }
 
 func waitForUSWriterWork(ctx context.Context, bb *db.Blackboard, projectRoot, agentID string, pollInterval, maxWait time.Duration) (bool, error) {
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr := loadResolver(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			claimable := models.CountClaimableTasks(s, models.RoleUSWriter, pr)
@@ -381,7 +383,7 @@ func waitForUSReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot s
 		GetLogger().Info("Cleared stale review claims before us-reviewer wait", "count", cleared)
 	}
 
-	pr := ops.LoadResolverForModels(projectRoot)
+	pr := loadResolver(projectRoot)
 	return waitForWorkEventDriven(ctx, bb, projectRoot, pollInterval, maxWait,
 		func(s *models.State) (bool, string) {
 			count := models.CountReviewableTasks(s, models.RoleUSReviewer, pr)
@@ -394,10 +396,10 @@ func waitForUSReviewerWork(ctx context.Context, bb *db.Blackboard, projectRoot s
 
 // waitForOrchestratorWork waits for orchestrator wake triggers using event-driven detection
 func waitForOrchestratorWork(ctx context.Context, bb *db.Blackboard, projectRoot string, pollInterval, maxWait time.Duration) (bool, error) {
-	detCtx := ops.LoadDetectionContext(projectRoot)
+	detCtx, detErr := ops.LoadDetectionContext(projectRoot)
 	var pipelineTerminals []models.TaskStatus
 	var planningPairs map[string]bool
-	if detCtx != nil {
+	if detErr == nil {
 		pipelineTerminals = detCtx.SprintTerminals
 		planningPairs = detCtx.PlanningPairs
 	}

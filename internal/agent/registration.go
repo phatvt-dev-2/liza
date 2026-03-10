@@ -137,19 +137,16 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 	activeExecuting, releasedInitial, activeReviewing, releasedSubmitted := ops.ResolveReleaseStatuses(task, resolver)
 
 	transitionTask := func(to models.TaskStatus) {
-		if pipelineTransitions != nil {
-			if err := task.TransitionWith(to, pipelineTransitions); err != nil {
-				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
-			}
-		} else {
-			if err := task.Transition(to); err != nil {
-				logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
-			}
+		if pipelineTransitions == nil {
+			logger.Warn("Cannot transition task on unregister: pipeline transitions not loaded", "task_id", task.ID)
+			return
+		}
+		if err := task.TransitionWith(to, pipelineTransitions); err != nil {
+			logger.Warn("Failed to transition task on unregister", "task_id", task.ID, "error", err)
 		}
 	}
 
 	// Collapse roles into claim types: doer (AssignedTo) vs reviewer (ReviewingBy).
-	// Pipeline-resolved statuses apply to both legacy and pipeline roles within each type.
 	switch role {
 	case roles.RuntimeCoder, roles.RuntimeCodePlanner:
 		if task.Status == activeExecuting {
@@ -188,9 +185,6 @@ func loadPipelineForRelease(projectRoot string) (map[models.TaskStatus][]models.
 	cfg, err := pipeline.LoadFrozen(projectRoot)
 	if err != nil {
 		GetLogger().Warn("Failed to load pipeline config for claim release", "error", err)
-		return nil, nil
-	}
-	if cfg == nil {
 		return nil, nil
 	}
 	resolver := pipeline.NewResolver(cfg)

@@ -33,17 +33,15 @@ func ResumeHandoff(input ResumeHandoffInput) (*ResumeHandoffResult, error) {
 	lp := paths.New(input.ProjectRoot)
 	bb := db.For(lp.StatePath())
 
-	// Collect pipeline executing statuses (if pipeline config exists)
-	var executingStatuses []models.TaskStatus
+	// Collect pipeline executing statuses
 	resolver, _, err := loadResolver(input.ProjectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
-	if resolver != nil {
-		for _, rpName := range resolver.RolePairNames() {
-			if es, err := resolver.ExecutingStatus(rpName); err == nil {
-				executingStatuses = append(executingStatuses, es)
-			}
+	var executingStatuses []models.TaskStatus
+	for _, rpName := range resolver.RolePairNames() {
+		if es, err := resolver.ExecutingStatus(rpName); err == nil {
+			executingStatuses = append(executingStatuses, es)
 		}
 	}
 
@@ -140,11 +138,8 @@ func isResumableHandoff(task *models.Task, agentID string, executingStatuses []m
 	return true
 }
 
-// isExecutingStatus returns true if the status is a legacy or pipeline executing state.
+// isExecutingStatus returns true if the status is a pipeline-defined executing state.
 func isExecutingStatus(status models.TaskStatus, pipelineExecuting []models.TaskStatus) bool {
-	if status == models.TaskStatusImplementing || status == models.TaskStatusCodePlanning {
-		return true
-	}
 	for _, es := range pipelineExecuting {
 		if status == es {
 			return true

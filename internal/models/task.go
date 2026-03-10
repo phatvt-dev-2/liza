@@ -143,36 +143,6 @@ func (ts TaskStatus) IsPipelineSprintTerminal(terminalStates []TaskStatus) bool 
 	return ts.IsTerminal() || slices.Contains(terminalStates, ts)
 }
 
-// taskTransitions defines the complete, explicit task state machine.
-// Every valid status transition is declared here. Terminal states have empty target lists.
-var taskTransitions = map[TaskStatus][]TaskStatus{
-	TaskStatusDraft:             {TaskStatusReady, TaskStatusAbandoned},
-	TaskStatusReady:             {TaskStatusImplementing, TaskStatusSuperseded, TaskStatusAbandoned},
-	TaskStatusImplementing:      {TaskStatusReadyForReview, TaskStatusBlocked, TaskStatusReady, TaskStatusIntegrationFailed},
-	TaskStatusReadyForReview:    {TaskStatusReviewing},
-	TaskStatusReviewing:         {TaskStatusApproved, TaskStatusRejected, TaskStatusReadyForReview},
-	TaskStatusRejected:          {TaskStatusImplementing, TaskStatusBlocked, TaskStatusSuperseded, TaskStatusAbandoned},
-	TaskStatusApproved:          {TaskStatusMerged, TaskStatusIntegrationFailed},
-	TaskStatusBlocked:           {TaskStatusSuperseded, TaskStatusAbandoned},
-	TaskStatusIntegrationFailed: {TaskStatusImplementing, TaskStatusAbandoned},
-	TaskStatusMerged:            {},
-	TaskStatusAbandoned:         {},
-	TaskStatusSuperseded:        {},
-
-	// Code-planning pair transitions
-	TaskStatusDraftCodingPlan:     {TaskStatusCodePlanning, TaskStatusAbandoned},
-	TaskStatusCodePlanning:        {TaskStatusCodingPlanToReview, TaskStatusBlocked, TaskStatusDraftCodingPlan, TaskStatusIntegrationFailed},
-	TaskStatusCodingPlanToReview:  {TaskStatusReviewingCodingPlan},
-	TaskStatusReviewingCodingPlan: {TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected, TaskStatusCodingPlanToReview},
-	TaskStatusCodingPlanRejected:  {TaskStatusDraftCodingPlan, TaskStatusBlocked, TaskStatusSuperseded, TaskStatusAbandoned},
-	TaskStatusCodingPlanApproved:  {TaskStatusMerged, TaskStatusIntegrationFailed},
-}
-
-// CanTransition reports whether a transition from ts to the given target status is valid.
-func (ts TaskStatus) CanTransition(to TaskStatus) bool {
-	return slices.Contains(taskTransitions[ts], to)
-}
-
 // Task represents a single task in the Liza system
 type Task struct {
 	ID                  string             `yaml:"id"`
@@ -227,7 +197,7 @@ type OutputEntry struct {
 }
 
 // PipelineResolver provides pipeline state resolution for tasks with role-pairs.
-// Implemented by pipeline.Resolver. Pass nil for legacy projects.
+// Implemented by pipeline.Resolver.
 type PipelineResolver interface {
 	DoerRole(rolePair string) (string, error)
 	ReviewerRole(rolePair string) (string, error)
@@ -247,19 +217,9 @@ func (t *Task) EffectiveType() TaskType {
 	return t.Type
 }
 
-// Transition validates and applies a status transition on the task.
-// Returns a descriptive error if the transition is invalid.
-func (t *Task) Transition(to TaskStatus) error {
-	if !t.Status.CanTransition(to) {
-		return fmt.Errorf("invalid task transition: %s → %s (task %s)", t.Status, to, t.ID)
-	}
-	t.Status = to
-	return nil
-}
-
-// TransitionWith validates and applies a status transition using a custom transition map.
-// This supports pipeline-defined states that aren't in the hardcoded transition map.
-// The target status must exist as a key in the transition map (i.e., be a declared state).
+// TransitionWith validates and applies a status transition using a transition map
+// built from pipeline config. The target status must exist as a key in the
+// transition map (i.e., be a declared state).
 func (t *Task) TransitionWith(to TaskStatus, transitions map[TaskStatus][]TaskStatus) error {
 	if !slices.Contains(transitions[t.Status], to) {
 		return fmt.Errorf("invalid task transition: %s → %s (task %s)", t.Status, to, t.ID)
@@ -271,49 +231,16 @@ func (t *Task) TransitionWith(to TaskStatus, transitions map[TaskStatus][]TaskSt
 	return nil
 }
 
-// IsClaimable checks if a task is claimable by the given role based on its type, status, and dependencies.
+// IsClaimable checks if a task is claimable by the given role based on its
+// pipeline-defined states, type, and dependencies.
 // The role parameter uses workflow form (e.g. "code_reviewer").
-// When pr is non-nil and the task has a RolePair, pipeline-defined states are used.
 func (t *Task) IsClaimable(role string, allTasks []Task, pr PipelineResolver) bool {
-	// Pipeline path: use resolver for tasks with role-pairs.
-	if t.RolePair != "" && pr != nil {
-		if !t.isClaimablePipeline(role, pr) {
-			return false
-		}
-		return checkDependencies(t, allTasks)
-	}
-
-	// Legacy path: hardcoded status checks.
-	switch role {
-	case RoleCoder:
-		if !t.EffectiveType().HasRole(role) {
-			return false
-		}
-		if !t.Status.CanTransition(TaskStatusImplementing) {
-			return false
-		}
-	case RoleCodeReviewer:
-		if !t.EffectiveType().HasRole(role) {
-			return false
-		}
-		if !t.Status.CanTransition(TaskStatusReviewing) {
-			return false
-		}
-	case RoleCodePlanner:
-		if !t.Status.CanTransition(TaskStatusCodePlanning) {
-			return false
-		}
-	case RoleCodePlanReviewer:
-		if !t.Status.CanTransition(TaskStatusReviewingCodingPlan) {
-			return false
-		}
-	case RoleOrchestrator:
-		// Orchestrator does not participate in task claiming workflows.
-		return false
-	default:
+	if t.RolePair == "" || pr == nil {
 		return false
 	}
-
+	if !t.isClaimablePipeline(role, pr) {
+		return false
+	}
 	return checkDependencies(t, allTasks)
 }
 
@@ -359,32 +286,30 @@ func (t *Task) isClaimablePipeline(role string, pr PipelineResolver) bool {
 }
 
 // IsApprovedForMerge checks if a task is in an approved state eligible for merge.
-// Uses the pipeline resolver for pipeline tasks (non-empty RolePair); falls back
-// to legacy statuses (APPROVED, CODING_PLAN_APPROVED) otherwise.
 func IsApprovedForMerge(task *Task, pr PipelineResolver) bool {
-	if task.RolePair != "" && pr != nil {
-		approved, err := pr.ApprovedStatus(task.RolePair)
-		return err == nil && task.Status == approved
+	if task.RolePair == "" || pr == nil {
+		return false
 	}
-	return task.Status == TaskStatusApproved || task.Status == TaskStatusCodingPlanApproved
+	approved, err := pr.ApprovedStatus(task.RolePair)
+	return err == nil && task.Status == approved
 }
 
-// IsSubmittedStatus checks if a task is in a submitted state (pipeline-aware).
+// IsSubmittedStatus checks if a task is in a submitted state.
 func IsSubmittedStatus(task *Task, pr PipelineResolver) bool {
-	if task.RolePair != "" && pr != nil {
-		submitted, err := pr.SubmittedStatus(task.RolePair)
-		return err == nil && task.Status == submitted
+	if task.RolePair == "" || pr == nil {
+		return false
 	}
-	return task.Status == TaskStatusReadyForReview || task.Status == TaskStatusCodingPlanToReview
+	submitted, err := pr.SubmittedStatus(task.RolePair)
+	return err == nil && task.Status == submitted
 }
 
-// IsExecutingStatus checks if a task is in an executing state (pipeline-aware).
+// IsExecutingStatus checks if a task is in an executing state.
 func IsExecutingStatus(task *Task, pr PipelineResolver) bool {
-	if task.RolePair != "" && pr != nil {
-		executing, err := pr.ExecutingStatus(task.RolePair)
-		return err == nil && task.Status == executing
+	if task.RolePair == "" || pr == nil {
+		return false
 	}
-	return task.Status == TaskStatusImplementing || task.Status == TaskStatusCodePlanning
+	executing, err := pr.ExecutingStatus(task.RolePair)
+	return err == nil && task.Status == executing
 }
 
 // checkDependencies returns true if all dependencies of the task are satisfied (MERGED).

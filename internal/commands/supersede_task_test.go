@@ -170,6 +170,7 @@ func TestSupersedeTaskCommand(t *testing.T) {
 					{
 						ID:          tt.taskID,
 						Status:      tt.taskStatus,
+						RolePair:    "coding-pair",
 						AssignedTo:  tt.assignedTo,
 						Description: "Test task description",
 						SpecRef:     "README.md",
@@ -319,6 +320,7 @@ func TestSupersedeTaskCommand_RaceCondition(t *testing.T) {
 			{
 				ID:          "task-1",
 				Status:      models.TaskStatusBlocked,
+				RolePair:    "coding-pair",
 				Description: "Test task description",
 				SpecRef:     "README.md",
 				DoneWhen:    "Test completion criteria",
@@ -525,6 +527,7 @@ func TestSupersedeTaskCommand_LeaseFieldsCleared(t *testing.T) {
 			{
 				ID:           "task-1",
 				Status:       models.TaskStatusBlocked,
+				RolePair:     "coding-pair",
 				Description:  "Test task description",
 				SpecRef:      "README.md",
 				DoneWhen:     "Test completion criteria",

@@ -566,6 +566,7 @@ func TestResetAgentAfterExit_ReviewerReleasesTask(t *testing.T) {
 		Priority:           1,
 		Iteration:          1,
 		Type:               models.TaskTypeCoding,
+		RolePair:           "coding-pair",
 	})
 	state.Agents[agentID] = models.Agent{
 		Role:        "code-reviewer",
@@ -630,6 +631,7 @@ func TestResetAgentAfterExit_CoderReleasesTask(t *testing.T) {
 		Priority:   1,
 		Iteration:  1,
 		Type:       models.TaskTypeCoding,
+		RolePair:   "coding-pair",
 	})
 	state.Agents[agentID] = models.Agent{
 		Role:        "coder",

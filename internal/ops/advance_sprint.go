@@ -86,7 +86,11 @@ func planSprintAdvance(s *models.State, now time.Time, projectRoot string) (*spr
 	if s.Sprint.Status != models.SprintStatusCheckpoint {
 		return nil, fmt.Errorf("cannot advance sprint: status is %s, expected CHECKPOINT", s.Sprint.Status)
 	}
-	if !allPlannedTasksTerminalForProject(s, projectRoot) {
+	allTerminal, termErr := allPlannedTasksTerminalForProject(s, projectRoot)
+	if termErr != nil {
+		return nil, fmt.Errorf("cannot advance sprint: %w", termErr)
+	}
+	if !allTerminal {
 		return nil, fmt.Errorf("cannot advance sprint: not all planned tasks are terminal")
 	}
 

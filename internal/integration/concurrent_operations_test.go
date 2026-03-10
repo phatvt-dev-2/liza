@@ -626,6 +626,7 @@ func TestConcurrentMerges(t *testing.T) {
 				ID:           taskID,
 				Description:  "Test merge task " + taskID,
 				Status:       models.TaskStatusApproved,
+				RolePair:     "coding-pair",
 				Priority:     i + 1,
 				Created:      now,
 				SpecRef:      "README.md",

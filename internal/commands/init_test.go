@@ -721,7 +721,7 @@ func TestInitCommandWithConfig_EntryPoint(t *testing.T) {
 	}
 }
 
-func TestInitCommandWithConfig_NoConfigNoPipeline(t *testing.T) {
+func TestInitCommandWithConfig_NoConfigAutoFreezes(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)
 	setupGlobalLiza(t)
@@ -737,29 +737,29 @@ func TestInitCommandWithConfig_NoConfigNoPipeline(t *testing.T) {
 
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
 
-	// Init without --config
+	// Init without --config auto-freezes embedded pipeline
 	err = InitCommand("Legacy goal", "specs/vision.md", nil)
 	if err != nil {
 		t.Fatalf("InitCommand() error = %v", err)
 	}
 
-	// Verify no pipeline.yaml
+	// Verify pipeline.yaml is auto-frozen from embedded config
 	frozenPath := filepath.Join(tmpDir, ".liza", "pipeline.yaml")
-	if _, err := os.Stat(frozenPath); !os.IsNotExist(err) {
-		t.Errorf("pipeline.yaml should not exist without --config, but it does")
+	if _, err := os.Stat(frozenPath); os.IsNotExist(err) {
+		t.Errorf("pipeline.yaml should be auto-frozen from embedded config")
 	}
 
-	// Verify no pipeline_version
+	// Verify pipeline_version is set
 	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
 	state, err := bb.Read()
 	if err != nil {
 		t.Fatalf("Failed to read state: %v", err)
 	}
-	if state.PipelineVersion != 0 {
-		t.Errorf("state.PipelineVersion = %d, want 0 (unset)", state.PipelineVersion)
+	if state.PipelineVersion != 2 {
+		t.Errorf("state.PipelineVersion = %d, want 2", state.PipelineVersion)
 	}
 
-	// Verify no entry_point
+	// Verify no entry_point (not specified)
 	if state.Goal.EntryPoint != "" {
 		t.Errorf("state.Goal.EntryPoint = %q, want empty", state.Goal.EntryPoint)
 	}
@@ -925,13 +925,24 @@ func TestInitCommandWithConfig_EntryPointWithoutConfig(t *testing.T) {
 
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
 
+	// --entry-point without --config now succeeds because embedded pipeline
+	// is auto-loaded and "detailed-spec" exists in the embedded config
 	err = InitCommandWithConfig(InitParams{
 		Description: "Goal",
 		SpecRef:     "specs/vision.md",
 		EntryPoint:  "detailed-spec",
 	})
-	if err == nil {
-		t.Fatal("Expected error for --entry-point without --config, got nil")
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
 	}
-	testhelpers.AssertErrorContains(t, err, "--entry-point requires a pipeline config")
+
+	// Verify entry_point is set
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Goal.EntryPoint != "detailed-spec" {
+		t.Errorf("state.Goal.EntryPoint = %q, want %q", state.Goal.EntryPoint, "detailed-spec")
+	}
 }

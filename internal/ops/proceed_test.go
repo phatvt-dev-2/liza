@@ -15,10 +15,10 @@ import (
 // --- Proceed: happy path ---
 
 func TestProceed_CreatesChildTasks(t *testing.T) {
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
@@ -27,8 +27,9 @@ func TestProceed_CreatesChildTasks(t *testing.T) {
 	task := models.Task{
 		ID:           parentID,
 		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
 		Description:  "Plan the auth module",
-		Status:       models.TaskStatusMerged,
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -81,8 +82,8 @@ func TestProceed_CreatesChildTasks(t *testing.T) {
 	if srcTask == nil {
 		t.Fatal("Source task not found")
 	}
-	if srcTask.Status != models.TaskStatusMerged {
-		t.Errorf("Source status = %v, want MERGED", srcTask.Status)
+	if srcTask.Status != models.TaskStatus("CODING_PLAN_APPROVED") {
+		t.Errorf("Source status = %v, want CODING_PLAN_APPROVED", srcTask.Status)
 	}
 	if !srcTask.TransitionsExecuted["code-plan-to-coding"] {
 		t.Error("transitions_executed should contain code-plan-to-coding")
@@ -93,8 +94,8 @@ func TestProceed_CreatesChildTasks(t *testing.T) {
 	if child0 == nil {
 		t.Fatal("Child task 0 not found")
 	}
-	if child0.Status != models.TaskStatusDraft {
-		t.Errorf("Child 0 status = %v, want DRAFT", child0.Status)
+	if child0.Status != models.TaskStatus("DRAFT_CODE") {
+		t.Errorf("Child 0 status = %v, want DRAFT_CODE", child0.Status)
 	}
 	if child0.ParentTask == nil || *child0.ParentTask != parentID {
 		t.Errorf("Child 0 parent_task = %v, want %q", child0.ParentTask, parentID)
@@ -117,8 +118,8 @@ func TestProceed_CreatesChildTasks(t *testing.T) {
 	if child1 == nil {
 		t.Fatal("Child task 1 not found")
 	}
-	if child1.Status != models.TaskStatusDraft {
-		t.Errorf("Child 1 status = %v, want DRAFT", child1.Status)
+	if child1.Status != models.TaskStatus("DRAFT_CODE") {
+		t.Errorf("Child 1 status = %v, want DRAFT_CODE", child1.Status)
 	}
 	if child1.ParentTask == nil || *child1.ParentTask != parentID {
 		t.Errorf("Child 1 parent_task = %v, want %q", child1.ParentTask, parentID)
@@ -128,10 +129,10 @@ func TestProceed_CreatesChildTasks(t *testing.T) {
 // --- Proceed: idempotency rejection ---
 
 func TestProceed_RejectsRepeatedTransition(t *testing.T) {
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
@@ -140,8 +141,9 @@ func TestProceed_RejectsRepeatedTransition(t *testing.T) {
 	task := models.Task{
 		ID:           parentID,
 		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
 		Description:  "Plan task",
-		Status:       models.TaskStatusMerged,
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -158,8 +160,9 @@ func TestProceed_RejectsRepeatedTransition(t *testing.T) {
 	child := models.Task{
 		ID:          "plan-1-code-plan-to-coding-0",
 		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
 		Description: "Child",
-		Status:      models.TaskStatusDraft,
+		Status:      models.TaskStatus("DRAFT_CODE"),
 		Priority:    1,
 		Created:     now,
 		ParentTask:  &parentID,
@@ -283,18 +286,19 @@ func TestProceed_RejectsNonexistentTask(t *testing.T) {
 // --- Proceed: wrong status ---
 
 func TestProceed_RejectsWrongStatus(t *testing.T) {
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
 	task := models.Task{
 		ID:           "plan-1",
 		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
 		Description:  "Plan task",
-		Status:       models.TaskStatusImplementing,
+		Status:       models.TaskStatus("CODE_PLANNING"),
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -314,18 +318,18 @@ func TestProceed_RejectsWrongStatus(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for wrong status")
 	}
-	if !strings.Contains(err.Error(), "MERGED") {
-		t.Errorf("Error = %q, want to contain 'MERGED'", err.Error())
+	if !strings.Contains(err.Error(), "CODING_PLAN_APPROVED") {
+		t.Errorf("Error = %q, want to contain 'CODING_PLAN_APPROVED'", err.Error())
 	}
 }
 
 // --- Proceed: empty output ---
 
 func TestProceed_RejectsEmptyOutput(t *testing.T) {
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
@@ -333,8 +337,9 @@ func TestProceed_RejectsEmptyOutput(t *testing.T) {
 	task := models.Task{
 		ID:           "plan-1",
 		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
 		Description:  "Plan task",
-		Status:       models.TaskStatusMerged,
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -360,10 +365,10 @@ func TestProceed_RejectsEmptyOutput(t *testing.T) {
 // --- Proceed: crash recovery ---
 
 func TestProceed_CrashRecovery_CreatesMissingChildren(t *testing.T) {
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
@@ -372,8 +377,9 @@ func TestProceed_CrashRecovery_CreatesMissingChildren(t *testing.T) {
 	parentTask := models.Task{
 		ID:           parentID,
 		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
 		Description:  "Plan task",
-		Status:       models.TaskStatusMerged,
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -392,8 +398,9 @@ func TestProceed_CrashRecovery_CreatesMissingChildren(t *testing.T) {
 	child0 := models.Task{
 		ID:          "plan-1-code-plan-to-coding-0",
 		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
 		Description: "Child 0",
-		Status:      models.TaskStatusDraft,
+		Status:      models.TaskStatus("DRAFT_CODE"),
 		Priority:    1,
 		Created:     now,
 		ParentTask:  &parentID,
@@ -438,10 +445,10 @@ func TestProceed_CrashRecovery_CreatesMissingChildren(t *testing.T) {
 // --- Proceed: crash recovery with all children present ---
 
 func TestProceed_CrashRecovery_AllChildrenExist(t *testing.T) {
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
@@ -450,8 +457,9 @@ func TestProceed_CrashRecovery_AllChildrenExist(t *testing.T) {
 	parentTask := models.Task{
 		ID:           parentID,
 		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
 		Description:  "Plan task",
-		Status:       models.TaskStatusMerged,
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -468,8 +476,9 @@ func TestProceed_CrashRecovery_AllChildrenExist(t *testing.T) {
 	child0 := models.Task{
 		ID:          "plan-1-code-plan-to-coding-0",
 		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
 		Description: "Child 0",
-		Status:      models.TaskStatusDraft,
+		Status:      models.TaskStatus("DRAFT_CODE"),
 		Priority:    1,
 		Created:     now,
 		ParentTask:  &parentID,
@@ -495,10 +504,10 @@ func TestProceed_CrashRecovery_AllChildrenExist(t *testing.T) {
 // --- Proceed: output entry validation ---
 
 func TestProceed_RejectsOutputMissingFields(t *testing.T) {
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
@@ -506,8 +515,9 @@ func TestProceed_RejectsOutputMissingFields(t *testing.T) {
 	task := models.Task{
 		ID:           "plan-1",
 		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
 		Description:  "Plan task",
-		Status:       models.TaskStatusMerged,
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",
@@ -643,63 +653,6 @@ func TestProceed_PipelineCreatesChildTasksWithRolePair(t *testing.T) {
 	}
 }
 
-func TestProceed_LegacyStillUsesKnownTransitions(t *testing.T) {
-	// No pipeline.yaml → legacy path
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-	state := testhelpers.CreateValidState()
-	state.Sprint.Status = models.SprintStatusCompleted
-
-	now := time.Now().UTC()
-	parentID := "plan-1"
-	reviewCommit := "abc123"
-	task := models.Task{
-		ID:           parentID,
-		Type:         models.TaskTypeCoding,
-		Description:  "Plan task",
-		Status:       models.TaskStatusMerged,
-		Priority:     1,
-		Created:      now,
-		SpecRef:      "README.md",
-		DoneWhen:     "Plan approved",
-		Scope:        "scope",
-		ReviewCommit: &reviewCommit,
-		Output: []models.OutputEntry{
-			{Desc: "Child", DoneWhen: "Done", Scope: "s", SpecRef: "README.md"},
-		},
-		History: []models.TaskHistoryEntry{},
-	}
-	state.Tasks = append(state.Tasks, task)
-	state.Sprint.Scope.Planned = []string{parentID}
-	testhelpers.WriteInitialState(t, stateFile, state)
-
-	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
-	if err != nil {
-		t.Fatalf("Proceed() error: %v", err)
-	}
-
-	bb := db.New(stateFile)
-	readState, err := bb.Read()
-	if err != nil {
-		t.Fatalf("Failed to read state: %v", err)
-	}
-
-	child := readState.FindTask(result.ChildTaskIDs[0])
-	if child == nil {
-		t.Fatal("Child task not found")
-	}
-	if child.Status != models.TaskStatusDraft {
-		t.Errorf("Child status = %v, want DRAFT", child.Status)
-	}
-	if child.RolePair != "" {
-		t.Errorf("Child role_pair = %q, want empty (legacy)", child.RolePair)
-	}
-	if child.ParentTask == nil || *child.ParentTask != parentID {
-		t.Errorf("Child parent_task = %v, want %q", child.ParentTask, parentID)
-	}
-}
-
 func TestAvailableTransitions_PipelineTask(t *testing.T) {
 	tmpDir, stateFile := setupPipelineProceedTest(t)
 
@@ -718,36 +671,6 @@ func TestAvailableTransitions_PipelineTask(t *testing.T) {
 		DoneWhen:    "Done",
 		Scope:       "scope",
 		History:     []models.TaskHistoryEntry{},
-	}
-	state.Tasks = append(state.Tasks, task)
-	testhelpers.WriteInitialState(t, stateFile, state)
-
-	avail := AvailableTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
-	if len(avail) != 1 || avail[0] != "code-plan-to-coding" {
-		t.Errorf("AvailableTransitions = %v, want [code-plan-to-coding]", avail)
-	}
-}
-
-func TestAvailableTransitions_LegacyTask(t *testing.T) {
-	// No pipeline.yaml → legacy path
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-	state := testhelpers.CreateValidState()
-	now := time.Now().UTC()
-	reviewCommit := "abc123"
-	task := models.Task{
-		ID:           "plan-1",
-		Type:         models.TaskTypeCoding,
-		Description:  "Plan task",
-		Status:       models.TaskStatusMerged,
-		Priority:     1,
-		Created:      now,
-		SpecRef:      "README.md",
-		DoneWhen:     "Done",
-		Scope:        "scope",
-		ReviewCommit: &reviewCommit,
-		History:      []models.TaskHistoryEntry{},
 	}
 	state.Tasks = append(state.Tasks, task)
 	testhelpers.WriteInitialState(t, stateFile, state)
@@ -1350,41 +1273,6 @@ func TestExecuteAvailableTransitions_PerSubtask(t *testing.T) {
 	}
 }
 
-func TestExecuteAvailableTransitions_NoopForLegacy(t *testing.T) {
-	// No pipeline.yaml → legacy project
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-	state := testhelpers.CreateValidState()
-	now := time.Now().UTC()
-	reviewCommit := "abc123"
-	mergeCommit := "def456"
-	task := models.Task{
-		ID:           "task-1",
-		Type:         models.TaskTypeCoding,
-		Description:  "Some task",
-		Status:       models.TaskStatusMerged,
-		Priority:     1,
-		Created:      now,
-		SpecRef:      "README.md",
-		DoneWhen:     "Done",
-		Scope:        "scope",
-		ReviewCommit: &reviewCommit,
-		MergeCommit:  &mergeCommit,
-		History:      []models.TaskHistoryEntry{},
-	}
-	state.Tasks = append(state.Tasks, task)
-	testhelpers.WriteInitialState(t, stateFile, state)
-
-	results, err := ExecuteAvailableTransitions(tmpDir)
-	if err != nil {
-		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
-	}
-	if results != nil {
-		t.Errorf("results = %v, want nil for legacy project", results)
-	}
-}
-
 func TestExecuteAvailableTransitions_NoopWhenNoTransitions(t *testing.T) {
 	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
 
@@ -1522,10 +1410,10 @@ func TestExecuteAvailableTransitions_NoSprintGate(t *testing.T) {
 // --- Proceed: sprint scope update ---
 
 func TestProceed_AddsChildrenToSprintScope(t *testing.T) {
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
@@ -1534,8 +1422,9 @@ func TestProceed_AddsChildrenToSprintScope(t *testing.T) {
 	task := models.Task{
 		ID:           parentID,
 		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
 		Description:  "Plan the auth module",
-		Status:       models.TaskStatusMerged,
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "README.md",

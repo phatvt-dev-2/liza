@@ -79,6 +79,12 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 		input.Type = string(models.TaskTypeCoding)
 	}
 
+	taskType := models.TaskType(input.Type)
+	if !taskType.IsValid() {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("unknown task type %q; valid types: %s",
+			input.Type, strings.Join(models.ValidTaskTypeNames(), ", "))}
+	}
+
 	// Derive project root from state path (.liza/state.yaml → project root)
 	projectRoot := filepath.Dir(filepath.Dir(statePath))
 	resolver, _, err := loadResolver(projectRoot)
@@ -86,27 +92,16 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
 
-	taskType := models.TaskType(input.Type)
-	if !taskType.IsValid() {
-		msg := fmt.Sprintf("unknown task type %q; valid types: %s", input.Type, strings.Join(models.ValidTaskTypeNames(), ", "))
-		if resolver != nil {
-			msg += fmt.Sprintf(". For pipeline workflow customization, use role_pair (available: %s)",
-				strings.Join(resolver.RolePairNames(), ", "))
-		}
-		return nil, &PreconditionError{Reason: msg}
-	}
-
-	if resolver != nil && input.RolePair != "" {
-		if _, rpErr := resolver.RolePair(input.RolePair); rpErr != nil {
-			return nil, &PreconditionError{
-				Reason: fmt.Sprintf("unknown role_pair %q; available role_pairs: %s",
-					input.RolePair, strings.Join(resolver.RolePairNames(), ", ")),
-			}
-		}
-	} else if resolver != nil && input.RolePair == "" {
+	if input.RolePair == "" {
 		return nil, &PreconditionError{
-			Reason: fmt.Sprintf("role_pair is required for pipeline-configured goals; available: %s",
+			Reason: fmt.Sprintf("role_pair is required; available: %s",
 				strings.Join(resolver.RolePairNames(), ", ")),
+		}
+	}
+	if _, rpErr := resolver.RolePair(input.RolePair); rpErr != nil {
+		return nil, &PreconditionError{
+			Reason: fmt.Sprintf("unknown role_pair %q; available role_pairs: %s",
+				input.RolePair, strings.Join(resolver.RolePairNames(), ", ")),
 		}
 	}
 
@@ -123,12 +118,17 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 
 	bb := db.For(statePath)
 
+	initialStatus, err := initialTaskStatusWithResolver(input.RolePair, resolver)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve initial status for role-pair %q: %w", input.RolePair, err)
+	}
+
 	newTask := models.Task{
 		ID:          input.ID,
 		Type:        taskType,
 		RolePair:    input.RolePair,
 		Description: input.Description,
-		Status:      initialTaskStatusWithResolver(input.RolePair, resolver),
+		Status:      initialStatus,
 		Priority:    input.Priority,
 		SpecRef:     input.SpecRef,
 		DoneWhen:    input.DoneWhen,
@@ -236,11 +236,4 @@ func AddTasks(statePath, logPath string, input *AddTasksInput) (*AddTasksResult,
 		result.Results = append(result.Results, item)
 	}
 	return result, nil
-}
-
-func initialTaskStatus(rolePair string) models.TaskStatus {
-	if rolePair == "code-planning-pair" {
-		return models.TaskStatusDraftCodingPlan
-	}
-	return models.TaskStatusReady
 }

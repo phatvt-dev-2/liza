@@ -112,7 +112,7 @@ func TestExit42RestartTracker_ExponentialBackoffAndCap(t *testing.T) {
 
 	var delays []time.Duration
 	for i := 0; i < 4; i++ {
-		outcome, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+		outcome, err := tracker.Handle(bb, tmpDir, roles.RuntimeCoder, task.ID, agentID)
 		if err != nil {
 			t.Fatalf("Handle() error on attempt %d: %v", i+1, err)
 		}
@@ -167,7 +167,7 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 	tracker := newExit42RestartTracker()
 
 	// First attempt
-	outcome, err := tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	outcome, err := tracker.Handle(bb, tmpDir, roles.RuntimeCoder, task.ID, agentID)
 	if err != nil {
 		t.Fatalf("Handle() error on attempt 1: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 	}
 
 	// Second attempt (at threshold)
-	outcome, err = tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	outcome, err = tracker.Handle(bb, tmpDir, roles.RuntimeCoder, task.ID, agentID)
 	if err != nil {
 		t.Fatalf("Handle() error on attempt 2: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 	}
 
 	// Third attempt (over threshold)
-	outcome, err = tracker.Handle(bb, roles.RuntimeCoder, task.ID, agentID)
+	outcome, err = tracker.Handle(bb, tmpDir, roles.RuntimeCoder, task.ID, agentID)
 	if err != nil {
 		t.Fatalf("Handle() error on attempt 3: %v", err)
 	}

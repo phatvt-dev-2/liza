@@ -128,7 +128,11 @@ func resumeSprint(s *models.State, lizaPaths paths.LizaPaths, projectRoot string
 		}, nil
 
 	case models.SprintStatusCheckpoint:
-		if allPlannedTasksTerminalForProject(s, projectRoot) {
+		allTerminal, termErr := allPlannedTasksTerminalForProject(s, projectRoot)
+		if termErr != nil {
+			return "", nil, termErr
+		}
+		if allTerminal {
 			// Sprint is truly done — mark COMPLETED for human review.
 			// Human runs liza proceed, then liza resume again to advance.
 			s.Sprint.Status = models.SprintStatusCompleted

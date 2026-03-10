@@ -13,7 +13,6 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ClaimResult contains the outcome of a successful task claim.
@@ -86,105 +85,60 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
 
-	if resolver != nil && task.RolePair != "" {
-		// Pipeline path: resolve statuses from config
-		pipelineInitial, err := resolver.InitialStatus(task.RolePair)
-		if err != nil {
-			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-		}
-		pipelineRejected, err := resolver.RejectedStatus(task.RolePair)
-		if err != nil {
-			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-		}
-		pipelineExecuting, err := resolver.ExecutingStatus(task.RolePair)
-		if err != nil {
-			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-		}
-		doerRole, err := resolver.DoerRole(task.RolePair)
-		if err != nil {
-			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-		}
+	if task.RolePair == "" {
+		return nil, fmt.Errorf("task %s has no role_pair set", taskID)
+	}
 
-		switch task.Status {
-		case pipelineInitial:
-			if runtimeRole != doerRole {
-				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
-			}
-			targetStatus = pipelineExecuting
-			isFreshClaim = true
-			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
-				return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
-			}
-		case pipelineRejected:
-			if runtimeRole != doerRole {
-				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
-			}
-			targetStatus = pipelineExecuting
-			isRejectionClaim = true
-			if task.AssignedTo != nil {
-				previousAssignee = *task.AssignedTo
-			}
-		case models.TaskStatusIntegrationFailed:
-			if runtimeRole != doerRole {
-				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
-			}
-			targetStatus = pipelineExecuting
-			isIntegrationFixClaim = true
-			if task.AssignedTo != nil {
-				previousAssignee = *task.AssignedTo
-			}
-		default:
+	// Resolve statuses from pipeline config
+	pipelineInitial, err := resolver.InitialStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	pipelineRejected, err := resolver.RejectedStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	pipelineExecuting, err := resolver.ExecutingStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	doerRole, err := resolver.DoerRole(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+
+	switch task.Status {
+	case pipelineInitial:
+		if runtimeRole != doerRole {
 			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
 		}
-		pipelineTransitions = BuildPipelineTransitions(resolver)
-	} else {
-		// Legacy path: hardcoded status resolution
-		workflowRole, err := roles.ToWorkflow(runtimeRole)
-		if err != nil {
-			return nil, err
+		targetStatus = pipelineExecuting
+		isFreshClaim = true
+		if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+			return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
 		}
-
-		switch task.Status {
-		case models.TaskStatusReady, models.TaskStatusRejected, models.TaskStatusIntegrationFailed:
-			if workflowRole != models.RoleCoder {
-				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
-			}
-			targetStatus = models.TaskStatusImplementing
-			switch task.Status {
-			case models.TaskStatusReady:
-				isFreshClaim = true
-				if unmet := unmetDependencies(task, state); len(unmet) > 0 {
-					return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
-				}
-			case models.TaskStatusIntegrationFailed:
-				isIntegrationFixClaim = true
-			default: // TaskStatusRejected
-				isRejectionClaim = true
-				if task.AssignedTo != nil {
-					previousAssignee = *task.AssignedTo
-				}
-			}
-		case models.TaskStatusDraftCodingPlan, models.TaskStatusCodingPlanRejected:
-			if workflowRole != models.RoleCodePlanner {
-				return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
-			}
-			targetStatus = models.TaskStatusCodePlanning
-			switch task.Status {
-			case models.TaskStatusDraftCodingPlan:
-				isFreshClaim = true
-				if unmet := unmetDependencies(task, state); len(unmet) > 0 {
-					return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
-				}
-			default: // TaskStatusCodingPlanRejected
-				isRejectionClaim = true
-				if task.AssignedTo != nil {
-					previousAssignee = *task.AssignedTo
-				}
-			}
-		default:
-			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, workflowRole)
+	case pipelineRejected:
+		if runtimeRole != doerRole {
+			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
 		}
+		targetStatus = pipelineExecuting
+		isRejectionClaim = true
+		if task.AssignedTo != nil {
+			previousAssignee = *task.AssignedTo
+		}
+	case models.TaskStatusIntegrationFailed:
+		if runtimeRole != doerRole {
+			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
+		}
+		targetStatus = pipelineExecuting
+		isIntegrationFixClaim = true
+		if task.AssignedTo != nil {
+			previousAssignee = *task.AssignedTo
+		}
+	default:
+		return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
 	}
+	pipelineTransitions = BuildPipelineTransitions(resolver)
 
 	agent, exists := state.Agents[agentID]
 	if exists && agent.CurrentTask != nil && *agent.CurrentTask != "" && *agent.CurrentTask != taskID {
@@ -303,14 +257,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		}
 
 		// Update task
-		if pipelineTransitions != nil {
-			if err := task.TransitionWith(targetStatus, pipelineTransitions); err != nil {
-				return err
-			}
-		} else {
-			if err := task.Transition(targetStatus); err != nil {
-				return err
-			}
+		if err := task.TransitionWith(targetStatus, pipelineTransitions); err != nil {
+			return err
 		}
 		task.AssignedTo = &agentID
 		task.LeaseExpires = &leaseExpires
@@ -570,13 +518,7 @@ func enforceRejectedIterationLimit(
 		blockedReason := iterationLimitBlockedReason(task.Iteration, blockedLimit)
 		questions := defaultIterationLimitBlockedQuestions()
 
-		transitionToBlocked := func() error {
-			if pipelineTransitions != nil {
-				return task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions)
-			}
-			return task.Transition(models.TaskStatusBlocked)
-		}
-		if err := transitionToBlocked(); err != nil {
+		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
 			return err
 		}
 		task.BlockedReason = &blockedReason

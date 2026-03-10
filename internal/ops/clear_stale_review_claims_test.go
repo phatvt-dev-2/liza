@@ -26,6 +26,7 @@ func TestClearStaleReviewClaims_NoStale(t *testing.T) {
 		{
 			ID: "t1", Description: "Active review", Status: models.TaskStatusReviewing,
 			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			RolePair:    "coding-pair",
 			ReviewingBy: &reviewer, ReviewLeaseExpires: &futureLease,
 			History: []models.TaskHistoryEntry{},
 		},
@@ -58,6 +59,7 @@ func TestClearStaleReviewClaims_ExpiredLease(t *testing.T) {
 		{
 			ID: "t1", Description: "Stale review", Status: models.TaskStatusReviewing,
 			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			RolePair:   "coding-pair",
 			AssignedTo: &coder, ReviewingBy: &reviewer, ReviewLeaseExpires: &expiredLease,
 			History: []models.TaskHistoryEntry{},
 		},
@@ -104,6 +106,7 @@ func TestClearStaleReviewClaims_MissingLease(t *testing.T) {
 		{
 			ID: "t1", Description: "Malformed review", Status: models.TaskStatusReviewing,
 			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			RolePair:    "coding-pair",
 			ReviewingBy: &reviewer, // no ReviewLeaseExpires
 			History:     []models.TaskHistoryEntry{},
 		},
@@ -160,12 +163,14 @@ func TestClearStaleReviewClaims_MultipleStale(t *testing.T) {
 		{
 			ID: "t1", Description: "Stale 1", Status: models.TaskStatusReviewing,
 			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			RolePair:    "coding-pair",
 			ReviewingBy: &reviewer1, ReviewLeaseExpires: &expiredLease,
 			History: []models.TaskHistoryEntry{},
 		},
 		{
 			ID: "t2", Description: "Stale 2", Status: models.TaskStatusReviewing,
 			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			RolePair:    "coding-pair",
 			ReviewingBy: &reviewer2, ReviewLeaseExpires: &expiredLease,
 			History: []models.TaskHistoryEntry{},
 		},

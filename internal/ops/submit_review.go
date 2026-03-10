@@ -52,27 +52,23 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, err
 	}
 
-	// Resolve expected statuses (pipeline or legacy)
-	expectedCurrentStatus := models.TaskStatusImplementing
-	targetSubmittedStatus := models.TaskStatusReadyForReview
-	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
-
+	// Resolve expected statuses from pipeline config
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
-	if resolver != nil && task.RolePair != "" {
-		if expectedCurrentStatus, err = resolver.ExecutingStatus(task.RolePair); err != nil {
-			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-		}
-		if targetSubmittedStatus, err = resolver.SubmittedStatus(task.RolePair); err != nil {
-			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-		}
-		pipelineTransitions = BuildPipelineTransitions(resolver)
-	} else if runtimeRole == roles.RuntimeCodePlanner {
-		expectedCurrentStatus = models.TaskStatusCodePlanning
-		targetSubmittedStatus = models.TaskStatusCodingPlanToReview
+	if task.RolePair == "" {
+		return nil, fmt.Errorf("task %s has no role_pair set", taskID)
 	}
+	expectedCurrentStatus, err := resolver.ExecutingStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	targetSubmittedStatus, err := resolver.SubmittedStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	pipelineTransitions := BuildPipelineTransitions(resolver)
 
 	if task.Status != expectedCurrentStatus {
 		return nil, fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)
@@ -199,14 +195,8 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 			return fmt.Errorf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)
 		}
 
-		if pipelineTransitions != nil {
-			if err := task.TransitionWith(targetSubmittedStatus, pipelineTransitions); err != nil {
-				return err
-			}
-		} else {
-			if err := task.Transition(targetSubmittedStatus); err != nil {
-				return err
-			}
+		if err := task.TransitionWith(targetSubmittedStatus, pipelineTransitions); err != nil {
+			return err
 		}
 		task.ReviewCommit = &postRebaseCommit
 		// Update BaseCommit from "branched from" to "rebased onto" — this is the
@@ -255,14 +245,8 @@ func markSubmitRebaseConflict(bb *db.Blackboard, taskID, agentID string, pipelin
 		if t == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
-		if pipelineTransitions != nil {
-			if err := t.TransitionWith(models.TaskStatusIntegrationFailed, pipelineTransitions); err != nil {
-				return err
-			}
-		} else {
-			if err := t.Transition(models.TaskStatusIntegrationFailed); err != nil {
-				return err
-			}
+		if err := t.TransitionWith(models.TaskStatusIntegrationFailed, pipelineTransitions); err != nil {
+			return err
 		}
 		t.FailedBy = appendUniqueAgentID(t.FailedBy, agentID)
 		t.IntegrationFix = false

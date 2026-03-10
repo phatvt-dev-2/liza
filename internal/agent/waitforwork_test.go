@@ -50,11 +50,11 @@ func TestWaitForCoderWork(t *testing.T) {
 		{
 			name: "task waiting on dependency",
 			tasks: []models.Task{
-				{
-					ID:        "task-1",
-					Status:    models.TaskStatusReady,
-					DependsOn: []string{"task-2"},
-				},
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())
+					task.DependsOn = []string{"task-2"}
+					return task
+				}(),
 				testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, time.Now().UTC()),
 			},
 			wantWork: false,
@@ -65,8 +65,6 @@ func TestWaitForCoderWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-			testhelpers.SetupPipelineConfig(t, tmpDir)
-			lizaDir := filepath.Dir(statePath)
 
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
@@ -80,7 +78,7 @@ func TestWaitForCoderWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "coder", config, 10*time.Millisecond, 100*time.Millisecond)
+			hasWork, err := waitForWork(ctx, db.New(statePath), tmpDir, "coder", config, 10*time.Millisecond, 100*time.Millisecond)
 
 			if err != nil {
 				t.Fatalf("waitForWork() error = %v", err)
@@ -222,8 +220,6 @@ func TestWaitForCodePlannerWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-			testhelpers.SetupPipelineConfig(t, tmpDir)
-			lizaDir := filepath.Dir(statePath)
 
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
@@ -234,7 +230,7 @@ func TestWaitForCodePlannerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "code-planner", config, 10*time.Millisecond, 100*time.Millisecond)
+			hasWork, err := waitForWork(ctx, db.New(statePath), tmpDir, "code-planner", config, 10*time.Millisecond, 100*time.Millisecond)
 			if err != nil {
 				t.Fatalf("waitForWork() error = %v", err)
 			}
@@ -337,8 +333,6 @@ func TestWaitForOrchestratorWork(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-			testhelpers.SetupPipelineConfig(t, tmpDir)
-			lizaDir := filepath.Dir(statePath)
 
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
@@ -353,7 +347,7 @@ func TestWaitForOrchestratorWork(t *testing.T) {
 			defer cancel()
 
 			// Orchestrator now respects maxWait parameter (uses 100ms timeout for test)
-			hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "orchestrator", config, 10*time.Millisecond, 100*time.Millisecond)
+			hasWork, err := waitForWork(ctx, db.New(statePath), tmpDir, "orchestrator", config, 10*time.Millisecond, 100*time.Millisecond)
 
 			if err != nil {
 				t.Fatalf("waitForWork() error = %v", err)
@@ -371,8 +365,6 @@ func TestWaitForOrchestratorWork(t *testing.T) {
 func TestOrchestratorRespectsMaxWaitConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
-	lizaDir := filepath.Dir(statePath)
 
 	// Create state with no work available
 	state := testhelpers.CreateValidState()
@@ -388,7 +380,7 @@ func TestOrchestratorRespectsMaxWaitConfig(t *testing.T) {
 	// Test with a short maxWait - orchestrator should timeout when maxWait is reached
 	ctx := context.Background()
 	startTime := time.Now()
-	hasWork, err := waitForWork(ctx, db.New(statePath), lizaDir, "orchestrator", config, 10*time.Millisecond, 150*time.Millisecond)
+	hasWork, err := waitForWork(ctx, db.New(statePath), tmpDir, "orchestrator", config, 10*time.Millisecond, 150*time.Millisecond)
 	elapsed := time.Since(startTime)
 
 	if err != nil {
@@ -466,8 +458,6 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-			testhelpers.SetupPipelineConfig(t, tmpDir)
-			lizaDir := filepath.Dir(statePath)
 
 			// Write initial state with no work
 			state := tt.setupState()
@@ -488,7 +478,7 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 			errCh := make(chan error, 1)
 
 			go func() {
-				hasWork, err := waitForWork(ctx, bb, lizaDir, tt.role, config, 10*time.Millisecond, 5*time.Second)
+				hasWork, err := waitForWork(ctx, bb, tmpDir, tt.role, config, 10*time.Millisecond, 5*time.Second)
 				if err != nil {
 					errCh <- err
 					return
@@ -533,8 +523,6 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 func TestWaitForWorkCancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
-	lizaDir := filepath.Dir(statePath)
 
 	// Create state with no work
 	state := testhelpers.CreateValidState()
@@ -553,7 +541,7 @@ func TestWaitForWorkCancellation(t *testing.T) {
 	started := make(chan struct{})
 	go func() {
 		close(started)
-		_, err := waitForWork(ctx, bb, lizaDir, "coder", config, 10*time.Millisecond, 10*time.Second)
+		_, err := waitForWork(ctx, bb, tmpDir, "coder", config, 10*time.Millisecond, 10*time.Second)
 		errCh <- err
 	}()
 
@@ -575,8 +563,6 @@ func TestWaitForWorkCancellation(t *testing.T) {
 func TestWaitForWorkTimeout(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
-	lizaDir := filepath.Dir(statePath)
 
 	// Create state with no work
 	state := testhelpers.CreateValidState()
@@ -591,7 +577,7 @@ func TestWaitForWorkTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	startTime := time.Now()
-	hasWork, err := waitForWork(ctx, bb, lizaDir, "coder", config, 10*time.Millisecond, 200*time.Millisecond)
+	hasWork, err := waitForWork(ctx, bb, tmpDir, "coder", config, 10*time.Millisecond, 200*time.Millisecond)
 	elapsed := time.Since(startTime)
 
 	if err != nil {
@@ -612,8 +598,6 @@ func TestWaitForWorkTimeout(t *testing.T) {
 func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
-	lizaDir := filepath.Dir(statePath)
 
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{} // No work available
@@ -631,7 +615,7 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 	started := make(chan struct{})
 	go func() {
 		close(started)
-		hasWork, err := waitForCoderWork(ctx, bb, lizaDir, "coder-1", 10*time.Millisecond, 5*time.Second)
+		hasWork, err := waitForCoderWork(ctx, bb, tmpDir, "coder-1", 10*time.Millisecond, 5*time.Second)
 		if err != nil {
 			errCh <- err
 			return
@@ -673,8 +657,6 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 func TestWaitForWorkPollingAbortStateMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
-	lizaDir := filepath.Dir(statePath)
 
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{} // No work available
@@ -697,7 +679,7 @@ func TestWaitForWorkPollingAbortStateMode(t *testing.T) {
 	started := make(chan struct{})
 	go func() {
 		close(started)
-		hasWork, err := waitForWorkPolling(ctx, bb, lizaDir, 50*time.Millisecond, 5*time.Second, checkWork)
+		hasWork, err := waitForWorkPolling(ctx, bb, tmpDir, 50*time.Millisecond, 5*time.Second, checkWork)
 		if err != nil {
 			errCh <- err
 			return
@@ -738,8 +720,6 @@ func TestWaitForWorkPollingAbortStateMode(t *testing.T) {
 func TestAbortPrecedenceOverWork(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
-	lizaDir := filepath.Dir(statePath)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -754,7 +734,7 @@ func TestAbortPrecedenceOverWork(t *testing.T) {
 	defer cancel()
 
 	// Should return false (ABORT), not true (work available)
-	hasWork, err := waitForCoderWork(ctx, bb, lizaDir, "coder-1", 10*time.Millisecond, 100*time.Millisecond)
+	hasWork, err := waitForCoderWork(ctx, bb, tmpDir, "coder-1", 10*time.Millisecond, 100*time.Millisecond)
 
 	if err != nil {
 		t.Fatalf("waitForCoderWork() error = %v", err)
@@ -1161,8 +1141,6 @@ func TestWaitForUSReviewerWork(t *testing.T) {
 func TestWaitForCoderWorkDetectsResumableHandoff(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
-	lizaDir := filepath.Dir(statePath)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -1178,7 +1156,7 @@ func TestWaitForCoderWorkDetectsResumableHandoff(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	hasWork, err := waitForCoderWork(ctx, bb, lizaDir, "coder-1", 10*time.Millisecond, 200*time.Millisecond)
+	hasWork, err := waitForCoderWork(ctx, bb, tmpDir, "coder-1", 10*time.Millisecond, 200*time.Millisecond)
 	if err != nil {
 		t.Fatalf("waitForCoderWork() error = %v", err)
 	}

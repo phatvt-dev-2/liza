@@ -81,6 +81,9 @@ func SetupLizaDir(t *testing.T, tmpDir string) (statePath, lockPath string) {
 		t.Fatalf("Failed to create lock file: %v", err)
 	}
 
+	// Pipeline config is mandatory — include it by default.
+	SetupPipelineConfig(t, tmpDir)
+
 	return statePath, lockPath
 }
 

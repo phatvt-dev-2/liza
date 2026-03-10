@@ -34,9 +34,9 @@ func setupPipelineTest(t *testing.T) (string, string) {
 
 func TestLoadDetectionContext_PipelineGoal(t *testing.T) {
 	tmpDir, _ := setupPipelineTest(t)
-	ctx := LoadDetectionContext(tmpDir)
-	if ctx == nil {
-		t.Fatal("expected non-nil detection context for pipeline goal")
+	ctx, err := LoadDetectionContext(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadDetectionContext() error: %v", err)
 	}
 	if len(ctx.SprintTerminals) == 0 {
 		t.Error("expected non-empty SprintTerminals")
@@ -46,13 +46,14 @@ func TestLoadDetectionContext_PipelineGoal(t *testing.T) {
 	}
 }
 
-func TestLoadDetectionContext_LegacyGoal(t *testing.T) {
+func TestLoadDetectionContext_NoPipeline(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.SetupLizaDir(t, tmpDir)
-	ctx := LoadDetectionContext(tmpDir)
-	if ctx != nil {
-		t.Fatal("expected nil detection context for legacy goal")
+	os.Remove(filepath.Join(tmpDir, ".liza", "pipeline.yaml"))
+	_, err := LoadDetectionContext(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for missing pipeline config")
 	}
 }
 
@@ -71,9 +72,9 @@ func TestLoadResolver_PipelineGoal(t *testing.T) {
 func TestTransitionSourcePairs_PipelineGoal(t *testing.T) {
 	tmpDir, _ := setupPipelineTest(t)
 
-	pairs := TransitionSourcePairs(tmpDir)
-	if pairs == nil {
-		t.Fatal("expected non-nil transition source pairs for pipeline goal")
+	pairs, err := TransitionSourcePairs(tmpDir)
+	if err != nil {
+		t.Fatalf("TransitionSourcePairs() error: %v", err)
 	}
 	// valid-coding-subpipeline.yaml has code-planning-pair as a transition source
 	if !pairs["code-planning-pair"] {
@@ -108,30 +109,27 @@ func TestIsPlanningPair(t *testing.T) {
 	}
 }
 
-func TestTransitionSourcePairs_LegacyGoal(t *testing.T) {
+func TestTransitionSourcePairs_NoPipeline(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.SetupLizaDir(t, tmpDir)
-	// No pipeline.yaml → legacy goal
+	os.Remove(filepath.Join(tmpDir, ".liza", "pipeline.yaml"))
 
-	pairs := TransitionSourcePairs(tmpDir)
-	if pairs != nil {
-		t.Fatalf("expected nil transition source pairs for legacy goal, got %v", pairs)
+	_, err := TransitionSourcePairs(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for missing pipeline config")
 	}
 }
 
-func TestLoadResolver_LegacyGoal(t *testing.T) {
+func TestLoadResolver_NoPipeline(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.SetupLizaDir(t, tmpDir)
-	// No pipeline.yaml → legacy goal
+	os.Remove(filepath.Join(tmpDir, ".liza", "pipeline.yaml"))
 
-	resolver, _, err := loadResolver(tmpDir)
-	if err != nil {
-		t.Fatalf("loadResolver() error: %v", err)
-	}
-	if resolver != nil {
-		t.Fatal("expected nil resolver for legacy goal")
+	_, _, err := loadResolver(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for missing pipeline config")
 	}
 }
 
@@ -223,11 +221,12 @@ func TestClaimTask_PipelineCodePlanningPair(t *testing.T) {
 	}
 }
 
-func TestClaimTask_LegacyGoalStillWorks(t *testing.T) {
-	// No pipeline.yaml → legacy path
+func TestClaimTask_NoPipelineReturnsError(t *testing.T) {
+	// No pipeline.yaml → should fail now that pipeline is mandatory
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	os.Remove(filepath.Join(tmpDir, ".liza", "pipeline.yaml"))
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -237,19 +236,9 @@ func TestClaimTask_LegacyGoalStillWorks(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{"task-1"}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
-	if err != nil {
-		t.Fatalf("ClaimTask() error: %v", err)
-	}
-	if result.TaskID != "task-1" {
-		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
-	}
-
-	bb := db.For(stateFile)
-	readState, _ := bb.Read()
-	readTask := readState.FindTask("task-1")
-	if readTask.Status != models.TaskStatusImplementing {
-		t.Errorf("Legacy task status = %v, want IMPLEMENTING", readTask.Status)
+	_, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err == nil {
+		t.Fatal("expected error when pipeline config is missing")
 	}
 }
 
@@ -364,29 +353,35 @@ func TestInitialTaskStatus_PipelineGoal(t *testing.T) {
 	}
 
 	// Pipeline goal: coding-pair → DRAFT_CODE
-	status := initialTaskStatusWithResolver("coding-pair", resolver)
+	status, err := initialTaskStatusWithResolver("coding-pair", resolver)
+	if err != nil {
+		t.Fatalf("initialTaskStatusWithResolver(coding-pair) error: %v", err)
+	}
 	if status != models.TaskStatus("DRAFT_CODE") {
 		t.Errorf("initialTaskStatus(coding-pair) = %v, want DRAFT_CODE", status)
 	}
 
 	// Pipeline goal: code-planning-pair → DRAFT_CODING_PLAN
-	status = initialTaskStatusWithResolver("code-planning-pair", resolver)
+	status, err = initialTaskStatusWithResolver("code-planning-pair", resolver)
+	if err != nil {
+		t.Fatalf("initialTaskStatusWithResolver(code-planning-pair) error: %v", err)
+	}
 	if status != models.TaskStatus("DRAFT_CODING_PLAN") {
 		t.Errorf("initialTaskStatus(code-planning-pair) = %v, want DRAFT_CODING_PLAN", status)
 	}
 }
 
-func TestInitialTaskStatus_LegacyGoal(t *testing.T) {
-	// Legacy: no resolver
-	status := initialTaskStatusWithResolver("", nil)
-	if status != models.TaskStatusReady {
-		t.Errorf("initialTaskStatus('', nil) = %v, want READY", status)
+func TestInitialTaskStatus_UnknownRolePair(t *testing.T) {
+	tmpDir, _ := setupPipelineTest(t)
+
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver error: %v", err)
 	}
 
-	// Legacy: code-planning-pair without resolver
-	status = initialTaskStatusWithResolver("code-planning-pair", nil)
-	if status != models.TaskStatusDraftCodingPlan {
-		t.Errorf("initialTaskStatus(code-planning-pair, nil) = %v, want DRAFT_CODING_PLAN", status)
+	_, err = initialTaskStatusWithResolver("nonexistent-pair", resolver)
+	if err == nil {
+		t.Fatal("expected error for unknown role-pair")
 	}
 }
 

@@ -40,7 +40,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 		return nil, err
 	}
 
-	pr := LoadResolverForModels(projectRoot)
+	pr, _ := LoadResolverForModels(projectRoot)
 	if !models.IsExecutingStatus(task, pr) {
 		return nil, fmt.Errorf("task %s is not in an executing state (status: %s)", taskID, task.Status)
 	}

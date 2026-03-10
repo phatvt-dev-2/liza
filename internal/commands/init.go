@@ -53,11 +53,6 @@ func InitCommandWithConfig(params InitParams) error {
 		stdin = os.Stdin
 	}
 
-	// --entry-point requires --config
-	if entryPoint != "" && configPath == "" {
-		return fmt.Errorf("--entry-point requires a pipeline config (provide --config or run 'liza setup')")
-	}
-
 	// Validate and load pipeline config early (before creating .liza dir)
 	var pipelineCfg *pipeline.PipelineConfig
 	var pipelineData []byte
@@ -74,12 +69,21 @@ func InitCommandWithConfig(params InitParams) error {
 		if err != nil {
 			return fmt.Errorf("failed to read config file: %w", err)
 		}
-		// Validate entry-point if provided
-		if entryPoint != "" {
-			if _, ok := pipelineCfg.Pipeline.EntryPoints[entryPoint]; !ok {
-				return fmt.Errorf("entry-point %q not found in pipeline config (available: %s)",
-					entryPoint, entryPointNames(pipelineCfg))
-			}
+	} else {
+		// Auto-freeze embedded pipeline config when --config is not provided
+		pipelineData = embedded.PipelineConfigContent()
+		var err error
+		pipelineCfg, err = pipeline.LoadFromBytes(pipelineData)
+		if err != nil {
+			return fmt.Errorf("invalid embedded pipeline config: %w", err)
+		}
+	}
+
+	// Validate entry-point if provided
+	if entryPoint != "" {
+		if _, ok := pipelineCfg.Pipeline.EntryPoints[entryPoint]; !ok {
+			return fmt.Errorf("entry-point %q not found in pipeline config (available: %s)",
+				entryPoint, entryPointNames(pipelineCfg))
 		}
 	}
 
@@ -130,13 +134,11 @@ func InitCommandWithConfig(params InitParams) error {
 		os.RemoveAll(lizaPaths.LizaDir())
 	}
 
-	// Freeze pipeline config into .liza/pipeline.yaml if provided
-	if pipelineCfg != nil {
-		frozenPath := filepath.Join(lizaPaths.LizaDir(), "pipeline.yaml")
-		if err := os.WriteFile(frozenPath, pipelineData, 0644); err != nil {
-			cleanupInit()
-			return fmt.Errorf("failed to freeze pipeline config: %w", err)
-		}
+	// Freeze pipeline config into .liza/pipeline.yaml
+	frozenPath := filepath.Join(lizaPaths.LizaDir(), "pipeline.yaml")
+	if err := os.WriteFile(frozenPath, pipelineData, 0644); err != nil {
+		cleanupInit()
+		return fmt.Errorf("failed to freeze pipeline config: %w", err)
 	}
 
 	// Write/merge Claude Code settings to .claude/
@@ -164,11 +166,8 @@ func InitCommandWithConfig(params InitParams) error {
 	timestamp := time.Now().UTC()
 	goalID := fmt.Sprintf("goal-%d", timestamp.Unix())
 
-	// Set pipeline version if config was provided
-	pipelineVersion := 0
-	if pipelineCfg != nil {
-		pipelineVersion = 2
-	}
+	// Pipeline version (always v2 — pipeline is mandatory)
+	pipelineVersion := 2
 
 	// Create initial state
 	state := &models.State{

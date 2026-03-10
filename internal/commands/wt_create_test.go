@@ -136,10 +136,15 @@ func TestWtCreateCommand(t *testing.T) {
 			// Add task if not testing nonexistent task
 			if tt.taskID != "nonexistent" && tt.taskID != "" {
 				worktreePath := filepath.Join(".worktrees", tt.taskID)
+				rolePair := "coding-pair"
+				if tt.taskStatus == models.TaskStatusCodePlanning {
+					rolePair = "code-planning-pair"
+				}
 				task := models.Task{
 					ID:          tt.taskID,
 					Description: "Test task",
 					Status:      tt.taskStatus,
+					RolePair:    rolePair,
 					Priority:    1,
 					Created:     now,
 					SpecRef:     "README.md",
@@ -280,6 +285,7 @@ func TestWtCreateCommand_PostWorktreeCmd(t *testing.T) {
 				ID:           "task-postcmd",
 				Description:  "Test task",
 				Status:       models.TaskStatusImplementing,
+				RolePair:     "coding-pair",
 				Priority:     1,
 				Created:      now,
 				SpecRef:      "README.md",
@@ -358,6 +364,7 @@ func TestWtCreateCommand_NoPostWorktreeCmd(t *testing.T) {
 				ID:           "task-nocmd",
 				Description:  "Test task",
 				Status:       models.TaskStatusImplementing,
+				RolePair:     "coding-pair",
 				Priority:     1,
 				Created:      now,
 				SpecRef:      "README.md",
@@ -439,6 +446,7 @@ func TestWtCreateCommandIntegration(t *testing.T) {
 				ID:           "task-integration",
 				Description:  "Integration test task",
 				Status:       models.TaskStatusImplementing,
+				RolePair:     "coding-pair",
 				Priority:     1,
 				Created:      now,
 				SpecRef:      "README.md",

@@ -57,6 +57,7 @@ func TestHasPendingMerges(t *testing.T) {
 				{
 					ID:          "task-1",
 					Status:      models.TaskStatusApproved,
+					RolePair:    "coding-pair",
 					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
 					MergeCommit: nil,
 				},
@@ -70,12 +71,14 @@ func TestHasPendingMerges(t *testing.T) {
 				{
 					ID:          "task-1",
 					Status:      models.TaskStatusApproved,
+					RolePair:    "coding-pair",
 					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
 					MergeCommit: testhelpers.StringPtr("abc123"),
 				},
 				{
 					ID:          "task-2",
 					Status:      models.TaskStatusApproved,
+					RolePair:    "coding-pair",
 					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
 					MergeCommit: nil,
 				},
@@ -89,6 +92,7 @@ func TestHasPendingMerges(t *testing.T) {
 				{
 					ID:          "task-1",
 					Status:      models.TaskStatusCodingPlanApproved,
+					RolePair:    "code-planning-pair",
 					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
 					MergeCommit: nil,
 				},
@@ -113,10 +117,8 @@ func TestHasPendingMerges(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup test blackboard with tasks (no pipeline config = legacy mode)
 			tmpDir := t.TempDir()
 			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
@@ -124,9 +126,9 @@ func TestHasPendingMerges(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			bb := db.New(statePath)
+			pr, _ := ops.LoadResolverForModels(tmpDir)
 
-			// Test hasPendingMerges (legacy — no pipeline.yaml)
-			result := hasPendingMerges(bb, tt.agentID, nil)
+			result := hasPendingMerges(bb, tt.agentID, pr)
 			if result != tt.expected {
 				t.Errorf("hasPendingMerges() = %v, expected %v", result, tt.expected)
 			}
@@ -138,7 +140,6 @@ func TestHasPendingMerges(t *testing.T) {
 func TestHasPendingMerges_Pipeline(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Install frozen pipeline config
 	src, err := os.ReadFile(findPipelineTestdata(t))
@@ -194,21 +195,9 @@ func TestHasPendingMerges_Pipeline(t *testing.T) {
 			agentID:  "code-plan-reviewer-1",
 			expected: true,
 		},
-		{
-			name: "legacy APPROVED with no role_pair still works with pipeline config",
-			tasks: []models.Task{
-				{
-					ID:         "task-1",
-					Status:     models.TaskStatusApproved,
-					ApprovedBy: testhelpers.StringPtr("code-reviewer-1"),
-				},
-			},
-			agentID:  "code-reviewer-1",
-			expected: true,
-		},
 	}
 
-	pr := ops.LoadResolverForModels(tmpDir)
+	pr, _ := ops.LoadResolverForModels(tmpDir)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
@@ -229,7 +218,6 @@ func TestHasPendingMerges_Pipeline(t *testing.T) {
 func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Install Phase 2 frozen pipeline config
 	src, err := os.ReadFile(findPhase2PipelineTestdata(t))
@@ -300,18 +288,6 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "legacy APPROVED with no role_pair still works with Phase 2 config",
-			tasks: []models.Task{
-				{
-					ID:         "task-1",
-					Status:     models.TaskStatusApproved,
-					ApprovedBy: testhelpers.StringPtr("code-reviewer-1"),
-				},
-			},
-			agentID:  "code-reviewer-1",
-			expected: true,
-		},
-		{
 			name: "CODE_APPROVED coding-pair still works in Phase 2 config",
 			tasks: []models.Task{
 				{
@@ -326,7 +302,7 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 		},
 	}
 
-	pr := ops.LoadResolverForModels(tmpDir)
+	pr, _ := ops.LoadResolverForModels(tmpDir)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
@@ -347,7 +323,6 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 func TestLogTaskSubmissionIfCompleted_Phase2Pipeline(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Install Phase 2 frozen pipeline config
 	src, err := os.ReadFile(findPhase2PipelineTestdata(t))
@@ -404,7 +379,7 @@ func TestLogTaskSubmissionIfCompleted_Phase2Pipeline(t *testing.T) {
 		},
 	}
 
-	pr := ops.LoadResolverForModels(tmpDir)
+	pr, _ := ops.LoadResolverForModels(tmpDir)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()

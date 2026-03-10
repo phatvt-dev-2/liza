@@ -61,7 +61,7 @@ func (t *exit42RestartTracker) reset(taskID string) {
 	delete(t.byKey, "task:"+taskID)
 }
 
-func (t *exit42RestartTracker) Handle(bb *db.Blackboard, role, taskID, agentID string) (exit42RestartOutcome, error) {
+func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, taskID, agentID string) (exit42RestartOutcome, error) {
 	state, err := bb.Read()
 	if err != nil {
 		return exit42RestartOutcome{}, fmt.Errorf("read state for exit-42 tracking: %w", err)
@@ -111,7 +111,12 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, role, taskID, agentID s
 		if outcome.RestartCount <= restartLimit {
 			return nil
 		}
-		if task.Status != models.TaskStatusImplementing {
+		// Check if task is in an executing state using pipeline resolver
+		pr, prErr := ops.LoadResolverForModels(projectRoot)
+		if prErr != nil {
+			return prErr
+		}
+		if !models.IsExecutingStatus(task, pr) {
 			return nil
 		}
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
@@ -128,7 +133,11 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, role, taskID, agentID s
 			"Should this task be decomposed or the spec clarified before retrying?",
 		}
 
-		if err := task.Transition(models.TaskStatusBlocked); err != nil {
+		pipelineTransitions, ptErr := ops.LoadPipelineTransitions(projectRoot)
+		if ptErr != nil {
+			return ptErr
+		}
+		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
 			return err
 		}
 
@@ -434,8 +443,10 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		// Handle approved merges (reviewer only)
 		if isReviewerRuntime(config.Role) {
-			pr := ops.LoadResolverForModels(config.ProjectRoot)
-			if err := handleApprovedMerges(config.ProjectRoot, config.AgentID, bb, pr); err != nil {
+			pr, prErr := ops.LoadResolverForModels(config.ProjectRoot)
+			if prErr != nil {
+				GetLogger().Warn("Failed to load pipeline resolver — skipping merge handling", "error", prErr)
+			} else if err := handleApprovedMerges(config.ProjectRoot, config.AgentID, bb, pr); err != nil {
 				GetLogger().Warn("Merge handler error", "error", err)
 			}
 
@@ -574,18 +585,22 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 			// Log task submission if it happened (doer roles only)
 			if isDoerRuntime(config.Role) && claimedTaskID != "" {
-				doerPR := ops.LoadResolverForModels(config.ProjectRoot)
-				if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID, doerPR); err != nil {
+				doerPR, doerPRErr := ops.LoadResolverForModels(config.ProjectRoot)
+				if doerPRErr != nil {
+					GetLogger().Warn("Failed to load pipeline resolver — skipping submission log", "error", doerPRErr)
+				} else if err := logTaskSubmissionIfCompleted(bb, claimedTaskID, config.AgentID, doerPR); err != nil {
 					GetLogger().Warn("Failed to log task submission", "error", err, "task_id", claimedTaskID)
 				}
 			}
 
 			// Verify expected state changes for orchestrator
 			if config.Role == roles.RuntimeOrchestrator {
-				detCtx := ops.LoadDetectionContext(config.ProjectRoot)
+				detCtx, detErr := ops.LoadDetectionContext(config.ProjectRoot)
 				var pipelineTerminals []models.TaskStatus
 				var planningPairs map[string]bool
-				if detCtx != nil {
+				if detErr != nil {
+					GetLogger().Warn("Failed to load detection context", "error", detErr)
+				} else {
 					pipelineTerminals = detCtx.SprintTerminals
 					planningPairs = detCtx.PlanningPairs
 				}
@@ -603,7 +618,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				restartTaskID = taskID
 			}
 
-			outcome, trackErr := exit42Tracker.Handle(bb, config.Role, restartTaskID, config.AgentID)
+			outcome, trackErr := exit42Tracker.Handle(bb, config.ProjectRoot, config.Role, restartTaskID, config.AgentID)
 			if trackErr != nil {
 				GetLogger().Warn("Exit-42 tracker failed, using default retry delay",
 					"error", trackErr,

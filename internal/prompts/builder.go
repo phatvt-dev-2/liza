@@ -151,10 +151,10 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 	hypothesisExhausted := countHypothesisExhausted(state.Tasks)
 	immediateDiscoveries := countImmediateDiscoveries(state.Discovered)
 
-	detCtx := ops.LoadDetectionContext(config.ProjectRoot)
+	detCtx, detErr := ops.LoadDetectionContext(config.ProjectRoot)
 	var sprintTerminals []models.TaskStatus
 	var planningPairs map[string]bool
-	if detCtx != nil {
+	if detErr == nil {
 		sprintTerminals = detCtx.SprintTerminals
 		planningPairs = detCtx.PlanningPairs
 	}

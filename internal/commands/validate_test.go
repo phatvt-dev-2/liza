@@ -68,13 +68,13 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 		errContains string
 	}{
 		{
-			name: "DRAFT with assigned_to",
+			name: "DRAFT_CODE with assigned_to",
 			setupTask: func() models.Task {
 				agent := "coder-1"
 				return models.Task{
 					ID:          "task-1",
 					Description: "Test",
-					Status:      models.TaskStatusDraft,
+					Status:      models.TaskStatusReady,
 					RolePair:    "coding-pair",
 					AssignedTo:  &agent,
 					Created:     time.Now().UTC(),
@@ -84,7 +84,7 @@ func TestValidateCommand_TaskStateInvariants(t *testing.T) {
 				}
 			},
 			wantErr:     true,
-			errContains: "DRAFT task with assigned_to",
+			errContains: "DRAFT_CODE task with assigned_to",
 		},
 		{
 			name: "IMPLEMENTING without assigned_to",

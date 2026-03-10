@@ -126,6 +126,7 @@ func TestRecoverAgentCommand(t *testing.T) {
 					ID:                 "task-1",
 					Description:        "test task",
 					Status:             models.TaskStatusReviewing,
+					RolePair:           "coding-pair",
 					Priority:           1,
 					ReviewingBy:        strPtr("code-reviewer-1"),
 					ReviewLeaseExpires: &expiredTime,
@@ -185,6 +186,7 @@ func TestRecoverAgentCommand(t *testing.T) {
 			if err := os.MkdirAll(lizaDir, 0755); err != nil {
 				t.Fatal(err)
 			}
+			testhelpers.SetupPipelineConfig(t, tmpDir)
 
 			statePath := filepath.Join(lizaDir, paths.StateFileName)
 			state := testhelpers.CreateValidState()

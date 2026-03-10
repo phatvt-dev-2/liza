@@ -83,8 +83,7 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("pipeline config: %v", resolverErr))
-	}
-	if resolver != nil {
+	} else {
 		pipelineTransitions = BuildPipelineTransitions(resolver)
 	}
 

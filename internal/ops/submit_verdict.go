@@ -12,7 +12,6 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // VerdictResult contains the outcome of a successful verdict submission.
@@ -51,8 +50,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 
-	runtimeRole, err := identity.ExtractRole(agentID)
-	if err != nil {
+	if _, err := identity.ExtractRole(agentID); err != nil {
 		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
 	}
 
@@ -62,32 +60,27 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		return nil, err
 	}
 
-	// Resolve expected statuses (pipeline or legacy)
-	expectedReviewingStatus := models.TaskStatusReviewing
-	approvedStatus := models.TaskStatusApproved
-	rejectedStatus := models.TaskStatusRejected
-	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
-
+	// Resolve expected statuses from pipeline config
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
-	if resolver != nil && task.RolePair != "" {
-		if expectedReviewingStatus, err = resolver.ReviewingStatus(task.RolePair); err != nil {
-			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-		}
-		if approvedStatus, err = resolver.ApprovedStatus(task.RolePair); err != nil {
-			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-		}
-		if rejectedStatus, err = resolver.RejectedStatus(task.RolePair); err != nil {
-			return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-		}
-		pipelineTransitions = BuildPipelineTransitions(resolver)
-	} else if runtimeRole == roles.RuntimeCodePlanReviewer {
-		expectedReviewingStatus = models.TaskStatusReviewingCodingPlan
-		approvedStatus = models.TaskStatusCodingPlanApproved
-		rejectedStatus = models.TaskStatusCodingPlanRejected
+	if task.RolePair == "" {
+		return nil, fmt.Errorf("task %s has no role_pair set", taskID)
 	}
+	expectedReviewingStatus, err := resolver.ReviewingStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	approvedStatus, err := resolver.ApprovedStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	rejectedStatus, err := resolver.RejectedStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	pipelineTransitions := BuildPipelineTransitions(resolver)
 
 	// Fast-fail before git operations; re-checked authoritatively inside Modify.
 	if task.Status != expectedReviewingStatus {
@@ -131,10 +124,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		}
 
 		transitionTask := func(to models.TaskStatus) error {
-			if pipelineTransitions != nil {
-				return task.TransitionWith(to, pipelineTransitions)
-			}
-			return task.Transition(to)
+			return task.TransitionWith(to, pipelineTransitions)
 		}
 
 		if verdict == "APPROVED" {

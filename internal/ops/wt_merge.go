@@ -78,14 +78,9 @@ func appendUniqueAgentID(failedBy []string, agentID string) []string {
 	return append(failedBy, agentID)
 }
 
-// pipelineTransition applies a status transition using the pipeline transition map
-// when the task has a role-pair and a pipeline bundle is available; otherwise falls
-// back to the hardcoded transition map.
+// pipelineTransition applies a status transition using the pipeline transition map.
 func pipelineTransition(t *models.Task, to models.TaskStatus, pb *pipelineBundle) error {
-	if t.RolePair != "" && pb != nil {
-		return t.TransitionWith(to, pb.transitions)
-	}
-	return t.Transition(to)
+	return t.TransitionWith(to, pb.transitions)
 }
 
 // markIntegrationFailed transitions a task to INTEGRATION_FAILED under lock.
@@ -261,12 +256,11 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	}
 
 	// Load pipeline bundle once for all pipeline-aware checks
-	pb := loadPipelineBundle(projectRoot)
-
-	var pr models.PipelineResolver
-	if pb != nil {
-		pr = pb.pr
+	pb, pbErr := loadPipelineBundle(projectRoot)
+	if pbErr != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", pbErr)
 	}
+	pr := pb.pr
 
 	if !models.IsApprovedForMerge(task, pr) {
 		return nil, fmt.Errorf("task must be in an approved state to merge (current status: %s)", task.Status)

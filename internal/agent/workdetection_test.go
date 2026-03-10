@@ -4,9 +4,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+// testPipelineResolver creates a models.PipelineResolver from the embedded pipeline config.
+// Used by workdetection tests that need a resolver without filesystem setup.
+func testPipelineResolver(t *testing.T) models.PipelineResolver {
+	t.Helper()
+	cfg, err := pipeline.LoadFromBytes(embedded.PipelineConfigContent())
+	if err != nil {
+		t.Fatalf("failed to load embedded pipeline config: %v", err)
+	}
+	return pipeline.NewResolver(cfg)
+}
 
 func TestCountClaimableTasks(t *testing.T) {
 	now := time.Now().UTC()
@@ -105,11 +118,13 @@ func TestCountClaimableTasks(t *testing.T) {
 		},
 	}
 
+	pr := testPipelineResolver(t)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
-			got := models.CountClaimableTasks(state, models.RoleCoder, nil)
+			got := models.CountClaimableTasks(state, models.RoleCoder, pr)
 			if got != tt.want {
 				t.Errorf("CountClaimableTasks() = %d, want %d", got, tt.want)
 			}
@@ -220,11 +235,13 @@ func TestCountReviewableTasks(t *testing.T) {
 		},
 	}
 
+	pr := testPipelineResolver(t)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := testhelpers.CreateValidState()
 			state.Tasks = tt.tasks
-			got := models.CountReviewableTasks(state, models.RoleCodeReviewer, nil)
+			got := models.CountReviewableTasks(state, models.RoleCodeReviewer, pr)
 			if got != tt.want {
 				t.Errorf("CountReviewableTasks() = %d, want %d", got, tt.want)
 			}
@@ -751,9 +768,11 @@ func TestHasCoderWork(t *testing.T) {
 		},
 	}
 
+	pr := testPipelineResolver(t)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.CountClaimableTasks(tt.state, models.RoleCoder, nil) > 0
+			got := models.CountClaimableTasks(tt.state, models.RoleCoder, pr) > 0
 			if got != tt.want {
 				t.Errorf("CountClaimableTasks() = %v, want %v", got, tt.want)
 			}
@@ -802,9 +821,11 @@ func TestHasReviewerWork(t *testing.T) {
 		},
 	}
 
+	pr := testPipelineResolver(t)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.CountReviewableTasks(tt.state, models.RoleCodeReviewer, nil) > 0
+			got := models.CountReviewableTasks(tt.state, models.RoleCodeReviewer, pr) > 0
 			if got != tt.want {
 				t.Errorf("CountReviewableTasks() = %v, want %v", got, tt.want)
 			}
@@ -968,9 +989,11 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 		},
 	}
 
+	pr := testPipelineResolver(t)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.GetCoderWorkDiagnostics(tt.state, nil)
+			got := models.GetCoderWorkDiagnostics(tt.state, pr)
 			if got != tt.wantMsg {
 				t.Errorf("GetCoderWorkDiagnostics() = %q, want %q", got, tt.wantMsg)
 			}
@@ -1079,9 +1102,11 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 		},
 	}
 
+	pr := testPipelineResolver(t)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := models.GetReviewerWorkDiagnostics(tt.state, nil)
+			got := models.GetReviewerWorkDiagnostics(tt.state, pr)
 			if got != tt.wantMsg {
 				t.Errorf("GetReviewerWorkDiagnostics() = %q, want %q", got, tt.wantMsg)
 			}

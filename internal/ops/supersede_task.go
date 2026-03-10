@@ -37,6 +37,11 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 
+	pb, err := loadPipelineBundle(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+
 	// Phase 1: Read and Validate (no lock held)
 	_, task, err := readTaskState(bb, taskID)
 	if err != nil {
@@ -61,7 +66,7 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 			return fmt.Errorf("cannot supersede task %s: status changed from %s to %s", taskID, originalStatus, currentTask.Status)
 		}
 
-		if err := currentTask.Transition(models.TaskStatusSuperseded); err != nil {
+		if err := currentTask.TransitionWith(models.TaskStatusSuperseded, pb.transitions); err != nil {
 			return err
 		}
 		currentTask.SupersededBy = replacementIDs

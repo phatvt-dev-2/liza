@@ -43,16 +43,14 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
 	}
 
-	var pipelineExecuting []models.TaskStatus
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
-	if resolver != nil {
-		for _, rpName := range resolver.RolePairNames() {
-			if es, err := resolver.ExecutingStatus(rpName); err == nil {
-				pipelineExecuting = append(pipelineExecuting, es)
-			}
+	var pipelineExecuting []models.TaskStatus
+	for _, rpName := range resolver.RolePairNames() {
+		if es, err := resolver.ExecutingStatus(rpName); err == nil {
+			pipelineExecuting = append(pipelineExecuting, es)
 		}
 	}
 
