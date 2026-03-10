@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-03-07T16:00:00Z"
+last_updated: "2026-03-10T23:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -535,10 +535,68 @@ clusters:
       limitations: "9 prompt templates to maintain; new roles require template AND supervisor wiring"
     note: "Depends on ADR-0033, ADR-0034, ADR-0035"
 
+  # --- Wave 3: 2026-03-08 to 2026-03-10 ---
+
+  - id: 39
+    title: "MCP Role-Based Access Control"
+    commit_shas: ["e491e07"]
+    date_range: "2026-03-09"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0039-mcp-role-based-access-control.md"
+    user_context:
+      problem: "Architecture review found 7 MCP handlers without role validation — coder could pause/delete agents"
+      alternatives: "None — MCP and CLI should have the same access control"
+      rationale: "MCP handlers are an API surface with the same trust model as CLI"
+      limitations: "None"
+    note: "Extends ADR-0030 (Code-Enforced Guardrails)"
+
+  - id: 40
+    title: "Legacy Pipeline Removal"
+    commit_shas: ["61063cf", "581d377", "b055e3a", "4bc048f"]
+    date_range: "2026-03-10"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0040-legacy-pipeline-removal.md"
+    user_context:
+      problem: "Dual-path code was always temporary scaffolding; pipeline model now stable with e2e test confidence"
+      alternatives: "Keep dual paths — always planned to remove once stable"
+      rationale: "Single code path eliminates 'which path?' bugs; e2e test provided confidence"
+      limitations: "Breaking change: existing workspaces must re-run liza init"
+    note: "Completes ADR-0035. Extends ADR-0019/0020 toward declarative workflows."
+
+  - id: 41
+    title: "RoleStrategy Pattern Extraction"
+    commit_shas: ["ebc3f5b"]
+    date_range: "2026-03-10"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0041-role-strategy-pattern.md"
+    user_context:
+      problem: "RunSupervisor became a god function with 9-way switch chains; more roles planned"
+      alternatives: "None — Strategy pattern is the natural fit"
+      rationale: "Extensibility and readability; supervisor loop becomes role-agnostic"
+      limitations: "None"
+    note: "Depends on ADR-0038 (Phase 2 Roles). Enabled by ADR-0040 (Legacy Removal)."
+
+  - id: 42
+    title: "Generic Claim-Type Vocabulary (Doer/Reviewer)"
+    commit_shas: ["0a53748"]
+    date_range: "2026-03-10"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0042-generic-claim-type-vocabulary.md"
+    user_context:
+      problem: "Sub-pipelines introduced doer/reviewer taxonomy but original code still used coder/code-reviewer"
+      alternatives: "None — vocabulary should match the adversarial concept"
+      rationale: "Doer/reviewer are not roles but adversarial load-bearing categories"
+      limitations: "None — breaking changes expected at development stage"
+    note: "Completes vocabulary arc: ADR-0033 (Orchestrator), ADR-0024 (Constants), ADR-0035 (adversarial principle)."
+
 processing_cursor:
   step: "cluster_analysis"
   substep: "high_confidence_complete"
-  note: "Dropped medium-confidence candidates to avoid sequence gaps; no further candidates pending"
+  note: "Wave 3 complete (ADR-0039 to ADR-0042). Domain file splitting and render extraction declined."
 
 configuration:
   adr_output_dir: "specs/architecture/ADR"
