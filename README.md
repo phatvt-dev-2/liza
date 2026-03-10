@@ -15,7 +15,7 @@ Main characteristics:
   - From vague spec to code and tests, with intermediate artifacts (epics, US, implementation plans)
     that are AI generated but human reviewed.
   - Automatic task decomposition based on complexity with dependency management for parallel execution.
-  - Multi-sprints between which the user operates.
+  - Multi-sprints: agents are fully autonomous within a sprint, user operates between sprints - review of produced artifacts, continuous improvement, and steering of the next sprint
 - **Adversarial** architecture:
   - Every activity is dual — a doer and a reviewer.
   - They interact like a developer and a PR reviewer do — submission, feedback comments, verdict, revised submission, etc.
