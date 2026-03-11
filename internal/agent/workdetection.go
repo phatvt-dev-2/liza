@@ -141,25 +141,14 @@ func countImmediateDiscoveries(state *models.State) int {
 	return count
 }
 
-// countMergedPlanningTasksWithOutput counts planned tasks that are MERGED,
-// belong to a transition-source role-pair, and have non-empty Output[] entries,
-// indicating a planning task whose output is ready to be expanded into coding tasks.
-// Only planning tasks qualify — coding tasks with output[] are ignored to prevent
-// misclassification as PLANNING_COMPLETE during normal coding sprints.
-//
-// planningPairs provides the set of role-pairs that are transition sources.
-// When nil, falls back to hardcoded "code-planning-pair".
+// countMergedPlanningTasksWithOutput counts planned tasks with unconsumed
+// planning output, indicating tasks ready to be expanded into coding tasks.
+// Uses the shared predicate ops.IsUnconsumedPlanningOutput.
 func countMergedPlanningTasksWithOutput(state *models.State, planningPairs map[string]bool) int {
 	count := 0
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
-			continue
-		}
-		if len(task.TransitionsExecuted) > 0 {
-			continue // transitions already fired — children exist
-		}
-		if ops.IsPlanningPair(task.RolePair, planningPairs) {
+		if ops.IsUnconsumedPlanningOutput(task, planningPairs) {
 			count++
 		}
 	}

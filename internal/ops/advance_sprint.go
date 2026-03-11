@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"gopkg.in/yaml.v3"
 )
 
@@ -94,7 +96,11 @@ func planSprintAdvance(s *models.State, now time.Time, projectRoot string) (*spr
 		return nil, fmt.Errorf("cannot advance sprint: not all planned tasks are terminal")
 	}
 
-	return buildSprintAdvancePlan(s, now)
+	planningPairs, ppErr := loadPlanningPairsForAdvance(projectRoot)
+	if ppErr != nil {
+		return nil, fmt.Errorf("cannot advance sprint: %w", ppErr)
+	}
+	return buildSprintAdvancePlan(s, now, planningPairs)
 }
 
 // applySprintAdvance mutates state to record the completed sprint in history
@@ -148,18 +154,26 @@ func writeSprintArchive(archivePath string, sprint *models.Sprint) error {
 // derived values for advancing from a COMPLETED sprint. Unlike planSprintAdvance
 // (which requires CHECKPOINT), this handles the sub-pipeline flow where the
 // sprint was marked COMPLETED after all tasks reached sprint-terminal state.
-func planSprintAdvanceFromCompleted(s *models.State, now time.Time) (*sprintAdvancePlan, error) {
+func planSprintAdvanceFromCompleted(s *models.State, now time.Time, projectRoot string) (*sprintAdvancePlan, error) {
 	if s.Sprint.Status != models.SprintStatusCompleted {
 		return nil, fmt.Errorf("cannot advance sprint: status is %s, expected COMPLETED", s.Sprint.Status)
 	}
 
-	return buildSprintAdvancePlan(s, now)
+	planningPairs, err := loadPlanningPairsForAdvance(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("cannot advance sprint: %w", err)
+	}
+	return buildSprintAdvancePlan(s, now, planningPairs)
 }
 
 // buildSprintAdvancePlan is the shared implementation for sprint advance planning.
 // It snapshots the current sprint for archive, normalizes legacy numbering, and
 // computes carried tasks. Callers validate preconditions before calling this.
-func buildSprintAdvancePlan(s *models.State, now time.Time) (*sprintAdvancePlan, error) {
+//
+// planningPairs identifies which role-pairs are transition sources (planning pairs).
+// Merged planning tasks with unconsumed output are carried forward alongside
+// non-terminal tasks so the orchestrator can fire PLANNING_COMPLETE in the new sprint.
+func buildSprintAdvancePlan(s *models.State, now time.Time, planningPairs map[string]bool) (*sprintAdvancePlan, error) {
 	archivedSprint := s.Sprint
 	if archivedSprint.Number == 0 {
 		archivedSprint.Number = 1
@@ -171,6 +185,7 @@ func buildSprintAdvancePlan(s *models.State, now time.Time) (*sprintAdvancePlan,
 	newNumber := archivedSprint.Number + 1
 	newSprintID := fmt.Sprintf("sprint-%d", newNumber)
 	carriedTasks := collectNonTerminalTaskIDs(s)
+	carriedTasks = append(carriedTasks, collectMergedPlanningWithUnconsumedOutput(s, planningPairs)...)
 
 	return &sprintAdvancePlan{
 		archivedSprint: archivedSprint,
@@ -189,4 +204,52 @@ func collectNonTerminalTaskIDs(state *models.State) []string {
 		}
 	}
 	return carried
+}
+
+// IsUnconsumedPlanningOutput reports whether a task is a merged planning task
+// with output that has not yet been expanded into child tasks. Used by both
+// sprint advance (carry-forward) and orchestrator wake detection (PLANNING_COMPLETE).
+func IsUnconsumedPlanningOutput(task *models.Task, planningPairs map[string]bool) bool {
+	if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
+		return false
+	}
+	if len(task.TransitionsExecuted) > 0 {
+		return false // transitions already fired — children exist
+	}
+	return IsPlanningPair(task.RolePair, planningPairs)
+}
+
+// collectMergedPlanningWithUnconsumedOutput returns IDs of planned tasks with
+// unconsumed planning output. These need to be carried into the new sprint so
+// the orchestrator can fire PLANNING_COMPLETE.
+//
+// Iterates state.Sprint.Scope.Planned (not all tasks) to avoid reintroducing
+// tasks from prior sprints.
+func collectMergedPlanningWithUnconsumedOutput(state *models.State, planningPairs map[string]bool) []string {
+	var carried []string
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if IsUnconsumedPlanningOutput(task, planningPairs) {
+			carried = append(carried, taskID)
+		}
+	}
+	return carried
+}
+
+// loadPlanningPairsForAdvance loads planning pairs from pipeline config.
+// Returns (nil, nil) when the pipeline config is absent (legacy project) —
+// IsPlanningPair falls back to recognizing "code-planning-pair" as the only
+// planning pair.
+// Returns a non-nil error when the config exists but cannot be loaded (parse or
+// validation failure), preventing silent fallback that would drop non-legacy
+// planning pairs.
+func loadPlanningPairsForAdvance(projectRoot string) (map[string]bool, error) {
+	detCtx, err := LoadDetectionContext(projectRoot)
+	if err != nil {
+		if errors.Is(err, pipeline.ErrConfigNotFound) {
+			return nil, nil // legacy project — no pipeline config
+		}
+		return nil, fmt.Errorf("pipeline config failed to load: %w", err)
+	}
+	return detCtx.PlanningPairs, nil
 }

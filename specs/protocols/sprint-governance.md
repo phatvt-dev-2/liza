@@ -350,7 +350,9 @@ sprint_history:
 Non-terminal tasks automatically carry into the new sprint's planned scope. This includes:
 - READY, IMPLEMENTING, READY_FOR_REVIEW, REVIEWING, REJECTED, BLOCKED, DRAFT, INTEGRATION_FAILED
 
-Terminal tasks (MERGED, ABANDONED, SUPERSEDED) are NOT carried forward.
+Terminal tasks (MERGED, ABANDONED, SUPERSEDED) are generally NOT carried forward, with one exception:
+
+**Planning tasks with unconsumed output:** MERGED tasks that belong to a planning role-pair (e.g., `code-planning-pair`), have non-empty `output[]`, and have no `transitions_executed` are carried forward. These tasks have planning output that the orchestrator has not yet expanded into child tasks via PLANNING_COMPLETE. Without carry-forward, the new sprint would have an empty planned scope and the orchestrator would idle indefinitely.
 
 ---
 

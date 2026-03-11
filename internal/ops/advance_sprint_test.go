@@ -331,6 +331,189 @@ func TestResumeWithSprintAdvance(t *testing.T) {
 	}
 }
 
+// TestAdvanceSprint_CarriesMergedPlanningWithUnconsumedOutput is a regression test:
+// a merged planning task with Output[] but no TransitionsExecuted must be carried
+// into the new sprint so the orchestrator can fire PLANNING_COMPLETE.
+func TestAdvanceSprint_CarriesMergedPlanningWithUnconsumedOutput(t *testing.T) {
+	tmpDir, stateFile := setupAdvanceTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.Number = 1
+
+	// Merged planning task with unconsumed output (no transitions executed)
+	planningTask := testhelpers.BuildTaskByStatus("code-planning-1", models.TaskStatusMerged, now)
+	planningTask.RolePair = "code-planning-pair"
+	planningTask.Output = []models.OutputEntry{
+		{Desc: "implement feature X", DoneWhen: "tests pass", Scope: "internal/", SpecRef: "README.md"},
+	}
+	// TransitionsExecuted is nil — output not yet consumed
+
+	state.Tasks = []models.Task{planningTask}
+	state.Sprint.Scope.Planned = []string{"code-planning-1"}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := AdvanceSprint(tmpDir)
+	if err != nil {
+		t.Fatalf("AdvanceSprint() error: %v", err)
+	}
+
+	// The planning task must be carried forward
+	found := false
+	for _, id := range result.CarriedTasks {
+		if id == "code-planning-1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("CarriedTasks = %v, want to include code-planning-1 (merged planning with unconsumed output)", result.CarriedTasks)
+	}
+
+	// Verify persisted state
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	found = false
+	for _, id := range readState.Sprint.Scope.Planned {
+		if id == "code-planning-1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Sprint.Scope.Planned = %v, want to include code-planning-1", readState.Sprint.Scope.Planned)
+	}
+}
+
+// TestResumeWithSprintAdvance_CarriesMergedPlanning is a regression test for the
+// COMPLETED/resume path: a merged planning task with unconsumed output must survive
+// sprint advance via Resume.
+func TestResumeWithSprintAdvance_CarriesMergedPlanning(t *testing.T) {
+	tmpDir, stateFile := setupAdvanceTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeRunning
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.Number = 1
+
+	// Merged planning task with unconsumed output
+	planningTask := testhelpers.BuildTaskByStatus("code-planning-1", models.TaskStatusMerged, now)
+	planningTask.RolePair = "code-planning-pair"
+	planningTask.Output = []models.OutputEntry{
+		{Desc: "implement feature X", DoneWhen: "tests pass", Scope: "internal/", SpecRef: "README.md"},
+	}
+
+	state.Tasks = []models.Task{planningTask}
+	state.Sprint.Scope.Planned = []string{"code-planning-1"}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Step 1: Resume from CHECKPOINT with all terminal → marks COMPLETED
+	result1, err := Resume(tmpDir, "human")
+	if err != nil {
+		t.Fatalf("Resume() step 1 error: %v", err)
+	}
+	if result1.SprintAdvanced != nil {
+		t.Error("Step 1: Expected SprintAdvanced to be nil (should mark COMPLETED, not advance)")
+	}
+
+	// Step 2: Resume from COMPLETED → advances to new sprint
+	result2, err := Resume(tmpDir, "human")
+	if err != nil {
+		t.Fatalf("Resume() step 2 error: %v", err)
+	}
+	if result2.SprintAdvanced == nil {
+		t.Fatal("Step 2: Expected SprintAdvanced to be non-nil")
+	}
+
+	// Verify the planning task was carried into the new sprint
+	found := false
+	for _, id := range result2.SprintAdvanced.CarriedTasks {
+		if id == "code-planning-1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("CarriedTasks = %v, want to include code-planning-1", result2.SprintAdvanced.CarriedTasks)
+	}
+
+	// Verify persisted state
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.ID != "sprint-2" {
+		t.Errorf("Sprint.ID = %q, want %q", readState.Sprint.ID, "sprint-2")
+	}
+	found = false
+	for _, id := range readState.Sprint.Scope.Planned {
+		if id == "code-planning-1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Sprint.Scope.Planned = %v, want to include code-planning-1", readState.Sprint.Scope.Planned)
+	}
+}
+
+func TestCollectMergedPlanningWithUnconsumedOutput_ConfiguredPairs(t *testing.T) {
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// Non-legacy planning pair with unconsumed output
+	planningTask := testhelpers.BuildTaskByStatus("epic-plan-1", models.TaskStatusMerged, now)
+	planningTask.RolePair = "epic-planning-pair"
+	planningTask.Output = []models.OutputEntry{
+		{Desc: "epic subtask", DoneWhen: "done", Scope: "pkg/", SpecRef: "README.md"},
+	}
+
+	state.Tasks = []models.Task{planningTask}
+	state.Sprint.Scope.Planned = []string{"epic-plan-1"}
+
+	// With configured pairs that include this role-pair
+	configuredPairs := map[string]bool{"epic-planning-pair": true}
+	carried := collectMergedPlanningWithUnconsumedOutput(state, configuredPairs)
+	if len(carried) != 1 || carried[0] != "epic-plan-1" {
+		t.Errorf("carried = %v, want [epic-plan-1] with configured planning pairs", carried)
+	}
+
+	// Without configured pairs (nil → legacy fallback to "code-planning-pair" only)
+	carried = collectMergedPlanningWithUnconsumedOutput(state, nil)
+	if len(carried) != 0 {
+		t.Errorf("carried = %v, want [] — epic-planning-pair should not match legacy fallback", carried)
+	}
+}
+
+func TestCollectMergedPlanningWithUnconsumedOutput_ConsumedOutputNotCarried(t *testing.T) {
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// Merged planning task with output BUT transitions already executed
+	planningTask := testhelpers.BuildTaskByStatus("code-planning-1", models.TaskStatusMerged, now)
+	planningTask.RolePair = "code-planning-pair"
+	planningTask.Output = []models.OutputEntry{
+		{Desc: "implement feature X", DoneWhen: "tests pass", Scope: "internal/", SpecRef: "README.md"},
+	}
+	planningTask.TransitionsExecuted = map[string]bool{"child-task-1": true}
+
+	state.Tasks = []models.Task{planningTask}
+	state.Sprint.Scope.Planned = []string{"code-planning-1"}
+
+	carried := collectMergedPlanningWithUnconsumedOutput(state, nil)
+	if len(carried) != 0 {
+		t.Errorf("carried = %v, want [] — consumed output should not be carried", carried)
+	}
+}
+
 func TestResumeWithoutSprintAdvance(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

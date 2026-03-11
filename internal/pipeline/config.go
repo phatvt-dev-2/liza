@@ -4,6 +4,7 @@ package pipeline
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// ErrConfigNotFound is returned when no pipeline config file exists.
+// Callers can use errors.Is to distinguish absent config (legacy project)
+// from parse/validation errors.
+var ErrConfigNotFound = errors.New("pipeline config not found")
 
 // PipelineConfig is the top-level structure of a pipeline YAML file.
 type PipelineConfig struct {
@@ -60,11 +66,13 @@ type TransitionDef struct {
 }
 
 // LoadFrozen loads the frozen pipeline config from .liza/pipeline.yaml.
-// Returns an error when no pipeline config exists (pipeline is mandatory).
+// Returns ErrConfigNotFound (wrapped) when no pipeline config exists.
+// Callers can use errors.Is(err, ErrConfigNotFound) to distinguish absent
+// config from parse/validation errors.
 func LoadFrozen(projectRoot string) (*PipelineConfig, error) {
 	path := filepath.Join(projectRoot, ".liza", "pipeline.yaml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, fmt.Errorf("pipeline config not found at %s (run 'liza init' to create workspace)", path)
+		return nil, fmt.Errorf("%w at %s (run 'liza init' to create workspace)", ErrConfigNotFound, path)
 	}
 	return Load(path)
 }

@@ -108,7 +108,7 @@ func resumeSprint(s *models.State, lizaPaths paths.LizaPaths, projectRoot string
 	case models.SprintStatusCompleted:
 		// COMPLETED sprint — archive and create new sprint.
 		// This is the second step: human ran liza proceed, now starts next sprint.
-		plan, err := planSprintAdvanceFromCompleted(s, timestamp.UTC())
+		plan, err := planSprintAdvanceFromCompleted(s, timestamp.UTC(), projectRoot)
 		if err != nil {
 			return "", nil, fmt.Errorf("sprint advance failed: %w", err)
 		}
