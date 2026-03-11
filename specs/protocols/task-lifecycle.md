@@ -127,11 +127,11 @@ Original task history is preserved. No silent rewrites.
 | Integration failed | Task reclaimable with integration-fix scope |
 | Two coders failed same task | Hypothesis exhaustion → mandatory rescope |
 
-### Review Deadlock Protocol
+### Review Budget Exhaustion Protocol
 
 When Coder and Code Reviewer reach `max_review_cycles` (default: 5) without approval:
 
-1. **Task transitions to BLOCKED** with `blocked_reason: "review_deadlock"`
+1. **Task transitions to BLOCKED** with `blocked_reason: "review_budget_exhausted"`
 2. **Planner evaluates** the rejection/revision history:
 
 | Planner Assessment | Action |
@@ -142,7 +142,7 @@ When Coder and Code Reviewer reach `max_review_cycles` (default: 5) without appr
 | Task fundamentally misframed | SUPERSEDED, create replacement task(s) |
 | No viable path forward | ABANDONED (requires rationale in log) |
 
-3. **Planner must log** `review_deadlock` anomaly with assessment
+3. **Planner must log** `review_budget_exhausted` anomaly with assessment
 4. **Work is NOT discarded** unless Planner explicitly chooses ABANDONED after assessment
 
 **Key invariant:** The Coder-Code Reviewer loop runs to completion (5 cycles) before any intervention. No premature escalation.

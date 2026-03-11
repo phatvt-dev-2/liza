@@ -78,7 +78,7 @@ Summary of types relevant to circuit breaker patterns:
 | `debt_created` | Code Reviewer | debt_accumulation |
 | `external_blocker` | Coder | external_service_outage (aggregated by `blocker_service`) |
 | `hypothesis_exhaustion` | Planner | (triggers rescope, not CB) |
-| `review_deadlock` | Planner | (logged for audit; triggers Planner intervention, not CB) |
+| `review_budget_exhausted` | Planner | (logged for audit; triggers Planner intervention, not CB) |
 | `spec_gap` | Planner | spec_gap_cluster |
 
 ---

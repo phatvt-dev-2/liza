@@ -760,7 +760,7 @@ For detailed definition including edge cases (submodules, untracked files), see 
 | `spec_changed` | Code Reviewer | Spec changed since task creation |
 | `hypothesis_exhaustion` | Orchestrator | Two coders failed same task, rescope required |
 | `spec_gap` | Orchestrator | Missing spec discovered during planning/rescope |
-| `review_deadlock` | Orchestrator | Coder-Code Reviewer reached max cycles without approval |
+| `review_budget_exhausted` | Orchestrator | Coder-Code Reviewer reached max cycles without approval |
 | `review_exhaustion` | Orchestrator | Two reviewers failed to issue verdict on same task |
 | `reviewer_loop` | Code Reviewer | Reviewer stuck in command loop, self-aborted |
 | `system_ambiguity` | Any role | Liza protocol or role definition unclear, escalated to Orchestrator |
@@ -817,7 +817,7 @@ invariants:
   - "Task failed_by list must contain unique agent IDs"
   - "Task parent_task must reference an existing task ID"
   - "Task output entries must have all required fields (desc, done_when, scope, spec_ref)"
-  - "Anomaly type must be one of: retry_loop, trade_off, spec_ambiguity, external_blocker, assumption_violated, scope_deviation, workaround, debt_created, spec_changed, hypothesis_exhaustion, spec_gap, review_deadlock, review_exhaustion, reviewer_loop, system_ambiguity"
+  - "Anomaly type must be one of: retry_loop, trade_off, spec_ambiguity, external_blocker, assumption_violated, scope_deviation, workaround, debt_created, spec_changed, hypothesis_exhaustion, spec_gap, review_budget_exhausted, review_exhaustion, reviewer_loop, system_ambiguity"
   # Transition invariants (runtime-enforced, not statically validated)
   # These are enforced by agent behavior and atomic operations during state transitions.
   # `liza validate` validates static state invariants; these require history analysis.

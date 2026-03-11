@@ -43,8 +43,8 @@ func classifyLimitEscalation(reviewCycles, reviewLimit, iteration, iterationLimi
 		}, true
 	case reviewLimitReached:
 		return limitEscalation{
-			reason:    reviewDeadlockBlockedReason(reviewCycles, reviewLimit),
-			questions: defaultReviewDeadlockBlockedQuestions(),
+			reason:    reviewBudgetExhaustedReason(reviewCycles, reviewLimit),
+			questions: defaultReviewBudgetExhaustedQuestions(),
 		}, true
 	default:
 		return limitEscalation{
@@ -58,13 +58,13 @@ func iterationLimitBlockedReason(iteration, limit int) string {
 	return fmt.Sprintf("max iterations reached without approval (%d/%d)", iteration, limit)
 }
 
-func reviewDeadlockBlockedReason(reviewCycles, limit int) string {
-	return fmt.Sprintf("review deadlock: max review cycles reached (%d/%d)", reviewCycles, limit)
+func reviewBudgetExhaustedReason(reviewCycles, limit int) string {
+	return fmt.Sprintf("review budget exhausted: max review cycles reached (%d/%d)", reviewCycles, limit)
 }
 
 func combinedLimitBlockedReason(reviewCycles, reviewLimit, iteration, iterationLimit int) string {
 	return fmt.Sprintf(
-		"review deadlock and max iterations reached (review cycles %d/%d, iterations %d/%d)",
+		"review budget and iteration limits exhausted (review cycles %d/%d, iterations %d/%d)",
 		reviewCycles, reviewLimit, iteration, iterationLimit,
 	)
 }
@@ -75,9 +75,9 @@ func defaultIterationLimitBlockedQuestions() []string {
 	}
 }
 
-func defaultReviewDeadlockBlockedQuestions() []string {
+func defaultReviewBudgetExhaustedQuestions() []string {
 	return []string{
-		"Should orchestrator rescope this task or clarify acceptance criteria to break the review deadlock?",
+		"Should orchestrator rescope this task or clarify acceptance criteria to break the review cycle?",
 	}
 }
 

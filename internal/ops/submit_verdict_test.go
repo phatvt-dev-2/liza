@@ -283,8 +283,8 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 				task.ReviewCyclesCurrent = 1
 				task.ReviewCyclesTotal = 1
 			},
-			wantReasonContains: "review deadlock",
-			wantQuestionHint:   "review deadlock",
+			wantReasonContains: "review budget exhausted",
+			wantQuestionHint:   "review cycle",
 			wantReviewCurrent:  2,
 			wantReviewTotal:    2,
 		},
@@ -313,7 +313,7 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 				task.Iteration = 2
 				task.MaxIterations = 2
 			},
-			wantReasonContains: "review deadlock and max iterations",
+			wantReasonContains: "review budget and iteration limits exhausted",
 			wantQuestionHint:   "both review cycles and iterations",
 			wantReviewCurrent:  2,
 			wantReviewTotal:    5,
