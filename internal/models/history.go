@@ -59,6 +59,18 @@ const (
 	TaskEventTransitionCrashRecov   TaskEventName = "transition_crash_recovery"
 	TaskEventReviewVerdictApproved  TaskEventName = "review_verdict_approved"
 	TaskEventReviewVerdictRejected  TaskEventName = "review_verdict_rejected"
+
+	TaskEventInitialization           TaskEventName = "initialization"
+	TaskEventCreated                  TaskEventName = "created"
+	TaskEventClaimed                  TaskEventName = "claimed"
+	TaskEventAbandoned                TaskEventName = "abandoned"
+	TaskEventClaimedForIntegrationFix TaskEventName = "claimed_for_integration_fix"
+	TaskEventClaimReleased            TaskEventName = "claim_released"
+	TaskEventReclaimedAfterRejection  TaskEventName = "reclaimed_after_rejection"
+	TaskEventReassignedAfterRejection TaskEventName = "reassigned_after_rejection"
+	TaskEventWorktreeRecovered        TaskEventName = "worktree_recovered"
+	TaskEventDoerClaimReleased        TaskEventName = "doer_claim_released"
+	TaskEventReviewClaimReleased      TaskEventName = "review_claim_released"
 )
 
 // TaskHistoryEntry represents a single event in a task's history
