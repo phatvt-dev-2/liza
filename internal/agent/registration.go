@@ -182,7 +182,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:   now,
-		Event:  "claim_released",
+		Event:  models.TaskEventClaimReleased,
 		Agent:  &agentID,
 		Reason: &reason,
 	})

@@ -80,7 +80,7 @@ func TestEnsureReviewerWorktree_MissingRecoverable(t *testing.T) {
 	}
 	found := false
 	for _, h := range readTask.History {
-		if h.Event == "worktree_recovered" {
+		if h.Event == models.TaskEventWorktreeRecovered {
 			found = true
 			break
 		}
@@ -145,7 +145,7 @@ func TestEnsureReviewerWorktree_MissingAlreadyRecovered(t *testing.T) {
 	// Simulate a prior recovery.
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now.Add(-5 * time.Minute),
-		Event: "worktree_recovered",
+		Event: models.TaskEventWorktreeRecovered,
 		Agent: &reviewerID,
 	})
 	state.Tasks = []models.Task{task}

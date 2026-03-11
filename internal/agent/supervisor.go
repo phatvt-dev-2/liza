@@ -147,7 +147,7 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, task
 		task.LeaseExpires = nil
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
-			Event:  "blocked",
+			Event:  models.TaskEventBlocked,
 			Agent:  &agentID,
 			Reason: &reason,
 		})

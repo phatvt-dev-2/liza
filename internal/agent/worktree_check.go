@@ -43,7 +43,7 @@ func ensureReviewerWorktree(projectRoot string, bb *db.Blackboard, taskID, agent
 	}
 
 	for _, h := range task.History {
-		if h.Event == "worktree_recovered" {
+		if h.Event == models.TaskEventWorktreeRecovered {
 			logger.Error("Blocking task: worktree still missing after prior recovery", "task_id", taskID)
 			blockReviewerTask(bb, taskID, agentID, "worktree missing after prior recovery attempt")
 			return false, fmt.Errorf("task %s: unrecoverable worktree: %w", taskID, errTaskBlocked)
@@ -83,7 +83,7 @@ func ensureReviewerWorktree(projectRoot string, bb *db.Blackboard, taskID, agent
 			agentPtr := agentID
 			t.History = append(t.History, models.TaskHistoryEntry{
 				Time:  time.Now().UTC(),
-				Event: "worktree_recovered",
+				Event: models.TaskEventWorktreeRecovered,
 				Agent: &agentPtr,
 			})
 		}
@@ -126,7 +126,7 @@ func blockReviewerTask(bb *db.Blackboard, taskID, agentID, reason string) {
 		now := time.Now().UTC()
 		t.History = append(t.History, models.TaskHistoryEntry{
 			Time:   now,
-			Event:  "blocked",
+			Event:  models.TaskEventBlocked,
 			Agent:  &agentID,
 			Reason: &reason,
 		})
