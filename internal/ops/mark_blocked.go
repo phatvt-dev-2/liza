@@ -77,7 +77,7 @@ func MarkBlocked(projectRoot, taskID, reason string, questions []string, agentID
 
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
-			Event:  "blocked",
+			Event:  models.TaskEventBlocked,
 			Agent:  &agentID,
 			Reason: &reason,
 		})

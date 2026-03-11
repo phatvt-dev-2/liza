@@ -91,8 +91,8 @@ func TestSupersedeTask_FromBlocked(t *testing.T) {
 	}
 
 	lastHistory := task.History[len(task.History)-1]
-	if lastHistory.Event != "superseded" {
-		t.Errorf("History event = %q, want %q", lastHistory.Event, "superseded")
+	if lastHistory.Event != models.TaskEventSuperseded {
+		t.Errorf("History event = %q, want %q", lastHistory.Event, models.TaskEventSuperseded)
 	}
 }
 

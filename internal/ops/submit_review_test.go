@@ -113,7 +113,7 @@ func TestSubmitForReview_TDDWaiverBypassesTestRequirement(t *testing.T) {
 	agent := "coder-1"
 	history := []models.TaskHistoryEntry{
 		{
-			Event: "pre_execution_checkpoint",
+			Event: models.TaskEventPreExecutionCheckpoint,
 			Agent: &agent,
 			Extra: map[string]any{
 				"intent":           "Fix comment typo",
@@ -134,7 +134,7 @@ func TestSubmitForReview_TDDWaiverBypassesTestRequirement(t *testing.T) {
 	// Without waiver, GetTDDWaiver should return empty
 	historyNoWaiver := []models.TaskHistoryEntry{
 		{
-			Event: "pre_execution_checkpoint",
+			Event: models.TaskEventPreExecutionCheckpoint,
 			Agent: &agent,
 			Extra: map[string]any{
 				"intent": "Add feature",
@@ -223,7 +223,7 @@ func setupRebaseConflictScenario(t *testing.T) (string, string, string, string, 
 				History: []models.TaskHistoryEntry{
 					{
 						Time:  time.Now().UTC(),
-						Event: "pre_execution_checkpoint",
+						Event: models.TaskEventPreExecutionCheckpoint,
 						Agent: &agentID,
 						Extra: map[string]any{
 							"intent":          "test",
@@ -288,7 +288,7 @@ func TestSubmitForReview_RebaseConflict_TransitionsToIntegrationFailed(t *testin
 	// History should have integration_failed entry
 	found := false
 	for _, h := range task.History {
-		if h.Event == "integration_failed" {
+		if h.Event == models.TaskEventIntegrationFailed {
 			found = true
 			break
 		}

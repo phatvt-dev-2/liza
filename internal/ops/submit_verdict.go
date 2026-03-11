@@ -136,7 +136,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 
 			task.History = append(task.History, models.TaskHistoryEntry{
 				Time:  now,
-				Event: "approved",
+				Event: models.TaskEventApproved,
 				Agent: &agentID,
 			})
 		} else {
@@ -149,7 +149,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 
 			task.History = append(task.History, models.TaskHistoryEntry{
 				Time:   now,
-				Event:  "rejected",
+				Event:  models.TaskEventRejected,
 				Agent:  &agentID,
 				Reason: &reason,
 			})
@@ -185,7 +185,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 
 				task.History = append(task.History, models.TaskHistoryEntry{
 					Time:   now,
-					Event:  "blocked",
+					Event:  models.TaskEventBlocked,
 					Agent:  &agentID,
 					Reason: &blockedReason,
 				})

@@ -206,7 +206,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
-			Event: "submitted_for_review",
+			Event: models.TaskEventSubmittedForReview,
 			Agent: &agentID,
 		})
 
@@ -255,7 +255,7 @@ func markSubmitRebaseConflict(bb *db.Blackboard, taskID, agentID string, pipelin
 
 		entry := models.TaskHistoryEntry{
 			Time:   time.Now().UTC(),
-			Event:  "integration_failed",
+			Event:  models.TaskEventIntegrationFailed,
 			Agent:  &agentID,
 			Reason: &reason,
 		}

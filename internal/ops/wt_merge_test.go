@@ -354,7 +354,7 @@ func TestMergeWorktree_Success(t *testing.T) {
 		t.Fatal("Expected history entry for merge")
 	}
 	lastHistory := task.History[len(task.History)-1]
-	if lastHistory.Event != "merged" {
+	if lastHistory.Event != models.TaskEventMerged {
 		t.Errorf("Last history event = %q, want 'merged'", lastHistory.Event)
 	}
 	if lastHistory.Extra == nil {
@@ -1087,7 +1087,7 @@ func TestMergeWorktree_NoTestScriptWarning(t *testing.T) {
 		t.Fatal("Expected history entry for merge")
 	}
 	lastHistory := task.History[len(task.History)-1]
-	if lastHistory.Event != "merged" {
+	if lastHistory.Event != models.TaskEventMerged {
 		t.Errorf("Last history event = %q, want 'merged'", lastHistory.Event)
 	}
 	if lastHistory.Extra == nil {
@@ -1142,7 +1142,7 @@ func TestMergeWorktree_TestsRanInHistory(t *testing.T) {
 		t.Fatal("Expected history entry for merge")
 	}
 	lastHistory := task.History[len(task.History)-1]
-	if lastHistory.Event != "merged" {
+	if lastHistory.Event != models.TaskEventMerged {
 		t.Errorf("Last history event = %q, want 'merged'", lastHistory.Event)
 	}
 	if lastHistory.Extra == nil {

@@ -72,7 +72,7 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 		note := fmt.Sprintf("summary: %s | next_action: %s", summary, nextAction)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
-			Event: "handoff_initiated",
+			Event: models.TaskEventHandoffInitiated,
 			Agent: &agentID,
 			Note:  &note,
 		})

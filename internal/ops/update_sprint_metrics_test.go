@@ -67,8 +67,8 @@ func TestComputeSprintMetrics_ReviewVerdicts(t *testing.T) {
 			DoneWhen:    "Done",
 			Scope:       "Test",
 			History: []models.TaskHistoryEntry{
-				{Time: now, Event: "submitted_for_review"},
-				{Time: now, Event: "review_verdict_approved"},
+				{Time: now, Event: models.TaskEventSubmittedForReview},
+				{Time: now, Event: models.TaskEventReviewVerdictApproved},
 			},
 		},
 		{
@@ -81,10 +81,10 @@ func TestComputeSprintMetrics_ReviewVerdicts(t *testing.T) {
 			DoneWhen:    "Done",
 			Scope:       "Test",
 			History: []models.TaskHistoryEntry{
-				{Time: now, Event: "submitted_for_review"},
-				{Time: now, Event: "review_verdict_rejected"},
-				{Time: now, Event: "submitted_for_review"},
-				{Time: now, Event: "review_verdict_rejected"},
+				{Time: now, Event: models.TaskEventSubmittedForReview},
+				{Time: now, Event: models.TaskEventReviewVerdictRejected},
+				{Time: now, Event: models.TaskEventSubmittedForReview},
+				{Time: now, Event: models.TaskEventReviewVerdictRejected},
 			},
 		},
 	}
@@ -117,17 +117,17 @@ func TestComputeSprintMetrics_TaskOutcomeApprovalRate(t *testing.T) {
 		{
 			ID: "t1", Description: "T1", Status: models.TaskStatusMerged,
 			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
-			History: []models.TaskHistoryEntry{{Time: now, Event: "submitted_for_review"}},
+			History: []models.TaskHistoryEntry{{Time: now, Event: models.TaskEventSubmittedForReview}},
 		},
 		{
 			ID: "t2", Description: "T2", Status: models.TaskStatusApproved,
 			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
-			History: []models.TaskHistoryEntry{{Time: now, Event: "submitted_for_review"}},
+			History: []models.TaskHistoryEntry{{Time: now, Event: models.TaskEventSubmittedForReview}},
 		},
 		{
 			ID: "t3", Description: "T3", Status: models.TaskStatusRejected,
 			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
-			History: []models.TaskHistoryEntry{{Time: now, Event: "submitted_for_review"}},
+			History: []models.TaskHistoryEntry{{Time: now, Event: models.TaskEventSubmittedForReview}},
 		},
 	}
 

@@ -119,8 +119,8 @@ func TestHandoff_Success(t *testing.T) {
 
 	// Verify history
 	lastHistory := task.History[len(task.History)-1]
-	if lastHistory.Event != "handoff_initiated" {
-		t.Errorf("History event = %q, want %q", lastHistory.Event, "handoff_initiated")
+	if lastHistory.Event != models.TaskEventHandoffInitiated {
+		t.Errorf("History event = %q, want %q", lastHistory.Event, models.TaskEventHandoffInitiated)
 	}
 }
 

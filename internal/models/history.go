@@ -39,6 +39,28 @@ type AlignmentHistory struct {
 	Extra     map[string]any `yaml:",inline"`
 }
 
+// TaskEventName identifies a task-history event.
+type TaskEventName = string
+
+// Task-event constants used in history entries across ops, commands, and agent packages.
+const (
+	TaskEventPlanning               TaskEventName = "planning"
+	TaskEventPreExecutionCheckpoint TaskEventName = "pre_execution_checkpoint"
+	TaskEventSubmittedForReview     TaskEventName = "submitted_for_review"
+	TaskEventApproved               TaskEventName = "approved"
+	TaskEventRejected               TaskEventName = "rejected"
+	TaskEventBlocked                TaskEventName = "blocked"
+	TaskEventMerged                 TaskEventName = "merged"
+	TaskEventSuperseded             TaskEventName = "superseded"
+	TaskEventIntegrationFailed      TaskEventName = "integration_failed"
+	TaskEventHandoffInitiated       TaskEventName = "handoff_initiated"
+	TaskEventHandoffResumed         TaskEventName = "handoff_resumed"
+	TaskEventTransitionExecuted     TaskEventName = "transition_executed"
+	TaskEventTransitionCrashRecov   TaskEventName = "transition_crash_recovery"
+	TaskEventReviewVerdictApproved  TaskEventName = "review_verdict_approved"
+	TaskEventReviewVerdictRejected  TaskEventName = "review_verdict_rejected"
+)
+
 // TaskHistoryEntry represents a single event in a task's history
 type TaskHistoryEntry struct {
 	Time             time.Time      `yaml:"time"`

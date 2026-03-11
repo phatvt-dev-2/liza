@@ -133,8 +133,8 @@ func TestSubmitVerdict_Approved(t *testing.T) {
 	}
 
 	lastHistory := task.History[len(task.History)-1]
-	if lastHistory.Event != "approved" {
-		t.Errorf("History event = %q, want %q", lastHistory.Event, "approved")
+	if lastHistory.Event != models.TaskEventApproved {
+		t.Errorf("History event = %q, want %q", lastHistory.Event, models.TaskEventApproved)
 	}
 }
 
@@ -192,8 +192,8 @@ func TestSubmitVerdict_Rejected(t *testing.T) {
 	}
 
 	lastHistory := task.History[len(task.History)-1]
-	if lastHistory.Event != "rejected" {
-		t.Errorf("History event = %q, want %q", lastHistory.Event, "rejected")
+	if lastHistory.Event != models.TaskEventRejected {
+		t.Errorf("History event = %q, want %q", lastHistory.Event, models.TaskEventRejected)
 	}
 }
 

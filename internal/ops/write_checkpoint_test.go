@@ -228,8 +228,8 @@ func TestWriteCheckpoint_Success(t *testing.T) {
 
 	// Verify the last history entry
 	lastEntry := task.History[len(task.History)-1]
-	if lastEntry.Event != "pre_execution_checkpoint" {
-		t.Errorf("Expected event 'pre_execution_checkpoint', got %q", lastEntry.Event)
+	if lastEntry.Event != models.TaskEventPreExecutionCheckpoint {
+		t.Errorf("Expected event %q, got %q", models.TaskEventPreExecutionCheckpoint, lastEntry.Event)
 	}
 	if lastEntry.Agent == nil || *lastEntry.Agent != "coder-1" {
 		t.Error("Expected agent 'coder-1' in checkpoint entry")
@@ -465,7 +465,7 @@ func TestGetLatestScopeExtensions(t *testing.T) {
 		{
 			name: "checkpoint without scope extensions",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{"intent": "test"}},
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{"intent": "test"}},
 			},
 			agentID: "coder-1",
 			want:    0,
@@ -473,7 +473,7 @@ func TestGetLatestScopeExtensions(t *testing.T) {
 		{
 			name: "checkpoint with scope extensions",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
 					"intent": "test",
 					"scope_extensions": []map[string]string{
 						{"file": "pkg/util.go", "justification": "shared helper"},
@@ -486,7 +486,7 @@ func TestGetLatestScopeExtensions(t *testing.T) {
 		{
 			name: "checkpoint from different agent ignored",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &otherAgent, Extra: map[string]any{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &otherAgent, Extra: map[string]any{
 					"scope_extensions": []map[string]string{
 						{"file": "other.go", "justification": "other"},
 					},
@@ -498,12 +498,12 @@ func TestGetLatestScopeExtensions(t *testing.T) {
 		{
 			name: "latest checkpoint wins",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
 					"scope_extensions": []map[string]string{
 						{"file": "old.go", "justification": "old"},
 					},
 				}},
-				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
 					"intent": "new checkpoint without extensions",
 				}},
 			},
@@ -541,7 +541,7 @@ func TestGetTDDWaiver(t *testing.T) {
 		{
 			name: "checkpoint without waiver",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{"intent": "test"}},
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{"intent": "test"}},
 			},
 			agentID: "coder-1",
 			want:    "",
@@ -549,7 +549,7 @@ func TestGetTDDWaiver(t *testing.T) {
 		{
 			name: "checkpoint with waiver",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
 					"intent":           "test",
 					"tdd_not_required": "cosmetic-only change",
 				}},
@@ -560,7 +560,7 @@ func TestGetTDDWaiver(t *testing.T) {
 		{
 			name: "checkpoint from different agent ignored",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &otherAgent, Extra: map[string]any{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &otherAgent, Extra: map[string]any{
 					"tdd_not_required": "waiver from other",
 				}},
 			},
@@ -570,10 +570,10 @@ func TestGetTDDWaiver(t *testing.T) {
 		{
 			name: "latest checkpoint wins",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
 					"tdd_not_required": "old waiver",
 				}},
-				{Event: "pre_execution_checkpoint", Agent: &agent, Extra: map[string]any{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
 					"intent": "new checkpoint without waiver",
 				}},
 			},
@@ -619,7 +619,7 @@ func TestHasCheckpoint(t *testing.T) {
 		{
 			name: "checkpoint from different agent",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &otherAgent},
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &otherAgent},
 			},
 			agentID: "coder-1",
 			want:    false,
@@ -627,7 +627,7 @@ func TestHasCheckpoint(t *testing.T) {
 		{
 			name: "checkpoint from correct agent",
 			history: []models.TaskHistoryEntry{
-				{Event: "pre_execution_checkpoint", Agent: &agent},
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent},
 			},
 			agentID: "coder-1",
 			want:    true,

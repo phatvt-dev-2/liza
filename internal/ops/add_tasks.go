@@ -150,7 +150,7 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 
 		alignmentEntry := models.AlignmentHistory{
 			Timestamp: now,
-			Event:     "planning",
+			Event:     models.TaskEventPlanning,
 			Summary:   fmt.Sprintf("Added task %s: %s", input.ID, input.Description),
 		}
 		state.Goal.AlignmentHistory = append(state.Goal.AlignmentHistory, alignmentEntry)

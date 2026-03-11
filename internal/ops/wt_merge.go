@@ -106,7 +106,7 @@ func markIntegrationFailed(bb *db.Blackboard, taskID, agentID, reason, mergeComm
 
 		entry := models.TaskHistoryEntry{
 			Time:   time.Now(),
-			Event:  "integration_failed",
+			Event:  models.TaskEventIntegrationFailed,
 			Agent:  &agentID,
 			Reason: &reason,
 		}
@@ -426,7 +426,7 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		// Add history entry
 		historyEntry := models.TaskHistoryEntry{
 			Time:   time.Now(),
-			Event:  "merged",
+			Event:  models.TaskEventMerged,
 			Agent:  &agentID,
 			Commit: &mergeCommit,
 			Extra:  map[string]any{"tests_ran": testsRan},

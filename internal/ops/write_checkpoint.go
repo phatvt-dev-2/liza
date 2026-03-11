@@ -110,7 +110,7 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
-			Event: "pre_execution_checkpoint",
+			Event: models.TaskEventPreExecutionCheckpoint,
 			Agent: &input.AgentID,
 			Extra: extra,
 		})
@@ -123,7 +123,7 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 // event from the specified agent.
 func HasCheckpoint(history []models.TaskHistoryEntry, agentID string) bool {
 	for _, entry := range history {
-		if entry.Event == "pre_execution_checkpoint" && entry.Agent != nil && *entry.Agent == agentID {
+		if entry.Event == models.TaskEventPreExecutionCheckpoint && entry.Agent != nil && *entry.Agent == agentID {
 			return true
 		}
 	}
@@ -135,7 +135,7 @@ func HasCheckpoint(history []models.TaskHistoryEntry, agentID string) bool {
 func GetTDDWaiver(history []models.TaskHistoryEntry, agentID string) string {
 	for i := len(history) - 1; i >= 0; i-- {
 		entry := history[i]
-		if entry.Event == "pre_execution_checkpoint" && entry.Agent != nil && *entry.Agent == agentID {
+		if entry.Event == models.TaskEventPreExecutionCheckpoint && entry.Agent != nil && *entry.Agent == agentID {
 			if v, ok := entry.Extra["tdd_not_required"].(string); ok {
 				return v
 			}
@@ -150,7 +150,7 @@ func GetTDDWaiver(history []models.TaskHistoryEntry, agentID string) string {
 func GetLatestScopeExtensions(history []models.TaskHistoryEntry, agentID string) []map[string]string {
 	for i := len(history) - 1; i >= 0; i-- {
 		entry := history[i]
-		if entry.Event != "pre_execution_checkpoint" || entry.Agent == nil || *entry.Agent != agentID {
+		if entry.Event != models.TaskEventPreExecutionCheckpoint || entry.Agent == nil || *entry.Agent != agentID {
 			continue
 		}
 		raw, ok := entry.Extra["scope_extensions"]

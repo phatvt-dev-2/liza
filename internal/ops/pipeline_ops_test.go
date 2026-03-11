@@ -431,7 +431,7 @@ func TestSubmitForReview_PipelineCodingPairTransition(t *testing.T) {
 		DoneWhen:     "done",
 		Scope:        "scope",
 		History: []models.TaskHistoryEntry{
-			{Time: now, Event: "pre_execution_checkpoint", Agent: &agent},
+			{Time: now, Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent},
 		},
 	}
 	state.Tasks = []models.Task{task}

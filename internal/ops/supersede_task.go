@@ -81,7 +81,7 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 		note := fmt.Sprintf("replaced by: %s", strings.Join(replacementIDs, ", "))
 		currentTask.History = append(currentTask.History, models.TaskHistoryEntry{
 			Time:   now,
-			Event:  "superseded",
+			Event:  models.TaskEventSuperseded,
 			Agent:  &agentID,
 			Reason: &reason,
 			Note:   &note,

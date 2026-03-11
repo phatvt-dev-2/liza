@@ -123,8 +123,8 @@ func TestResumeHandoff_Success(t *testing.T) {
 	if task.LeaseExpires == nil || !task.LeaseExpires.After(callStart) {
 		t.Errorf("LeaseExpires = %v, want renewed lease after %v", task.LeaseExpires, callStart)
 	}
-	if len(task.History) == 0 || task.History[len(task.History)-1].Event != "handoff_resumed" {
-		t.Errorf("Last history event = %v, want handoff_resumed", task.History)
+	if len(task.History) == 0 || task.History[len(task.History)-1].Event != models.TaskEventHandoffResumed {
+		t.Errorf("Last history event = %v, want %s", task.History, models.TaskEventHandoffResumed)
 	}
 
 	agent, ok := readState.Agents[agentID]

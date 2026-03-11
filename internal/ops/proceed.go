@@ -154,7 +154,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: "transition_executed",
+		Event: models.TaskEventTransitionExecuted,
 		Extra: map[string]any{
 			"transition": transitionName,
 			"children":   len(result.ChildTaskIDs),
@@ -188,7 +188,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		}
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
-			Event: "transition_crash_recovery",
+			Event: models.TaskEventTransitionCrashRecov,
 			Extra: map[string]any{
 				"transition":         transitionName,
 				"recovered_children": len(missingChildren),
@@ -206,7 +206,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
-			Event: "transition_crash_recovery",
+			Event: models.TaskEventTransitionCrashRecov,
 			Extra: map[string]any{
 				"transition":         transitionName,
 				"recovered_children": 1,

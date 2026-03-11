@@ -114,8 +114,8 @@ func TestMarkBlocked_Success(t *testing.T) {
 
 	// Verify history entry
 	lastHistory := task.History[len(task.History)-1]
-	if lastHistory.Event != "blocked" {
-		t.Errorf("History event = %q, want %q", lastHistory.Event, "blocked")
+	if lastHistory.Event != models.TaskEventBlocked {
+		t.Errorf("History event = %q, want %q", lastHistory.Event, models.TaskEventBlocked)
 	}
 }
 

@@ -60,12 +60,12 @@ func ComputeSprintMetrics(state *models.State) models.SprintMetrics {
 		hasSubmitted := false
 		for _, entry := range task.History {
 			switch entry.Event {
-			case "submitted_for_review":
+			case models.TaskEventSubmittedForReview:
 				hasSubmitted = true
-			case "review_verdict_approved":
+			case models.TaskEventReviewVerdictApproved:
 				metrics.ReviewVerdictApprovals++
 				metrics.ReviewVerdictCount++
-			case "review_verdict_rejected":
+			case models.TaskEventReviewVerdictRejected:
 				metrics.ReviewVerdictRejections++
 				metrics.ReviewVerdictCount++
 			}
