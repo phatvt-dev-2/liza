@@ -141,10 +141,10 @@ After APPROVED, **Code Reviewer** executes:
    - Read integration HEAD without checkout (`git rev-parse refs/heads/integration`)
    - Detect fast-forward (task commit is descendant of integration)
    - For true merge: compute tree via `git merge-tree`, create commit via `git commit-tree`, update ref via `git update-ref`
-   - No modification to main repo working tree
+   - Working tree files are transiently synced for integration test correctness, then restored if checked-out branch differs from integration
 4. If conflict: task → INTEGRATION_FAILED, Code Reviewer reports
 5. If integration tests fail: rollback via `git update-ref` to pre-merge HEAD, task → INTEGRATION_FAILED
-6. On success: task → MERGED, worktree deleted
+6. On success: working tree restored to checked-out branch HEAD (unless on integration, where no restore needed), task → MERGED, worktree deleted
 
 ---
 

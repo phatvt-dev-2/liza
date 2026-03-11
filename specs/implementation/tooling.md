@@ -395,6 +395,7 @@ liza wt-create task-3 [--fresh]
 liza wt-merge task-3
 # Task must be APPROVED
 # Performs working-tree-less merge using git merge-tree + commit-tree + update-ref
+# Working tree files transiently synced for integration tests, then restored
 # Multiple reviewers can merge concurrently without race conditions
 ```
 

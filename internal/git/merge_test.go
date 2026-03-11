@@ -214,3 +214,220 @@ func TestMergeBranchConflict(t *testing.T) {
 		t.Error("Expected clean state after merge abort")
 	}
 }
+
+func TestRestoreSyncedFiles(t *testing.T) {
+	t.Run("added file is removed", func(t *testing.T) {
+		repoDir := setupTestRepo(t)
+		g := New(repoDir)
+
+		testhelpers.MustGit(t, repoDir, "checkout", "integration")
+		baseCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Add a new file and commit.
+		newFile := filepath.Join(repoDir, "new-feature.txt")
+		if err := os.WriteFile(newFile, []byte("feature\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		testhelpers.MustGit(t, repoDir, "add", "new-feature.txt")
+		testhelpers.MustGit(t, repoDir, "commit", "-m", "Add new feature")
+		tipCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Sync forward (simulates what MergeWorktree does after update-ref).
+		if err := g.SyncMergedFiles(baseCommit, tipCommit); err != nil {
+			t.Fatalf("SyncMergedFiles: %v", err)
+		}
+
+		// File exists after sync.
+		if _, err := os.Stat(newFile); err != nil {
+			t.Fatalf("expected new-feature.txt to exist after sync: %v", err)
+		}
+
+		// Restore to baseCommit (the file didn't exist there).
+		if err := g.RestoreSyncedFiles(baseCommit, tipCommit, baseCommit); err != nil {
+			t.Fatalf("RestoreSyncedFiles: %v", err)
+		}
+
+		// File should be gone.
+		if _, err := os.Stat(newFile); !os.IsNotExist(err) {
+			t.Errorf("expected new-feature.txt to be removed after restore, stat: %v", err)
+		}
+	})
+
+	t.Run("modified file is restored", func(t *testing.T) {
+		repoDir := setupTestRepo(t)
+		g := New(repoDir)
+
+		testhelpers.MustGit(t, repoDir, "checkout", "integration")
+
+		// Write a file and commit as the base.
+		modFile := filepath.Join(repoDir, "modify-me.txt")
+		if err := os.WriteFile(modFile, []byte("original\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		testhelpers.MustGit(t, repoDir, "add", "modify-me.txt")
+		testhelpers.MustGit(t, repoDir, "commit", "-m", "Add modify-me")
+		baseCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Modify and commit.
+		if err := os.WriteFile(modFile, []byte("modified\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		testhelpers.MustGit(t, repoDir, "add", "modify-me.txt")
+		testhelpers.MustGit(t, repoDir, "commit", "-m", "Modify file")
+		tipCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Sync forward.
+		if err := g.SyncMergedFiles(baseCommit, tipCommit); err != nil {
+			t.Fatalf("SyncMergedFiles: %v", err)
+		}
+
+		// After sync, file has modified content.
+		content, _ := os.ReadFile(modFile)
+		if string(content) != "modified\n" {
+			t.Fatalf("expected modified content after sync, got %q", content)
+		}
+
+		// Restore to baseCommit.
+		if err := g.RestoreSyncedFiles(baseCommit, tipCommit, baseCommit); err != nil {
+			t.Fatalf("RestoreSyncedFiles: %v", err)
+		}
+
+		content, _ = os.ReadFile(modFile)
+		if string(content) != "original\n" {
+			t.Errorf("expected original content after restore, got %q", content)
+		}
+	})
+
+	t.Run("unaffected files untouched", func(t *testing.T) {
+		repoDir := setupTestRepo(t)
+		g := New(repoDir)
+
+		testhelpers.MustGit(t, repoDir, "checkout", "integration")
+
+		baseCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Add a file and commit (this is the "affected" file).
+		affected := filepath.Join(repoDir, "affected.txt")
+		if err := os.WriteFile(affected, []byte("affected\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		testhelpers.MustGit(t, repoDir, "add", "affected.txt")
+		testhelpers.MustGit(t, repoDir, "commit", "-m", "Add affected")
+		tipCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Create an unrelated untracked file.
+		unrelated := filepath.Join(repoDir, "unrelated.txt")
+		if err := os.WriteFile(unrelated, []byte("don't touch me\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := g.RestoreSyncedFiles(baseCommit, tipCommit, baseCommit); err != nil {
+			t.Fatalf("RestoreSyncedFiles: %v", err)
+		}
+
+		// Unrelated file should still exist with original content.
+		content, err := os.ReadFile(unrelated)
+		if err != nil {
+			t.Fatalf("unrelated file should still exist: %v", err)
+		}
+		if string(content) != "don't touch me\n" {
+			t.Errorf("unrelated file content changed: %q", content)
+		}
+	})
+
+	t.Run("subdirectory file is restored correctly", func(t *testing.T) {
+		repoDir := setupTestRepo(t)
+		g := New(repoDir)
+
+		testhelpers.MustGit(t, repoDir, "checkout", "integration")
+
+		// Create a subdirectory file and commit as base.
+		subDir := filepath.Join(repoDir, "src")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		subFile := filepath.Join(subDir, "app.go")
+		if err := os.WriteFile(subFile, []byte("package main\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		testhelpers.MustGit(t, repoDir, "add", "src/app.go")
+		testhelpers.MustGit(t, repoDir, "commit", "-m", "Add src/app.go")
+		baseCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Modify the subdirectory file and commit.
+		if err := os.WriteFile(subFile, []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		testhelpers.MustGit(t, repoDir, "add", "src/app.go")
+		testhelpers.MustGit(t, repoDir, "commit", "-m", "Modify src/app.go")
+		tipCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Sync forward.
+		if err := g.SyncMergedFiles(baseCommit, tipCommit); err != nil {
+			t.Fatalf("SyncMergedFiles: %v", err)
+		}
+
+		// Restore to baseCommit — should get original content.
+		if err := g.RestoreSyncedFiles(baseCommit, tipCommit, baseCommit); err != nil {
+			t.Fatalf("RestoreSyncedFiles: %v", err)
+		}
+
+		content, _ := os.ReadFile(subFile)
+		if string(content) != "package main\n" {
+			t.Errorf("expected original content after restore, got %q", content)
+		}
+	})
+
+	t.Run("subdirectory added file is removed", func(t *testing.T) {
+		repoDir := setupTestRepo(t)
+		g := New(repoDir)
+
+		testhelpers.MustGit(t, repoDir, "checkout", "integration")
+		baseCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Add a file in a subdirectory.
+		subDir := filepath.Join(repoDir, "pkg", "util")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		subFile := filepath.Join(subDir, "helper.go")
+		if err := os.WriteFile(subFile, []byte("package util\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		testhelpers.MustGit(t, repoDir, "add", "pkg/util/helper.go")
+		testhelpers.MustGit(t, repoDir, "commit", "-m", "Add pkg/util/helper.go")
+		tipCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Sync forward.
+		if err := g.SyncMergedFiles(baseCommit, tipCommit); err != nil {
+			t.Fatalf("SyncMergedFiles: %v", err)
+		}
+
+		// File should exist after sync.
+		if _, err := os.Stat(subFile); err != nil {
+			t.Fatalf("expected pkg/util/helper.go after sync: %v", err)
+		}
+
+		// Restore to baseCommit — file didn't exist there.
+		if err := g.RestoreSyncedFiles(baseCommit, tipCommit, baseCommit); err != nil {
+			t.Fatalf("RestoreSyncedFiles: %v", err)
+		}
+
+		if _, err := os.Stat(subFile); !os.IsNotExist(err) {
+			t.Errorf("expected pkg/util/helper.go to be removed, stat: %v", err)
+		}
+	})
+
+	t.Run("empty diff is no-op", func(t *testing.T) {
+		repoDir := setupTestRepo(t)
+		g := New(repoDir)
+
+		testhelpers.MustGit(t, repoDir, "checkout", "integration")
+		commit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+
+		// Same commit for both — no diff, should be a no-op.
+		if err := g.RestoreSyncedFiles(commit, commit, commit); err != nil {
+			t.Fatalf("RestoreSyncedFiles with empty diff should succeed: %v", err)
+		}
+	})
+}

@@ -336,6 +336,14 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 		return nil, fmt.Errorf("failed to sync working tree after merge: %w", err)
 	}
 
+	// Detect current branch early — needed for working tree restore on both
+	// success and rollback paths.
+	var warnings []string
+	currentBranch, branchErr := gitWrapper.GetCurrentBranch()
+	if branchErr != nil {
+		warnings = append(warnings, fmt.Sprintf("skipped working tree restore (branch detection failed: %v)", branchErr))
+	}
+
 	// Run integration tests if they exist
 	var testsRan bool
 	var noTestScriptFound bool
@@ -374,6 +382,9 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 				}
 			} else {
 				// Ref rolled back — sync working tree to match pre-merge state.
+				// This reverse sync undoes the forward SyncMergedFiles, returning
+				// the tree to its pre-MergeWorktree state. No additional restore
+				// is needed even when checked out on a non-integration branch.
 				if syncErr := gitWrapper.SyncMergedFiles(mergeCommit, preMergeHEAD); syncErr != nil {
 					log.Printf("wt-merge %s: WARNING — failed to sync working tree after rollback: %v", taskID, syncErr)
 				}
@@ -398,6 +409,13 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	} else {
 		// Distinguish actual stat failures from true missing-script cases.
 		log.Printf("wt-merge %s: WARNING — unable to stat integration test script at %s: %v; proceeding without tests", taskID, integrationTestScript, statErr)
+	}
+
+	// Restore working tree when checked-out branch differs from integration.
+	if branchErr == nil && currentBranch != integrationBranch {
+		if syncErr := gitWrapper.RestoreSyncedFiles(preMergeHEAD, mergeCommit, "HEAD"); syncErr != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to restore working tree: %v", syncErr))
+		}
 	}
 
 	// Update state to MERGED (before worktree cleanup — if write fails,
@@ -442,7 +460,6 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 
 	// Cleanup: Remove worktree (after state commit — safe to lose worktree now)
 	// Errors are non-fatal — state is already committed, collect as warnings
-	var warnings []string
 	if err := gitWrapper.RemoveWorktree(taskID); err != nil {
 		warnings = append(warnings, fmt.Sprintf("failed to remove worktree: %v", err))
 	}

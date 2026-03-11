@@ -223,6 +223,88 @@ func (g *Git) SyncMergedFiles(fromCommit, toCommit string) error {
 	return nil
 }
 
+// RestoreSyncedFiles undoes the working-tree changes made by SyncMergedFiles.
+// It restores each file affected by the syncFrom..syncTo range to the version
+// at restoreRef. Files that don't exist at restoreRef are removed from the
+// working tree and index. This keeps the working tree clean when the checked-out
+// branch differs from the integration branch that was advanced by update-ref.
+//
+// Uses --no-renames so renames appear as delete+add — the ls-tree filter then
+// handles both cases naturally.
+func (g *Git) RestoreSyncedFiles(syncFrom, syncTo, restoreRef string) error {
+	// Get affected files using --no-renames so renames flatten to delete+add.
+	output, err := g.exec("diff", "--no-renames", "--name-only", syncFrom+".."+syncTo)
+	if err != nil {
+		return fmt.Errorf("failed to diff %s..%s: %w", shortSHA(syncFrom), shortSHA(syncTo), err)
+	}
+	if output == "" {
+		return nil
+	}
+
+	affectedFiles := strings.Split(output, "\n")
+	var nonEmpty []string
+	for _, f := range affectedFiles {
+		if f != "" {
+			nonEmpty = append(nonEmpty, f)
+		}
+	}
+	if len(nonEmpty) == 0 {
+		return nil
+	}
+
+	// Check which files exist at restoreRef.
+	// -r recurses into subdirectories so pathspec matching works for nested paths.
+	lsArgs := append([]string{"ls-tree", "-r", "--name-only", restoreRef, "--"}, nonEmpty...)
+	lsOutput, err := g.exec(lsArgs...)
+	// ls-tree returns empty output (no error) when none of the files exist at restoreRef.
+	if err != nil {
+		return fmt.Errorf("failed to ls-tree %s: %w", restoreRef, err)
+	}
+
+	existsAtRef := make(map[string]bool)
+	if lsOutput != "" {
+		for _, f := range strings.Split(lsOutput, "\n") {
+			if f != "" {
+				existsAtRef[f] = true
+			}
+		}
+	}
+
+	var checkoutPaths []string
+	var removePaths []string
+	for _, f := range nonEmpty {
+		if existsAtRef[f] {
+			checkoutPaths = append(checkoutPaths, f)
+		} else {
+			removePaths = append(removePaths, f)
+		}
+	}
+
+	// Restore files that exist at restoreRef.
+	if len(checkoutPaths) > 0 {
+		args := append([]string{"checkout", restoreRef, "--"}, checkoutPaths...)
+		if _, err := g.exec(args...); err != nil {
+			return fmt.Errorf("failed to checkout files from %s: %w", restoreRef, err)
+		}
+	}
+
+	// Remove files that don't exist at restoreRef.
+	if len(removePaths) > 0 {
+		for _, f := range removePaths {
+			path := filepath.Join(g.projectRoot, f)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove file %s: %w", f, err)
+			}
+		}
+		args := append([]string{"rm", "--cached", "--ignore-unmatch", "--"}, removePaths...)
+		if _, err := g.exec(args...); err != nil {
+			return fmt.Errorf("failed to update index for removed files: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // shortSHA returns the first 7 characters of a SHA, or the full string if shorter.
 func shortSHA(sha string) string {
 	if len(sha) > 7 {

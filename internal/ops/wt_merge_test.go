@@ -1296,6 +1296,58 @@ func TestMergeWorktree_MissingWorktreeNoReviewCommit(t *testing.T) {
 	testhelpers.RequireErrorContains(t, err, "no review_commit")
 }
 
+func TestMergeWorktree_CleansWorkingTreeWhenNotOnIntegration(t *testing.T) {
+	taskID := "merge-clean-wt"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	// Switch main working tree to "main" — NOT integration.
+	testhelpers.MustGit(t, tmpDir, "checkout", "main")
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+	if result.MergeCommit == "" {
+		t.Fatal("MergeCommit should not be empty")
+	}
+
+	// Verify state updated to MERGED.
+	state := readStateForTest(t, stateFile)
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found in state")
+	}
+	if task.Status != models.TaskStatusMerged {
+		t.Errorf("Task status = %v, want MERGED", task.Status)
+	}
+
+	// After merge, working tree should be clean (relative to checked-out branch HEAD).
+	// .liza/ and .worktrees/ are infra dirs excluded from this assertion.
+	status := testhelpers.MustGit(t, tmpDir, "status", "--short")
+	for _, line := range strings.Split(status, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Parse git status --short format: "XY <path>" or "XY <old> -> <new>"
+		// Fields splits on whitespace; field 0 is status, field 1+ is path.
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		path := fields[1]
+		// Renames: "XY old -> new" — use the destination path.
+		if len(fields) >= 4 && fields[2] == "->" {
+			path = fields[3]
+		}
+		if strings.HasPrefix(path, ".liza/") || strings.HasPrefix(path, ".worktrees/") {
+			continue
+		}
+		t.Errorf("working tree not clean after merge: %s", line)
+	}
+}
+
 // readStateForTest reads state from a state file for test verification.
 func readStateForTest(t *testing.T, stateFile string) *models.State {
 	t.Helper()
