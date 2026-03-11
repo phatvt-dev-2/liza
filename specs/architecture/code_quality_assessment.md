@@ -7,37 +7,38 @@
 
 ## Repository Metrics Dashboard
 
-- **Production Code**: 22,898 lines of Go across 149 files *(was 23,424/138 — −526 LOC, +11 files)*
-- **Test Code**: 56,058 lines across 122 test files (2.45:1 test-to-production ratio) *(was 56,430/120, 2.41:1)*
-- **Test Functions**: 1,015 test cases with table-driven subtests *(was 997)*
+- **Production Code**: 23,776 lines of Go across 160 files *(was 22,898/149 — +878 LOC, +11 files from structural splits and strategy extraction)*
+- **Test Code**: 57,809 lines across 129 test files (2.43:1 test-to-production ratio) *(was 56,058/122, 2.45:1)*
+- **Test Functions**: 1,039 test cases with table-driven subtests *(was 1,015)*
 - **Behavioral Contracts**: 1,944 lines across 9 core documents + 20 skill protocols (4,461 lines)
 - **Specifications**: 103 Markdown files including 45 ADRs *(was 98/41)*
 - **Documentation**: 23 user-facing guides
 - **Dependencies**: 4 direct (cobra, yaml.v3, flock, fsnotify) — radically minimal
 - **CI/CD**: Multi-platform (Linux + macOS), Codecov integration, 23 pre-commit hooks *(was 21)*, E2E tests in CI
-- **Code Hygiene**: Zero TODOs, zero `nolint` directives, zero `panic()`, zero `interface{}` in production Go code; statuses and roles are typed constants
+- **Code Hygiene**: Zero TODOs, zero `nolint` directives, zero `panic()`, zero `interface{}` in production Go code; statuses, roles, and event names are typed constants
 
 ## Executive Summary
 
 Liza is a hybrid multi-agent coding orchestrator: Go-based deterministic supervisors enforce invariants while LLM agents handle judgment. The codebase demonstrates **exceptional engineering discipline** in its core runtime — minimal dependencies, comprehensive testing, atomic state management — combined with an unusually thorough specification and contract corpus that forms the product's core IP.
 
 **Key Strengths:**
-- **Test-first culture**: 2.45:1 test-to-production ratio with race detection, parallelization enforcement, and sleep guards — ratio improving as production LOC decreases
+- **Test-first culture**: 2.43:1 test-to-production ratio with race detection, parallelization enforcement, and sleep guards
 - **Radical dependency minimalism**: 4 direct dependencies for the entire Go runtime
-- **Pristine code hygiene**: Zero TODOs, zero `nolint`, zero `panic()`, zero untyped code in production *(pass 2)*
+- **Pristine code hygiene**: Zero TODOs, zero `nolint`, zero `panic()`, zero untyped code in production; event names now typed constants *(pass 2)*
 - **Atomic state management**: flock + temp-write + fsync + rename pattern prevents corruption
 - **Specification-driven development**: 103 spec files + 45 ADRs create extraordinary traceability
-- **Healthy refactoring trajectory**: Production LOC decreased 526 lines while test count grew by 18 — the codebase is getting leaner *(pass 2)*
+- **Healthy refactoring trajectory**: Structural splits added 11 files for navigability while test count grew by 42; codebase LOC increased modestly (+878 from strategy extraction, constants, and per-file overhead) *(pass 2)*
 
 **Areas for Improvement:**
-- **CLI registration monolith**: `cmd/liza/main.go` at 1,462 LOC with 34 cobra commands is the largest file by far *(pass 2)*
-- **Design-level complexity**: `ClaimTask()` uses boolean-flag dispatch (same pattern RoleStrategy replaced in agent); MCP tool registration is imperative ceremony amenable to declarative definitions; event name literals scattered across 17 files without constants *(pass 2)*
+- ~~**CLI registration monolith**: `cmd/liza/main.go` at 1,462 LOC~~ *(Resolved — split into 7 domain-specific files; `main.go` reduced to 95 LOC)*
+- ~~**Design-level complexity**: boolean-flag dispatch, imperative MCP registration, untyped event names~~ *(Largely resolved — claim strategy pattern, declarative tool registration, typed event constants; some raw literals remain in new strategy file and proceed.go)*
 - **Coverage reporting gap**: Codecov configured but coverage threshold not enforced in CI
 - **Python layer underspecified**: Supporting Python utilities lack tests
+- **Hardcoded `"orchestrator-1"` identity**: 7 production call sites still default to `"orchestrator-1"` — should resolve from workspace state *(pass 2)*
 
 **Overall Rating: A (Excellent)**
 
-The deduction from A+ is for: (1) file-level concentration in `cmd/liza/main.go` and `git/worktree.go`, (2) design-level complexity — boolean-flag dispatch in claim operations, imperative MCP registration, and untyped event name literals across 17 files, and (3) absent coverage enforcement despite strong testing culture.
+The deduction from A+ is for: (1) ~~file-level concentration in `cmd/liza/main.go` and `git/worktree.go`~~ *(resolved — both split into domain-specific files)*, (2) remaining design-level complexity — hardcoded `"orchestrator-1"` identity across 7 call sites, 6 orchestration functions still exceed 150 LOC, and (3) absent coverage enforcement despite strong testing culture.
 
 ---
 
@@ -62,13 +63,13 @@ The deduction from A+ is for: (1) file-level concentration in `cmd/liza/main.go`
 - **Precondition-heavy design**: Operations validate extensively before mutating, failing fast with typed errors
 - **Rebase conflict handling**: `submit_review.go` detects drift and returns actionable error messages, not generic failures
 - **Compare-and-swap for git refs**: Prevents lost updates during concurrent merges
-- **Strong test ratio**: 12,242 test LOC for 5,833 production LOC (2.09:1)
+- **Strong test ratio**: 12,282 test LOC for 5,984 production LOC (2.05:1)
 
 **Concerns:**
-- ~~`claim_task.go` (655 LOC) and `proceed.go` (533 LOC) are on the large side~~ *(Partially resolved — legacy code paths removed; `claim_task.go` 597 LOC, `proceed.go` 504 LOC)*
-- **Boolean-flag dispatch in `ClaimTask()`** (296 LOC): The function resolves claim type (fresh/rejected/integration-fix) into three boolean flags (`isFreshClaim`, `isRejectionClaim`, `isIntegrationFixClaim`), then threads them through worktree handling, state mutation, event naming, and cleanup. This is the same pattern RoleStrategy replaced in the agent package — polymorphic behavior encoded as flags instead of types. A claim strategy interface would eliminate the flags and make each claim path self-contained *(pass 2)*
-- 6 orchestration functions exceed 150 LOC: `ClaimTask` (296), `InitCommandWithConfig` (248), `MergeWorktree` (234), `SubmitForReview` (203), `SubmitVerdict` (185), `RecoverTask` (183) *(pass 2)*
-- **Event name string literals scattered across 17 files**: `"claimed"`, `"blocked"`, `"submitted_for_review"`, `"approved"`, `"rejected"`, `"merged"`, etc. are raw strings written to task history and matched by string comparison in `watch.go`, `inspect_tasks.go`, `proceed.go`, `update_sprint_metrics.go`. Unlike task statuses and role names (which are typed constants), event names have no constants — a typo would silently produce an unrecognized event *(pass 2)*
+- ~~`claim_task.go` (655 LOC) and `proceed.go` (533 LOC) are on the large side~~ *(Partially resolved — legacy code paths removed; `claim_task.go` 551 LOC with strategy extraction to `claim_task_strategy.go` 197 LOC, `proceed.go` 504 LOC)*
+- ~~**Boolean-flag dispatch in `ClaimTask()`** (296 LOC)~~ *(Resolved — claim strategy pattern extracted to `claim_task_strategy.go`; `ClaimTask()` reduced to 247 LOC of strategy dispatch. Each claim path (fresh/rejected/integration-fix) is now a self-contained strategy struct with `Preconditions()`, `WorktreePhase()`, `MutateTask()`, `EventName()` methods)*
+- 6 orchestration functions exceed 150 LOC: `InitCommandWithConfig` (248), `ClaimTask` (247), `MergeWorktree` (234), `SubmitForReview` (203), `SubmitVerdict` (185), `RecoverTask` (183) *(pass 2)*
+- ~~**Event name string literals scattered across 17 files**~~ *(Largely resolved — 28 `TaskEventName` typed constants defined in `models/history.go`; constants used across `statevalidate`, `ops`, `commands`, and `agent` packages. A few raw literals remain in `claim_task_strategy.go` and `proceed.go`)*
 - **Hardcoded `"orchestrator-1"` as assumed agent ID**: 8 production call sites (MCP schema defaults, CLI defaults, operation fallbacks) hardcode `"orchestrator-1"` as the default orchestrator identity. This is a user-supplied value (`liza agent orchestrator --agent-id orchestrator-1`), not a system constant. If a user runs with `--agent-id orchestrator-2`, the MCP server and several operations would silently default to the wrong identity. This should come from workspace state (the registered orchestrator agent) or at minimum a single configurable constant, not a magic string *(pass 2)*
 
 ### MCP Server (`internal/mcp/`) ★★★★☆
@@ -82,7 +83,7 @@ The deduction from A+ is for: (1) file-level concentration in `cmd/liza/main.go`
 
 **Concerns:**
 - ~~No handler-level middleware~~ *(Resolved — `728249e`: extracted into `middleware.go`)*
-- **Imperative tool registration**: `server_registration.go` (576 LOC) has two functions (`registerMutationTools` 238 LOC, `registerComplexOperations` 235 LOC) that repeat the same pattern: build `protocol.Tool{Name, Description, InputSchema}`, call `s.registerTool(tool, handler)`. A declarative approach — tool metadata as a `[]toolDef` slice with name, schema, handler, and optional role checker, registered in a loop — would collapse ~470 LOC of ceremony into data definitions + ~30 LOC of registration logic *(pass 2)*
+- ~~**Imperative tool registration**~~ *(Resolved — `server_registration.go` (668 LOC) now uses a `toolDef` struct with declarative `[]toolDef` slices registered via `registerToolDefs()` loop. Tool definitions are data; registration ceremony collapsed to ~30 LOC of loop logic)*
 
 ### Agent Supervision (`internal/agent/`) ★★★★☆
 
@@ -107,7 +108,7 @@ The deduction from A+ is for: (1) file-level concentration in `cmd/liza/main.go`
 - **Comprehensive rebase handling**: Conflict detection with structured error types
 
 **Concerns:**
-- `worktree.go` (591 LOC, 35 functions) is the most function-dense file in the codebase. Functions are individually well-sized (most under 30 LOC) but the file mixes 5 concerns: worktree CRUD, branch management, merge operations, rebase/diff operations, and query operations. The `Git` struct is a thin wrapper (only `projectRoot` + `exec`), so the cohesion issue is conceptual rather than coupling-based — separate files grouping by concern would suffice without needing separate types *(pass 2 — previously rated ★★★★★ with no concerns)*
+- ~~`worktree.go` (591 LOC, 35 functions) mixes 5 concerns~~ *(Resolved — split into 5 concern-based files: `worktree.go` (174 LOC, 7 functions — CRUD), `merge.go` (232 LOC, 10 functions), `rebase.go` (55 LOC, 4 functions), `query.go` (52 LOC, 4 functions), `git.go` (105 LOC, 10 functions — struct/constructor/exec helpers). Total: 618 LOC, 35 functions across 5 files)*
 
 ### State Validation (`internal/statevalidate/`) ★★★★★
 
@@ -118,19 +119,20 @@ The deduction from A+ is for: (1) file-level concentration in `cmd/liza/main.go`
 - **Well-documented invariants**: Doc comments on each validation function explain the invariant it protects
 
 **Concerns:**
-- Lowest test-to-production ratio in the codebase at 0.75:1 (583 test LOC for 774 production LOC, 20 test functions). The validation rules are individually simple (conditionals), and table-driven subtests cover multiple rules per function, but this critical package that guards all state invariants deserves deeper coverage *(pass 2 — previously listed as "None")*
+- ~~Lowest test-to-production ratio in the codebase at 0.75:1~~ *(Improved — now 1.33:1 (1,029 test LOC for 774 production LOC, 24 test functions). Edge-case tests added for task validation branches in `validate_task_test.go`)*
 
-### CLI Entry Point (`cmd/liza/`) ★★★☆☆
+### CLI Entry Point (`cmd/liza/`) ★★★★☆
 
-*(pass 2 — previously not assessed as a separate subsystem)*
+*(pass 2 — upgraded from ★★★☆☆ after structural split)*
 
 **Strengths:**
 - **Thin delegation**: Each command's `RunE` averages 5-15 lines — parses flags and delegates to `commands` or `ops`
 - **Consistent flag patterns**: All commands follow the same structure
+- **Domain-based organization**: Split into 7 files — `main.go` (95 LOC), `cmd_task.go` (280), `cmd_system.go` (489), `cmd_agent.go` (241), `cmd_review.go` (183), `cmd_init.go` (127), `cmd_worktree.go` (123) *(pass 2)*
 
 **Concerns:**
-- `main.go` at 1,462 LOC is the largest file in the codebase — 34 cobra command definitions, a 127-line `init()` registering them all, and all flag definitions in a single file. Most cobra projects split into per-command or per-domain files at 10+ commands
-- The `init()` function's 127-line registration block must be maintained in sync with command definitions — no compile-time enforcement prevents a command from being defined but not registered
+- ~~`main.go` at 1,462 LOC is the largest file in the codebase~~ *(Resolved — split into 7 domain-specific files; `main.go` reduced to 95 LOC with `main()`, `rootCmd`, shared helpers, and `init()`)*
+- The `init()` function's registration block must be maintained in sync with command definitions — no compile-time enforcement prevents a command from being defined but not registered
 
 ### CLI Commands (`internal/commands/`) ★★★★☆
 
@@ -178,7 +180,7 @@ This is Liza's core IP and most distinctive feature.
 ## Testing & Quality Infrastructure ★★★★★
 
 **Strengths:**
-- **2.45:1 test-to-production ratio**: Improving as production LOC decreases through refactoring *(was 2.41:1)*
+- **2.43:1 test-to-production ratio** *(was 2.45:1)*
 - **Pure standard library testing**: No external test frameworks — reduces dependency surface
 - **Table-driven tests throughout**: 80+ files use `t.Run()` subtests with structured test cases
 - **Race detection enabled by default**: `-race` flag in all CI runs
@@ -269,15 +271,13 @@ This is Liza's core IP and most distinctive feature.
 - `make check-embedded` target added, wired into `make lint`
 - Commits: `47e5597`, `bab9a78`
 
-#### 1.5 Split CLI Entry Point *(pass 2)*
-- **What**: `cmd/liza/main.go` (1,462 LOC) → per-domain files: `cmd_task.go` (add-task, claim-task, supersede, mark-blocked, delete-task), `cmd_worktree.go` (wt-create, wt-delete, wt-merge), `cmd_agent.go` (agent, delete-agent, recover-agent, recover-task), `cmd_review.go` (submit-for-review, submit-verdict, release-claim), `cmd_system.go` (watch, pause, stop, start, resume, status, get, proceed, sprint-checkpoint), `cmd_init.go` (setup, init, validate, version). Keep `main.go` with `main()`, `rootCmd`, shared helpers, and `init()`.
-- **Risk**: Low — pure structural split, zero behavior change, cobra registration is mechanical
-- **Impact**: Eliminates the largest file in the codebase. Prevents single-file bottleneck as commands grow.
+#### 1.5 Split CLI Entry Point — ✅ DONE *(pass 2)*
+- `cmd/liza/main.go` (1,462 LOC) → 7 domain-specific files: `main.go` (95 LOC), `cmd_task.go` (280), `cmd_system.go` (489), `cmd_agent.go` (241), `cmd_review.go` (183), `cmd_init.go` (127), `cmd_worktree.go` (123)
+- Commit: `7ac5ac8`
 
-#### 1.6 Group `git/worktree.go` by Concern *(pass 2)*
-- **What**: `worktree.go` (591 LOC, 35 functions) → files grouped by concern: `worktree.go` (CRUD: Create, Attach, Fresh, Remove, List, GetPath), `merge.go` (MergeTree, CreateCommitFromTree, UpdateRef, MergeBranch, SyncMergedFiles, DiffFiles), `rebase.go` (RebaseOnto, AbortRebase), `query.go` (CalculateDrift, IsAncestor, GetWorktreeHEAD, GetWorktreeBranch). Keep `git.go` for struct/constructor/exec helpers. The `Git` struct stays as-is — the shared state is thin (`projectRoot` + `exec`), so separate types would add ceremony without reducing coupling.
-- **Risk**: Low — all methods on the same receiver; grouping is purely organizational
-- **Impact**: Makes the most function-dense file navigable by concern. 35 → ~10 functions per file.
+#### 1.6 Group `git/worktree.go` by Concern — ✅ DONE *(pass 2)*
+- `worktree.go` (591 LOC, 35 functions) → 5 concern-based files: `worktree.go` (174 LOC, 7 functions — CRUD), `merge.go` (232, 10 functions), `rebase.go` (55, 4 functions), `query.go` (52, 4 functions), `git.go` (105, 10 functions — struct/constructor/exec)
+- Commit: `35e5c6d`
 
 ### Priority 2: Medium Impact / Medium Risk
 
@@ -301,34 +301,28 @@ This is Liza's core IP and most distinctive feature.
 - Risk: Low — additive only
 - Impact: Prevents silent breakage in supporting tooling
 
-#### 2.4 Improve `statevalidate` Test Ratio *(pass 2)*
-- **What**: Add table-driven tests for edge cases in `validate_task.go` (highest branching density: 79 if-statements in 371 LOC). Current ratio 0.75:1 is the lowest in the codebase. Target: at least 1.5:1 to match codebase median.
-- **Risk**: Low — additive test-only change
-- **Impact**: Critical validation package gets coverage proportional to its importance. Particularly valuable before adding new validation rules.
-- **Depends on**: None
+#### 2.4 Improve `statevalidate` Test Ratio — ✅ DONE *(pass 2)*
+- Test ratio improved from 0.75:1 to 1.33:1 (1,029 test LOC for 774 production LOC). `validate_task_test.go` grew from ~130 to 446 LOC with edge-case coverage for task validation branches. Test functions: 20 → 24.
+- Commit: `3a54845`
 
 #### 2.5 Eliminate Magic Literals *(pass 2)*
 
-**2.5a Event name constants** (Low risk):
-- **What**: Event names (`"claimed"`, `"blocked"`, `"submitted_for_review"`, `"approved"`, `"rejected"`, `"merged"`, `"superseded"`, `"reclaimed_after_rejection"`, `"pre_execution_checkpoint"`, etc.) are raw string literals scattered across 17 production files. Define them as typed constants in `models/` alongside the existing `TaskStatus` and `AgentStatus` constants. Mechanical find-and-replace; existing tests catch mismatches.
-- **Impact**: Eliminates silent bugs from event name typos. Completes the typing discipline already applied to statuses and roles.
+**2.5a Event name constants** — ✅ DONE (Low risk):
+- 28 `TaskEventName` typed constants defined in `models/history.go`. Constants replaced across `statevalidate`, `ops`, `commands`, and `agent` packages. A few raw literals remain in `claim_task_strategy.go` and `proceed.go`.
+- Commits: `e2baae9`, `0451f44`, `5b4cd5f`, `e08d3f5`, `4e4baed`
 
 **2.5b Resolve hardcoded `"orchestrator-1"` identity** (Medium risk):
 - **What**: 8 call sites hardcode `"orchestrator-1"` as the default orchestrator agent ID — in MCP schema defaults, CLI flag defaults, and operation fallbacks. This is a user-supplied value (`liza agent orchestrator --agent-id orchestrator-1`), not a system invariant. If a user runs with a different orchestrator ID, defaults silently assume the wrong identity. The fix is to resolve the orchestrator identity from workspace state (the registered agent with orchestrator role) rather than a magic string. A single `const` is a partial mitigation but doesn't solve the fundamental problem that the default should be dynamic, not static.
 - **Impact**: Prevents identity mismatch bugs in multi-orchestrator or renamed-orchestrator scenarios. Makes the system behave correctly regardless of the orchestrator agent's chosen ID.
 
-#### 2.6 Claim Strategy Pattern *(pass 2)*
+#### 2.6 Claim Strategy Pattern — ✅ DONE *(pass 2)*
 
-- **What**: Replace the boolean-flag dispatch in `ClaimTask()` (296 LOC) with a strategy interface. Currently, `isFreshClaim`/`isRejectionClaim`/`isIntegrationFixClaim` booleans are resolved from task status, then threaded through worktree handling (already partially dispatched via `handleClaimTaskWorktreePhase`), state mutation (lines 248-283), event naming, and cleanup. A `claimStrategy` interface with `Preconditions()`, `WorktreePhase()`, `MutateTask()`, `EventName()` methods would: (1) eliminate the boolean flags, (2) make each claim path self-contained and independently testable, (3) make adding new claim types a new struct rather than more branches. Same pattern as `RoleStrategy` in the agent package.
-- **Risk**: Medium — refactoring the most complex operation requires careful test verification
-- **Impact**: Addresses the root cause of `ClaimTask()`'s complexity rather than just its length. The worktree phase helpers already exist as partial extraction — this completes the pattern.
-- **Depends on**: None
+- `claimStrategy` interface extracted to `claim_task_strategy.go` (197 LOC) with `Preconditions()`, `WorktreePhase()`, `MutateTask()`, `EventName()` methods. Three implementations: `freshClaimStrategy`, `rejectedClaimStrategy`, `integrationFixClaimStrategy`. `ClaimTask()` reduced from 296 to 247 LOC of strategy dispatch. Boolean flags eliminated.
+- Commit: `9d68a78`
 
-#### 2.7 Declarative MCP Tool Registration *(pass 2)*
-- **What**: Replace the imperative registration in `server_registration.go` (`registerMutationTools` 238 LOC, `registerComplexOperations` 235 LOC) with declarative tool definitions. Define a `toolDef` struct containing name, description, input schema, handler, and optional role checker. Register all tools in a loop. The schema definitions stay the same size, but the registration ceremony (~470 LOC of repeated `s.registerTool(protocol.Tool{...}, handler)` calls) collapses to data + ~30 LOC of loop logic.
-- **Risk**: Medium — schema definitions are currently compile-time verified via `schema_consistency_test.go`; declarative approach must preserve that
-- **Impact**: Reduces ceremony, makes tool inventory scannable as data, simplifies adding new tools.
-- **Depends on**: None
+#### 2.7 Declarative MCP Tool Registration — ✅ DONE *(pass 2)*
+- `toolDef` struct with `registerToolDefs()` loop replaces imperative registration. `server_registration.go` (668 LOC) now defines tools as `[]toolDef` data slices. Schema consistency tests preserved.
+- Commit: `5350e71`
 
 ### Priority 3: Strategic / Long-term
 
@@ -351,10 +345,10 @@ This is Liza's core IP and most distinctive feature.
 
 ## Summary
 
-Liza is a technically rigorous project that practices what it preaches. The behavioral contracts that govern LLM agents are themselves enforced by well-tested Go code with atomic state management, comprehensive validation, and race-free concurrency patterns. The 2.45:1 test-to-production ratio, zero TODOs, zero `nolint`, zero `panic()`, and 4-dependency runtime reflect deliberate engineering discipline. The production LOC trajectory is healthy — decreasing through refactoring while test coverage expands.
+Liza is a technically rigorous project that practices what it preaches. The behavioral contracts that govern LLM agents are themselves enforced by well-tested Go code with atomic state management, comprehensive validation, and race-free concurrency patterns. The 2.43:1 test-to-production ratio, zero TODOs, zero `nolint`, zero `panic()`, and 4-dependency runtime reflect deliberate engineering discipline.
 
-The project's primary challenge is not code quality but **cognitive surface area**: 31,000+ lines of specifications, contracts, and skills create an extraordinary knowledge base that also presents a steep learning curve. The code itself is well-factored at the package level; the remaining concerns are a mix of structural (file-level concentration in `cmd/liza/main.go` and `git/worktree.go`) and design-level (`ClaimTask()`'s boolean-flag dispatch, imperative MCP registration). The structural issues are addressable through mechanical splits. The design issues would benefit from the same pattern-based approach that already improved the agent package (RoleStrategy) — strategy interfaces and declarative definitions rather than just method extraction.
+The project's primary challenge is not code quality but **cognitive surface area**: 31,000+ lines of specifications, contracts, and skills create an extraordinary knowledge base that also presents a steep learning curve. The code itself is well-factored at the package level; the remaining concerns are: (1) 6 orchestration functions still exceed 150 LOC, (2) hardcoded `"orchestrator-1"` identity across 7 call sites, and (3) absent coverage enforcement. The pass 2 refactoring sprint resolved the structural issues (CLI split, git/worktree split) and the design-level concerns (claim strategy pattern, declarative MCP registration, typed event constants).
 
 **Overall Rating: A (Excellent)**
 
-The deduction from A+ is for: (1) file-level concentration in `cmd/liza/main.go` and `git/worktree.go`, (2) design-level complexity in ops orchestration (boolean-flag dispatch) and MCP registration (imperative ceremony), and (3) absent coverage enforcement despite strong testing culture. All P1 items from the original assessment are resolved. New P1 items (1.5, 1.6) are low-risk structural splits; P2 items (2.5, 2.6) propose pattern-based approaches to the design-level concerns. The codebase quality is improving between assessments.
+The deduction from A+ is for: (1) 6 orchestration functions >150 LOC (the longest two at ~248 LOC each), (2) hardcoded `"orchestrator-1"` identity, and (3) absent coverage enforcement despite strong testing culture. All P1 items from both pass 1 and pass 2 are resolved. P2 items 2.4–2.7 are resolved; remaining P2 items are coverage enforcement (2.1), Python tests (2.3), and orchestrator identity (2.5b). The codebase quality is improving between assessments.
