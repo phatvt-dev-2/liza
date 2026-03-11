@@ -130,7 +130,7 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 		Description: input.Description,
 		Status:      initialStatus,
 		Priority:    input.Priority,
-		SpecRef:     input.SpecRef,
+		SpecRef:     paths.NormalizeSpecRef(input.SpecRef),
 		DoneWhen:    input.DoneWhen,
 		Scope:       input.Scope,
 		DependsOn:   normalizedDeps,
