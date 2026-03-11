@@ -77,5 +77,21 @@ IMPLEMENTATION PHASE:
    Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source).
 3. Update worktree artifacts required by DONE WHEN.
 4. Validate done_when criteria with concrete checks.
-5. Submit using liza_submit_for_review when complete.
+5. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza_submit_for_review until all pass):
+   a. Each output[] entry passes TASK DECOMPOSITION PRINCIPLE checks above.
+   b. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
+      ("tests pass" is vague; "TestFoo in pkg/bar passes asserting X" is falsifiable.)
+   c. Spec coverage: enumerate every requirement from the spec. Map each to at least one
+      output[] entry. Unmapped requirements = not ready to submit.
+   d. output[] completeness: one entry per planned coding task, each with all four fields
+      (desc, done_when, scope, spec_ref) populated.
+   e. output[] matches plan: compare each output[] entry's desc, done_when, scope, and
+      spec_ref against the plan file in the worktree — they must be identical, not
+      paraphrased or extended.
+   f. Cross-reference consistency: for every cross-reference in the plan ("owned by CPx",
+      "depends on CPx", "out of scope for CPx"), search the plan file you committed in the
+      worktree and confirm the referenced task explicitly states that responsibility,
+      dependency, or exclusion. If any reference points to a task that does not claim it,
+      fix the plan before submitting.
+6. Submit using liza_submit_for_review only after all checks in step 5 pass.
 {{- end -}}
