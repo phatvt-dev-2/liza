@@ -34,11 +34,11 @@ Liza is a hybrid multi-agent coding orchestrator: Go-based deterministic supervi
 - ~~**Design-level complexity**: boolean-flag dispatch, imperative MCP registration, untyped event names~~ *(Largely resolved — claim strategy pattern, declarative tool registration, typed event constants; some raw literals remain in new strategy file and proceed.go)*
 - **Coverage reporting gap**: Codecov configured but coverage threshold not enforced in CI
 - **Python layer underspecified**: Supporting Python utilities lack tests
-- **Hardcoded `"orchestrator-1"` identity**: 7 production call sites still default to `"orchestrator-1"` — should resolve from workspace state *(pass 2)*
+- **Hardcoded `"orchestrator-1"` identity**: 8 production call sites still default to `"orchestrator-1"` — should resolve from workspace state *(pass 2)*
 
 **Overall Rating: A (Excellent)**
 
-The deduction from A+ is for: (1) ~~file-level concentration in `cmd/liza/main.go` and `git/worktree.go`~~ *(resolved — both split into domain-specific files)*, (2) remaining design-level complexity — hardcoded `"orchestrator-1"` identity across 7 call sites, 6 orchestration functions still exceed 150 LOC, and (3) absent coverage enforcement despite strong testing culture.
+The deduction from A+ is for: (1) ~~file-level concentration in `cmd/liza/main.go` and `git/worktree.go`~~ *(resolved — both split into domain-specific files)*, (2) remaining design-level complexity — hardcoded `"orchestrator-1"` identity across 8 call sites, 6 orchestration functions still exceed 150 LOC, and (3) absent coverage enforcement despite strong testing culture.
 
 ---
 
@@ -69,7 +69,7 @@ The deduction from A+ is for: (1) ~~file-level concentration in `cmd/liza/main.g
 - ~~`claim_task.go` (655 LOC) and `proceed.go` (533 LOC) are on the large side~~ *(Partially resolved — legacy code paths removed; `claim_task.go` 551 LOC with strategy extraction to `claim_task_strategy.go` 197 LOC, `proceed.go` 504 LOC)*
 - ~~**Boolean-flag dispatch in `ClaimTask()`** (296 LOC)~~ *(Resolved — claim strategy pattern extracted to `claim_task_strategy.go`; `ClaimTask()` reduced to 247 LOC of strategy dispatch. Each claim path (fresh/rejected/integration-fix) is now a self-contained strategy struct with `Preconditions()`, `WorktreePhase()`, `MutateTask()`, `EventName()` methods)*
 - 6 orchestration functions exceed 150 LOC: `InitCommandWithConfig` (248), `ClaimTask` (247), `MergeWorktree` (234), `SubmitForReview` (203), `SubmitVerdict` (185), `RecoverTask` (183) *(pass 2)*
-- ~~**Event name string literals scattered across 17 files**~~ *(Largely resolved — 28 `TaskEventName` typed constants defined in `models/history.go`; constants used across `statevalidate`, `ops`, `commands`, and `agent` packages. A few raw literals remain in `claim_task_strategy.go` and `proceed.go`)*
+- ~~**Event name string literals scattered across 17 files**~~ *(Largely resolved — 26 `TaskEventName` typed constants defined in `models/history.go`; constants used across `statevalidate`, `ops`, `commands`, and `agent` packages. A few raw literals remain in `claim_task_strategy.go` and `proceed.go`)*
 - **Hardcoded `"orchestrator-1"` as assumed agent ID**: 8 production call sites (MCP schema defaults, CLI defaults, operation fallbacks) hardcode `"orchestrator-1"` as the default orchestrator identity. This is a user-supplied value (`liza agent orchestrator --agent-id orchestrator-1`), not a system constant. If a user runs with `--agent-id orchestrator-2`, the MCP server and several operations would silently default to the wrong identity. This should come from workspace state (the registered orchestrator agent) or at minimum a single configurable constant, not a magic string *(pass 2)*
 
 ### MCP Server (`internal/mcp/`) ★★★★☆
@@ -308,7 +308,7 @@ This is Liza's core IP and most distinctive feature.
 #### 2.5 Eliminate Magic Literals *(pass 2)*
 
 **2.5a Event name constants** — ✅ DONE (Low risk):
-- 28 `TaskEventName` typed constants defined in `models/history.go`. Constants replaced across `statevalidate`, `ops`, `commands`, and `agent` packages. A few raw literals remain in `claim_task_strategy.go` and `proceed.go`.
+- 26 `TaskEventName` typed constants defined in `models/history.go`. Constants replaced across `statevalidate`, `ops`, `commands`, and `agent` packages. A few raw literals remain in `claim_task_strategy.go` and `proceed.go`.
 - Commits: `e2baae9`, `0451f44`, `5b4cd5f`, `e08d3f5`, `4e4baed`
 
 **2.5b Resolve hardcoded `"orchestrator-1"` identity** (Medium risk):
@@ -347,7 +347,7 @@ This is Liza's core IP and most distinctive feature.
 
 Liza is a technically rigorous project that practices what it preaches. The behavioral contracts that govern LLM agents are themselves enforced by well-tested Go code with atomic state management, comprehensive validation, and race-free concurrency patterns. The 2.43:1 test-to-production ratio, zero TODOs, zero `nolint`, zero `panic()`, and 4-dependency runtime reflect deliberate engineering discipline.
 
-The project's primary challenge is not code quality but **cognitive surface area**: 31,000+ lines of specifications, contracts, and skills create an extraordinary knowledge base that also presents a steep learning curve. The code itself is well-factored at the package level; the remaining concerns are: (1) 6 orchestration functions still exceed 150 LOC, (2) hardcoded `"orchestrator-1"` identity across 7 call sites, and (3) absent coverage enforcement. The pass 2 refactoring sprint resolved the structural issues (CLI split, git/worktree split) and the design-level concerns (claim strategy pattern, declarative MCP registration, typed event constants).
+The project's primary challenge is not code quality but **cognitive surface area**: 31,000+ lines of specifications, contracts, and skills create an extraordinary knowledge base that also presents a steep learning curve. The code itself is well-factored at the package level; the remaining concerns are: (1) 6 orchestration functions still exceed 150 LOC, (2) hardcoded `"orchestrator-1"` identity across 8 call sites, and (3) absent coverage enforcement. The pass 2 refactoring sprint resolved the structural issues (CLI split, git/worktree split) and the design-level concerns (claim strategy pattern, declarative MCP registration, typed event constants).
 
 **Overall Rating: A (Excellent)**
 
