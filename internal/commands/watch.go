@@ -491,7 +491,7 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []alert {
 
 		var firstClaimer string
 		for _, entry := range task.History {
-			if entry.Event == "claimed" && entry.Agent != nil {
+			if entry.Event == models.TaskEventClaimed && entry.Agent != nil {
 				firstClaimer = *entry.Agent
 				break
 			}

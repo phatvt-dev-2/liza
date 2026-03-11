@@ -443,7 +443,7 @@ func TestCheckReassigned(t *testing.T) {
 					task.History = []models.TaskHistoryEntry{
 						{
 							Time:  now.Add(-1 * time.Hour),
-							Event: "claimed",
+							Event: models.TaskEventClaimed,
 							Agent: &firstClaimer,
 						},
 					}
@@ -463,7 +463,7 @@ func TestCheckReassigned(t *testing.T) {
 					task.History = []models.TaskHistoryEntry{
 						{
 							Time:  now.Add(-1 * time.Hour),
-							Event: "claimed",
+							Event: models.TaskEventClaimed,
 							Agent: &assignee,
 						},
 					}

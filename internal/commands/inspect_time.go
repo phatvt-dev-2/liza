@@ -20,7 +20,7 @@ func calculateTimeOnTask(task *models.Task) time.Duration {
 
 	var claimedTime time.Time
 	for _, entry := range task.History {
-		if entry.Event == "claimed" {
+		if entry.Event == models.TaskEventClaimed {
 			if claimedTime.IsZero() || entry.Time.After(claimedTime) {
 				claimedTime = entry.Time
 			}

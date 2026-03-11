@@ -183,7 +183,7 @@ func InitCommandWithConfig(params InitParams) error {
 			AlignmentHistory: []models.AlignmentHistory{
 				{
 					Timestamp: timestamp,
-					Event:     "initialization",
+					Event:     models.TaskEventInitialization,
 					Summary:   "Initial goal. No tasks defined yet.",
 				},
 			},

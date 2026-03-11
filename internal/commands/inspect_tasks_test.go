@@ -27,7 +27,7 @@ func TestInspectTasks(t *testing.T) {
 				AssignedTo:  &assignedTo,
 				Created:     now.Add(-2 * time.Hour),
 				History: []models.TaskHistoryEntry{
-					{Time: now.Add(-1 * time.Hour), Event: "claimed"},
+					{Time: now.Add(-1 * time.Hour), Event: models.TaskEventClaimed},
 				},
 			},
 			{
@@ -38,7 +38,7 @@ func TestInspectTasks(t *testing.T) {
 				BlockedReason: &blockedReason,
 				Created:       now.Add(-24 * time.Hour),
 				History: []models.TaskHistoryEntry{
-					{Time: now.Add(-23 * time.Hour), Event: "blocked"},
+					{Time: now.Add(-23 * time.Hour), Event: models.TaskEventBlocked},
 				},
 			},
 			{
@@ -225,8 +225,8 @@ func TestInspectTask(t *testing.T) {
 				AssignedTo:  &assignedTo,
 				Created:     now.Add(-2 * time.Hour),
 				History: []models.TaskHistoryEntry{
-					{Time: now.Add(-30 * time.Minute), Event: "created"},
-					{Time: now.Add(-1 * time.Hour), Event: "claimed"},
+					{Time: now.Add(-30 * time.Minute), Event: models.TaskEventCreated},
+					{Time: now.Add(-1 * time.Hour), Event: models.TaskEventClaimed},
 				},
 			},
 			{
@@ -237,9 +237,9 @@ func TestInspectTask(t *testing.T) {
 				BlockedReason: &blockedReason,
 				Created:       now.Add(-5 * time.Hour),
 				History: []models.TaskHistoryEntry{
-					{Time: now.Add(-5 * time.Hour), Event: "created"},
-					{Time: now.Add(-4 * time.Hour), Event: "claimed"},
-					{Time: now.Add(-2 * time.Hour), Event: "blocked"},
+					{Time: now.Add(-5 * time.Hour), Event: models.TaskEventCreated},
+					{Time: now.Add(-4 * time.Hour), Event: models.TaskEventClaimed},
+					{Time: now.Add(-2 * time.Hour), Event: models.TaskEventBlocked},
 				},
 			},
 		},
@@ -354,8 +354,8 @@ func TestTaskInfo_ComputedFields(t *testing.T) {
 		AssignedTo:  &assignedTo,
 		Created:     now.Add(-2 * time.Hour),
 		History: []models.TaskHistoryEntry{
-			{Time: now.Add(-2 * time.Hour), Event: "created"},
-			{Time: now.Add(-1 * time.Hour), Event: "claimed"},
+			{Time: now.Add(-2 * time.Hour), Event: models.TaskEventCreated},
+			{Time: now.Add(-1 * time.Hour), Event: models.TaskEventClaimed},
 		},
 	}
 
@@ -445,8 +445,8 @@ func TestCalculateTimeInStatus(t *testing.T) {
 				Status:  models.TaskStatusImplementing,
 				Created: now.Add(-5 * time.Hour),
 				History: []models.TaskHistoryEntry{
-					{Time: now.Add(-5 * time.Hour), Event: "created"},
-					{Time: now.Add(-2 * time.Hour), Event: "claimed"},
+					{Time: now.Add(-5 * time.Hour), Event: models.TaskEventCreated},
+					{Time: now.Add(-2 * time.Hour), Event: models.TaskEventClaimed},
 				},
 			},
 			expectedContains: "2h",
@@ -457,9 +457,9 @@ func TestCalculateTimeInStatus(t *testing.T) {
 				Status:  models.TaskStatusBlocked,
 				Created: now.Add(-10 * time.Hour),
 				History: []models.TaskHistoryEntry{
-					{Time: now.Add(-10 * time.Hour), Event: "created"},
-					{Time: now.Add(-8 * time.Hour), Event: "claimed"},
-					{Time: now.Add(-3 * time.Hour), Event: "blocked"},
+					{Time: now.Add(-10 * time.Hour), Event: models.TaskEventCreated},
+					{Time: now.Add(-8 * time.Hour), Event: models.TaskEventClaimed},
+					{Time: now.Add(-3 * time.Hour), Event: models.TaskEventBlocked},
 				},
 			},
 			expectedContains: "3h",

@@ -61,7 +61,7 @@ func TestCalculateTimeOnTask(t *testing.T) {
 				History: []models.TaskHistoryEntry{
 					{
 						Time:  now.Add(-1 * time.Hour),
-						Event: "claimed",
+						Event: models.TaskEventClaimed,
 					},
 				},
 			},
