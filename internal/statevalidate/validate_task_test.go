@@ -1,0 +1,446 @@
+package statevalidate
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+func TestValidateTaskInvariants_EnforcesStatusSpecificRequiredFields(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+
+	cases := []struct {
+		name    string
+		task    func() models.Task
+		wantErr string
+	}{
+		{
+			name: "initial status rejects assigned_to",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())
+				task.AssignedTo = testhelpers.StringPtr("coder-1")
+				return task
+			},
+			wantErr: "DRAFT_CODE task with assigned_to: task-1",
+		},
+		{
+			name: "executing status requires assigned_to",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+				task.AssignedTo = nil
+				return task
+			},
+			wantErr: "IMPLEMENTING_CODE task without assigned_to: task-1",
+		},
+		{
+			name: "executing status requires worktree",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+				task.Worktree = nil
+				return task
+			},
+			wantErr: "IMPLEMENTING_CODE task without worktree: task-1",
+		},
+		{
+			name: "executing status requires base_commit when not integration fix",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+				task.BaseCommit = nil
+				return task
+			},
+			wantErr: "IMPLEMENTING_CODE task without base_commit: task-1",
+		},
+		{
+			name: "executing status requires lease_expires",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+				task.LeaseExpires = nil
+				return task
+			},
+			wantErr: "IMPLEMENTING_CODE task without lease_expires: task-1",
+		},
+		{
+			name: "submitted status requires review_commit",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, time.Now().UTC())
+				task.ReviewCommit = nil
+				return task
+			},
+			wantErr: "CODE_READY_FOR_REVIEW task without review_commit: task-1",
+		},
+		{
+			name: "reviewing status requires reviewing_by",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())
+				task.ReviewingBy = nil
+				return task
+			},
+			wantErr: "REVIEWING_CODE task without reviewing_by: task-1",
+		},
+		{
+			name: "reviewing status requires review_lease_expires",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())
+				task.ReviewLeaseExpires = nil
+				return task
+			},
+			wantErr: "REVIEWING_CODE task without review_lease_expires: task-1",
+		},
+		{
+			name: "reviewing status requires review_commit",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())
+				task.ReviewCommit = nil
+				return task
+			},
+			wantErr: "REVIEWING_CODE task without review_commit: task-1",
+		},
+		{
+			name: "approved status requires review_commit",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusApproved, time.Now().UTC())
+				task.ReviewCommit = nil
+				return task
+			},
+			wantErr: "CODE_APPROVED task without review_commit: task-1",
+		},
+		{
+			name: "merged status rejects lingering worktree",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+				task.Worktree = testhelpers.StringPtr(".worktrees/task-1")
+				return task
+			},
+			wantErr: "MERGED task still has worktree: task-1",
+		},
+		{
+			name: "blocked status requires blocked_reason",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, time.Now().UTC())
+				task.BlockedReason = nil
+				return task
+			},
+			wantErr: "BLOCKED task without blocked_reason: task-1",
+		},
+		{
+			name: "blocked status requires blocked_questions",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, time.Now().UTC())
+				task.BlockedQuestions = nil
+				return task
+			},
+			wantErr: "BLOCKED task without blocked_questions: task-1",
+		},
+		{
+			name: "rejected status requires rejection_reason",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, time.Now().UTC())
+				task.RejectionReason = nil
+				return task
+			},
+			wantErr: "CODE_REJECTED task without rejection_reason: task-1",
+		},
+		{
+			name: "superseded status requires superseded_by",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, time.Now().UTC())
+				task.SupersededBy = nil
+				task.RescopeReason = testhelpers.StringPtr("replaced")
+				return task
+			},
+			wantErr: "SUPERSEDED task without superseded_by: task-1",
+		},
+		{
+			name: "superseded status requires rescope_reason",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, time.Now().UTC())
+				task.RescopeReason = nil
+				return task
+			},
+			wantErr: "SUPERSEDED task without rescope_reason: task-1",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
+			assertErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestValidateTaskInvariants_CompletionFieldRequirements(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+
+	cases := []struct {
+		name        string
+		task        func() models.Task
+		wantErr     string
+		useResolver bool
+	}{
+		{
+			name: "executing task requires done_when",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+				task.DoneWhen = ""
+				return task
+			},
+			wantErr:     "non-DRAFT task missing done_when: task-1",
+			useResolver: true,
+		},
+		{
+			name: "merged task requires spec_ref",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+				task.SpecRef = ""
+				return task
+			},
+			wantErr:     "non-DRAFT task missing spec_ref: task-1",
+			useResolver: true,
+		},
+		{
+			name: "pipeline initial status is exempt",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())
+				task.SpecRef = ""
+				task.DoneWhen = ""
+				return task
+			},
+			useResolver: true,
+		},
+		{
+			name: "draft coding plan is exempt",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraftCodingPlan, time.Now().UTC())
+				task.SpecRef = ""
+				task.DoneWhen = ""
+				return task
+			},
+		},
+		{
+			name: "superseded is exempt",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, time.Now().UTC())
+				task.SpecRef = ""
+				task.DoneWhen = ""
+				task.RescopeReason = testhelpers.StringPtr("replaced")
+				return task
+			},
+		},
+		{
+			name: "abandoned is exempt",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusAbandoned, time.Now().UTC())
+				task.SpecRef = ""
+				task.DoneWhen = ""
+				return task
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			task := tc.task()
+			state := stateWithTasks(task)
+
+			var err error
+			if tc.useResolver {
+				err = validateTaskInvariants(state, "", true, resolver, cfg)
+			} else {
+				err = validateTaskInvariants(state, "", true, nil, nil)
+			}
+
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
+				}
+				return
+			}
+
+			assertErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestValidateTaskInvariants_IntegrationFixHistoryLinkage(t *testing.T) {
+	cases := []struct {
+		name    string
+		task    func() models.Task
+		wantErr string
+	}{
+		{
+			name: "rejects integration fix without failed history",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+				task.IntegrationFix = true
+				return task
+			},
+			wantErr: "task task-1 has integration_fix:true but no INTEGRATION_FAILED event in history",
+		},
+		{
+			name: "accepts integration fix with failed history",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+				task.IntegrationFix = true
+				task.History = []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: "integration_failed",
+					},
+				}
+				return task
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, nil, nil)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
+				}
+				return
+			}
+			assertErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestValidateTaskInvariants_RejectsBrokenReferencesAndOutput(t *testing.T) {
+	cases := []struct {
+		name    string
+		tasks   []models.Task
+		wantErr string
+	}{
+		{
+			name: "duplicate failed_by agents",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+					task.FailedBy = []string{"coder-1", "coder-1"}
+					return task
+				}(),
+			},
+			wantErr: "task task-1 has duplicate agent IDs in failed_by",
+		},
+		{
+			name: "parent task must exist",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+					task.ParentTask = testhelpers.StringPtr("missing-parent")
+					return task
+				}(),
+			},
+			wantErr: "task task-1 has parent_task referencing non-existent task 'missing-parent'",
+		},
+		{
+			name: "output entry requires desc",
+			tasks: []models.Task{
+				func() models.Task {
+					task := validOutputTask("task-1")
+					task.Output[0].Desc = ""
+					return task
+				}(),
+			},
+			wantErr: "task task-1 output[0] missing desc",
+		},
+		{
+			name: "output entry requires done_when",
+			tasks: []models.Task{
+				func() models.Task {
+					task := validOutputTask("task-1")
+					task.Output[0].DoneWhen = ""
+					return task
+				}(),
+			},
+			wantErr: "task task-1 output[0] missing done_when",
+		},
+		{
+			name: "output entry requires scope",
+			tasks: []models.Task{
+				func() models.Task {
+					task := validOutputTask("task-1")
+					task.Output[0].Scope = ""
+					return task
+				}(),
+			},
+			wantErr: "task task-1 output[0] missing scope",
+		},
+		{
+			name: "output entry requires spec_ref",
+			tasks: []models.Task{
+				func() models.Task {
+					task := validOutputTask("task-1")
+					task.Output[0].SpecRef = ""
+					return task
+				}(),
+			},
+			wantErr: "task task-1 output[0] missing spec_ref",
+		},
+		{
+			name: "valid parent reference passes",
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("parent", models.TaskStatusMerged, time.Now().UTC()),
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("child", models.TaskStatusMerged, time.Now().UTC())
+					task.ParentTask = testhelpers.StringPtr("parent")
+					return task
+				}(),
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTaskInvariants(stateWithTasks(tc.tasks...), "", true, nil, nil)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
+				}
+				return
+			}
+			assertErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+func validOutputTask(taskID string) models.Task {
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusMerged, time.Now().UTC())
+	task.Output = []models.OutputEntry{
+		{
+			Desc:     "Implement follow-up work",
+			DoneWhen: "Follow-up behavior is covered",
+			Scope:    "state validation",
+			SpecRef:  "specs/plans/refactor.md",
+		},
+	}
+	return task
+}
+
+func stateWithTasks(tasks ...models.Task) *models.State {
+	state := testhelpers.CreateValidState()
+	state.Tasks = tasks
+	state.Sprint.Scope.Planned = make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+	return state
+}
+
+func assertErrorContains(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("validateTaskInvariants() error = nil, want substring %q", want)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("validateTaskInvariants() error = %q, want substring %q", err.Error(), want)
+	}
+}
