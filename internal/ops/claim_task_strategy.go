@@ -25,6 +25,7 @@ type claimContext struct {
 type claimStrategy interface {
 	validate(*models.Task, *models.State, string, string, *claimContext) error
 	enforceIterationLimit() bool
+	requiresDependencyRecheck() bool
 	handleWorktree(*db.Blackboard, *git.Git, *claimContext) (claimWorktreePhaseResult, error)
 	shouldRunPostWorktreeCmd(claimWorktreePhaseResult) bool
 	mutateTask(*models.Task, *claimContext)
@@ -45,6 +46,10 @@ func (freshClaimStrategy) validate(task *models.Task, state *models.State, runti
 
 func (freshClaimStrategy) enforceIterationLimit() bool {
 	return false
+}
+
+func (freshClaimStrategy) requiresDependencyRecheck() bool {
+	return true
 }
 
 func (freshClaimStrategy) handleWorktree(
@@ -103,6 +108,10 @@ func (rejectedClaimStrategy) validate(task *models.Task, _ *models.State, runtim
 
 func (rejectedClaimStrategy) enforceIterationLimit() bool {
 	return true
+}
+
+func (rejectedClaimStrategy) requiresDependencyRecheck() bool {
+	return false
 }
 
 func (rejectedClaimStrategy) handleWorktree(
@@ -164,6 +173,10 @@ func (integrationFixClaimStrategy) validate(task *models.Task, _ *models.State, 
 }
 
 func (integrationFixClaimStrategy) enforceIterationLimit() bool {
+	return false
+}
+
+func (integrationFixClaimStrategy) requiresDependencyRecheck() bool {
 	return false
 }
 

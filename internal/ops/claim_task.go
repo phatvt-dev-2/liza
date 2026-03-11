@@ -220,8 +220,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 			}
 		}
 
-		// For fresh claims: re-check dependencies
-		if _, ok := strategy.(freshClaimStrategy); ok {
+		// Re-check dependencies under lock for strategies that require it
+		if strategy.requiresDependencyRecheck() {
 			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
 				return fmt.Errorf("race condition: dependencies changed: %v", unmet)
 			}
