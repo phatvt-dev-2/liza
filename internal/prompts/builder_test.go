@@ -547,8 +547,10 @@ func TestBuildCoderContext(t *testing.T) {
 				"If context exhaustion is near (~90%)",
 				"--- IMPLEMENTATION PHASE ---",
 				"Work ONLY in the worktree directory. Use git -C /project/.worktrees/task-1 for all git commands.",
-				"WORKTREE GIT RULES:",
+				"WORKTREE RULES:",
 				"MUST use -C /project/.worktrees/task-1",
+				"edit tool tracks reads by string",
+				"CREATE new files",
 				"COMMIT WORKFLOW:",
 				"files were modified by this hook",
 				"TDD (code tasks): Write tests FIRST",
@@ -671,6 +673,9 @@ func TestBuildCoderContext(t *testing.T) {
 				"liza_submit_for_review",
 				"\"task_id\": \"task-1\"",
 				"\"agent_id\": \"coder-1\"",
+				"WORKTREE RULES:",
+				"edit tool tracks reads by string",
+				"CREATE new files",
 			},
 		},
 		{
@@ -1094,7 +1099,7 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		"liza_add_tasks",
 		"liza_submit_for_review",
 		"liza_submit_verdict",
-		"WORKTREE GIT RULES",
+		"WORKTREE RULES",
 		"IMPLEMENTATION PHASE",
 		"REVIEW CHECKLIST",
 		"VERDICT SUBMISSION",
@@ -1621,6 +1626,9 @@ func TestBuildCodePlannerContext(t *testing.T) {
 		"liza_write_checkpoint",
 		"REFACTORING TASKS:",
 		"done_when MUST distinguish behavioral test changes (not expected) from mechanical test",
+		"WORKTREE RULES",
+		"edit tool tracks reads by string",
+		"CREATE new files",
 	}
 	for _, want := range wantContains {
 		if !strings.Contains(prompt, want) {
@@ -1771,9 +1779,11 @@ func TestBuildEpicPlannerContext(t *testing.T) {
 		"one cohesive capability area",
 		"3–8 user stories",
 
-		// Worktree git rules
-		"WORKTREE GIT RULES",
+		// Worktree rules
+		"WORKTREE RULES",
 		"MUST use -C",
+		"edit tool tracks reads by string",
+		"CREATE new files",
 
 		// Implementation phase
 		"IMPLEMENTATION PHASE",
@@ -1825,9 +1835,11 @@ func TestBuildUSWriterContext(t *testing.T) {
 		"~/.liza/skills/user-story-writing/SKILL.md",
 		// SMARC criteria
 		"SMARC",
-		// Worktree git rules
-		"WORKTREE GIT RULES",
+		// Worktree rules
+		"WORKTREE RULES",
 		"MUST use -C",
+		"edit tool tracks reads by string",
+		"CREATE new files",
 	}
 	for _, want := range wantContains {
 		if !strings.Contains(prompt, want) {

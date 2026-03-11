@@ -70,8 +70,11 @@ Anti-patterns to avoid:
 - Generic Persona: "As a User" where "User" could be any noun
 - Valueless Story: hand-waving the "so that" clause
 
-WORKTREE GIT RULES:
+WORKTREE RULES:
 - All git commands MUST use -C {{.WorktreePath}} to prevent shared state corruption.
+- File Read/Edit paths must match exactly — the edit tool tracks reads by string, not inode.
+  Use {{.WorktreePath}}/path for ALL file operations. Never retype or reconstruct the path.
+- To CREATE new files: use Write directly without Read. Do not attempt Read first (it will error).
 
 IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
