@@ -48,13 +48,11 @@ Persistent record of issues identified by architectural analysis skills.
   - [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
   - [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments)
   - [Manual Sprint Transitions as Scaling Bottleneck](#manual-sprint-transitions-as-scaling-bottleneck)
-  - ~~[Unbounded Integration Test Execution](#unbounded-integration-test-execution)~~ *(Resolved)*
 - [Fragility](#fragility)
   - [Cross-Script State Mutation](#cross-script-state-mutation)
   - [Bootstrap Artifact Path Drift](#bootstrap-artifact-path-drift)
   - [File-Based Spec References Without Version Anchors](#file-based-spec-references-without-version-anchors)
   - [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation)
-  - ~~[MCP Admin Handler Authorization Gap](#mcp-admin-handler-authorization-gap)~~ *(Resolved)*
   - [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap)
 - [Blind Spots](#blind-spots)
   - [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification)
@@ -135,9 +133,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | FRAGILITY | [File-Based Spec References Without Version Anchors](#file-based-spec-references-without-version-anchors) |
 | **medium** | FRAGILITY | [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation) |
 | **medium** | FRAGILITY | [State Validation Composition Gap](#state-validation-composition-gap) |
-| ~~medium~~ | ~~FRAGILITY~~ | ~~[MCP Admin Handler Authorization Gap](#mcp-admin-handler-authorization-gap)~~ *(Resolved)* |
 | **medium** | FRAGILITY | [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) |
-| ~~medium~~ | ~~STRESS POINT~~ | ~~[Unbounded Integration Test Execution](#unbounded-integration-test-execution)~~ *(Resolved)* |
 | **medium** | BLIND SPOT | [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification) |
 | **medium** | BLIND SPOT | [Initialization Completion Unverifiable](#initialization-completion-unverifiable) |
 | **medium** | BLIND SPOT | [Sprint Metrics Lossy at Sprint Boundary](#sprint-metrics-lossy-at-sprint-boundary) |
@@ -579,15 +575,6 @@ Bottlenecks that emerge under load.
 - Batch multiple pipeline transitions into single human review gate
 - Async notification with timeout-based auto-proceed for non-critical pipelines
 
-### ~~Unbounded Integration Test Execution~~ *(Resolved — verification 2026-03-11)*
-
-**Skill:** software-architecture-review
-**Category:** STRESS POINT
-
-**Issue:** ~~`MergeWorktree` runs integration tests with no timeout~~ — **Resolved.** `MergeWorktree` now uses `exec.CommandContext` with `DefaultIntegrationTestTimeout` (10m). On Unix, process group kill (`Setpgid` + `SIGKILL` on `-pgid` via `exec_unix.go`) terminates the entire process tree. `WaitDelay` (5s) ensures `cmd.Wait` returns on both platforms even if child processes hold pipes open. Test covers timeout behavior.
-
-**Resolution:** `wt_merge.go:355` uses `context.WithTimeout(context.Background(), DefaultIntegrationTestTimeout)` + `exec.CommandContext`.
-
 ---
 
 ## Fragility
@@ -665,15 +652,6 @@ Partial failure modes with unclear recovery.
 **Implication:** The composition logic — which validators run, in what order, how errors aggregate — is untested. A bug in `ValidateStateFile` (the top-level entry point invoked by `liza validate` CLI and MCP `liza_validate` tool) could skip validators entirely without detection. Since `liza validate` is the primary mechanism for detecting blackboard corruption, this gap affects the system's self-healing capability.
 
 **Direction:** Table-driven tests calling `ValidateStateFile` with various malformed states (missing required fields, invalid agent invariants, malformed anomalies, broken handoff entries, missing spec files) would cover the composition layer cheaply. The inner validators' existing coverage means only the wiring needs testing.
-
-### ~~MCP Admin Handler Authorization Gap~~ *(Resolved — verification 2026-03-11)*
-
-**Skill:** software-architecture-review
-**Category:** FRAGILITY
-
-**Issue:** ~~7 state-mutating MCP handlers skip role validation~~ — **Resolved.** All handlers now have role checks via declarative `roleChecker` field in `server_registration.go`: admin ops use `checkOrchestrator`, `handleWtCreate` uses `requireDoerRole`, `handleWtDelete` uses `requireDoerOrOrchestratorRole`. `handleMarkBlocked` intentionally skips role check — ops-layer assignment check is sufficient.
-
-**Resolution:** Declarative role-checker registration pattern in `server_registration.go` ensures all mutation tools enforce role validation. The `roleChecker` field on `toolDefinition` is checked at registration time by `withRole()` middleware.
 
 ### SetTaskOutput spec_ref Validation Gap
 
@@ -952,7 +930,7 @@ Failure propagation and compound interaction effects.
 **Category:** CASCADE
 **Related:** [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure), [Role Addition Accelerates Contract Complexity Pressure](#role-addition-accelerates-contract-complexity-pressure), [Supervisor Contention](#supervisor-contention), [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments), [Filesystem/Git I/O Contention](#filesystemgit-io-contention)
 
-**Issue:** The sub-pipelines spec (Phase 2: Epic Planner → Epic Plan Reviewer → US Writer → US Reviewer → Code Planner → Code Plan Reviewer → Coder → Code Reviewer) adds 4 new roles to the current 4. Every issue in this registry that scales with role count compounds: "Contract Complexity vs Context Pressure" (8 roles × role-specific contract sections), "Role Addition Accelerates Contract Complexity Pressure" (acknowledged trajectory), ~~"waitForXWork structural duplication" (8 role-specific wait functions already, doubling to 16)~~ *(resolved: refactored to generic callback pattern — no longer scales with role count)*, "Supervisor Contention" (8 concurrent supervisors vs current 3-4), "Cache Coherence Gap" (more processes, more stale reads), "Filesystem/Git I/O Contention" (more worktrees, more concurrent git operations). The architecture review (pass 13) notes production code grew 11% faster than tests during pipeline expansion. The compound effect is unmeasured: the 45+ open architectural issues are documented as independent concerns, yet under 8-role deployment they interact — supervisor contention amplifies lease churn, which amplifies restart frequency, which amplifies cache coherence gaps.
+**Issue:** The sub-pipelines spec (Phase 2: Epic Planner → Epic Plan Reviewer → US Writer → US Reviewer → Code Planner → Code Plan Reviewer → Coder → Code Reviewer) adds 4 new roles to the current 4. Every issue in this registry that scales with role count compounds: "Contract Complexity vs Context Pressure" (8 roles × role-specific contract sections), "Role Addition Accelerates Contract Complexity Pressure" (acknowledged trajectory), "waitForXWork" refactored to generic callback pattern (no longer scales with role count), "Supervisor Contention" (8 concurrent supervisors vs current 3-4), "Cache Coherence Gap" (more processes, more stale reads), "Filesystem/Git I/O Contention" (more worktrees, more concurrent git operations). The architecture review (pass 13) notes production code grew 11% faster than tests during pipeline expansion. The compound effect is unmeasured: the 45+ open architectural issues are documented as independent concerns, yet under 8-role deployment they interact — supervisor contention amplifies lease churn, which amplifies restart frequency, which amplifies cache coherence gaps.
 
 **Implication:** Phase 2 deployment activates interaction effects between issues that were individually tolerable at 3-role scale; the risk profile is combinatorial, not additive.
 

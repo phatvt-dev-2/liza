@@ -54,13 +54,13 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 **Purpose:** Core domain model. Task lifecycle state machine, agent state, sprint tracking.
 
 **Observations:**
-- `State` struct is the central data type — serialized to/from `state.yaml`. ~~`state.go` is 937 LOC with 20+ structs~~ *(P1.2 resolved: split into `state.go` (43), `task.go` (431), `agent.go` (51), `sprint.go` (137), `config.go` (132), `history.go` (163) — commit `82258fe`)*
+- `State` struct is the central data type — serialized to/from `state.yaml`. Split into `state.go` (43), `task.go` (431), `agent.go` (51), `sprint.go` (137), `config.go` (132), `history.go` (163) *(P1.2, commit `82258fe`)*
 - `Task` struct has 30+ fields covering full lifecycle
 - `TaskType` → role workflow registry (`taskWorkflows` map)
 - `IsClaimable()` encodes claiming rules with dependency checking
 - 12 task statuses with `IsValid()`, `IsTerminal()` methods
-- ~~Pure leaf package: zero internal imports, zero external imports — clean domain boundary~~ *(pass 3, Boundaries lens — stale since pass 13)*: `models` now imports `internal/roles` (both `state.go` and `diagnostics.go`). `roles` is itself a leaf, so this is a shallow dependency, but `models` is no longer the zero-dependency foundation described in earlier passes.
-- ~~`diagnostics.go` (127 LOC) has no corresponding test file~~ *(pass 4, Coverage lens — resolved)*: `diagnostics_test.go` now exists. File grew to 202 LOC *(pass 13)*
+- `models` now imports `internal/roles` (both `state.go` and `diagnostics.go`). `roles` is itself a leaf, so this is a shallow dependency, but `models` is no longer the zero-dependency foundation described in earlier passes *(pass 13)*
+- `diagnostics_test.go` exists. File grew to 202 LOC *(pass 13)*
 
 #### db (`internal/db/`) — ~500 LOC *(health check: was 864 — shrunk, likely extraction to filelock)*
 
@@ -90,11 +90,11 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - `workdetection.go` (~170 LOC): 6 planner wake trigger types, now declarative via `plannerWakeTriggerSpecs` (trigger → description → state predicate) replacing imperative branching. `DetectOrchestratorWakeTriggers()` is a pure state-query function consumed by both `agent/supervisor.go` and `commands/status.go` (the latter creating a cross-layer dependency) *(pass 14, Boundaries lens)*
 - `logging.go`: package-level singleton `slog.Logger`, hardcoded to stdout
 - **Core execution paths untested**: `Execute()`, `ExecuteInteractive()`, `handleApprovedMerges()`, `logTaskSubmissionIfCompleted()` at 0% statement coverage; `resumeHandoffTask()` at 11.4%. These are the actual agent loop entry points — tested indirectly via `TestSupervisorBasicLoop` with mock executor but not at statement level *(pass 4, Coverage lens)*
-- **`handleApprovedMerges` nesting**: 47 LOC (was 55) with max nesting depth ~4-5 (for-range → if-conditions → if-err → errors.As). Improved with cleaner early returns. Still has nested `IntegrationFailedError` field processing. ~~Relatedly, `resumeHandoffTask` (63 LOC) reaches nesting depth 5 inside its `bb.Modify` closure~~ *(pass 7, Complexity lens — resolved: `ac4ce6f5` extracted `resumeHandoffTask` to `ops.ResumeHandoff`)*
-- ~~**Role string literals instead of constants**~~ *(pass 6, Coupling lens — resolved: `a60c72e`)*: `internal/roles` package introduced with `RuntimeCoder`, `RuntimeCodeReviewer`, `RuntimePlanner` constants and `ToWorkflow()`/`ToRuntime()` mapping. All agent/, cmd/, and ops/ files now import role constants. ~~1 residual: `claiming.go:115` still uses `Role: "coder"` literal~~ *(pass 13: resolved)*
+- **`handleApprovedMerges` nesting**: 47 LOC (was 55) with max nesting depth ~4-5 (for-range → if-conditions → if-err → errors.As). Improved with cleaner early returns. Still has nested `IntegrationFailedError` field processing. `resumeHandoffTask` extracted to `ops.ResumeHandoff` *(pass 7, resolved: `ac4ce6f5`)*
+- **Role string literals**: `internal/roles` package introduced with `RuntimeCoder`, `RuntimeCodeReviewer`, `RuntimePlanner` constants and `ToWorkflow()`/`ToRuntime()` mapping. All agent/, cmd/, and ops/ files now import role constants *(pass 6, resolved: `a60c72e`)*
 - **Duplicated identity validation**: `registration.go:validateIdentity()` reimplements `identity.ValidateFormat()` + `identity.ValidateRole()` — same algorithm (split on last hyphen, validate numeric suffix, check role prefix) without importing the `identity` package *(pass 6, Coupling lens)*
 - **Hardcoded `"terminal-1"` and raw `1800`**: `supervisor.go:386` passes `"terminal-1"` literal and `1800` instead of `models.DefaultLeaseDurationSeconds`; `supervisor.go:501` also uses raw `1800` *(pass 6, Coupling lens; pass 13: line numbers updated)*
-- ~~**waitForXWork structural duplication**: 8 role-specific wait functions~~ *(pass 13, Complexity lens — resolved)*: Refactored to 2 generic functions (`waitForWorkEventDriven`, `waitForWorkPolling`) accepting a `workCheckFunc` callback. File is now 213 LOC (was 412). Adding a new role no longer requires new wait functions.
+- **waitForXWork refactored**: 2 generic functions (`waitForWorkEventDriven`, `waitForWorkPolling`) accepting a `workCheckFunc` callback. File is now 213 LOC (was 412). Adding a new role no longer requires new wait functions *(pass 13, resolved)*
 
 #### statevalidate (`internal/statevalidate/`) — ~660 LOC *(health check: was 463)*
 
@@ -105,7 +105,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - Accepts `io.Writer` for non-fatal warnings (nil defaults to `io.Discard`)
 - Exported shims `ValidateAgentInvariants()` and `ValidateAnomalies()` expose individual validators for existing `commands/` test callsites
 - Used by: `commands/validate.go` (CLI `liza validate`), `ops/add_task.go` (post-write validation)
-- ~~`validate.go` (658 LOC) — single monolithic validation file~~ *(P1.3 resolved: split into `validate.go` (114, orchestration + shared helpers), `validate_task.go` (372), `validate_agent.go` (42), `validate_deps.go` (84), `validate_entity.go` (75), `validate_sprint.go` (88) — commit `d53a2f0`)*. Additionally, `validateTaskInvariants` refactored from 142 LOC to ~84 LOC with extracted `validateStatusFields()` and `validateTaskOutput()` helpers.
+- Split into `validate.go` (114, orchestration + shared helpers), `validate_task.go` (372), `validate_agent.go` (42), `validate_deps.go` (84), `validate_entity.go` (75), `validate_sprint.go` (88) *(P1.3, commit `d53a2f0`)*. `validateTaskInvariants` refactored from 142 LOC to ~84 LOC with extracted `validateStatusFields()` and `validateTaskOutput()` helpers.
 
 #### ops (`internal/ops/`) — ~5,900 LOC production, ~12,070 LOC test *(health check: was ~3,750/~6,450)*
 
@@ -152,7 +152,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 **Purpose:** Binary entry points.
 
 **Observations:**
-- ~~`cmd/liza/main.go` (1,462 LOC, 34 cobra commands)~~ *(pass 2, Complexity lens — resolved)*: Split into `main.go` (121 LOC) + 6 `cmd_*.go` files: `cmd_agent.go` (241), `cmd_init.go` (127), `cmd_review.go` (183), `cmd_system.go` (489), `cmd_task.go` (275), `cmd_worktree.go` (123). Total ~1,559 LOC across 7 files. Business logic still delegates to `commands` package.
+- Split into `main.go` (121 LOC) + 6 `cmd_*.go` files: `cmd_agent.go` (241), `cmd_init.go` (127), `cmd_review.go` (183), `cmd_system.go` (489), `cmd_task.go` (275), `cmd_worktree.go` (123). Total ~1,559 LOC across 7 files. Business logic delegates to `commands` package *(pass 2, resolved)*
 - `cmd/liza-mcp/main.go` (69 LOC): thin stdio transport launcher. Cross-assigns version info via mutable package globals: `mcp.Version = embedded.Version` *(pass 3, Boundaries lens)*
 
 #### mcp (`internal/mcp/`) — ~2,070 LOC *(pass 13: was ~1,770)*
@@ -160,13 +160,13 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 **Purpose:** MCP JSON-RPC server exposing tools and resources to AI agents.
 
 **Observations:**
-- ~~`server.go` (854 LOC): tool/resource registration, request dispatch~~ *(P1.1 resolved: split into `server.go` (130), `server_protocol.go` (243), `server_registration.go` (527) — commit `fd145e9`)*. `registerMutationTools()` is 242 LOC of declarative tool schema definitions — LOC is mostly boilerplate, not algorithmic complexity. `GetTool()`, `GetHandler()`, `ToolNames()` accessors added for test introspection *(pass 2, Complexity lens; `642f94e`; pass 13: was 757)*
-- ~~`handlers.go` (918 LOC, 40+ functions)~~ *(P1.1 resolved: split into `handlers_helpers.go` (303), `handlers_readonly.go` (131), `handlers_mutation.go` (291), `handlers_complex.go` (217) — original deleted, commit `3544574`)*: tool implementations delegating to `ops` package for mutations, `commands` package for read-only queries. Each handler is thin. *(pass 2; pass 5: updated LOC and ops import; pass 13: was ~600, grew with Phase 2 role handlers)*
+- Split into `server.go` (130), `server_protocol.go` (243), `server_registration.go` (527) *(P1.1, commit `fd145e9`)*. `registerMutationTools()` is 242 LOC of declarative tool schema definitions — LOC is mostly boilerplate, not algorithmic complexity. `GetTool()`, `GetHandler()`, `ToolNames()` accessors added for test introspection *(pass 2; `642f94e`; pass 13: was 757)*
+- Split into `handlers_helpers.go` (303), `handlers_readonly.go` (131), `handlers_mutation.go` (291), `handlers_complex.go` (217) *(P1.1, commit `3544574`)*: tool implementations delegating to `ops` package for mutations, `commands` package for read-only queries. Each handler is thin *(pass 2; pass 5; pass 13: grew with Phase 2 role handlers)*
 - `protocol/` subpackage (232 LOC): clean DTO types, stdio transport, error codes
 - 4 registration categories: read-only tools, read-only resources, mutation tools, complex operations
 - Clean adapter boundary: mcp translates JSON-RPC into `ops` calls (mutations) and `commands` calls (queries), adds error classification, holds no business logic *(pass 3, Boundaries lens; pass 5: updated — handlers now import ops directly for all mutations)*
-- ~~**Server dispatch layer untested**~~ *(pass 4, Coverage lens — resolved)*: Comprehensive tests added in `server_dispatch_test.go` (14+ `TestHandleRequest_*` variants, `TestClassifyError`, `TestHandleNotification`) and `server_run_test.go` (2 `TestServerRun_*` variants). Routing, error classification, and initialization now covered.
-- ~~`protocol/` entirely untested~~ *(pass 4, Coverage lens — partially resolved: `c2fe02b`)*: stdio transport now has bounded request size enforcement (`MaxRequestSize` 10MB, `readLineBounded()`) with comprehensive tests (214 LOC in `stdio_test.go`). Error constructors remain untested. `RequestTooLarge` JSON-RPC error code added
+- **Server dispatch tested**: Comprehensive tests in `server_dispatch_test.go` (14+ `TestHandleRequest_*` variants, `TestClassifyError`, `TestHandleNotification`) and `server_run_test.go` (2 `TestServerRun_*` variants). Routing, error classification, and initialization covered *(pass 4, resolved)*
+- `protocol/` partially tested *(pass 4; partially resolved: `c2fe02b`)*: stdio transport now has bounded request size enforcement (`MaxRequestSize` 10MB, `readLineBounded()`) with comprehensive tests (214 LOC in `stdio_test.go`). Error constructors remain untested. `RequestTooLarge` JSON-RPC error code added
 
 #### git (`internal/git/`) — ~590 LOC *(health check: was 351)*
 
@@ -185,7 +185,7 @@ Human Input    →    Planner    →    Coder(s)    →    Code Reviewer    → 
 - Template-driven: all text in `.tmpl` files, clean logic/text separation
 - 14 templates: base prompt, 3 role contexts, 6 wake triggers, shared reference, integration fix
 - `executeTemplate()` panics on error rather than returning it
-- ~~`PlannerContextConfig` is empty struct (placeholder)~~ *(pass 13: resolved — replaced by `CodePlannerContextConfig`, `EpicPlannerContextConfig`, etc. with actual fields for Phase 2 roles)*
+- `PlannerContextConfig` replaced by `CodePlannerContextConfig`, `EpicPlannerContextConfig`, etc. with actual fields for Phase 2 roles *(pass 13, resolved)*
 - Template execution pattern (embed.FS + funcMap + template.Must + executeTemplate) is duplicated nearly identically in `commands/templates.go` *(pass 3, Boundaries lens)*
 - **Imports `internal/ops`** for 3 utility functions: `LoadDetectionContext`, `GetLatestScopeExtensions`, `IsPlanningPair`. This creates a dependency from the prompt-building layer to the business-logic layer — architecturally inverted (see boundary smell) *(pass 14, Boundaries lens)*
 
@@ -302,7 +302,6 @@ prompts/ (stable — imports ops for queries, see boundary smell)
 ### 1.4 Coverage Checkpoint
 
 **What exists that shouldn't?**
-- ~~`PlannerContextConfig` is an empty struct — premature abstraction or placeholder~~ *(pass 13: resolved)*
 - `commands/format.go` has bubble-sort for map keys (functional but O(n^2); `sort.Strings` exists)
 - `dashboardSection` type with `"table"` format case is a no-op (line 155: just appends empty string)
 
@@ -352,11 +351,7 @@ prompts/ (stable — imports ops for queries, see boundary smell)
 | File | LOC | Longest Function (LOC) | Max Nesting Depth | Branch Density (ifs/LOC) | Notes |
 |------|-----|----------------------|-------------------|------------------------|-------|
 | main.go | 1,462 | init (126) | 2 | — | Organizational only — 34 cobra commands *(health check: was 1,275)* |
-| ~~state.go~~ | ~~937~~ | — | 2 | — | ~~20+ cohesive structs~~ *(P1.2: split into 6 files, largest `task.go` 431 LOC — `82258fe`)* |
-| ~~handlers.go~~ | ~~918~~ | — | 3 | — | ~~40+ thin handlers~~ *(P1.1: split into 4 files, largest `handlers_helpers.go` 303 LOC — `3544574`)* |
-| ~~server.go~~ | ~~854~~ | ~~registerMutationTools (242)~~ | 2 | — | ~~Declarative schema definitions~~ *(P1.1: split into 3 files, largest `server_registration.go` 527 LOC — `fd145e9`)* |
 | **ops/claim_task.go** | **655** | **ClaimTask (~345)** | **6** | **1:7.3 (90 ifs)** | **Highest complexity** *(health check: was 299; pass 13: branch density quantified)* |
-| ~~statevalidate/validate.go~~ | ~~658~~ | ~~validateTaskInvariants (142)~~ | 3 | — | ~~Sequential if-chain~~ *(P1.3: split into 6 files, largest `validate_task.go` 372 LOC — `d53a2f0`)* |
 | watch.go | 645 | — | 3 | 1:10.4 (62 ifs) | 17 health checks *(health check: was 516; pass 13: branch density)* |
 | supervisor.go | 637 | RunSupervisor (186) | 5 | 1:8.0 (80 ifs) | Main event loop *(health check: was 302; pass 13: branch density)* |
 | prompts/builder.go | 598 | — | 2 | — | 23 functions, template-driven *(pass 13: was 258 — grew with Phase 2 roles)* |
@@ -441,11 +436,11 @@ The `mcp` package is a textbook adapter: it translates JSON-RPC wire format into
 
 ### 2.3 Smells
 
-#### ~~Smell: Hardcoded configuration — magic number 1800~~ *(mostly resolved — 2 residual sites, pass 6)*
+#### Smell: Hardcoded configuration — magic number 1800 *(mostly resolved — residual sites, pass 6)*
 
 **Signal:** `leaseDuration = 1800` appeared as a fallback default in 3 locations, plus 6 more magic numbers in wait config (now `RoleStrategy.WaitConfig`).
 
-**Fix:** Defined `DefaultLeaseDurationSeconds` and `Default{Coder,Planner,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside `Config`. ~~All 9 fallback sites reference named constants.~~ `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds`.
+**Fix:** Defined `DefaultLeaseDurationSeconds` and `Default{Coder,Planner,Reviewer}{PollInterval,MaxWait}` constants in `internal/models/state.go` alongside `Config`. `heartbeat.DefaultLeaseDuration` derives from `models.DefaultLeaseDurationSeconds`.
 
 **Residual** *(pass 6, Coupling lens)*: `supervisor.go:127` (`registerAgent(..., 1800)`) and `supervisor.go:221` (`claimReviewerTask(..., 1800, ...)`) still use raw `1800` instead of `models.DefaultLeaseDurationSeconds`. These were missed during the original extraction.
 
@@ -459,7 +454,7 @@ The `mcp` package is a textbook adapter: it translates JSON-RPC wire format into
 
 **Direction:** Accept `io.Reader`/`io.Writer` parameters for full testability.
 
-#### ~~Smell: Untested critical execution paths~~ *(pass 4, Coverage lens — partially resolved)*
+#### Smell: Untested critical execution paths *(pass 4, Coverage lens — partially resolved)*
 
 **Signal:** The system's most critical runtime paths have 0% statement coverage:
 - `supervisor.Execute()` and `ExecuteInteractive()` — the actual agent execution entry points that build `exec.Cmd`, set stdin/stdout, run the CLI, and handle exit codes
@@ -579,7 +574,7 @@ These are operational tuning parameters with no path to `models.Config`.
 
 #### Smell: Temporal test coupling and non-parallelizable suite *(Adversarial pass, entry: tests/ — partially resolved: `1914732`, `1ff88d2`)*
 
-**Signal:** ~~Test suite currently has 93 `_test.go` files with 0 uses of `t.Parallel()` and 21 explicit `time.Sleep()` calls (notably in watcher/heartbeat paths).~~ Shared process-level globals exist (`db.instances` singleton map and package-level `rootCmd`), which encourages serial execution in packages that use them.
+**Signal:** Shared process-level globals exist (`db.instances` singleton map and package-level `rootCmd`), which encourages serial execution in packages that use them.
 
 **Partial fix:** `resetRootCmdForTest(t)` helper isolates `rootCmd` flag state and `db.For()` singletons between tests. `t.Parallel()` introduced in 15 call sites across 4 test files (stateless tests in `roles`, `errors`, `filelock/metrics`, `agent/prompt`). `time.Sleep()` calls reduced from 21 to 5 by replacing brittle sleep-based waits with event-driven synchronization (polling with condition checks) in watcher, heartbeat, and supervisor tests. `internal/testguard/` package (116 LOC) added with ratchet tests enforcing `t.Parallel()` floor (≥10 calls) and `time.Sleep()` ceiling (≤11 calls), preventing regression.
 
@@ -613,18 +608,6 @@ These are operational tuning parameters with no path to `models.Config`.
 **Impact:** Low-medium. Permission or transient filesystem errors can be misreported as simple presence/absence outcomes, producing misleading diagnostics and control flow.
 
 **Direction:** Use explicit triage on `os.Stat` calls: exists, not-exist, and other-error (returned with context).
-
-#### Smell: waitForXWork structural duplication *(pass 13, Complexity lens)*
-
-**Signal:** `agent/waitforwork.go` (412 LOC) contains 8 role-specific wait functions following two structural patterns:
-- **Doer pattern** (4 functions: coder, code-planner, epic-planner, us-writer): `loadResolver → waitForWorkEventDriven(closure: count claimable + resumable handoffs)`
-- **Reviewer pattern** (4 functions: code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer): `clearStaleReviewClaims → loadResolver → waitForWorkEventDriven(closure: count reviewable)`
-
-Each function is 10-20 LOC with identical structure, differing only in the role constant passed and minor log message formatting.
-
-**Impact:** Low. The functions are short and correct. However, adding a new role requires adding a new function and a new dispatcher case — the pattern doesn't scale without understanding the convention.
-
-**Direction:** Extract `waitForDoerWork(role)` and `waitForReviewerWork(role)` parameterized by role name. The dispatcher in `waitForWork()` would remain. Low priority — current code is clear despite the repetition.
 
 #### Smell: Pipeline config loaded per-operation *(pass 13, Complexity lens)*
 
@@ -682,13 +665,11 @@ func IsXStatus(task *Task, pr PipelineResolver) bool {
     return task.Status == TaskStatusX || task.Status == TaskStatusY
 }
 ```
-~~Only the resolver method name and legacy fallback statuses differ.~~
+Only the resolver method name differs.
 
-~~**Impact:** Low. The functions are small and clear individually. However, adding a new pipeline-aware status check requires copy-pasting the same pattern. The triplication also contributes to the 0%-coverage cluster noted in pass 15 — three identical patterns, all untested.~~
+**Impact:** Low. Legacy fallback branches removed in `581d377` — all three functions now use pipeline resolver only. The structural triplication remains (three functions with identical shape differing by resolver method), but the legacy fallback half of each function is gone.
 
-~~**Direction:** A parameterized `checkPipelineStatus(task, pr, resolverFn, legacyStatuses...)` helper would collapse three functions into one. Low priority — the pattern is unlikely to grow beyond ~5 variants.~~
-
-*(Partially resolved in `581d377`: legacy fallback branches removed — all three functions now use pipeline resolver only. The structural triplication remains (three functions with identical shape differing by resolver method), but the legacy fallback half of each function is gone. The parameterization suggestion is still valid but lower priority.)*
+**Direction:** A parameterized `checkPipelineStatus(task, pr, resolverFn)` helper would collapse three functions into one. Low priority — the pattern is unlikely to grow beyond ~5 variants.
 
 #### Smell: Worktree path construction duplication *(pass 16, Duplication lens)*
 
@@ -958,7 +939,7 @@ This is the concrete code-level manifestation of two existing issues in `archite
 | Observer (Watcher) | `internal/db/watcher.go` | Event-driven state change notification via fsnotify |
 | Strategy (claimRelease) | `internal/ops/release_claim.go` | Parameterized coder/reviewer claim release — eliminates duplication between two nearly-identical release flows *(pass 5, Duplication lens: notable counterexample)* |
 | Registry | `internal/models/`, `internal/roles/` | Task type → role workflow mapping; unified role constants with runtime↔workflow mapping |
-| State Machine | `internal/models/`, `internal/ops/` | ~~Explicit `taskTransitions` map with `CanTransition()`/`Transition()`~~ Pipeline-driven only: `TransitionWith()` using `BuildPipelineTransitions()` *(pass 2: added; `581d377`: hardcoded map removed)* |
+| State Machine | `internal/models/`, `internal/ops/` | Pipeline-driven only: `TransitionWith()` using `BuildPipelineTransitions()` *(pass 2: added; `581d377`: hardcoded map removed)* |
 | Circuit Breaker | `internal/analysis/` | Pattern detection on anomalies triggers system pause |
 | Heartbeat/Lease | `internal/agent/heartbeat.go` | Agent liveness detection via periodic lease extension |
 | Embed | `internal/embedded/` | Contract/skill files embedded in binary via `go:embed` |
@@ -985,7 +966,7 @@ This is the concrete code-level manifestation of two existing issues in `archite
 **Gaps:**
 - `cmd/liza-mcp/main.go` (60 LOC): zero tests *(pass 15: was 69 LOC)*
 - `cmd/liza/main.go` (1,462 LOC): 741 LOC tests (0.5:1) — CLI wiring *(pass 15: was 1,275/717)*
-- ~~`internal/models/diagnostics.go` (127 LOC): zero tests, no test file~~ *(pass 4 — resolved: pass 13)*: `diagnostics_test.go` now exists; file grew to 202 LOC
+- `internal/models/diagnostics.go` (202 LOC): `diagnostics_test.go` exists *(pass 4 resolved: pass 13)*
 - `internal/mcp/protocol/errors.go` (71 LOC): zero tests, no test file *(pass 4; pass 15: was 68 LOC)*
 - `internal/statevalidate/` (658 LOC, 55.1%): 9 of 27 functions at 0% — lowest functional package *(pass 15, Coverage lens)*
 - `internal/roles/` (60%): 4 Phase 2 role-query functions at 0% (`DoerRoles`, `ReviewerRoles`, `IsDoerRole`, `IsReviewerRole`) *(pass 15, Coverage lens)*
@@ -1047,8 +1028,6 @@ The 24.3% uncovered code concentrates in three patterns:
 
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
-| ~~Medium~~ | ~~Missing access control on MCP admin handlers~~ *(Resolved)* | Added `requireRole(orchestrator)` to admin ops (`handleDeleteAgent`, `handleSprintCheckpoint`, `handleAnalyze`, `handleUpdateSprintMetrics`, `handleClearStaleReviews`); `requireDoerRole` to `handleWtCreate`; `requireDoerOrOrchestratorRole` to `handleWtDelete` (orchestrator needs cleanup access). `handleDeleteAgent` uses `target_agent_id` (agent to delete) + `agent_id` (caller), consistent with other mutation tools. Orchestrator prompt templates updated with `agent_id` parameter. | ~~Add `requireRole(orchestrator)` to admin ops; `requireDoerRole` to worktree ops~~ |
-| ~~Medium~~ | ~~Unbounded integration test execution~~ *(Resolved)* | `MergeWorktree` now uses `exec.CommandContext` with `DefaultIntegrationTestTimeout` (10m). On Unix, process group kill (`Setpgid` + `SIGKILL` on `-pgid` via `exec_unix.go`) terminates the entire process tree. On Windows, `exec_windows.go` is a no-op — relies on `CommandContext`'s default parent-kill behavior. `WaitDelay` (5s) ensures `cmd.Wait` returns on both platforms even if child processes hold pipes open. Test covers timeout behavior. | ~~Use `exec.CommandContext` with configurable timeout (default 10m)~~ |
 | **Low** | Silent data drops in `extractStringSlice` *(Adversarial pass, data flow)* | Non-string array elements silently discarded; callers get shorter array with no error | Return error on type mismatch, or return warnings alongside result |
 | **Low** | `extractOutputEntries` validation gap *(Adversarial pass, data flow)* | Accepts empty required fields (`desc`, `done_when`, `scope`) unlike parallel `extractTaskInputs` which validates | Add validation consistent with `extractTaskInputs` |
 | **Low** | Timestamp `time.Now()` inconsistency in `wt_merge.go` *(Adversarial pass, data flow)* | Lines 102, 413 use `time.Now()` while all other ops files use `time.Now().UTC()` | Change to `time.Now().UTC()` — two-line fix |
@@ -1067,20 +1046,13 @@ The 24.3% uncovered code concentrates in three patterns:
 | **Low** | `prompts → ops` dependency inversion *(pass 14, Boundaries lens)* | Prompt layer depends on business-logic layer for 3 utility functions; architecturally wrong direction | Move `IsPlanningPair` to `pipeline`, `GetLatestScopeExtensions` to `models`, pass `PipelineDetectionContext` as parameter |
 | **Low** | `commands → agent` boundary crossing *(pass 14, Boundaries lens)* | Status command calls `agent.DetectOrchestratorWakeTriggers()`, breaking peer relationship | Move wake detection to `ops` or future query package |
 | **Low** | Import analysis table drift *(pass 14, Boundaries lens)* | 5 packages had undercounted imports (ops: 8→11, commands: 9→12, agent: 6→9, mcp: 4→9, prompts: missing ops) | Corrected in this pass |
-| ~~**Low**~~ | ~~Temporal test coupling *(Adversarial pass, entry: tests/ — partially resolved: `1914732`, `1ff88d2`)*~~ *(Resolved)* | Down to 3 justified `time.Sleep()` calls, 12 `t.Parallel()` uses. Ratchet tests prevent regression. Remaining serial tests constrained by process-global state — acceptable. | ~~Continue tightening ratchets~~ |
 | **Low** | Residual raw `1800` in supervisor.go *(pass 6; verification: 1 site remains)* | 1 call site (supervisor.go:393) bypasses `models.DefaultLeaseDurationSeconds` constant | Replace with named constant |
 | **Low** | Duplicated identity validation *(pass 6; verification: dead code)* | `agent/registration.go:validateIdentity()` reimplements `identity` package logic but is never called — dead code with no runtime impact | Remove dead `validateIdentity()` function |
 | **Low** | Inconsistent ops parameter conventions *(pass 6)* | `AddTask` takes `statePath`/`logPath` while 15+ others take `projectRoot` | Standardize on `projectRoot` |
 | **Low** | `StdioTransport` not injectable *(partially addressed: `c2fe02b`)* | Bounded read tests achieved without injection; `Run()` still untestable | Accept `io.Reader`/`io.Writer` params for full loop testing |
-| ~~**Low**~~ | ~~`PlannerContextConfig` empty struct~~ | ~~Premature abstraction~~ | ~~Remove or document intent~~ *(pass 13: resolved — replaced by populated Phase 2 config types)* |
-| ~~**Low**~~ | ~~waitForXWork structural duplication *(pass 13)*~~ *(Resolved)* | Refactored to 2 generic functions (`waitForWorkEventDriven`, `waitForWorkPolling`) with `workCheckFunc` callback. File is now 213 LOC (was 412). | ~~Extract helpers~~ |
-| ~~**Low**~~ | ~~Duplicated template execution pattern *(pass 3)*~~ *(Resolved)* | `commands/templates.go` no longer exists. Template execution centralized in `prompts/`. | ~~Extract shared infrastructure~~ |
-| ~~**Low**~~ | ~~`derefString` duplicated~~ *(Resolved)* | Now exists only in `prompts/builder.go`. | ~~Use template func only~~ |
 | **Low** | `LIZA_LOG_LEVEL` documentation drift *(Adversarial pass, entry: config/)* | Env var documented but no runtime reader; logger is fixed at INFO | Implement env-driven log level or remove from docs |
 | **Low** | `os.Stat` existence checks under-handle non-`IsNotExist` errors *(Adversarial pass, entry: error handling — partially resolved: `52ceac5`)* | Some presence checks classify only exists/missing and miss permission/I/O distinctions. `wt_merge.go` integration-test stat now handles tri-state correctly | Standardize tri-state handling in remaining sites |
-| ~~**Low**~~ | ~~`validateTaskInvariants` monolithic if-chain *(pass 7; now in `statevalidate/`)*~~ *(Resolved)* | Refactored to ~84 LOC (lines 164-248) with extracted `validateStatusFields()` (~65 LOC) and `validateTaskOutput()` helpers. `statusClassifier` pattern for pipeline state grouping. | ~~Group checks by status~~ |
-| **Low** | High nesting in `claiming.go` helpers *(pass 7, partially resolved: `ac4ce6f5`; verification: improved)* | `handleApprovedMerges` improved: now 47 LOC (was 55) with max depth ~4-5. Cleaner early returns. Still has nested `IntegrationFailedError` handling. ~~`resumeHandoffTask` depth 5~~ extracted to `ops.ResumeHandoff` | Accept current nesting or extract error-classification into helper |
-| ~~**Low**~~ | ~~`cmd/liza/main.go` (1,462 LOC) *(pass 2; pass 13: was 1,275)*~~ *(Resolved)* | Split into `main.go` (121 LOC) + 6 `cmd_*.go` files (~1,438 LOC combined): `cmd_agent.go`, `cmd_init.go`, `cmd_review.go`, `cmd_system.go`, `cmd_task.go`, `cmd_worktree.go`. | ~~Split cobra definitions~~ |
+| **Low** | High nesting in `claiming.go` helpers *(pass 7, partially resolved: `ac4ce6f5`; verification: improved)* | `handleApprovedMerges` improved: now 47 LOC (was 55) with max depth ~4-5. Cleaner early returns. Still has nested `IntegrationFailedError` handling. `resumeHandoffTask` extracted to `ops.ResumeHandoff` | Accept current nesting or extract error-classification into helper |
 | **Low** | No interface-based seams *(pass 3)* | Deliberate simplicity; acceptable for v1 | Monitor test suite time; introduce seams if needed |
 | **Low** | Mutable package-level version variables *(pass 3)* | `mcp.Version = embedded.Version` cross-assignment | Consider constructor parameter or build-time injection |
 | **Low** | Regenerate `coverage.out` *(pass 4)* | Report shows 0% for functions with thorough tests; may predate recent commits | Run `make test` to update |
@@ -1118,7 +1090,7 @@ All six primary structural concerns identified across passes 1-4 have been resol
 
 **Adversarial pass (entry: docs/)** forced a doc-first path and surfaced contract-level drift missed by prior code-centric passes. All items resolved: state-machine spec drift, troubleshooting branch naming, and testing-doc short-mode drift.
 
-**Adversarial pass (entry: specs/)** surfaced coherence gaps: (1) ~~Pairing Session Initialization doc pointer drift~~ (resolved: `docs/USAGE.md` now exists as index file), and (2) sprint governance links Vision via `../vision.md` while canonical Vision lives in `specs/build/0 - Vision.md`. Watcher stall detection (resolved: `61b16d5`).
+**Adversarial pass (entry: specs/)** surfaced coherence gaps: (1) Pairing Session Initialization doc pointer drift resolved (`docs/USAGE.md` now exists as index file), and (2) sprint governance links Vision via `../vision.md` while canonical Vision lives in `specs/build/0 - Vision.md`. Watcher stall detection resolved (`61b16d5`).
 
 **Adversarial pass (entry: tests/)** CLI contract coverage gap resolved (`9d95c1c` — `mutation_wiring_test.go`). Temporal coupling partially resolved: `time.Sleep` reduced from 21 to 5, `t.Parallel()` introduced (15 uses), ratchet tests prevent regression. Remaining serial tests constrained by process-global state.
 
@@ -1140,7 +1112,7 @@ All six primary structural concerns identified across passes 1-4 have been resol
 
 **Health check (after pass 12)** updated LOC figures across all components (~20,900 production / ~54,900 test, up 32% from prior review). Added `internal/pipeline/` package (641 LOC) — declarative pipeline configuration with types, parsing, validation, and state resolution for multi-stage agent workflows. 7 consumers across ops, agent, commands, statevalidate, and prompts. Resolved High-priority recommendation (Pairing init doc pointer drift — `docs/USAGE.md` now exists). All other open findings verified as still present. Notable growth: `ops/claim_task.go` doubled (299→655 LOC), `mcp/handlers.go` +53%, `models/state.go` +49%.
 
-**Pass 13 (Complexity lens)** revisits complexity with fresh LOC and branch density metrics. Codebase grew to ~23,100/~55,600 LOC (production/test), with test-to-code ratio declining from 2.6:1 to 2.4:1 — production code growing faster than tests. Key findings: (1) Branch density quantified via if-counts — `claim_task.go` has the highest at 1:7.3 (90 conditionals in 655 LOC), followed by `supervisor.go` (1:8.0, 80 ifs). (2) `models` is no longer a pure leaf package — it now imports `internal/roles`, weakening the boundary claim from passes 3-4. (3) ~~`waitforwork.go` contains 8 near-identical role-specific functions~~ *(resolved: refactored to 2 generic functions with callback, 213 LOC)*. (4) Pipeline config loaded per-operation from disk (14 call sites via `loadResolver`) — correct and simple but prevents session-level caching. Resolved: `diagnostics.go` now has tests; `PlannerContextConfig` replaced by populated Phase 2 config types; residual `Role: "coder"` literal in `claiming.go` fixed.
+**Pass 13 (Complexity lens)** revisits complexity with fresh LOC and branch density metrics. Codebase grew to ~23,100/~55,600 LOC (production/test), with test-to-code ratio declining from 2.6:1 to 2.4:1 — production code growing faster than tests. Key findings: (1) Branch density quantified via if-counts — `claim_task.go` has the highest at 1:7.3 (90 conditionals in 655 LOC), followed by `supervisor.go` (1:8.0, 80 ifs). (2) `models` is no longer a pure leaf package — it now imports `internal/roles`, weakening the boundary claim from passes 3-4. (3) `waitforwork.go` refactored to 2 generic functions with callback, 213 LOC (was 8 role-specific functions). (4) Pipeline config loaded per-operation from disk (14 call sites via `loadResolver`) — correct and simple but prevents session-level caching. Resolved: `diagnostics.go` now has tests; `PlannerContextConfig` replaced by populated Phase 2 config types; residual `Role: "coder"` literal in `claiming.go` fixed.
 
 **Pass 15 (Coverage lens)** revisits test coverage with fresh `go tool cover` data. Statement coverage improved slightly to 75.7% (from 75.3%). LOC stable at ~23,127/~55,647. Key findings: (1) `statevalidate` is the lowest-coverage functional package at 55.1% — all entry-point validators (`ValidateStateFile`, `ValidateAgentInvariants`, `ValidateAnomalies`, `validateRequiredFields`) are at 0% while inner validators are well-covered, creating a "tested parts, untested whole" composition gap in a data-integrity package. (2) `models/state.go` governance helpers at 0% — `ValidateTransition` (system mode state machine), `IsApprovedForMerge`, `ReleaseAgent`, `NormalizeHeartbeatInterval` — these are pure functions that would be trivial to test. (3) `roles` package dropped to 60% with 4 Phase 2 role-query functions untested. (4) `embedded` installation functions (`WriteMCPSettings`, `WritePipelineConfig`, `WriteGuardrails`) remain at 0% — the user-facing `liza init` path. (5) 468 total functions at 0% coverage — trend metric for tracking. (6) Per-package coverage table added with risk classification. All 24 previously-open Low-priority recommendations verified as still present; 5 new Low-priority items added.
 
