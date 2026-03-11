@@ -286,7 +286,93 @@ func parseRegisteredToolHandlers(path string) (map[string]toolRegistration, erro
 		return true
 	})
 
+	ast.Inspect(file, func(n ast.Node) bool {
+		composite, ok := n.(*ast.CompositeLit)
+		if !ok || !isToolDefLiteral(composite) {
+			return true
+		}
+
+		toolName, reg, ok := extractToolDefRegistration(composite)
+		if !ok {
+			return true
+		}
+
+		toolHandlers[toolName] = reg
+		return true
+	})
+
 	return toolHandlers, nil
+}
+
+func isToolDefLiteral(composite *ast.CompositeLit) bool {
+	if composite == nil {
+		return false
+	}
+	if ident, ok := composite.Type.(*ast.Ident); ok {
+		return ident.Name == "toolDef"
+	}
+	if composite.Type != nil {
+		return false
+	}
+
+	hasToolField := false
+	hasHandlerField := false
+	for _, elt := range composite.Elts {
+		entry, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		keyIdent, ok := entry.Key.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		switch keyIdent.Name {
+		case "tool":
+			hasToolField = true
+		case "handler":
+			hasHandlerField = true
+		}
+	}
+	return hasToolField && hasHandlerField
+}
+
+func extractToolDefRegistration(composite *ast.CompositeLit) (string, toolRegistration, bool) {
+	var (
+		toolName    string
+		handlerName string
+		hasWithRole bool
+	)
+
+	for _, elt := range composite.Elts {
+		entry, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+
+		keyIdent, ok := entry.Key.(*ast.Ident)
+		if !ok {
+			continue
+		}
+
+		switch keyIdent.Name {
+		case "tool":
+			name, ok := extractRegisteredToolName(entry.Value)
+			if !ok {
+				return "", toolRegistration{}, false
+			}
+			toolName = name
+		case "handler":
+			handlerName = extractHandlerName(entry.Value)
+		case "roleChecker":
+			hasWithRole = !isNil(entry.Value)
+		}
+	}
+
+	if toolName == "" || handlerName == "" {
+		return "", toolRegistration{}, false
+	}
+
+	return toolName, toolRegistration{handlerName: handlerName, hasWithRole: hasWithRole}, true
 }
 
 // isWithRoleCall returns true if the expression is a withRole(...) call.
