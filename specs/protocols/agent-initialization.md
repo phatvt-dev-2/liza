@@ -115,7 +115,6 @@ Role-specific decision tree for what to do first.
 2. Wake triggers and their meanings:
    - INITIAL_PLANNING: No tasks exist, decompose goal into tasks
    - BLOCKED_TASKS: Tasks are blocked, analyze blockers and resolve
-   - INTEGRATION_FAILED: Merge/test failures, diagnose and plan fix
    - HYPOTHESIS_EXHAUSTED: Multiple coders failed same task, re-evaluate approach
    - IMMEDIATE_DISCOVERY: Urgent discoveries need triage
 

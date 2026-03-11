@@ -53,16 +53,16 @@ func TestIsSystemStopped(t *testing.T) {
 	}
 }
 
-// TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder verifies that
-// the orchestrator validation accepts when a coder claims an INTEGRATION_FAILED task
-func TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder(t *testing.T) {
+// TestVerifyOrchestratorStateChanges_BlockedNotResolved verifies that
+// the orchestrator validation accepts when blocked tasks remain unchanged (no-op exit)
+func TestVerifyOrchestratorStateChanges_BlockedNotResolved(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 
-	// State before: task is INTEGRATION_FAILED
+	// State before: task is BLOCKED
 	stateBefore := &models.State{
 		Version: 1,
 		Goal: models.Goal{
@@ -75,12 +75,12 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder(t *testi
 			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
 		},
 		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
 		},
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
-	// State after: task is IMPLEMENTING (by coder)
+	// State after: task STILL BLOCKED (orchestrator couldn't resolve)
 	stateAfter := &models.State{
 		Version: 1,
 		Goal: models.Goal{
@@ -93,7 +93,7 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder(t *testi
 			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
 		},
 		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
 		},
 		Config: models.Config{IntegrationBranch: "main"},
 	}
@@ -104,20 +104,22 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedClaimedByCoder(t *testi
 
 	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil)
 	if err != nil {
-		t.Errorf("Expected validation to pass when coder claims INTEGRATION_FAILED task, got error: %v", err)
+		t.Errorf("Expected no error for no-op BLOCKED exit (may require human intervention), got: %v", err)
 	}
 }
 
-// TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded verifies that
-// the orchestrator validation accepts when orchestrator supersedes an INTEGRATION_FAILED task
-func TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded(t *testing.T) {
+// TestVerifyOrchestratorStateChanges_HypothesisExhaustedNotResolved verifies that
+// the orchestrator validation accepts when exhausted tasks remain unchanged (no-op exit)
+func TestVerifyOrchestratorStateChanges_HypothesisExhaustedNotResolved(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 
-	// State before: task is INTEGRATION_FAILED
+	// State before: task has 2+ failed_by (hypothesis exhausted)
+	exhaustedTask := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+	exhaustedTask.FailedBy = []string{"coder-1", "coder-2"}
 	stateBefore := &models.State{
 		Version: 1,
 		Goal: models.Goal{
@@ -129,13 +131,13 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded(t *testing.T
 		Agents: map[string]models.Agent{
 			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
 		},
-		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
-		},
+		Tasks:  []models.Task{exhaustedTask},
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
-	// State after: task is SUPERSEDED
+	// State after: task STILL exhausted (orchestrator couldn't resolve)
+	exhaustedTaskAfter := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+	exhaustedTaskAfter.FailedBy = []string{"coder-1", "coder-2"}
 	stateAfter := &models.State{
 		Version: 1,
 		Goal: models.Goal{
@@ -147,10 +149,7 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded(t *testing.T
 		Agents: map[string]models.Agent{
 			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
 		},
-		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, now),
-			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
-		},
+		Tasks:  []models.Task{exhaustedTaskAfter},
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
@@ -160,125 +159,6 @@ func TestVerifyOrchestratorStateChanges_IntegrationFailedSuperseded(t *testing.T
 
 	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil)
 	if err != nil {
-		t.Errorf("Expected validation to pass when orchestrator supersedes INTEGRATION_FAILED task, got error: %v", err)
-	}
-}
-
-// TestVerifyOrchestratorStateChanges_IntegrationFailedNotHandled verifies that
-// the orchestrator validation fails when INTEGRATION_FAILED task remains unchanged
-func TestVerifyOrchestratorStateChanges_IntegrationFailedNotHandled(t *testing.T) {
-	tmpDir := t.TempDir()
-	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
-
-	now := time.Now().UTC()
-
-	// State before: task is INTEGRATION_FAILED
-	stateBefore := &models.State{
-		Version: 1,
-		Goal: models.Goal{
-			ID:          "goal-1",
-			Description: "Test goal",
-			Status:      models.GoalStatusInProgress,
-			Created:     now,
-		},
-		Agents: map[string]models.Agent{
-			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
-		},
-		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
-		},
-		Config: models.Config{IntegrationBranch: "main"},
-	}
-
-	// State after: task STILL INTEGRATION_FAILED (no change)
-	stateAfter := &models.State{
-		Version: 1,
-		Goal: models.Goal{
-			ID:          "goal-1",
-			Description: "Test goal",
-			Status:      models.GoalStatusInProgress,
-			Created:     now,
-		},
-		Agents: map[string]models.Agent{
-			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
-		},
-		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
-		},
-		Config: models.Config{IntegrationBranch: "main"},
-	}
-
-	testhelpers.WriteInitialState(t, statePath, stateAfter)
-
-	bb := db.New(statePath)
-
-	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil)
-	if err == nil {
-		t.Error("Expected validation to fail when INTEGRATION_FAILED task remains unchanged")
-	}
-
-	if !strings.Contains(err.Error(), "no tasks were handled") {
-		t.Errorf("Expected error to mention 'no tasks were handled', got: %v", err)
-	}
-}
-
-// TestVerifyOrchestratorStateChanges_IntegrationFailedMixedOutcomes verifies that
-// the orchestrator validation accepts when some tasks are handled (claimed/superseded) and others remain
-func TestVerifyOrchestratorStateChanges_IntegrationFailedMixedOutcomes(t *testing.T) {
-	tmpDir := t.TempDir()
-	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	testhelpers.SetupPipelineConfig(t, tmpDir)
-
-	now := time.Now().UTC()
-
-	// State before: 3 tasks are INTEGRATION_FAILED
-	stateBefore := &models.State{
-		Version: 1,
-		Goal: models.Goal{
-			ID:          "goal-1",
-			Description: "Test goal",
-			Status:      models.GoalStatusInProgress,
-			Created:     now,
-		},
-		Agents: map[string]models.Agent{
-			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
-		},
-		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
-			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusIntegrationFailed, now),
-			testhelpers.BuildTaskByStatus("task-3", models.TaskStatusIntegrationFailed, now),
-		},
-		Config: models.Config{IntegrationBranch: "main"},
-	}
-
-	// State after: 1 IMPLEMENTING, 1 SUPERSEDED, 1 still INTEGRATION_FAILED
-	stateAfter := &models.State{
-		Version: 1,
-		Goal: models.Goal{
-			ID:          "goal-1",
-			Description: "Test goal",
-			Status:      models.GoalStatusInProgress,
-			Created:     now,
-		},
-		Agents: map[string]models.Agent{
-			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
-		},
-		Tasks: []models.Task{
-			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
-			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusSuperseded, now),
-			testhelpers.BuildTaskByStatus("task-3", models.TaskStatusIntegrationFailed, now),
-			testhelpers.BuildTaskByStatus("task-4", models.TaskStatusReady, now),
-		},
-		Config: models.Config{IntegrationBranch: "main"},
-	}
-
-	testhelpers.WriteInitialState(t, statePath, stateAfter)
-
-	bb := db.New(statePath)
-
-	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil)
-	if err != nil {
-		t.Errorf("Expected validation to pass when some INTEGRATION_FAILED tasks are handled, got error: %v", err)
+		t.Errorf("Expected no error for no-op HYPOTHESIS_EXHAUSTED exit (may require human intervention), got: %v", err)
 	}
 }

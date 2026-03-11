@@ -173,51 +173,13 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 				blockedAfter++
 			}
 		}
-		if blockedAfter >= blockedBefore {
-			return fmt.Errorf("orchestrator completed with BLOCKED_TASKS trigger but blocked count didn't decrease (before: %d, after: %d)", blockedBefore, blockedAfter)
+		if blockedAfter < blockedBefore {
+			logger.Info("Orchestrator resolved blocked tasks", "before", blockedBefore, "after", blockedAfter)
+		} else {
+			logger.Info("Orchestrator could not resolve blocked tasks",
+				"before", blockedBefore, "after", blockedAfter,
+				"hint", "Blocks may require human intervention")
 		}
-		logger.Info("Orchestrator resolved blocked tasks", "before", blockedBefore, "after", blockedAfter)
-
-	case WakeTriggerIntegrationFailed:
-		// INTEGRATION_FAILED: expect failed tasks to be claimed by coders or handled by orchestrator
-		// Count tasks that were INTEGRATION_FAILED before orchestrator ran
-		failedBefore := 0
-		failedTaskIDs := make([]string, 0)
-		for _, task := range stateBefore.Tasks {
-			if task.Status == models.TaskStatusIntegrationFailed {
-				failedBefore++
-				failedTaskIDs = append(failedTaskIDs, task.ID)
-			}
-		}
-
-		// Check what happened to those tasks after orchestrator ran
-		stillFailed := 0
-		claimed := 0
-		superseded := 0
-		for _, taskID := range failedTaskIDs {
-			afterTask := stateAfter.FindTask(taskID)
-			if afterTask != nil {
-				switch afterTask.Status {
-				case models.TaskStatusIntegrationFailed:
-					stillFailed++
-				case models.TaskStatusImplementing:
-					claimed++
-				case models.TaskStatusSuperseded:
-					superseded++
-				}
-			}
-		}
-
-		// Success conditions:
-		// 1. Tasks were claimed by coders (expected case)
-		// 2. Tasks were superseded by orchestrator (structural issue)
-		// 3. Combination of both
-		handled := claimed + superseded
-		if handled == 0 && stillFailed == failedBefore {
-			return fmt.Errorf("orchestrator completed with INTEGRATION_FAILED trigger but no tasks were handled (still %d INTEGRATION_FAILED)", stillFailed)
-		}
-
-		logger.Info("Orchestrator checked integration failures", "claimed", claimed, "superseded", superseded, "still_failed", stillFailed)
 
 	case WakeTriggerHypothesisExhausted:
 		// HYPOTHESIS_EXHAUSTED: expect exhausted tasks to be updated or superseded
@@ -233,10 +195,13 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 				exhaustedAfter++
 			}
 		}
-		if exhaustedAfter >= exhaustedBefore {
-			return fmt.Errorf("orchestrator completed with HYPOTHESIS_EXHAUSTED trigger but exhausted count didn't decrease (before: %d, after: %d)", exhaustedBefore, exhaustedAfter)
+		if exhaustedAfter < exhaustedBefore {
+			logger.Info("Orchestrator handled exhausted hypotheses", "before", exhaustedBefore, "after", exhaustedAfter)
+		} else {
+			logger.Info("Orchestrator could not resolve exhausted hypotheses",
+				"before", exhaustedBefore, "after", exhaustedAfter,
+				"hint", "May require human intervention or spec revision")
 		}
-		logger.Info("Orchestrator handled exhausted hypotheses", "before", exhaustedBefore, "after", exhaustedAfter)
 
 	case WakeTriggerImmediateDiscovery:
 		// IMMEDIATE_DISCOVERY: expect discoveries to be converted to tasks

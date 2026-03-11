@@ -255,7 +255,6 @@ func TestOrchestratorWakeTriggerSpecs(t *testing.T) {
 	wantOrder := []OrchestratorWakeTrigger{
 		WakeTriggerInitialPlanning,
 		WakeTriggerBlocked,
-		WakeTriggerIntegrationFailed,
 		WakeTriggerHypothesisExhausted,
 		WakeTriggerImmediateDiscovery,
 	}
@@ -311,18 +310,6 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			wantCount:   2,
 		},
 		{
-			name: "integration failed trigger",
-			state: func() *models.State {
-				state := testhelpers.CreateValidState()
-				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
-				}
-				return state
-			}(),
-			wantTrigger: WakeTriggerIntegrationFailed,
-			wantCount:   1,
-		},
-		{
 			name: "hypothesis exhaustion trigger",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
@@ -372,11 +359,12 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			wantCount:   0,
 		},
 		{
-			name: "multiple triggers (blocked takes priority)",
+			name: "multiple triggers (blocked takes priority over hypothesis exhausted)",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
-				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusIntegrationFailed, now)
+				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now)
+				task2.FailedBy = []string{"coder-1", "coder-2"}
 				state.Tasks = []models.Task{task1, task2}
 				return state
 			}(),
@@ -517,6 +505,23 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				return state
 			}(),
 			wantTrigger: WakeTriggerPlanningComplete,
+			wantCount:   1,
+		},
+		{
+			name: "merged planning task with TransitionsExecuted triggers sprint complete not planning complete",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				task.RolePair = "code-planning-pair"
+				task.Output = []models.OutputEntry{
+					{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
+				}
+				task.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+				state.Sprint.Scope.Planned = []string{"task-1"}
+				state.Tasks = []models.Task{task}
+				return state
+			}(),
+			wantTrigger: WakeTriggerSprintComplete,
 			wantCount:   1,
 		},
 		{

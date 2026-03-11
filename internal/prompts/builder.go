@@ -157,7 +157,7 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 		planningTasks = collectMergedPlanningTasks(state, planningPairs)
 	}
 
-	wakeTrigger := determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries, sprintComplete, planningTasks)
+	wakeTrigger := determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, sprintComplete, planningTasks)
 
 	wakeData, err := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, config.ProjectRoot)
 	if err != nil {

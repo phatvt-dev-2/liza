@@ -48,6 +48,9 @@ func collectMergedPlanningTasks(state *models.State, planningPairs map[string]bo
 		if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
 			continue
 		}
+		if len(task.TransitionsExecuted) > 0 {
+			continue // transitions already fired
+		}
 		if ops.IsPlanningPair(task.RolePair, planningPairs) {
 			result = append(result, planningTaskData{
 				TaskID: task.ID,
@@ -58,15 +61,12 @@ func collectMergedPlanningTasks(state *models.State, planningPairs map[string]bo
 	return result
 }
 
-func determineWakeTrigger(totalTasks, blocked, integrationFailed, hypothesisExhausted, immediateDiscoveries int, sprintComplete bool, planningTasks []planningTaskData) string {
+func determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries int, sprintComplete bool, planningTasks []planningTaskData) string {
 	if totalTasks == 0 {
 		return "INITIAL_PLANNING"
 	}
 	if blocked > 0 {
 		return "BLOCKED_TASKS"
-	}
-	if integrationFailed > 0 {
-		return "INTEGRATION_FAILED"
 	}
 	if hypothesisExhausted > 0 {
 		return "HYPOTHESIS_EXHAUSTED"
@@ -163,8 +163,6 @@ func buildInstructionsForWakeTrigger(wakeTrigger string, wakeData wakeTemplateDa
 		return executeTemplate("wake_initial_planning", wakeData)
 	case "BLOCKED_TASKS":
 		return executeTemplate("wake_blocked_tasks", nil)
-	case "INTEGRATION_FAILED":
-		return executeTemplate("wake_integration_failed", nil)
 	case "HYPOTHESIS_EXHAUSTED":
 		return executeTemplate("wake_hypothesis_exhausted", nil)
 	case "IMMEDIATE_DISCOVERY":

@@ -321,13 +321,6 @@ func TestWaitForOrchestratorWork(t *testing.T) {
 			wantWork: true,
 		},
 		{
-			name: "integration failed tasks",
-			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
-			},
-			wantWork: true,
-		},
-		{
 			name: "no orchestrator work needed",
 			tasks: []models.Task{
 				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),

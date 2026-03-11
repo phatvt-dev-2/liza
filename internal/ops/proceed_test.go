@@ -1189,11 +1189,16 @@ func TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks(t *testing.T)
 		t.Errorf("Child status = %v, want DRAFT_CODING_PLAN", child.Status)
 	}
 
-	// Children must NOT be in Sprint.Scope.Planned
+	// Children MUST be in Sprint.Scope.Planned
+	found := false
 	for _, id := range readState.Sprint.Scope.Planned {
 		if id == childID {
-			t.Errorf("Child %q should NOT be in Sprint.Scope.Planned", childID)
+			found = true
+			break
 		}
+	}
+	if !found {
+		t.Errorf("Child %q should be in Sprint.Scope.Planned", childID)
 	}
 
 	// Source task should have transition marked
@@ -1264,11 +1269,16 @@ func TestExecuteAvailableTransitions_PerSubtask(t *testing.T) {
 		if child.RolePair != "coding-pair" {
 			t.Errorf("Child %q role_pair = %q, want %q", childID, child.RolePair, "coding-pair")
 		}
-		// Must NOT be in sprint scope
+		// Must be in sprint scope
+		childFound := false
 		for _, id := range readState.Sprint.Scope.Planned {
 			if id == childID {
-				t.Errorf("Child %q should NOT be in Sprint.Scope.Planned", childID)
+				childFound = true
+				break
 			}
+		}
+		if !childFound {
+			t.Errorf("Child %q should be in Sprint.Scope.Planned", childID)
 		}
 	}
 }
@@ -1404,6 +1414,90 @@ func TestExecuteAvailableTransitions_NoSprintGate(t *testing.T) {
 	}
 	if len(results) != 1 {
 		t.Fatalf("results count = %d, want 1", len(results))
+	}
+}
+
+// TestExecuteAvailableTransitions_ScopeDedupGuard verifies the defensive dedup
+// guard when adding children to Sprint.Scope.Planned.
+//
+// Note: crash recovery through ExecuteAvailableTransitions is unreachable because
+// AvailableTransitions filters out transitions already in TransitionsExecuted.
+// The recoverCrashedTransition path is only reachable through direct Proceed calls.
+// This test validates the dedup guard against a pre-seeded scope entry.
+func TestExecuteAvailableTransitions_ScopeDedupGuard(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	parentID := "plan-task-1"
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+
+	// Predictable child IDs based on the naming convention
+	child0ID := "plan-task-1-code-plan-to-coding-0"
+	child1ID := "plan-task-1-code-plan-to-coding-1"
+
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan the auth module",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Implement login", DoneWhen: "POST /login works", Scope: "auth", SpecRef: "specs/auth.md#login"},
+			{Desc: "Implement refresh", DoneWhen: "POST /refresh works", Scope: "auth", SpecRef: "specs/auth.md#refresh"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	// Artificially pre-seed a child ID in scope to validate the dedup guard
+	state.Sprint.Scope.Planned = []string{parentID, child0ID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+	if len(results[0].ChildTaskIDs) != 2 {
+		t.Fatalf("ChildTaskIDs count = %d, want 2", len(results[0].ChildTaskIDs))
+	}
+
+	// Verify sprint scope: each child ID exactly once, no duplicates
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child0Count := 0
+	child1Count := 0
+	for _, id := range readState.Sprint.Scope.Planned {
+		if id == child0ID {
+			child0Count++
+		}
+		if id == child1ID {
+			child1Count++
+		}
+	}
+	if child0Count != 1 {
+		t.Errorf("child %q appears %d times in Sprint.Scope.Planned, want 1 (dedup failed)", child0ID, child0Count)
+	}
+	if child1Count != 1 {
+		t.Errorf("child %q appears %d times in Sprint.Scope.Planned, want 1", child1ID, child1Count)
 	}
 }
 

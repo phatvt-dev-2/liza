@@ -222,9 +222,8 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 // ExecuteAvailableTransitions auto-executes pipeline transitions for merged tasks.
 // Called by the supervisor after merging approved tasks. For each MERGED task with
 // available transitions (per its role-pair's approved status in the pipeline config),
-// it creates child tasks in state.Tasks but does NOT add them to Sprint.Scope.Planned.
-// Children are carried to the next sprint via collectNonTerminalTaskIDs during sprint
-// advancement.
+// it creates child tasks in state.Tasks and adds them to Sprint.Scope.Planned
+// (with dedup guard for crash recovery idempotency).
 //
 // This intentionally scans ALL merged tasks, not just newly-merged ones: if the
 // supervisor crashes between merge and transition, the next run will pick up the
@@ -295,6 +294,17 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 				results = append(results, result)
 			}
 		}
+
+		// Add children to sprint scope (dedup guard: defensive against pre-existing
+		// scope entries from partial prior runs)
+		for _, r := range results {
+			for _, childID := range r.ChildTaskIDs {
+				if !slices.Contains(s.Sprint.Scope.Planned, childID) {
+					s.Sprint.Scope.Planned = append(s.Sprint.Scope.Planned, childID)
+				}
+			}
+		}
+
 		return nil
 	})
 

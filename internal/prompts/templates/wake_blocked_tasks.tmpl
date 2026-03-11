@@ -16,4 +16,6 @@ Tasks are BLOCKED. Analyze and resolve immediately:
    - Execute tool: liza_wt_delete with {"task_id": "task-3", "agent_id": "orchestrator-1"} (if worktree exists)
 4. Log decisions in task history
 5. Execute all state-modifying tools in this session. Do NOT defer.
+
+Do NOT call liza_sprint_checkpoint. If you cannot resolve the blocker (genuine spec ambiguity, external dependency), leave the task BLOCKED and exit. Other tasks must continue uninterrupted.
 {{- end -}}

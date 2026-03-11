@@ -282,10 +282,11 @@ Design contradictions that create structural friction.
 
 **Implication:** A sprint can report completion while unresolved implementation risk remains in flight under replacement tasks.
 
-**Current mitigation:** Sprint governance protocol (`sprint-governance.md`) explicitly documents this as expected behavior — humans must manually update `scope.planned[]` to include replacement tasks, or wait for all active tasks. The gap is that the `AllPlannedTasksTerminal()` function doesn't account for replacements, while the governance protocol assumes humans will maintain scope accuracy.
+**Current mitigation:** Pipeline-created children (from `ExecuteAvailableTransitions`) are now automatically added to `sprint.scope.planned[]`, preventing premature sprint completion when planning tasks transition to coding tasks. Orchestrator-created replacement tasks (rescoping) are still NOT automatically added — humans must manually update scope or wait for all active tasks. Sprint governance protocol (`sprint-governance.md`) documents this as expected behavior.
+
+**Remaining gap:** Orchestrator rescoping (SUPERSEDED → replacement tasks) does not auto-update scope. This is intentional — rescoping is a human-guided decision, and auto-inclusion could mask scope creep.
 
 **Future options:**
-- Promote replacement tasks into sprint planned scope automatically
 - Add an alternate completion criterion based on all active (planned + replacement) tasks
 - Separate cadence checkpoint status from true work-closure status
 

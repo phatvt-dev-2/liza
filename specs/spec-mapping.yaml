@@ -275,9 +275,6 @@ code_classification:
   internal/prompts/templates/wake_initial_planning.tmpl:
     type: architectural
     confidence: inferred
-  internal/prompts/templates/wake_integration_failed.tmpl:
-    type: architectural
-    confidence: inferred
   internal/prompts/templates/wake_sprint_complete.tmpl:
     type: architectural
     confidence: inferred
@@ -1363,15 +1360,6 @@ mappings:
     confidence: inferred-pending-review
     conflict_details: null
     last_verified: "2026-02-22"
-  internal/prompts/templates/wake_integration_failed.tmpl:
-    status: aligned
-    code_sha: 97d7687
-    spec_sha: 1948685
-    spec_path: specs/architecture/ADR/0016-embedded-template-architecture.md
-    spec_title: Embedded Template Architecture for Agent Prompts
-    confidence: inferred-pending-review
-    conflict_details: null
-    last_verified: "2026-02-22"
   internal/prompts/templates/wake_sprint_complete.tmpl:
     status: aligned
     code_sha: 421ceef
@@ -1453,7 +1441,7 @@ specs:
     status: active
     last_verified: "2026-02-22"
     linked_adrs: ["0016"]
-    code_paths: ["internal/embedded/embedded.go", "internal/prompts/builder.go", internal/prompts/templates.go, internal/prompts/templates/base_prompt.tmpl, internal/prompts/templates/coder_context.tmpl, internal/prompts/templates/coder_integration_fix.tmpl, internal/prompts/templates/planner_context.tmpl, internal/prompts/templates/reviewer_context.tmpl, internal/prompts/templates/shared_reference.tmpl, internal/prompts/templates/wake_blocked_tasks.tmpl, internal/prompts/templates/wake_hypothesis_exhausted.tmpl, internal/prompts/templates/wake_immediate_discovery.tmpl, internal/prompts/templates/wake_initial_planning.tmpl, internal/prompts/templates/wake_integration_failed.tmpl, internal/prompts/templates/wake_sprint_complete.tmpl]
+    code_paths: ["internal/embedded/embedded.go", "internal/prompts/builder.go", internal/prompts/templates.go, internal/prompts/templates/base_prompt.tmpl, internal/prompts/templates/coder_context.tmpl, internal/prompts/templates/coder_integration_fix.tmpl, internal/prompts/templates/planner_context.tmpl, internal/prompts/templates/reviewer_context.tmpl, internal/prompts/templates/shared_reference.tmpl, internal/prompts/templates/wake_blocked_tasks.tmpl, internal/prompts/templates/wake_hypothesis_exhausted.tmpl, internal/prompts/templates/wake_immediate_discovery.tmpl, internal/prompts/templates/wake_initial_planning.tmpl, internal/prompts/templates/wake_sprint_complete.tmpl]
   specs/functional/1.1 - Contract System.md:
     title: Contract System
     status: active

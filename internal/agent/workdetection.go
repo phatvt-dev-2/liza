@@ -11,7 +11,6 @@ type OrchestratorWakeTrigger string
 const (
 	WakeTriggerInitialPlanning     OrchestratorWakeTrigger = "INITIAL_PLANNING"
 	WakeTriggerBlocked             OrchestratorWakeTrigger = "BLOCKED_TASKS"
-	WakeTriggerIntegrationFailed   OrchestratorWakeTrigger = "INTEGRATION_FAILED"
 	WakeTriggerHypothesisExhausted OrchestratorWakeTrigger = "HYPOTHESIS_EXHAUSTED"
 	WakeTriggerImmediateDiscovery  OrchestratorWakeTrigger = "IMMEDIATE_DISCOVERY"
 	WakeTriggerPlanningComplete    OrchestratorWakeTrigger = "PLANNING_COMPLETE"
@@ -50,13 +49,6 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 		},
 	},
 	{
-		Trigger:     WakeTriggerIntegrationFailed,
-		Description: "Integration failures need orchestrator intervention.",
-		Count: func(state *models.State) int {
-			return countTasksByStatus(state, models.TaskStatusIntegrationFailed)
-		},
-	},
-	{
 		Trigger:     WakeTriggerHypothesisExhausted,
 		Description: "Tasks with repeated coder failures need orchestrator intervention.",
 		Count:       countHypothesisExhaustedTasks,
@@ -79,11 +71,10 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // Priority order:
 // 1. No tasks (initial planning)
 // 2. Blocked tasks
-// 3. Integration failed
-// 4. Hypothesis exhausted (2+ failed_by)
-// 5. Immediate discoveries (not yet converted to tasks)
-// 6. Planning complete (all planned tasks terminal, merged tasks have output[])
-// 7. Sprint complete (all planned tasks terminal)
+// 3. Hypothesis exhausted (2+ failed_by)
+// 4. Immediate discoveries (not yet converted to tasks)
+// 5. Planning complete (all planned tasks terminal, merged tasks have output[])
+// 6. Sprint complete (all planned tasks terminal)
 func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool) OrchestratorWakeResult {
 	for _, triggerSpec := range orchestratorWakeTriggerSpecs {
 		if count := triggerSpec.Count(state); count > 0 {
@@ -164,6 +155,9 @@ func countMergedPlanningTasksWithOutput(state *models.State, planningPairs map[s
 		task := state.FindTask(taskID)
 		if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
 			continue
+		}
+		if len(task.TransitionsExecuted) > 0 {
+			continue // transitions already fired — children exist
 		}
 		if ops.IsPlanningPair(task.RolePair, planningPairs) {
 			count++

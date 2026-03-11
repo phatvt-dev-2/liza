@@ -202,22 +202,6 @@ func TestBuildOrchestratorContext(t *testing.T) {
 			},
 		},
 		{
-			name: "integration failed trigger",
-			state: func() *models.State {
-				state := testhelpers.CreateValidState()
-				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
-				}
-				return state
-			}(),
-			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
-			wantContains: []string{
-				"WAKE TRIGGER: INTEGRATION_FAILED",
-				"- Integration failed: 1",
-				"Integration failed detected. Act as backstop if needed:",
-			},
-		},
-		{
 			name: "hypothesis exhaustion trigger",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
@@ -1507,24 +1491,7 @@ func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 				"execute tools NOW",
 				"Execute all state-modifying tools in this session",
 				"Do NOT defer",
-			},
-		},
-		{
-			name: "INTEGRATION_FAILED has backstop behavior language",
-			state: func() *models.State {
-				state := testhelpers.CreateValidState()
-				state.Tasks = []models.Task{
-					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
-				}
-				return state
-			}(),
-			wantTrigger: "INTEGRATION_FAILED",
-			wantContains: []string{
-				"Act as backstop if needed",
-				"If task already IMPLEMENTING",
-				"No action needed — coder is handling it",
-				"Exit normally — this is the expected flow",
-				"Coders claim INTEGRATION_FAILED tasks directly",
+				"Do NOT call liza_sprint_checkpoint",
 			},
 		},
 		{
@@ -1544,6 +1511,7 @@ func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 				"Execute changes",
 				"create them all in this session",
 				"All state modifications must be executed before you exit",
+				"Do NOT call liza_sprint_checkpoint",
 			},
 		},
 		{
@@ -1574,6 +1542,7 @@ func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 				"execute liza_add_tasks tool NOW",
 				"fallback state edit + liza_validate",
 				"All discovered items must be processed and all tools executed in this session",
+				"Do NOT call liza_sprint_checkpoint",
 			},
 		},
 		{

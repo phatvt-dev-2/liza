@@ -179,7 +179,6 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 |---------|-----------|--------|
 | Blocked task | Task status = BLOCKED | Evaluate rescope options |
 | Hypothesis exhaustion | Task has `failed_by` with ≥2 coders | Reassign or rescope |
-| Integration failure | Task status = INTEGRATION_FAILED | Create fix task |
 | Immediate discovery | Discovery with `urgency: immediate` not yet converted | Evaluate conversion to task |
 | Systemic finding | Discovery with `source: systemic-thinking` not yet converted | Evaluate: create task, defer to ISSUES_FILE, or dismiss |
 
