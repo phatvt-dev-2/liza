@@ -37,6 +37,9 @@ var claudeSettingsContent []byte
 //go:embed "mcp.json"
 var mcpSettingsContent []byte
 
+//go:embed "console.sh"
+var consoleScriptContent []byte
+
 //go:embed "guardrails-template.md"
 var guardrailsTemplateContent []byte
 
@@ -469,6 +472,16 @@ func WriteGuardrails(projectRoot string) error {
 	}
 	if err := os.WriteFile(guardrailsPath, guardrailsTemplateContent, 0644); err != nil {
 		return fmt.Errorf("failed to write GUARDRAILS.md: %w", err)
+	}
+	return nil
+}
+
+// WriteConsoleScript writes the embedded console.sh to the project root.
+// Always overwrites (the file is gitignored).
+func WriteConsoleScript(projectRoot string) error {
+	consolePath := filepath.Join(projectRoot, "console.sh")
+	if err := os.WriteFile(consolePath, consoleScriptContent, 0755); err != nil {
+		return fmt.Errorf("failed to write console.sh: %w", err)
 	}
 	return nil
 }

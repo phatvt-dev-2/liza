@@ -31,6 +31,7 @@ coverage.out
 # Go build artifacts — sync-embedded output (only *.go is source)
 internal/embedded/*
 !internal/embedded/*.go
+!internal/embedded/console.sh
 !internal/embedded/guardrails-template.md
 !internal/embedded/pipeline.yaml
 /liza
@@ -43,3 +44,4 @@ AGENTS.md
 GEMINI.md
 
 .worktrees/
+console.sh

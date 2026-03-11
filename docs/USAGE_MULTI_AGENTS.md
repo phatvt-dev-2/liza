@@ -177,7 +177,7 @@ liza watch
 # Watch blackboard state
 watch -n 2 'liza get tasks --format table'
 # or:
-watch -n 2 'liza get tasks --format table; echo ; echo ====== Agents ====== ; liza get agents --format table ; echo ; echo ====== Metrics ====== ; liza get metrics ; echo ; echo ====== Anomalies ====== ; liza get anomalies'
+watch -n 2 './console.sh'
 ```
 
 **4. Human Interventions**

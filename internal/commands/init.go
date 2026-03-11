@@ -162,6 +162,11 @@ func InitCommandWithConfig(params InitParams) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write GUARDRAILS.md: %v\n", err)
 	}
 
+	// Write console.sh to project root (non-fatal, always overwrites)
+	if err := embedded.WriteConsoleScript(lizaPaths.ProjectRoot()); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write console.sh: %v\n", err)
+	}
+
 	// Generate IDs and timestamps
 	timestamp := time.Now().UTC()
 	goalID := fmt.Sprintf("goal-%d", timestamp.Unix())
