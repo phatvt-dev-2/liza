@@ -89,7 +89,7 @@ func (freshClaimStrategy) historyEntry(now time.Time, ctx *claimContext) models.
 	agentPtr := &ctx.agentID
 	return models.TaskHistoryEntry{
 		Time:  now,
-		Event: "claimed",
+		Event: models.TaskEventClaimed,
 		Agent: agentPtr,
 	}
 }
@@ -149,11 +149,11 @@ func (rejectedClaimStrategy) historyEntry(now time.Time, ctx *claimContext) mode
 		Agent: agentPtr,
 	}
 	if ctx.previousAssignee == ctx.agentID {
-		entry.Event = "reclaimed_after_rejection"
+		entry.Event = models.TaskEventReclaimedAfterRejection
 		return entry
 	}
 
-	entry.Event = "reassigned_after_rejection"
+	entry.Event = models.TaskEventReassignedAfterRejection
 	if ctx.previousAssignee != "" {
 		entry.PreviousAssignee = &ctx.previousAssignee
 	}
@@ -204,7 +204,7 @@ func (integrationFixClaimStrategy) historyEntry(now time.Time, ctx *claimContext
 	agentPtr := &ctx.agentID
 	return models.TaskHistoryEntry{
 		Time:  now,
-		Event: "claimed_for_integration_fix",
+		Event: models.TaskEventClaimedForIntegrationFix,
 		Agent: agentPtr,
 	}
 }
