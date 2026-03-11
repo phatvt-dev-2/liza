@@ -621,6 +621,46 @@ func TestClaimTask_ReadyWithStaleBranchAndWorktree(t *testing.T) {
 	}
 }
 
+func TestHandleReadyClaimWorktree_ConcurrentWinnerDoesNotDeleteWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.SetupLizaDir(t, tmpDir)
+
+	gitWrapper := git.New(tmpDir)
+	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("Failed to create winning worktree: %v", err)
+	}
+
+	worktreeRel := filepath.Join(paths.WorktreesDirName, "task-1")
+	worktreeDir := filepath.Join(tmpDir, worktreeRel)
+
+	err := handleReadyClaimWorktree(
+		gitWrapper,
+		"task-1",
+		"integration",
+		worktreeDir,
+		worktreeRel,
+		false,
+	)
+	if err == nil {
+		t.Fatal("Expected race-condition error")
+	}
+	if !strings.Contains(err.Error(), "race condition") {
+		t.Fatalf("Error = %q, want race condition", err.Error())
+	}
+
+	if _, err := os.Stat(worktreeDir); os.IsNotExist(err) {
+		t.Fatal("Winner worktree should remain on disk")
+	}
+	branchExists, err := gitWrapper.BranchExists("task/task-1")
+	if err != nil {
+		t.Fatalf("Failed to check branch after race: %v", err)
+	}
+	if !branchExists {
+		t.Fatal("Winner branch should remain after race")
+	}
+}
+
 func TestClaimTask_PostWorktreeCmdRunsOnFreshClaim(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)

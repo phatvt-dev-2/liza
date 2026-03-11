@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -58,14 +59,13 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 	// --- Phase 1: Validate Under Lock ---
 	var taskStatus models.TaskStatus
-	var previousAssignee string
 	var baseCommit string
 	var integrationBranch string
 	var postWorktreeCmd *string
 	var leaseDuration int
 	var maxCoderIterations int
-	var targetStatus models.TaskStatus
-	var isFreshClaim, isRejectionClaim, isIntegrationFixClaim bool
+	var strategy claimStrategy
+	var claimCtx claimContext
 	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 
 	// Read state to validate (lock is acquired and released)
@@ -109,32 +109,11 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 	switch task.Status {
 	case pipelineInitial:
-		if runtimeRole != doerRole {
-			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
-		}
-		targetStatus = pipelineExecuting
-		isFreshClaim = true
-		if unmet := unmetDependencies(task, state); len(unmet) > 0 {
-			return nil, fmt.Errorf("task has unmet dependencies: %v", unmet)
-		}
+		strategy = freshClaimStrategy{}
 	case pipelineRejected:
-		if runtimeRole != doerRole {
-			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
-		}
-		targetStatus = pipelineExecuting
-		isRejectionClaim = true
-		if task.AssignedTo != nil {
-			previousAssignee = *task.AssignedTo
-		}
+		strategy = rejectedClaimStrategy{}
 	case models.TaskStatusIntegrationFailed:
-		if runtimeRole != doerRole {
-			return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
-		}
-		targetStatus = pipelineExecuting
-		isIntegrationFixClaim = true
-		if task.AssignedTo != nil {
-			previousAssignee = *task.AssignedTo
-		}
+		strategy = integrationFixClaimStrategy{}
 	default:
 		return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
 	}
@@ -154,10 +133,22 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		leaseDuration = models.DefaultLeaseDurationSeconds
 	}
 	maxCoderIterations = effectiveCoderIterationLimit(task, state.Config)
+	claimCtx = claimContext{
+		taskID:            taskID,
+		agentID:           agentID,
+		taskStatus:        taskStatus,
+		targetStatus:      pipelineExecuting,
+		worktreeDir:       worktreeDir,
+		worktreeRel:       worktreeRel,
+		integrationBranch: integrationBranch,
+	}
+	if err := strategy.validate(task, state, runtimeRole, doerRole, &claimCtx); err != nil {
+		return nil, err
+	}
 
 	// Enforce coder iteration limits before doing any filesystem work.
 	// A REJECTED task at/over the limit is escalated to BLOCKED for orchestrator action.
-	if isRejectionClaim && task.Iteration >= maxCoderIterations {
+	if strategy.enforceIterationLimit() && task.Iteration >= maxCoderIterations {
 		blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus, pipelineTransitions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to enforce iteration limit: %w", err)
@@ -178,16 +169,13 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get integration branch commit: %w", err)
 	}
+	claimCtx.baseCommit = baseCommit
 
 	worktreePhase, err := handleClaimTaskWorktreePhase(
+		bb,
 		gitWrapper,
-		taskID,
-		isFreshClaim, isRejectionClaim, isIntegrationFixClaim,
-		integrationBranch,
-		previousAssignee,
-		agentID,
-		worktreeDir,
-		worktreeRel,
+		strategy,
+		&claimCtx,
 	)
 	if err != nil {
 		return nil, err
@@ -200,7 +188,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	// PostWorktreeCmd is idempotent — safe on existing worktrees, catches prior failures.
 	// Non-fatal: warnings are surfaced through ClaimResult for caller visibility.
 	var postCmdWarnings []string
-	if postWorktreeCmd != nil && (worktreeCreated || isRejectionClaim || isIntegrationFixClaim) {
+	if postWorktreeCmd != nil && strategy.shouldRunPostWorktreeCmd(worktreePhase) {
 		if postErr := RunPostWorktreeCmd(*postWorktreeCmd, worktreeDir); postErr != nil {
 			warning := fmt.Sprintf("post-worktree-cmd: %v", postErr)
 			postCmdWarnings = append(postCmdWarnings, warning)
@@ -211,6 +199,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	// --- Phase 3: Re-validate and Commit ---
 	now := time.Now().UTC()
 	leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
+	claimCtx.leaseExpires = leaseExpires
 
 	err = bb.Modify(func(state *models.State) error {
 		// Re-check task exists and status hasn't changed
@@ -232,7 +221,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		}
 
 		// For fresh claims: re-check dependencies
-		if isFreshClaim {
+		if _, ok := strategy.(freshClaimStrategy); ok {
 			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
 				return fmt.Errorf("race condition: dependencies changed: %v", unmet)
 			}
@@ -244,20 +233,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 			return fmt.Errorf("race condition: agent %s became busy with %s", agentID, *agent.CurrentTask)
 		}
 
-		// Build event description
-		event := "claimed"
-		if isRejectionClaim {
-			if previousAssignee == agentID {
-				event = "reclaimed_after_rejection"
-			} else {
-				event = "reassigned_after_rejection"
-			}
-		} else if isIntegrationFixClaim {
-			event = "claimed_for_integration_fix"
-		}
-
 		// Update task
-		if err := task.TransitionWith(targetStatus, pipelineTransitions); err != nil {
+		if err := task.TransitionWith(claimCtx.targetStatus, pipelineTransitions); err != nil {
 			return err
 		}
 		task.AssignedTo = &agentID
@@ -266,33 +243,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		// Increment iteration (0 -> 1 on first claim, then 2, 3, etc.)
 		task.Iteration++
 
-		// Different updates based on source state
-		if isIntegrationFixClaim {
-			task.IntegrationFix = true
-		} else if isRejectionClaim && previousAssignee != agentID {
-			// Different coder: reset review_cycles_current, update base_commit and worktree
-			task.Worktree = &worktreeRel
-			task.BaseCommit = &baseCommit
-			task.ReviewCyclesCurrent = 0
-		} else if isRejectionClaim && previousAssignee == agentID {
-			// Same coder: preserve base_commit and worktree (already set)
-		} else {
-			// Fresh claim: new worktree and base_commit
-			task.Worktree = &worktreeRel
-			task.BaseCommit = &baseCommit
-		}
-
-		// Add history entry
-		agentPtr := &agentID
-		historyEntry := models.TaskHistoryEntry{
-			Time:  now,
-			Event: event,
-			Agent: agentPtr,
-		}
-		if isRejectionClaim && previousAssignee != agentID && previousAssignee != "" {
-			historyEntry.PreviousAssignee = &previousAssignee
-		}
-		task.History = append(task.History, historyEntry)
+		strategy.mutateTask(task, &claimCtx)
+		task.History = append(task.History, strategy.historyEntry(now, &claimCtx))
 
 		// Update agent
 		if !exists {
@@ -330,8 +282,8 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		WorktreeRel:       worktreeRel,
 		BaseCommit:        baseCommit,
 		LeaseExpires:      leaseExpires,
-		IntegrationFix:    isIntegrationFixClaim,
-		PreviousAssignee:  previousAssignee,
+		IntegrationFix:    taskStatus == models.TaskStatusIntegrationFailed,
+		PreviousAssignee:  claimCtx.previousAssignee,
 		WorktreeRecreated: worktreeDeleted && worktreeCreated,
 		Warnings:          postCmdWarnings,
 	}, nil
@@ -349,59 +301,38 @@ func unmetDependencies(task *models.Task, state *models.State) []string {
 }
 
 func handleClaimTaskWorktreePhase(
+	bb *db.Blackboard,
 	gitWrapper *git.Git,
-	taskID string,
-	isFreshClaim, isRejectionClaim, isIntegrationFixClaim bool,
-	integrationBranch, previousAssignee, agentID, worktreeDir, worktreeRel string,
+	strategy claimStrategy,
+	ctx *claimContext,
 ) (claimWorktreePhaseResult, error) {
-	result := claimWorktreePhaseResult{}
-
-	switch {
-	case isFreshClaim:
-		if err := handleReadyClaimWorktree(gitWrapper, taskID, integrationBranch, worktreeDir, worktreeRel); err != nil {
-			return result, err
-		}
-		result.created = true
-		return result, nil
-	case isRejectionClaim:
-		return handleRejectedClaimWorktree(
-			gitWrapper,
-			taskID,
-			integrationBranch,
-			previousAssignee,
-			agentID,
-			worktreeDir,
-			worktreeRel,
-		)
-	case isIntegrationFixClaim:
-		if err := ensureIntegrationFailedWorktreeExists(worktreeDir, worktreeRel); err != nil {
-			return result, err
-		}
-		return result, nil
-	default:
-		return result, fmt.Errorf("unsupported claim type in worktree phase")
-	}
+	return strategy.handleWorktree(bb, gitWrapper, ctx)
 }
 
 func handleReadyClaimWorktree(
 	gitWrapper *git.Git,
 	taskID, integrationBranch, worktreeDir, worktreeRel string,
+	cleanupAllowed bool,
 ) error {
 	branchName := paths.TaskBranchPrefix + taskID
+	if _, err := gitWrapper.CreateWorktree(taskID, integrationBranch); err == nil {
+		return nil
+	} else if !isCreateWorktreeConflict(err) {
+		return fmt.Errorf("failed to create worktree: %w", err)
+	}
+	if !cleanupAllowed {
+		return fmt.Errorf("race condition: concurrent claim already provisioned worktree for READY task")
+	}
 
-	// Clean up stale worktree/branch if they exist from a previous claim that
-	// was released without proper cleanup (crash during release, manual state edits, etc.).
 	branchExists, err := gitWrapper.BranchExists(branchName)
 	if err != nil {
 		return fmt.Errorf("failed to check branch existence: %w", err)
 	}
-
 	if _, statErr := os.Stat(worktreeDir); statErr == nil {
 		log.Printf("WARNING: claim-task %s: removing stale worktree %s for READY task", taskID, worktreeRel)
 		if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
 			return fmt.Errorf("failed to remove stale worktree %s: %w", worktreeRel, cleanupErr)
 		}
-		// RemoveWorktree best-effort deletes the branch; ensure it's gone.
 		_ = gitWrapper.DeleteBranch(branchName)
 	} else if branchExists {
 		log.Printf("WARNING: claim-task %s: removing stale branch %s for READY task", taskID, branchName)
@@ -411,10 +342,33 @@ func handleReadyClaimWorktree(
 	}
 
 	if _, err := gitWrapper.CreateWorktree(taskID, integrationBranch); err != nil {
-		return fmt.Errorf("failed to create worktree: %w", err)
+		if isCreateWorktreeConflict(err) {
+			return fmt.Errorf("race condition: concurrent claim won after stale cleanup")
+		}
+		return fmt.Errorf("failed to create worktree after stale cleanup: %w", err)
 	}
 
 	return nil
+}
+
+func isCreateWorktreeConflict(err error) bool {
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "worktree already exists") ||
+		strings.Contains(errMsg, "already exists") ||
+		strings.Contains(errMsg, "already checked out")
+}
+
+func readyClaimHasStaleResources(gitWrapper *git.Git, taskID, worktreeDir string) (bool, error) {
+	branchExists, err := gitWrapper.BranchExists(paths.TaskBranchPrefix + taskID)
+	if err != nil {
+		return false, fmt.Errorf("failed to check branch existence: %w", err)
+	}
+	if _, err := os.Stat(worktreeDir); err == nil {
+		return true, nil
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Errorf("failed to stat worktree %s: %w", worktreeDir, err)
+	}
+	return branchExists, nil
 }
 
 func handleRejectedClaimWorktree(
