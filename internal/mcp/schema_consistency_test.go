@@ -188,7 +188,7 @@ func TestHandlerParamExtractionKnownPatterns(t *testing.T) {
 		{
 			handler:           "handleAddTasks",
 			required:          []string{"tasks"},
-			extractedMustHave: []string{"agent_id", "tasks"},
+			extractedMustHave: []string{"tasks"}, // agent_id extracted via resolveOrchestratorID helper
 		},
 		{
 			handler:           "handleClaimTask",
@@ -199,6 +199,11 @@ func TestHandlerParamExtractionKnownPatterns(t *testing.T) {
 			handler:           "handleMarkBlocked",
 			required:          []string{"task_id", "agent_id", "reason", "questions"},
 			extractedMustHave: []string{"questions"},
+		},
+		{
+			handler:           "handleSupersede",
+			required:          []string{"task_id", "reason"},
+			extractedMustHave: []string{"task_id", "reason"}, // agent_id extracted via resolveOrchestratorID helper
 		},
 		{
 			handler:           "handleSubmitForReview",

@@ -178,7 +178,7 @@ func TestAddTask_Success(t *testing.T) {
 	}
 }
 
-func TestAddTask_DefaultOrchestratorID(t *testing.T) {
+func TestAddTask_EmptyOrchestratorIDReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, ".liza", "log.jsonl")
@@ -193,14 +193,12 @@ func TestAddTask_DefaultOrchestratorID(t *testing.T) {
 		RolePair: "coding-pair",
 	}
 
-	// Empty orchestratorID should default to "orchestrator-1"
-	result, err := AddTask(stateFile, logFile, input, "")
-	if err != nil {
-		t.Fatalf("AddTask() error: %v", err)
+	// Empty orchestratorID should now return an error
+	_, err := AddTask(stateFile, logFile, input, "")
+	if err == nil {
+		t.Fatal("expected error for empty orchestratorID, got nil")
 	}
-	if result.TaskID != "task-1" {
-		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
-	}
+	testhelpers.AssertErrorContains(t, err, "orchestrator agent ID is required")
 }
 
 // minimalPipelineYAML is a minimal valid pipeline config for testing role_pair validation.

@@ -31,7 +31,7 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 		return nil, fmt.Errorf("rescope reason is required")
 	}
 	if agentID == "" {
-		agentID = "orchestrator-1"
+		return nil, fmt.Errorf("orchestrator agent ID is required")
 	}
 
 	lp := paths.New(projectRoot)

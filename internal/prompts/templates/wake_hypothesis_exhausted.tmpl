@@ -4,8 +4,8 @@ Multiple coders failed on same task. Re-evaluate and act NOW:
 1. Read task history — understand what was tried and why it failed
 2. Determine if:
    - Task is impossible as specified → supersede with revised tasks:
-     First: Use liza_add_tasks tool with {"tasks": [...], "agent_id": "orchestrator-1"} (create new tasks)
-     Then: Use liza_supersede_task tool with {"task_id": "<old-id>", "replacement_ids": ["<new-ids>"], "reason": "<reason>", "agent_id": "orchestrator-1"}
+     First: Use liza_add_tasks tool with {"tasks": [...], "agent_id": "{{.AgentID}}"} (create new tasks)
+     Then: Use liza_supersede_task tool with {"task_id": "<old-id>", "replacement_ids": ["<new-ids>"], "reason": "<reason>", "agent_id": "{{.AgentID}}"}
    - Missing context/docs → add to task description (update NOW)
    - Needs different approach → update scope/guidance (execute NOW)
    - Spec is wrong → fix spec first (update NOW)

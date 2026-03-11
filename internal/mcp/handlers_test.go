@@ -617,6 +617,41 @@ func TestHandleAddTasksMalformedEntry(t *testing.T) {
 	}
 }
 
+// TestHandleAddTasksAutoResolveAgentID verifies that omitting agent_id
+// auto-resolves the orchestrator from state.
+func TestHandleAddTasksAutoResolveAgentID(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	// No agent_id in params — should resolve from registered orchestrator-1
+	result, err := server.handleAddTasks(map[string]any{
+		"tasks": []any{
+			map[string]any{
+				"id":        "task-auto",
+				"desc":      "Auto-resolved agent test",
+				"spec":      "specs/test-spec.md",
+				"done":      "Task is complete",
+				"scope":     "Test scope",
+				"priority":  1,
+				"role_pair": "coding-pair",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("handleAddTasks without agent_id failed: %v", err)
+	}
+
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+}
+
 // TestHandleClaimTask verifies liza_claim_task tool
 func TestHandleClaimTask(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
@@ -1224,6 +1259,163 @@ func TestHandleSupersede(t *testing.T) {
 	task := state.Tasks[0]
 	if task.Status != models.TaskStatusSuperseded {
 		t.Errorf("Expected status SUPERSEDED, got %s", task.Status)
+	}
+}
+
+// TestHandleSupersedeAutoResolveAgentID verifies that omitting agent_id
+// auto-resolves the orchestrator from state for liza_supersede_task.
+func TestHandleSupersedeAutoResolveAgentID(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Add a replacement task
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		newTask := testhelpers.BuildTaskByStatus("task-replacement", models.TaskStatusReady, time.Now().UTC())
+		state.Tasks = append(state.Tasks, newTask)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to add replacement task: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	// No agent_id in params — should resolve from registered orchestrator-1
+	result, err := server.handleSupersede(map[string]any{
+		"task_id":         "task-1",
+		"replacement_ids": []any{"task-replacement"},
+		"reason":          "Auto-resolved supersede",
+	})
+	if err != nil {
+		t.Fatalf("handleSupersede without agent_id failed: %v", err)
+	}
+
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+
+	// Verify task was superseded
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	task := state.FindTask("task-1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusSuperseded {
+		t.Errorf("Expected status SUPERSEDED, got %s", task.Status)
+	}
+}
+
+// TestResolveOrchestratorIDValidation verifies that resolveOrchestratorID
+// rejects malformed agent_id values instead of silently auto-resolving.
+func TestResolveOrchestratorIDValidation(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	tests := []struct {
+		name    string
+		params  map[string]any
+		wantErr string
+	}{
+		{
+			name:    "empty string agent_id",
+			params:  map[string]any{"agent_id": ""},
+			wantErr: "agent_id must be a non-empty string",
+		},
+		{
+			name:    "non-string agent_id (int)",
+			params:  map[string]any{"agent_id": 123},
+			wantErr: "agent_id must be a non-empty string",
+		},
+		{
+			name:    "non-string agent_id (bool)",
+			params:  map[string]any{"agent_id": true},
+			wantErr: "agent_id must be a non-empty string",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := server.resolveOrchestratorID(tt.params)
+			if err == nil {
+				t.Fatal("Expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("Expected error containing %q, got: %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestResolveOrchestratorIDNoOrchestrator verifies that auto-resolution
+// fails with a clear error when no orchestrator is registered.
+func TestResolveOrchestratorIDNoOrchestrator(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Remove the orchestrator from state
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		delete(state.Agents, "orchestrator-1")
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	// No agent_id, no orchestrator registered
+	_, err = server.resolveOrchestratorID(map[string]any{})
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no orchestrator agent registered") {
+		t.Errorf("Expected 'no orchestrator' error, got: %v", err)
+	}
+}
+
+// TestResolveOrchestratorIDMultipleOrchestrators verifies that auto-resolution
+// fails when multiple orchestrators are registered.
+func TestResolveOrchestratorIDMultipleOrchestrators(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Add a second orchestrator
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Agents["orchestrator-2"] = models.Agent{
+			Role:      "orchestrator",
+			Status:    models.AgentStatusIdle,
+			Heartbeat: time.Now().UTC(),
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	// No agent_id, multiple orchestrators registered
+	_, err = server.resolveOrchestratorID(map[string]any{})
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "multiple orchestrators registered") {
+		t.Errorf("Expected 'multiple orchestrators' error, got: %v", err)
 	}
 }
 

@@ -164,7 +164,7 @@ func TestSupersedeTask_TaskNotFound(t *testing.T) {
 	}
 }
 
-func TestSupersedeTask_DefaultOrchestratorID(t *testing.T) {
+func TestSupersedeTask_EmptyAgentIDReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -175,9 +175,10 @@ func TestSupersedeTask_DefaultOrchestratorID(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	// Empty agentID should default to "orchestrator-1"
+	// Empty agentID should now return an error
 	_, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "reason", "")
-	if err != nil {
-		t.Fatalf("SupersedeTask() error: %v", err)
+	if err == nil {
+		t.Fatal("expected error for empty agentID, got nil")
 	}
+	testhelpers.AssertErrorContains(t, err, "orchestrator agent ID is required")
 }

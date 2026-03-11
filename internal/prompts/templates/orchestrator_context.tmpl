@@ -24,15 +24,15 @@ SPRINT STATE:
 
 ORCHESTRATOR COMMANDS:
 - liza_add_tasks — Add one or more tasks to blackboard (atomic per task, with validation)
-  Tool parameters: {"tasks": [{"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...]}], "agent_id": "orchestrator-1"}
+  Tool parameters: {"tasks": [{"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...]}], "agent_id": "{{.AgentID}}"}
 - liza_supersede_task — Supersede task
-  Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "orchestrator-1"}
+  Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "{{.AgentID}}"}
 - liza_wt_delete — Delete worktree for abandoned/superseded/blocked tasks
-  Tool parameters: {"task_id": "...", "agent_id": "orchestrator-1"}
+  Tool parameters: {"task_id": "...", "agent_id": "{{.AgentID}}"}
 - liza_sprint_checkpoint — Create sprint checkpoint for human review (pauses all agents)
-  Tool parameters: {"agent_id": "orchestrator-1"}
+  Tool parameters: {"agent_id": "{{.AgentID}}"}
 - liza_update_sprint_metrics — Recompute sprint metrics from current state
-  Tool parameters: {"agent_id": "orchestrator-1"}
+  Tool parameters: {"agent_id": "{{.AgentID}}"}
 
 ANOMALY LOGGING:
 | Event | Type | Required Fields |

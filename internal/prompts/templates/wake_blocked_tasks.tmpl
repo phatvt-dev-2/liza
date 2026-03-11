@@ -11,9 +11,9 @@ Tasks are BLOCKED. Analyze and resolve immediately:
    - To unblock: Set status back to the task's initial state (check role_pair: coding-pair→DRAFT_CODE, code-planning-pair→DRAFT_CODING_PLAN, us-writing-pair→DRAFT_US, epic-planning-pair→DRAFT_EPIC_PLAN) via fallback state edit, then run liza_validate
    - To supersede: First create replacement tasks, then use liza_supersede_task tool
    Example supersede workflow:
-   - Execute tool: liza_add_tasks with {"tasks": [{"id": "task-4", ...}], "agent_id": "orchestrator-1"} (create replacement tasks)
-   - Execute tool: liza_supersede_task with {"task_id": "task-3", "replacement_ids": ["task-4", "task-5"], "reason": "Split due to complexity", "agent_id": "orchestrator-1"}
-   - Execute tool: liza_wt_delete with {"task_id": "task-3", "agent_id": "orchestrator-1"} (if worktree exists)
+   - Execute tool: liza_add_tasks with {"tasks": [{"id": "task-4", ...}], "agent_id": "{{.AgentID}}"} (create replacement tasks)
+   - Execute tool: liza_supersede_task with {"task_id": "task-3", "replacement_ids": ["task-4", "task-5"], "reason": "Split due to complexity", "agent_id": "{{.AgentID}}"}
+   - Execute tool: liza_wt_delete with {"task_id": "task-3", "agent_id": "{{.AgentID}}"} (if worktree exists)
 4. Log decisions in task history
 5. Execute all state-modifying tools in this session. Do NOT defer.
 

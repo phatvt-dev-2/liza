@@ -25,6 +25,7 @@ type wakeEntryPointData struct {
 
 // wakeTemplateData is used by wake trigger templates that need GoalSpecRef
 type wakeTemplateData struct {
+	AgentID              string
 	GoalSpecRef          string
 	GoalEntryPoint       string               // set if --entry-point was specified
 	ResolvedRolePair     string               // role-pair resolved from GoalEntryPoint
@@ -35,6 +36,7 @@ type wakeTemplateData struct {
 
 // wakePlanningCompleteData is used by the PLANNING_COMPLETE wake template
 type wakePlanningCompleteData struct {
+	AgentID       string
 	PlanningTasks []planningTaskData
 }
 
@@ -157,22 +159,25 @@ func resolveDoerDisplayName(cfg *pipeline.PipelineConfig, rolePair string) strin
 	return rp.Doer
 }
 
-func buildInstructionsForWakeTrigger(wakeTrigger string, wakeData wakeTemplateData, planningTasks []planningTaskData) (string, error) {
+func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeTemplateData, planningTasks []planningTaskData) (string, error) {
+	agentData := wakeTemplateData{AgentID: agentID}
 	switch wakeTrigger {
 	case "INITIAL_PLANNING":
+		wakeData.AgentID = agentID
 		return executeTemplate("wake_initial_planning", wakeData)
 	case "BLOCKED_TASKS":
-		return executeTemplate("wake_blocked_tasks", nil)
+		return executeTemplate("wake_blocked_tasks", agentData)
 	case "HYPOTHESIS_EXHAUSTED":
-		return executeTemplate("wake_hypothesis_exhausted", nil)
+		return executeTemplate("wake_hypothesis_exhausted", agentData)
 	case "IMMEDIATE_DISCOVERY":
-		return executeTemplate("wake_immediate_discovery", nil)
+		return executeTemplate("wake_immediate_discovery", agentData)
 	case "PLANNING_COMPLETE":
 		return executeTemplate("wake_planning_complete", wakePlanningCompleteData{
+			AgentID:       agentID,
 			PlanningTasks: planningTasks,
 		})
 	case "SPRINT_COMPLETE":
-		return executeTemplate("wake_sprint_complete", nil)
+		return executeTemplate("wake_sprint_complete", agentData)
 	default:
 		return "", nil
 	}

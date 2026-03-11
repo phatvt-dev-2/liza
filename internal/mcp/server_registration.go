@@ -100,10 +100,6 @@ func (s *Server) registerReadOnlyResources() {
 
 // registerMutationTools registers Phase 2 mutation tools
 func (s *Server) registerMutationTools() {
-	var checkOrchestrator RoleChecker = func(id string) error {
-		return requireRole(id, roles.RuntimeOrchestrator)
-	}
-
 	// liza_add_tasks tool (batch endpoint)
 	s.registerTool(protocol.Tool{
 		Name:        "liza_add_tasks",
@@ -117,8 +113,7 @@ func (s *Server) registerMutationTools() {
 				},
 				"agent_id": {
 					Type:        "string",
-					Description: "Agent ID performing the action (default: orchestrator-1)",
-					Default:     "orchestrator-1",
+					Description: "Agent ID performing the action (default: auto-resolved from registered orchestrator)",
 				},
 			},
 			Required: []string{"tasks"},
@@ -141,7 +136,7 @@ func (s *Server) registerMutationTools() {
 				"depends":   {Type: "array", Description: "List of task IDs this task depends on"},
 				"type":      {Type: "string", Description: "Task type (default: coding)", Default: "coding"},
 				"role_pair": {Type: "string", Description: "Role pair for the task (e.g. 'code-planning-pair')"},
-				"agent_id":  {Type: "string", Description: "Agent ID performing the action (default: orchestrator-1)", Default: "orchestrator-1"},
+				"agent_id":  {Type: "string", Description: "Agent ID performing the action (default: auto-resolved from registered orchestrator)"},
 			},
 			Required: []string{"id", "desc", "spec", "done", "scope"},
 		},
@@ -330,12 +325,12 @@ func (s *Server) registerMutationTools() {
 				},
 				"agent_id": {
 					Type:        "string",
-					Description: "Agent ID performing the action",
+					Description: "Agent ID performing the action (default: auto-resolved from registered orchestrator)",
 				},
 			},
-			Required: []string{"task_id", "reason", "agent_id"},
+			Required: []string{"task_id", "reason"},
 		},
-	}, withRole(s.handleSupersede, checkOrchestrator))
+	}, s.handleSupersede)
 }
 
 // registerComplexOperations registers Phase 3 complex operation tools

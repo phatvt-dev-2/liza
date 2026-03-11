@@ -1,5 +1,11 @@
 package models
 
+import (
+	"fmt"
+
+	"github.com/liza-mas/liza/internal/roles"
+)
+
 // State represents the complete Liza state.yaml structure
 type State struct {
 	Version         int                    `yaml:"version"`
@@ -40,4 +46,28 @@ func (s *State) FindTaskIndex(taskID string) int {
 		}
 	}
 	return -1
+}
+
+// FindOrchestratorID returns the agent ID of the registered orchestrator.
+// Returns an error if zero or more than one orchestrator is registered,
+// since map iteration order is nondeterministic.
+//
+// Lease expiry is intentionally not checked here. This function answers
+// "who is the orchestrator?" not "is the orchestrator alive?". The
+// registration guard in agent.registerAgent prevents two live orchestrators;
+// stale agents should be cleaned up via delete-agent.
+func (s *State) FindOrchestratorID() (string, error) {
+	var found string
+	for id, agent := range s.Agents {
+		if agent.Role == roles.RuntimeOrchestrator {
+			if found != "" {
+				return "", fmt.Errorf("multiple orchestrators registered (%s, %s); pass --agent-id explicitly", found, id)
+			}
+			found = id
+		}
+	}
+	if found == "" {
+		return "", fmt.Errorf("no orchestrator agent registered; pass --agent-id explicitly")
+	}
+	return found, nil
 }

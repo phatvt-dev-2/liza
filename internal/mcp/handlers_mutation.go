@@ -8,11 +8,32 @@ import (
 	"github.com/liza-mas/liza/internal/roles"
 )
 
+// resolveOrchestratorID resolves the orchestrator agent ID from params or state.
+// When agent_id is absent from params, auto-resolves from the registered orchestrator.
+// When agent_id is present but empty or non-string, returns a validation error
+// to prevent silent identity assumption on malformed input.
+func (s *Server) resolveOrchestratorID(params map[string]any) (string, error) {
+	raw, present := params["agent_id"]
+	if present {
+		agentID, ok := raw.(string)
+		if !ok || agentID == "" {
+			return "", fmt.Errorf("agent_id must be a non-empty string")
+		}
+		return agentID, nil
+	}
+	statePath := paths.New(s.projectRoot).StatePath()
+	resolved, err := ops.ResolveOrchestratorFromState(statePath)
+	if err != nil {
+		return "", fmt.Errorf("agent_id not provided and auto-resolution failed: %w", err)
+	}
+	return resolved, nil
+}
+
 // handleAddTasks implements the liza_add_tasks tool (batch endpoint).
 func (s *Server) handleAddTasks(params map[string]any) (any, error) {
-	agentID, _ := params["agent_id"].(string)
-	if agentID == "" {
-		agentID = "orchestrator-1"
+	agentID, err := s.resolveOrchestratorID(params)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
@@ -230,8 +251,17 @@ func (s *Server) handleReleaseClaim(params map[string]any) (any, error) {
 // handleSupersede implements the liza_supersede_task tool
 // Maps to: liza supersede-task
 func (s *Server) handleSupersede(params map[string]any) (any, error) {
-	taskID, agentID, err := requireTaskAndAgent(params)
+	taskID, err := requireString(params, "task_id")
 	if err != nil {
+		return nil, err
+	}
+
+	agentID, err := s.resolveOrchestratorID(params)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
 		return nil, err
 	}
 

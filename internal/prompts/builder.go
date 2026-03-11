@@ -22,6 +22,7 @@ type BasePromptConfig struct {
 // OrchestratorContextConfig contains configuration for building orchestrator context
 type OrchestratorContextConfig struct {
 	ProjectRoot string
+	AgentID     string
 }
 
 // SiblingTaskSummary provides minimal context about sibling tasks in the same sprint
@@ -113,6 +114,7 @@ func BuildBasePrompt(config BasePromptConfig) (string, error) {
 
 // orchestratorContextData is the template data for orchestrator_context.tmpl
 type orchestratorContextData struct {
+	AgentID              string
 	WakeTrigger          string
 	SprintNumber         int
 	SprintHistory        []models.SprintSummary
@@ -164,12 +166,13 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 		return "", fmt.Errorf("building wake template data: %w", err)
 	}
 
-	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, wakeData, planningTasks)
+	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, config.AgentID, wakeData, planningTasks)
 	if err != nil {
 		return "", fmt.Errorf("building wake instructions: %w", err)
 	}
 
 	data := orchestratorContextData{
+		AgentID:              config.AgentID,
 		WakeTrigger:          wakeTrigger,
 		SprintNumber:         state.Sprint.Number,
 		SprintHistory:        state.SprintHistory,

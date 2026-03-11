@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/identity"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
@@ -1127,10 +1128,17 @@ Example YAML file format:
 
 		flagValue, _ := cmd.Flags().GetString("agent-id")
 		orchestratorID, _ := identity.Resolve(identity.Config{
-			FlagValue:    flagValue,
-			DefaultValue: "orchestrator-1",
-			Required:     false,
+			FlagValue: flagValue,
+			Required:  false,
 		})
+
+		if orchestratorID == "" {
+			resolved, err := ops.ResolveOrchestratorFromState(statePath)
+			if err != nil {
+				return fmt.Errorf("--agent-id not provided and %w", err)
+			}
+			orchestratorID = resolved
+		}
 
 		return commands.AddTaskCommand(statePath, logPath, input, orchestratorID)
 	},
@@ -1165,14 +1173,22 @@ Example:
 
 		flagValue, _ := cmd.Flags().GetString("agent-id")
 		agentID, _ := identity.Resolve(identity.Config{
-			FlagValue:    flagValue,
-			DefaultValue: "orchestrator-1",
-			Required:     false,
+			FlagValue: flagValue,
+			Required:  false,
 		})
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
+		}
+
+		if agentID == "" {
+			statePath := paths.New(projectRoot).StatePath()
+			resolved, resolveErr := ops.ResolveOrchestratorFromState(statePath)
+			if resolveErr != nil {
+				return fmt.Errorf("--agent-id not provided and %w", resolveErr)
+			}
+			agentID = resolved
 		}
 
 		return commands.SupersedeTaskCommand(projectRoot, taskID, replacementIDs, reason, agentID)

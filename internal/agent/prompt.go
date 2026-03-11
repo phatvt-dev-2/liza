@@ -187,6 +187,7 @@ func usReviewerContext(task *models.Task, state *models.State, config Supervisor
 func orchestratorContext(state *models.State, config SupervisorConfig) (string, error) {
 	orchestratorConfig := prompts.OrchestratorContextConfig{
 		ProjectRoot: config.ProjectRoot,
+		AgentID:     config.AgentID,
 	}
 	return prompts.BuildOrchestratorContext(state, orchestratorConfig)
 }

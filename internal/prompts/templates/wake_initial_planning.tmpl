@@ -29,7 +29,7 @@ Use liza_add_tasks once with:
     "type": "coding",
     "role_pair": "{{.ResolvedRolePair}}"
   }],
-  "agent_id": "orchestrator-1"
+  "agent_id": "{{.AgentID}}"
 }
 
 SUCCESS CRITERIA:
@@ -64,7 +64,7 @@ After classifying, use liza_add_tasks once with the chosen role_pair:
     "type": "coding",
     "role_pair": "<chosen-role-pair>"
   }],
-  "agent_id": "orchestrator-1"
+  "agent_id": "{{.AgentID}}"
 }
 
 SUCCESS CRITERIA:
@@ -86,7 +86,7 @@ Use liza_add_tasks once with:
     "type": "coding",
     "role_pair": "code-planning-pair"
   }],
-  "agent_id": "orchestrator-1"
+  "agent_id": "{{.AgentID}}"
 }
 
 SUCCESS CRITERIA:

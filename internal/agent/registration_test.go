@@ -769,3 +769,59 @@ func TestResetAgentAfterExit_NoCurrentTask(t *testing.T) {
 		t.Errorf("Expected CurrentTask nil, got %v", *agent.CurrentTask)
 	}
 }
+
+// TestRegisterSecondOrchestratorBlocked tests that registering a second
+// orchestrator with an active lease is rejected.
+func TestRegisterSecondOrchestratorBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Agents["orchestrator-1"] = models.Agent{
+		Role:         "orchestrator",
+		Status:       models.AgentStatusPlanning,
+		LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(10 * time.Minute)),
+		Heartbeat:    time.Now().UTC(),
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800)
+	if err == nil {
+		t.Fatal("expected error registering second orchestrator, got nil")
+	}
+	if !strings.Contains(err.Error(), "orchestrator already registered") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestRegisterOrchestratorTakeoverExpired tests that a new orchestrator can
+// register when the existing orchestrator's lease has expired.
+func TestRegisterOrchestratorTakeoverExpired(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Agents["orchestrator-1"] = models.Agent{
+		Role:         "orchestrator",
+		Status:       models.AgentStatusPlanning,
+		LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(-10 * time.Minute)),
+		Heartbeat:    time.Now().UTC().Add(-10 * time.Minute),
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800)
+	if err != nil {
+		t.Fatalf("expected registration to succeed with expired peer, got: %v", err)
+	}
+
+	// Verify orchestrator-2 is registered
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read state: %v", err)
+	}
+	if _, ok := readState.Agents["orchestrator-2"]; !ok {
+		t.Error("orchestrator-2 should be registered")
+	}
+}

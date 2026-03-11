@@ -154,7 +154,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				state.Tasks = []models.Task{}
 				return state
 			}(),
-			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"},
 			wantContains: []string{
 				"=== ORCHESTRATOR CONTEXT ===",
 				"WAKE TRIGGER: INITIAL_PLANNING",
@@ -192,7 +192,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"},
 			wantContains: []string{
 				"WAKE TRIGGER: BLOCKED_TASKS",
 				"- Total tasks: 2",
@@ -210,7 +210,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				state.Tasks = []models.Task{task}
 				return state
 			}(),
-			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"},
 			wantContains: []string{
 				"WAKE TRIGGER: HYPOTHESIS_EXHAUSTED",
 				"- Hypothesis exhausted: 1",
@@ -239,7 +239,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"},
 			wantContains: []string{
 				"WAKE TRIGGER: IMMEDIATE_DISCOVERY",
 				"- Immediate discoveries: 1",
@@ -259,7 +259,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"},
 			wantContains: []string{
 				"- Total tasks: 5",
 				"- Merged: 1",
@@ -281,7 +281,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				state.Tasks = []models.Task{planningTask, codingTask}
 				return state
 			}(),
-			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"},
 			wantContains: []string{
 				"WAKE TRIGGER: PLANNING_COMPLETE",
 				"- Total tasks: 2",
@@ -302,7 +302,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				}
 				return state
 			}(),
-			config: OrchestratorContextConfig{ProjectRoot: projectRoot},
+			config: OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"},
 			wantContains: []string{
 				"WAKE TRIGGER: SPRINT_COMPLETE",
 				"- Total tasks: 2",
@@ -481,6 +481,7 @@ func TestBuildOrchestratorContext_EntryPoints(t *testing.T) {
 
 			result, err := BuildOrchestratorContext(state, OrchestratorContextConfig{
 				ProjectRoot: projectRoot,
+				AgentID:     "orchestrator-1",
 			})
 			if err != nil {
 				t.Fatalf("BuildOrchestratorContext() error: %v", err)
@@ -892,7 +893,7 @@ func TestOrchestratorPromptHasAutonomyGuidance(t *testing.T) {
 		Goal:  models.Goal{SpecRef: ".liza/specs/goal.md", Description: "Test goal"},
 	}
 
-	config := OrchestratorContextConfig{ProjectRoot: projectRoot}
+	config := OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"}
 	prompt, err := BuildOrchestratorContext(state, config)
 	if err != nil {
 		t.Fatalf("BuildOrchestratorContext() error: %v", err)
@@ -1571,7 +1572,7 @@ func TestOrchestratorPromptAutonomyForAllWakeTriggers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := OrchestratorContextConfig{ProjectRoot: projectRoot}
+			config := OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"}
 			prompt, err := BuildOrchestratorContext(tt.state, config)
 			if err != nil {
 				t.Fatalf("BuildOrchestratorContext() error: %v", err)

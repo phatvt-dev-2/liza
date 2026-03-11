@@ -54,7 +54,7 @@ func (e *PostWriteValidationError) Unwrap() error {
 // and appends to the activity log. No terminal I/O.
 func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID string) (*AddTaskResult, error) {
 	if orchestratorID == "" {
-		orchestratorID = "orchestrator-1"
+		return nil, fmt.Errorf("orchestrator agent ID is required")
 	}
 	if err := paths.ValidateTaskID(input.ID); err != nil {
 		return nil, fmt.Errorf("invalid task ID: %w", err)
@@ -211,7 +211,7 @@ func AddTasks(statePath, logPath string, input *AddTasksInput) (*AddTasksResult,
 	}
 	orchestratorID := input.OrchestratorID
 	if orchestratorID == "" {
-		orchestratorID = "orchestrator-1"
+		return nil, fmt.Errorf("orchestrator agent ID is required")
 	}
 	result := &AddTasksResult{Results: make([]AddTaskItemResult, 0, len(input.Tasks))}
 	for i := range input.Tasks {

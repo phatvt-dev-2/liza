@@ -64,6 +64,18 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 			logger.Info("Taking over expired agent lease", "agent_id", agentID)
 		}
 
+		// Prevent multiple orchestrators: at most one orchestrator may be registered
+		if role == roles.RuntimeOrchestrator {
+			for id, agent := range state.Agents {
+				if id != agentID && agent.Role == roles.RuntimeOrchestrator {
+					if agent.LeaseExpires != nil && agent.LeaseExpires.After(now) {
+						return fmt.Errorf("orchestrator already registered: %s (expires %s); only one orchestrator is allowed",
+							id, agent.LeaseExpires.Format(time.RFC3339))
+					}
+				}
+			}
+		}
+
 		// Register agent directly as IDLE (atomic operation)
 		pid := os.Getpid()
 		state.Agents[agentID] = models.Agent{
