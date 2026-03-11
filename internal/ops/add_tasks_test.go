@@ -179,24 +179,15 @@ func TestAddTask_Success(t *testing.T) {
 }
 
 func TestAddTask_EmptyOrchestratorIDReturnsError(t *testing.T) {
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	logFile := filepath.Join(tmpDir, ".liza", "log.jsonl")
-	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
-
-	state := testhelpers.CreateValidState()
-	testhelpers.WriteInitialState(t, stateFile, state)
-
 	input := &AddTaskInput{
 		ID: "task-1", Description: "d", SpecRef: "specs/vision.md",
 		DoneWhen: "w", Scope: "sc", Priority: 1,
 		RolePair: "coding-pair",
 	}
 
-	// Empty orchestratorID should now return an error
-	_, err := AddTask(stateFile, logFile, input, "")
+	_, err := AddTask("/nonexistent", "/dev/null", input, "")
 	if err == nil {
-		t.Fatal("expected error for empty orchestratorID, got nil")
+		t.Fatal("expected error for empty orchestrator ID")
 	}
 	testhelpers.AssertErrorContains(t, err, "orchestrator agent ID is required")
 }

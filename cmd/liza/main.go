@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/liza-mas/liza/internal/identity"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/spf13/cobra"
 )
@@ -51,6 +52,31 @@ func requireAgentID(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("agent ID required (use --agent-id flag or LIZA_AGENT_ID env var): %w", err)
 	}
 	return agentID, nil
+}
+
+// resolveOrchestratorID resolves the orchestrator agent ID from flag, env var,
+// or workspace state (the registered orchestrator). Used by commands that default
+// to the orchestrator identity when no explicit agent ID is provided.
+func resolveOrchestratorID(cmd *cobra.Command) (string, error) {
+	flagValue, _ := cmd.Flags().GetString("agent-id")
+	agentID, _ := identity.Resolve(identity.Config{
+		FlagValue: flagValue,
+		Required:  false,
+	})
+	if agentID != "" {
+		return agentID, nil
+	}
+
+	projectRoot, err := requireProjectRoot()
+	if err != nil {
+		return "", err
+	}
+	lp := paths.New(projectRoot)
+	resolved, err := ops.ResolveOrchestratorFromState(lp.StatePath())
+	if err != nil {
+		return "", fmt.Errorf("--agent-id not provided and auto-resolution failed: %w", err)
+	}
+	return resolved, nil
 }
 
 func resolveChangedBy(cmd *cobra.Command) string {

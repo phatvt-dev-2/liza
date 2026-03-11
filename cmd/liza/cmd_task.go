@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/commands"
-	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/spf13/cobra"
 )
@@ -126,12 +125,10 @@ Example YAML file format:
 			input.Priority = 1
 		}
 
-		flagValue, _ := cmd.Flags().GetString("agent-id")
-		orchestratorID, _ := identity.Resolve(identity.Config{
-			FlagValue:    flagValue,
-			DefaultValue: "orchestrator-1",
-			Required:     false,
-		})
+		orchestratorID, err := resolveOrchestratorID(cmd)
+		if err != nil {
+			return err
+		}
 
 		return commands.AddTaskCommand(statePath, logPath, input, orchestratorID)
 	},
@@ -164,12 +161,10 @@ Example:
 			replacementIDs[i] = strings.TrimSpace(replacementIDs[i])
 		}
 
-		flagValue, _ := cmd.Flags().GetString("agent-id")
-		agentID, _ := identity.Resolve(identity.Config{
-			FlagValue:    flagValue,
-			DefaultValue: "orchestrator-1",
-			Required:     false,
-		})
+		agentID, err := resolveOrchestratorID(cmd)
+		if err != nil {
+			return err
+		}
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
