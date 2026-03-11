@@ -206,55 +206,6 @@ func TestAbortRebase_Success(t *testing.T) {
 	}
 }
 
-func TestGetWorktreeBranch_Success(t *testing.T) {
-	repoDir := setupTestRepo(t)
-	git := New(repoDir)
-
-	// Create a worktree
-	taskID := "task-branch-test"
-	if _, err := git.CreateWorktree(taskID, "integration"); err != nil {
-		t.Fatalf("CreateWorktree() error = %v", err)
-	}
-	wtPath := git.GetWorktreePath(taskID)
-
-	// Get the branch name
-	branch, err := git.GetWorktreeBranch(wtPath)
-	if err != nil {
-		t.Fatalf("GetWorktreeBranch() error = %v", err)
-	}
-
-	expectedBranch := "task/" + taskID
-	if branch != expectedBranch {
-		t.Errorf("GetWorktreeBranch() = %q, want %q", branch, expectedBranch)
-	}
-}
-
-func TestGetWorktreeBranch_DetachedHead(t *testing.T) {
-	repoDir := setupTestRepo(t)
-	git := New(repoDir)
-
-	// Create a worktree
-	taskID := "task-detached-head"
-	if _, err := git.CreateWorktree(taskID, "integration"); err != nil {
-		t.Fatalf("CreateWorktree() error = %v", err)
-	}
-	wtPath := git.GetWorktreePath(taskID)
-
-	// Detach HEAD by checking out a commit SHA
-	commitSHA := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
-	testhelpers.MustGit(t, wtPath, "checkout", commitSHA)
-
-	// Get the branch name (should be empty for detached HEAD)
-	branch, err := git.GetWorktreeBranch(wtPath)
-	if err != nil {
-		t.Fatalf("GetWorktreeBranch() error = %v", err)
-	}
-
-	if branch != "" {
-		t.Errorf("GetWorktreeBranch() = %q, want empty string for detached HEAD", branch)
-	}
-}
-
 func TestRebaseOnto_AlreadyInProgress(t *testing.T) {
 	repoDir := setupTestRepo(t)
 	git := New(repoDir)

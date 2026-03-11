@@ -1,0 +1,171 @@
+package git
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+func TestCalculateDrift(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	// Get current integration HEAD as base
+	baseCommit, err := git.GetCommitSHA("integration")
+	if err != nil {
+		t.Fatalf("GetCommitSHA() error = %v", err)
+	}
+
+	// No drift initially
+	drift, err := git.CalculateDrift(baseCommit, "integration")
+	if err != nil {
+		t.Fatalf("CalculateDrift() error = %v", err)
+	}
+	if drift != 0 {
+		t.Errorf("CalculateDrift() = %d, want 0", drift)
+	}
+
+	// Make a new commit on integration
+	testFile := filepath.Join(repoDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, repoDir, "add", "test.txt")
+	testhelpers.MustGit(t, repoDir, "commit", "-m", "New commit")
+
+	// Now there should be 1 commit of drift
+	drift, err = git.CalculateDrift(baseCommit, "integration")
+	if err != nil {
+		t.Fatalf("CalculateDrift() error = %v", err)
+	}
+	if drift != 1 {
+		t.Errorf("CalculateDrift() = %d, want 1", drift)
+	}
+}
+
+func TestGetWorktreeHEAD(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	taskID := "task-123"
+
+	// Create a worktree
+	if _, err := git.CreateWorktree(taskID, "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+
+	// Get the worktree's HEAD
+	headSHA, err := git.GetWorktreeHEAD(taskID)
+	if err != nil {
+		t.Fatalf("GetWorktreeHEAD() error = %v", err)
+	}
+
+	// Verify it's a valid SHA (40 chars)
+	if len(headSHA) != 40 {
+		t.Errorf("GetWorktreeHEAD() returned %d chars, want 40", len(headSHA))
+	}
+
+	// Get integration branch HEAD for comparison
+	integrationSHA, err := git.GetCommitSHA("integration")
+	if err != nil {
+		t.Fatalf("GetCommitSHA() error = %v", err)
+	}
+
+	// Worktree should be at same commit as integration (since we just created it)
+	if headSHA != integrationSHA {
+		t.Errorf("GetWorktreeHEAD() = %s, want %s", headSHA, integrationSHA)
+	}
+}
+
+func TestGetWorktreeBranch_Success(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	// Create a worktree
+	taskID := "task-branch-test"
+	if _, err := git.CreateWorktree(taskID, "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+	wtPath := git.GetWorktreePath(taskID)
+
+	// Get the branch name
+	branch, err := git.GetWorktreeBranch(wtPath)
+	if err != nil {
+		t.Fatalf("GetWorktreeBranch() error = %v", err)
+	}
+
+	expectedBranch := "task/" + taskID
+	if branch != expectedBranch {
+		t.Errorf("GetWorktreeBranch() = %q, want %q", branch, expectedBranch)
+	}
+}
+
+func TestGetWorktreeBranch_DetachedHead(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	// Create a worktree
+	taskID := "task-detached-head"
+	if _, err := git.CreateWorktree(taskID, "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+	wtPath := git.GetWorktreePath(taskID)
+
+	// Detach HEAD by checking out a commit SHA
+	commitSHA := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, wtPath, "checkout", commitSHA)
+
+	// Get the branch name (should be empty for detached HEAD)
+	branch, err := git.GetWorktreeBranch(wtPath)
+	if err != nil {
+		t.Fatalf("GetWorktreeBranch() error = %v", err)
+	}
+
+	if branch != "" {
+		t.Errorf("GetWorktreeBranch() = %q, want empty string for detached HEAD", branch)
+	}
+}
+
+func TestIsAncestor(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	// Get the initial commit
+	mainSHA, err := git.GetCommitSHA("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	integrationSHA, err := git.GetCommitSHA("integration")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// main should be ancestor of integration
+	isAnc, err := git.IsAncestor(mainSHA, integrationSHA)
+	if err != nil {
+		t.Fatalf("IsAncestor() error = %v", err)
+	}
+	if !isAnc {
+		t.Error("Expected main to be ancestor of integration")
+	}
+
+	// integration should NOT be ancestor of main (it has extra commits)
+	isAnc, err = git.IsAncestor(integrationSHA, mainSHA)
+	if err != nil {
+		t.Fatalf("IsAncestor() error = %v", err)
+	}
+	if isAnc {
+		t.Error("Expected integration NOT to be ancestor of main")
+	}
+
+	// same commit is ancestor of itself
+	isAnc, err = git.IsAncestor(integrationSHA, integrationSHA)
+	if err != nil {
+		t.Fatalf("IsAncestor() error = %v", err)
+	}
+	if !isAnc {
+		t.Error("Expected commit to be ancestor of itself")
+	}
+}
