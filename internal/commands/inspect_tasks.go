@@ -40,6 +40,7 @@ type taskInfo struct {
 	SpecRef         string               `json:"spec_ref,omitempty" yaml:"spec_ref,omitempty"`
 	RejectionReason *string              `json:"rejection_reason,omitempty" yaml:"rejection_reason,omitempty"`
 	Output          []models.OutputEntry `json:"output,omitempty" yaml:"output,omitempty"`
+	AttemptNum      int                  `json:"attempt_num,omitempty" yaml:"attempt_num,omitempty"`
 }
 
 // inspectTasks lists all tasks or filters by criteria
@@ -90,6 +91,7 @@ func buildTaskInfo(task *models.Task) taskInfo {
 		SpecRef:         task.SpecRef,
 		RejectionReason: task.RejectionReason,
 		Output:          task.Output,
+		AttemptNum:      len(task.Attempted) + 1,
 	}
 
 	info.Age = render.FormatDuration(calculateTaskAge(task))
@@ -189,7 +191,7 @@ func formatTasksTable(tasks []taskInfo) string {
 		return "No tasks found"
 	}
 
-	headers := []string{"ID", "STATUS", "PRIORITY", "ASSIGNED_TO", "REVIEWING_BY", "DEPS", "AGE", "TIME_IN_STATUS", "DESCRIPTION"}
+	headers := []string{"ID", "STATUS", "ATTEMPT", "PRIORITY", "ASSIGNED_TO", "REVIEWING_BY", "DEPS", "AGE", "TIME_IN_STATUS", "DESCRIPTION"}
 	var rows [][]string
 
 	for _, task := range tasks {
@@ -213,9 +215,12 @@ func formatTasksTable(tasks []taskInfo) string {
 			desc = desc[:47] + "..."
 		}
 
+		attempt := fmt.Sprintf("%d.%d", task.AttemptNum, task.Iteration)
+
 		rows = append(rows, []string{
 			task.ID,
 			task.Status,
+			attempt,
 			fmt.Sprintf("%d", task.Priority),
 			assignedTo,
 			reviewingBy,

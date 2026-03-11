@@ -570,6 +570,7 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 			DependsOn:    nil,
 			Age:          "1h ago",
 			TimeInStatus: "1h ago",
+			AttemptNum:   1,
 		},
 		{
 			ID:           "task-2",
@@ -579,6 +580,7 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 			DependsOn:    []string{"task-1"},
 			Age:          "30m ago",
 			TimeInStatus: "30m ago",
+			AttemptNum:   1,
 		},
 		{
 			ID:           "task-3",
@@ -588,14 +590,24 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 			DependsOn:    []string{"task-1", "task-2"},
 			Age:          "15m ago",
 			TimeInStatus: "15m ago",
+			AttemptNum:   2,
+			Iteration:    3,
 		},
 	}
 
 	output := formatTasksTable(tasks)
 
-	// Check header includes DEPS column
+	// Check header includes ATTEMPT and DEPS columns
+	if !strings.Contains(output, "ATTEMPT") {
+		t.Errorf("expected table header to contain 'ATTEMPT'")
+	}
 	if !strings.Contains(output, "DEPS") {
 		t.Errorf("expected table header to contain 'DEPS'")
+	}
+
+	// Check attempt values appear in output
+	if !strings.Contains(output, "2.3") {
+		t.Errorf("expected output to contain '2.3' for task-3 (attempt 2, round 3)")
 	}
 
 	// Check dependency counts appear in output
