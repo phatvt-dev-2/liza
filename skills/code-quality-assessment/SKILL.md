@@ -125,7 +125,7 @@ Your pass is N+1. Your lens continues the rotation from the previous lens.
 Each enrichment pass uses a different primary lens. Continue from the previous pass's lens.
 
 **Lenses:**
-1. **Complexity** — LOC, function length, god classes/scripts, cyclomatic complexity
+1. **Complexity** — LOC, function length, god classes/scripts, cyclomatic complexity, design-level complexity patterns
 2. **Test Coverage** — Test gaps, untested critical paths, test quality patterns
 3. **Dependencies** — Dependency count, staleness, vendoring, transitive depth
 4. **Documentation** — Doc coverage, staleness risk, spec-code drift
@@ -138,9 +138,26 @@ The first 3 passes cover the highest-value lenses (Complexity, Dependencies, CI/
 
 **How to apply:** During Phase 1+2, start with your primary lens. Spend ~40% of discovery time on it before broadening. The leading lens gets deepest attention while context is fresh.
 
-**Complexity lens — systematic large-file scan:**
-When Complexity is your primary lens, START with the LOC scan from Phase 1.3 (use the language-appropriate command).
-Flag ALL files >500 LOC as potential god classes. For each, investigate before merge phase.
+**Complexity lens — systematic scan:**
+When Complexity is your primary lens:
+
+1. **Structural scan** (start here): Run the LOC scan from Phase 1.3. Flag ALL files >500 LOC as
+   potential god classes. For each, investigate before merge phase.
+
+2. **Design-level scan** (after structural): For each complex function or file identified, ask
+   **"why is this complex?"** before recommending how to fix it:
+   - **Boolean-flag dispatch**: Function resolves a type/variant into boolean flags, then threads
+     them through multiple phases. Fix: strategy/polymorphism, not extraction.
+   - **Imperative ceremony**: Repetitive code that follows a pattern but isn't expressed as data.
+     Fix: declarative definitions + loop, not file split.
+   - **Responsibility mixing**: File contains unrelated concerns sharing no state. Fix: file split
+     (this is the one case where extraction IS the right answer).
+   - **Deep nesting**: Complex conditionals that could be flattened. Fix: early returns, guard
+     clauses, or table-driven dispatch.
+
+   The structural scan finds *where* complexity lives. The design-level scan identifies *what kind*
+   of complexity it is. Different kinds need different remedies — recommending extraction for a
+   design problem addresses the symptom, not the cause.
 
 ### Enrichment Iteration Guidance
 
@@ -250,7 +267,43 @@ find . -name "*.rs" ! -path "*/target/*" -exec wc -l {} + | sort -rn | head -20
 - Note what CI covers: lint, test, build, coverage, deploy
 - Check for coverage enforcement (threshold gates, not just reporting)
 
-## 1.6 Metrics Dashboard
+## 1.6 Code Hygiene Scan
+
+Scan for patterns that indicate quality discipline or gaps:
+
+- **Magic literals**: Search for hardcoded string values used in control flow, event dispatch, identity
+  comparison, or configuration. Language-specific patterns:
+
+  | Language | Scan Approach |
+  |----------|---------------|
+  | Go | `grep -rn '"[a-z_]*"' --include='*.go' \| grep -v '_test.go'` filtered to control flow contexts |
+  | Python | `grep -rn "['\"]\w+['\"]" --include='*.py'` in if/match/dispatch contexts |
+  | TS/JS | `grep -rn "['\"]\w+['\"]" --include='*.ts'` in switch/if/event contexts |
+
+  Not every string literal is a magic value. Focus on:
+  - Strings used in **dispatch** (switch/if chains, event names, status checks)
+  - Strings used as **identity** (agent IDs, role names, service names)
+  - Strings that appear in **multiple files** (cross-module coupling via literal)
+  - Strings that **shadow typed constants** (the type exists but literals bypass it)
+
+  **Provenance classification** — for each category of magic literal found, classify:
+
+  | Category | Example | Fix |
+  |----------|---------|-----|
+  | **System constant** | Event name, error code | Extract to typed constant |
+  | **Configuration value** | Default port, timeout | Extract to config with default |
+  | **User-supplied identity** | Agent ID, workspace name | Resolve from runtime state — a constant doesn't fix this |
+
+  The third category is the most severe: a hardcoded value that should be dynamic means the system
+  silently assumes a specific runtime configuration. A `const` only consolidates the assumption;
+  it doesn't fix it.
+
+- **Suppression markers**: Count `nolint`, `noqa`, `@ts-ignore`, `# type: ignore`, `eslint-disable`
+- **Panic/exit calls**: `panic()`, `os.Exit()`, `process.exit()`, `sys.exit()` in non-main code
+- **Untyped escape hatches**: `interface{}`, `any`, `Any`, `object` in production code
+- **TODO/FIXME/HACK**: Count and assess whether tracked or abandoned
+
+## 1.7 Metrics Dashboard
 
 Assemble findings into the dashboard format from `references/report-format.md`.
 
@@ -286,7 +339,10 @@ Each subsystem gets a 1–5 star rating:
 - **Test coverage**: Quality and depth of testing for this subsystem
 - **API clarity**: Are interfaces and contracts clear?
 - **Error handling**: How are failures managed?
-- **Complexity management**: Is complexity proportional to the problem?
+- **Complexity management**: Is complexity proportional to the problem? When complexity is high,
+  is it structural (file/function size — fixable by splitting) or design-level (wrong abstraction,
+  boolean-flag dispatch, imperative ceremony — requires pattern change)? Rate lower when complexity
+  has a design root cause, even if LOC is acceptable.
 
 ## 2.3 Analysis Template
 
@@ -370,8 +426,8 @@ One paragraph: what the project is and its overall engineering quality.
 
 | Priority | Criteria | Typical Actions |
 |----------|----------|-----------------|
-| **P1: High Impact / Low Risk** | Structural improvements that don't change behavior. Clear, safe, high ROI. | File splits, module extraction, grouping, adding missing CI gates |
-| **P2: Medium Impact / Medium Risk** | Quality improvements requiring broader changes. | Coverage enforcement, test additions, API cleanup, dependency updates |
+| **P1: High Impact / Low Risk** | Structural improvements that don't change behavior. Clear, safe, high ROI. | File splits, module extraction, grouping, adding missing CI gates, extracting typed constants from magic literals |
+| **P2: Medium Impact / Medium Risk** | Quality improvements requiring broader changes. | Coverage enforcement, test additions, API cleanup, dependency updates, design pattern introduction (strategy, declarative registration), resolving hardcoded identities |
 | **P3: Strategic / Long-term** | Investments that compound over time. May require architecture changes. | Fuzz testing, spec-code automation, tooling, major decompositions |
 
 ## 4.2 Recommendation Template
@@ -393,6 +449,11 @@ Every recommendation must trace to a finding in Phase 2 or Phase 3. No generic "
 - Do not recommend what the project already does well
 - Do not recommend architectural rewrites when structural cleanup suffices
 - Do not recommend without stating the concrete problem it addresses
+- Do not recommend file splits or method extraction as the remedy for every complexity concern.
+  Ask "why is this complex?" first — if the root cause is a design issue (boolean-flag dispatch,
+  imperative ceremony, missing polymorphism), recommend the design-level fix. Extraction addresses
+  structural complexity; it does not fix design complexity. If you find yourself recommending only
+  structural remedies, you are likely missing design-level concerns.
 - Sequence matters: P1 should be achievable independently; P2 may depend on P1
 
 ---
@@ -480,6 +541,7 @@ Healthy ranges for calibrating assessments. These are norms, not targets.
 | CI coverage enforcement | Present | Absent when test ratio is healthy (culture without enforcement) |
 | TODOs in production code | 0 ideal | >10 untracked (deferred maintenance) |
 | Pre-commit hooks | Present | None configured in a team project |
+| Magic literals in dispatch | 0 (all typed constants) | >5 untyped strings in control flow (typo risk, no IDE support) |
 
 ---
 
