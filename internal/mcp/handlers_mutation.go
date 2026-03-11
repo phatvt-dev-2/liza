@@ -277,7 +277,10 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 		return nil, fmt.Errorf("supersede task failed: %w", err)
 	}
 
-	return textResult(fmt.Sprintf("Task %s superseded (was %s)", result.TaskID, result.OriginalStatus))
+	return textResult(appendWarnings(
+		fmt.Sprintf("Task %s superseded (was %s)", result.TaskID, result.OriginalStatus),
+		result.Warnings,
+	))
 }
 
 // handleDeleteAgent implements the liza_delete_agent tool

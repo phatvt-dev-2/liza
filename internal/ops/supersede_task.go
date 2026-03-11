@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -16,6 +17,7 @@ type SupersedeResult struct {
 	TaskID         string
 	OriginalStatus models.TaskStatus
 	ReplacementIDs []string
+	Warnings       []string
 }
 
 // SupersedeTask transitions a BLOCKED, REJECTED, or READY task to SUPERSEDED,
@@ -56,6 +58,7 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 	}
 
 	// Phase 2: Atomic State Update
+	hadWorktree := task.Worktree != nil
 	err = bb.Modify(func(state *models.State) error {
 		currentTask := state.FindTask(taskID)
 		if currentTask == nil {
@@ -76,6 +79,7 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 		currentTask.LeaseExpires = nil
 		currentTask.ReviewingBy = nil
 		currentTask.ReviewLeaseExpires = nil
+		currentTask.Worktree = nil
 
 		now := time.Now().UTC()
 		note := fmt.Sprintf("replaced by: %s", strings.Join(replacementIDs, ", "))
@@ -94,9 +98,27 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 		return nil, fmt.Errorf("failed to supersede task: %w", err)
 	}
 
+	// Best-effort worktree cleanup (after state commit — safe to lose worktree now)
+	var warnings []string
+	if hadWorktree {
+		gw := git.New(projectRoot)
+		if rmErr := gw.RemoveWorktree(taskID); rmErr != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to remove worktree: %v", rmErr))
+		}
+		taskBranch := paths.TaskBranchPrefix + taskID
+		if exists, brErr := gw.BranchExists(taskBranch); brErr != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to check branch %s: %v", taskBranch, brErr))
+		} else if exists {
+			if delErr := gw.DeleteBranch(taskBranch); delErr != nil {
+				warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", taskBranch, delErr))
+			}
+		}
+	}
+
 	return &SupersedeResult{
 		TaskID:         taskID,
 		OriginalStatus: originalStatus,
 		ReplacementIDs: replacementIDs,
+		Warnings:       warnings,
 	}, nil
 }

@@ -1,11 +1,14 @@
 package ops
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -66,6 +69,11 @@ func TestSupersedeTask_FromBlocked(t *testing.T) {
 		t.Errorf("ReplacementIDs len = %d, want 2", len(result.ReplacementIDs))
 	}
 
+	// Worktree cleanup attempted (no git repo → warnings expected)
+	if len(result.Warnings) == 0 {
+		t.Error("expected warnings from worktree cleanup (no git repo in tmpDir)")
+	}
+
 	// Verify state
 	bb := db.New(stateFile)
 	readState, err := bb.Read()
@@ -88,6 +96,9 @@ func TestSupersedeTask_FromBlocked(t *testing.T) {
 	}
 	if task.AssignedTo != nil {
 		t.Error("AssignedTo should be nil after superseding")
+	}
+	if task.Worktree != nil {
+		t.Error("Worktree should be nil after superseding")
 	}
 
 	lastHistory := task.History[len(task.History)-1]
@@ -181,4 +192,58 @@ func TestSupersedeTask_EmptyAgentIDReturnsError(t *testing.T) {
 		t.Fatal("expected error for empty agentID, got nil")
 	}
 	testhelpers.AssertErrorContains(t, err, "orchestrator agent ID is required")
+}
+
+func TestSupersedeTask_CleansUpWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create a real git worktree
+	gw := git.New(tmpDir)
+	_, err := gw.CreateWorktree("task-1", "main")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+
+	// Verify worktree directory exists
+	wtPath := filepath.Join(tmpDir, ".worktrees", "task-1")
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Fatalf("worktree directory should exist: %v", err)
+	}
+
+	// Set up state with BLOCKED task that has a worktree
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "Split into smaller tasks", "orchestrator-1")
+	if err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+
+	// No warnings expected — cleanup should succeed with real git repo
+	if len(result.Warnings) > 0 {
+		t.Errorf("unexpected warnings: %v", result.Warnings)
+	}
+
+	// Verify worktree directory removed
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Error("worktree directory should be removed after supersede")
+	}
+
+	// Verify state: Worktree field cleared
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	updatedTask := readState.FindTask("task-1")
+	if updatedTask.Worktree != nil {
+		t.Error("Worktree should be nil in state after supersede")
+	}
 }
