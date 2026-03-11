@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-03-10T23:00:00Z"
+last_updated: "2026-03-11T18:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -593,10 +593,26 @@ clusters:
       limitations: "None — breaking changes expected at development stage"
     note: "Completes vocabulary arc: ADR-0033 (Orchestrator), ADR-0024 (Constants), ADR-0035 (adversarial principle)."
 
+  # --- Wave 4: 2026-03-11 ---
+
+  - id: 43
+    title: "MCP Middleware and Declarative Tool Registration"
+    commit_shas: ["728249e", "ee59b10"]
+    date_range: "2026-03-11"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0043-mcp-middleware-and-declarative-registration.md"
+    user_context:
+      problem: "Code quality assessment: zero MCP observability + inline role validation repeated in 15 handlers"
+      alternatives: "None — middleware is the standard pattern"
+      rationale: "Straightforward application of middleware chain; declarative registration follows naturally"
+      limitations: "Read-only tools still procedural; one layer of wrapping indirection"
+    note: "Extends ADR-0039 (RBAC) and ADR-0030 (Code-Enforced Guardrails)"
+
 processing_cursor:
   step: "cluster_analysis"
   substep: "high_confidence_complete"
-  note: "Wave 3 complete (ADR-0039 to ADR-0042). Domain file splitting and render extraction declined."
+  note: "Wave 4 started (ADR-0043). Remaining March 11 commits assessed as non-ADR-worthy refactoring/fixes."
 
 configuration:
   adr_output_dir: "specs/architecture/ADR"
