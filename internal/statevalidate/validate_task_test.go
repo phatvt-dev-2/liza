@@ -291,7 +291,7 @@ func TestValidateTaskInvariants_IntegrationFixHistoryLinkage(t *testing.T) {
 				task.History = []models.TaskHistoryEntry{
 					{
 						Time:  time.Now().UTC(),
-						Event: "integration_failed",
+						Event: models.TaskEventIntegrationFailed,
 					},
 				}
 				return task

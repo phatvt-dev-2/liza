@@ -206,7 +206,7 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		if task.IntegrationFix {
 			hasFailedEvent := false
 			for _, entry := range task.History {
-				if entry.Event == "integration_failed" {
+				if entry.Event == models.TaskEventIntegrationFailed {
 					hasFailedEvent = true
 					break
 				}
