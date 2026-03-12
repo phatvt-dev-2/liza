@@ -89,7 +89,7 @@ check-embedded:
 	@echo "✓ Embedded artifacts are consistent with masters"
 
 # Run linters
-lint: check-testhelpers check-embedded
+lint: sync-embedded check-testhelpers check-embedded
 	go fmt ./...
 	go vet ./...
 
