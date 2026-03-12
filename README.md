@@ -49,7 +49,7 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
   - Multi-sprints: agents are fully autonomous within a sprint, user steers between sprints via Liza CLI - review of produced artifacts, continuous improvement, and steering of the next sprint
   - A console displays a full real-time view of the execution.
 - **Adversarial architecture:**
-  - One Orchestrator role + 8 other. More to come (Architect, ...).
+  - One Orchestrator role + 8 others. More to come (Architect, ...).
   - Every activity is dual — a doer and a reviewer: epic planning, epic writing, US writing, code planning, coding - everything.
   - They interact like on a PR review — submission, feedback comments, verdict, revised submission, etc. — until approval.
 - **Hybrid hardened architecture:**
@@ -153,7 +153,7 @@ make install
 liza version
 ```
 
-### Pairing And MAS Modes
+### Pairing and MAS Modes
 
 - **Pairing**: See [Pairing Guide](docs/USAGE_PAIRING.md) — human-agent collaboration under contract
 - **Multi-Agent (Liza)**: See [USAGE](docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
@@ -251,7 +251,7 @@ Liza is a hybrid system:
   with forbidden transitions, and tiered rules that define what degrades gracefully
   versus what never bends.
 
-Reliability is built in every component.
+Reliability is built into every component.
 
 ```mermaid
 graph TB
@@ -454,7 +454,10 @@ This isn't about making agents try harder like with the Ralph Wiggum technique. 
 
 The contract operates as an explicit state machine with forbidden transitions, not as suggestions the agent interprets flexibly. Tiered rules define what degrades gracefully under pressure versus what never bends.
 
-Why does this work? LLMs inherit cognitive biases from RLHF training — sycophancy, eagerness to please, premature convergence. The contract exploits the same malleability in reverse: the Pygmalion effect (agents rise to explicit expectations), anticipated embarrassment (knowing a peer will review changes quality), and Ulysses contracts (binding commitments made before the temptation to cut corners).
+Why does this work? LLMs inherit cognitive biases from RLHF training — sycophancy, eagerness to please, premature convergence.
+The contract exploits the same malleability in reverse: the Pygmalion effect (agents rise to explicit expectations),
+anticipated embarrassment (knowing a peer will review changes' quality), and Ulysses contracts (binding commitments made
+before the temptation to cut corners).
 
 Errors caught in specs cost less than errors caught in code. The spec system front-loads understanding so agents don't discover requirements by failing tests. This reinforces the [Cost Gradient](<specs/build/1 - Vision.md>) concept from the contract.
 
@@ -525,7 +528,7 @@ See [Release Notes](docs/release_notes/) for version history and [RELEASE.md](RE
 **Planned role pairs:**
 - Sprint Analyzer role — analyze agent logs at sprint boundaries, capitalize on patterns via lesson-capture
 - Architect / Architecture Reviewer — define architecture from specs for coders to follow
-- Security Auditor / Security Audit Reviewer - review the security of the code
+- Security Auditor / Security Audit Reviewer — review the security of the code
 
 **Roadmap:**
 - Integration sub-pipeline — validate a batch of commits so it can be safely merged to main
