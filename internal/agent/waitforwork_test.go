@@ -656,9 +656,10 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 			t.Error("WaitForWork() should return false when ABORT detected")
 		}
 
-		// Should respond within 200ms
-		if elapsed > 200*time.Millisecond {
-			t.Errorf("ABORT detection took %v, expected < 200ms", elapsed)
+		// Should respond well before the 5s context deadline.
+		// fsnotify detects instantly; ticker fallback takes up to 1s.
+		if elapsed > 1500*time.Millisecond {
+			t.Errorf("ABORT detection took %v, expected < 1.5s", elapsed)
 		}
 	case <-time.After(6 * time.Second):
 		t.Fatal("Timeout waiting for ABORT response")

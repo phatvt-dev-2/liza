@@ -84,8 +84,9 @@ func waitForWorkEventDriven(
 	}
 	defer watcher.Close()
 
-	// Add ticker for periodic ABORT checks (file-based fallback)
-	abortTicker := time.NewTicker(5 * time.Second)
+	// Add ticker for periodic ABORT checks (file-based fallback).
+	// Keep this well below typical maxWait to avoid racing with context deadlines.
+	abortTicker := time.NewTicker(1 * time.Second)
 	defer abortTicker.Stop()
 
 	// Deadline timer — created once to avoid timer leak in the select loop
