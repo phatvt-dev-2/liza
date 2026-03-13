@@ -40,7 +40,7 @@ If exclusion is uncertain, ask. The default is to skip, not to clean.
 
 Before any transformation:
 
-0. **Language detection** — detect project language from staged file extensions, load the corresponding language file from `skills/clean-code/languages/<lang>.md`. This populates `$TEST_CMD`, `$COVERAGE_CMD`, and all other Tool Map variables used below. See Language-Specific Patterns for the full contract. If mixed languages are staged, see the mixed-language rule in that section.
+0. **Language detection** — detect project language from staged file extensions, load the corresponding language file from `~/.liza/skills/clean-code/languages/<lang>.md`. This populates `$TEST_CMD`, `$COVERAGE_CMD`, and all other Tool Map variables used below. See Language-Specific Patterns for the full contract. If mixed languages are staged, see the mixed-language rule in that section.
 
 1. **Staged changes exist** *(skip when commit SHA provided)*
 ```bash
@@ -346,7 +346,7 @@ If no language file exists: use only the universal Principle Catalog and warn:
 
 **Mixed-language staged diffs:** If staged files span multiple languages, resolve per-batch — each batch targets one language and uses that language's profile. Pre-flight uses the majority language's `$TEST_CMD`/`$COVERAGE_CMD`; if no clear majority, run each language's test suite.
 
-Discover available profiles with `ls skills/clean-code/languages/`.
+Discover available profiles with `ls ~/.liza/skills/clean-code/languages/`.
 
 ## Principle Conflicts
 
