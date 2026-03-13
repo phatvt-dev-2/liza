@@ -69,6 +69,7 @@ liza version
 ```bash
 liza setup          # installs contracts + skills to ~/.liza/
 liza setup --force  # overwrite existing (e.g., after liza upgrade)
+liza setup --agent-tools ~/my-agent-tools.md  # use custom AGENT_TOOLS.md
 ```
 
 **2. Initialize Project**

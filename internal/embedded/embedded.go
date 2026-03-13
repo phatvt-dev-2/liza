@@ -136,7 +136,7 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string, skipFiles map[string
 			return fmt.Errorf("failed to read embedded file %s: %w", path, err)
 		}
 
-		contentWithFrontmatter := prependFrontmatter(content)
+		contentWithFrontmatter := PrependFrontmatter(content)
 
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 			return fmt.Errorf("failed to create directory for %s: %w", targetPath, err)
@@ -152,11 +152,11 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string, skipFiles map[string
 	return written, err
 }
 
-// prependFrontmatter merges version metadata into existing YAML frontmatter,
+// PrependFrontmatter merges version metadata into existing YAML frontmatter,
 // or prepends a new frontmatter block if none exists.
 // Existing non-liza fields (e.g., skill name/description) are preserved;
 // old liza_* fields are replaced with current build values.
-func prependFrontmatter(content []byte) []byte {
+func PrependFrontmatter(content []byte) []byte {
 	prefix := []byte("---\n")
 	if !bytes.HasPrefix(content, prefix) {
 		return append([]byte(frontmatter()), content...)

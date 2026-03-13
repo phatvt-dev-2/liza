@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/embedded"
@@ -18,21 +19,49 @@ var userCustomizableFiles = map[string]bool{
 	"AGENT_TOOLS.md": true,
 }
 
+// SetupParams holds all parameters for the setup command.
+type SetupParams struct {
+	TargetDir      string    // target directory (typically ~/.liza/)
+	Force          bool      // overwrite existing files
+	AgentToolsPath string    // path to custom AGENT_TOOLS.md (empty = use embedded)
+	Stdin          io.Reader // input for interactive prompts (nil = os.Stdin)
+}
+
 // SetupCommand performs one-time global setup by writing contracts and skills
 // to the target directory (typically ~/.liza/).
-// The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
-func SetupCommand(targetDir string, force bool, stdin io.Reader) error {
+func SetupCommand(params SetupParams) error {
+	stdin := params.Stdin
 	if stdin == nil {
 		stdin = os.Stdin
 	}
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
+
+	// Early validation: read custom agent-tools file before any filesystem changes.
+	var customAgentTools []byte
+	if params.AgentToolsPath != "" {
+		content, err := os.ReadFile(params.AgentToolsPath)
+		if err != nil {
+			return fmt.Errorf("failed to read custom agent-tools file %s: %w", params.AgentToolsPath, err)
+		}
+		customAgentTools = content
 	}
 
-	planned := embedded.PlanGlobalFiles(targetDir)
+	if err := os.MkdirAll(params.TargetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", params.TargetDir, err)
+	}
+
+	planned := embedded.PlanGlobalFiles(params.TargetDir)
 	existing, fresh := partitionByExistence(planned)
 
-	skipFiles, err := confirmOverwrites(existing, fresh, force, targetDir, stdin)
+	// When --agent-tools is provided, auto-skip the embedded AGENT_TOOLS.md
+	// so confirmOverwrites won't prompt for it.
+	var autoSkip map[string]bool
+	if customAgentTools != nil {
+		autoSkip = map[string]bool{
+			filepath.Join(params.TargetDir, "AGENT_TOOLS.md"): true,
+		}
+	}
+
+	skipFiles, err := confirmOverwrites(existing, fresh, params.Force, params.TargetDir, stdin, autoSkip)
 	if err != nil {
 		return err
 	}
@@ -46,16 +75,36 @@ func SetupCommand(targetDir string, force bool, stdin io.Reader) error {
 		}
 	}
 
-	written, err := embedded.WriteGlobalFiles(targetDir, skipFiles)
+	written, err := embedded.WriteGlobalFiles(params.TargetDir, skipFiles)
 	if err != nil {
 		return fmt.Errorf("failed to write global files: %w", err)
 	}
 
-	if err := embedded.WritePipelineConfig(targetDir); err != nil {
+	// Write custom AGENT_TOOLS.md, replacing the embedded version.
+	var autoReplaced []string
+	if customAgentTools != nil {
+		agentToolsTarget := filepath.Join(params.TargetDir, "AGENT_TOOLS.md")
+
+		// Back up existing file before overwriting (data-loss protection).
+		if _, err := os.Stat(agentToolsTarget); err == nil {
+			if err := backupFile(agentToolsTarget); err != nil {
+				return fmt.Errorf("failed to backup %s: %w", agentToolsTarget, err)
+			}
+		}
+
+		contentWithFrontmatter := embedded.PrependFrontmatter(customAgentTools)
+		if err := os.WriteFile(agentToolsTarget, contentWithFrontmatter, 0644); err != nil {
+			return fmt.Errorf("failed to write custom AGENT_TOOLS.md: %w", err)
+		}
+		written = append(written, agentToolsTarget)
+		autoReplaced = append(autoReplaced, agentToolsTarget)
+	}
+
+	if err := embedded.WritePipelineConfig(params.TargetDir); err != nil {
 		return fmt.Errorf("failed to write pipeline.yaml: %w", err)
 	}
 
-	printSetupSummary(targetDir, written, skipFiles)
+	printSetupSummary(params.TargetDir, written, skipFiles, autoReplaced)
 	return nil
 }
 
@@ -72,9 +121,16 @@ func partitionByExistence(paths []string) (existing, fresh []string) {
 }
 
 // confirmOverwrites handles interactive confirmation for overwriting existing files.
-// Returns the set of files to skip (user-customizable files the user declined to overwrite).
-func confirmOverwrites(existing, fresh []string, force bool, targetDir string, stdin io.Reader) (map[string]bool, error) {
+// Returns the set of files to skip (user-customizable files the user declined to overwrite,
+// plus any auto-skipped files from the autoSkip set).
+// Files in autoSkip are added to skipFiles without prompting (e.g., when replaced by --agent-tools).
+func confirmOverwrites(existing, fresh []string, force bool, targetDir string, stdin io.Reader, autoSkip map[string]bool) (map[string]bool, error) {
 	skipFiles := make(map[string]bool)
+
+	// Seed with auto-skipped files (no prompt needed).
+	for p := range autoSkip {
+		skipFiles[p] = true
+	}
 
 	if len(existing) == 0 {
 		return skipFiles, nil
@@ -105,8 +161,11 @@ func confirmOverwrites(existing, fresh []string, force bool, targetDir string, s
 	}
 	fmt.Println()
 
-	// Per-file prompts for user-customizable files
+	// Per-file prompts for user-customizable files (skip if auto-skipped).
 	for _, p := range existing {
+		if autoSkip[p] {
+			continue
+		}
 		base := filepath.Base(p)
 		if !userCustomizableFiles[base] {
 			continue
@@ -130,15 +189,30 @@ func confirmOverwrites(existing, fresh []string, force bool, targetDir string, s
 }
 
 // printSetupSummary prints the final setup results to stdout.
-func printSetupSummary(targetDir string, written []string, skipFiles map[string]bool) {
+// autoReplaced tracks files replaced by custom versions (not "kept existing").
+func printSetupSummary(targetDir string, written []string, skipFiles map[string]bool, autoReplaced []string) {
 	fmt.Printf("Liza global config written to %s (%d files + pipeline.yaml):\n", targetDir, len(written))
 	for _, p := range written {
 		fmt.Printf("  %s\n", relDisplay(targetDir, p))
 	}
 	fmt.Printf("  %s (pipeline config)\n", relDisplay(targetDir, filepath.Join(targetDir, "pipeline.yaml")))
-	if len(skipFiles) > 0 {
-		fmt.Printf("Skipped %d user-customized files (kept existing).\n", len(skipFiles))
+
+	// Count user-skipped files (excluding auto-replaced ones).
+	keptExisting := 0
+	for p := range skipFiles {
+		if !slices.Contains(autoReplaced, p) {
+			keptExisting++
+		}
 	}
+	if keptExisting > 0 {
+		fmt.Printf("Skipped %d user-customized files (kept existing).\n", keptExisting)
+	}
+	if len(autoReplaced) == 1 {
+		fmt.Printf("Replaced 1 file with custom version.\n")
+	} else if len(autoReplaced) > 1 {
+		fmt.Printf("Replaced %d files with custom versions.\n", len(autoReplaced))
+	}
+
 	fmt.Printf("\nNext: configure global permissions in ~/.claude/settings.json\n")
 	fmt.Printf("See: contracts/contract-activation.md § Claude\n")
 }

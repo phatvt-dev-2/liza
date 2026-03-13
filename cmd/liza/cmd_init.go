@@ -32,14 +32,21 @@ to ~/.liza/skills/.
 After running setup, use 'liza init' in each project to create the
 project-local blackboard and symlinks.
 
-Use --force to overwrite an existing global config.`,
+Use --force to overwrite an existing global config.
+Use --agent-tools to install a custom AGENT_TOOLS.md instead of the embedded default.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		targetDir, err := paths.GlobalLizaDir()
 		if err != nil {
 			return err
 		}
 		force, _ := cmd.Flags().GetBool("force")
-		return commands.SetupCommand(targetDir, force, os.Stdin)
+		agentToolsPath, _ := cmd.Flags().GetString("agent-tools")
+		return commands.SetupCommand(commands.SetupParams{
+			TargetDir:      targetDir,
+			Force:          force,
+			AgentToolsPath: agentToolsPath,
+			Stdin:          os.Stdin,
+		})
 	},
 }
 
@@ -115,6 +122,7 @@ func init() {
 
 	// Setup command flags
 	setupCmd.Flags().Bool("force", false, "overwrite existing global config")
+	setupCmd.Flags().String("agent-tools", "", "path to custom AGENT_TOOLS.md (replaces embedded default)")
 
 	// Init command flags
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")

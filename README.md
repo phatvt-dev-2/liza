@@ -185,6 +185,7 @@ Or you may choose to make it your Socratic colleague, your rubber duck, or your 
 
 ```bash
 liza setup                                          # One-time global setup
+liza setup --agent-tools ~/my-tools.md              # Custom AGENT_TOOLS.md
 liza init "Project goal" --spec specs/vision.md     # Initialize blackboard
 liza init "Goal" --spec s.md \
   --config pipeline.yaml --entry-point epic-planning # Pipeline-configured init

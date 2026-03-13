@@ -87,7 +87,7 @@ func TestPrependFrontmatter(t *testing.T) {
 	BuildDate = "2026-01-01T00:00:00Z"
 
 	originalContent := []byte("# Test Content\n\nThis is a test file.")
-	result := prependFrontmatter(originalContent)
+	result := PrependFrontmatter(originalContent)
 
 	resultStr := string(result)
 
@@ -126,7 +126,7 @@ func TestPrependFrontmatter_ReplacesExisting(t *testing.T) {
 
 	// Content that already has frontmatter
 	input := []byte("---\nliza_version: \"1.0.0\"\nliza_git_commit: \"old123\"\nliza_build_date: \"2026-01-01T00:00:00Z\"\n---\n\n# Real Content\n\nBody text.")
-	result := prependFrontmatter(input)
+	result := PrependFrontmatter(input)
 	resultStr := string(result)
 
 	// Should have exactly one frontmatter block with the NEW values
@@ -161,7 +161,7 @@ func TestPrependFrontmatter_PreservesNonLizaFields(t *testing.T) {
 
 	// Skill-style frontmatter with name/description
 	input := []byte("---\nname: testing\ndescription: Test Protocol\n---\n\nTests are the immune system.")
-	result := prependFrontmatter(input)
+	result := PrependFrontmatter(input)
 	resultStr := string(result)
 
 	// Original fields must survive
@@ -203,7 +203,7 @@ func TestPrependFrontmatter_ReplacesOldLizaFieldsInMixed(t *testing.T) {
 
 	// Simulate re-running setup on an already-merged skill file
 	input := []byte("---\nname: testing\ndescription: Test Protocol\nliza_version: \"2.0.0\"\nliza_git_commit: \"old456\"\nliza_build_date: \"2026-02-01T00:00:00Z\"\n---\n\nBody.")
-	result := prependFrontmatter(input)
+	result := PrependFrontmatter(input)
 	resultStr := string(result)
 
 	// Non-liza fields preserved
