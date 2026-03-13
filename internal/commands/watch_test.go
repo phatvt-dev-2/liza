@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -1317,4 +1319,277 @@ func TestRunChecks_CircuitBreakerErrorDoesNotDropOtherAlerts(t *testing.T) {
 	if updatedState.Sprint.Status != models.SprintStatusInProgress {
 		t.Errorf("sprint.status = %s, want %s", updatedState.Sprint.Status, models.SprintStatusInProgress)
 	}
+}
+
+func TestCheckMissingRoles(t *testing.T) {
+	now := time.Now().UTC()
+
+	// Helper to load a real pipeline resolver from test fixtures.
+	loadTestResolver := func(t *testing.T) models.PipelineResolver {
+		t.Helper()
+		tmpDir := t.TempDir()
+		testhelpers.SetupPipelineConfig(t, tmpDir)
+		pr, err := ops.LoadResolverForModels(tmpDir)
+		if err != nil {
+			t.Fatalf("failed to load resolver: %v", err)
+		}
+		return pr
+	}
+
+	t.Run("no missing role — agent registered for claimable task", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		state := &models.State{
+			Tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+			},
+			Agents: map[string]models.Agent{
+				"coder-1": {Role: "coder", Status: models.AgentStatusIdle},
+			},
+		}
+		cache := make(map[string]time.Time)
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0; alerts: %v", len(alerts), alerts)
+		}
+	})
+
+	t.Run("missing doer role — task claimable but no coder registered", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		state := &models.State{
+			Tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+			},
+			Agents: map[string]models.Agent{
+				// Only a reviewer, no coder.
+				"code-reviewer-1": {Role: "code-reviewer", Status: models.AgentStatusIdle},
+			},
+		}
+		cache := make(map[string]time.Time)
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("len(alerts) = %d, want 1; alerts: %v", len(alerts), alerts)
+		}
+		if alerts[0].Category != "MISSING ROLE" {
+			t.Errorf("Category = %q, want %q", alerts[0].Category, "MISSING ROLE")
+		}
+		if alerts[0].Level != alertLevelWarning {
+			t.Errorf("Level = %q, want %q", alerts[0].Level, alertLevelWarning)
+		}
+		if !strings.Contains(alerts[0].Message, "coder") {
+			t.Errorf("Message = %q, expected to contain 'coder'", alerts[0].Message)
+		}
+		if !strings.Contains(alerts[0].Message, "task-1") {
+			t.Errorf("Message = %q, expected to contain 'task-1'", alerts[0].Message)
+		}
+	})
+
+	t.Run("missing reviewer role — task submitted but no reviewer registered", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		state := &models.State{
+			Tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now),
+			},
+			Agents: map[string]models.Agent{
+				"coder-1": {Role: "coder", Status: models.AgentStatusWorking},
+			},
+		}
+		cache := make(map[string]time.Time)
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("len(alerts) = %d, want 1; alerts: %v", len(alerts), alerts)
+		}
+		if !strings.Contains(alerts[0].Message, "code-reviewer") {
+			t.Errorf("Message = %q, expected to contain 'code-reviewer'", alerts[0].Message)
+		}
+	})
+
+	t.Run("terminal tasks ignored", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		state := &models.State{
+			Tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+				testhelpers.BuildTaskByStatus("task-2", models.TaskStatusSuperseded, now),
+				testhelpers.BuildTaskByStatus("task-3", models.TaskStatusAbandoned, now),
+			},
+			Agents: map[string]models.Agent{},
+		}
+		cache := make(map[string]time.Time)
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0 (terminal tasks); alerts: %v", len(alerts), alerts)
+		}
+	})
+
+	t.Run("dependency-blocked task with missing role — no alert", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		// task-2 is in initial status but depends on task-1 which is not merged.
+		task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now)
+		task2.DependsOn = []string{"task-1"}
+
+		state := &models.State{
+			Tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+				task2,
+			},
+			Agents: map[string]models.Agent{},
+		}
+		cache := make(map[string]time.Time)
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0 (dep-blocked task not claimable); alerts: %v", len(alerts), alerts)
+		}
+	})
+
+	t.Run("cache throttling — no duplicate alert; clears when role appears", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		state := &models.State{
+			Tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+			},
+			Agents: map[string]models.Agent{},
+		}
+		cache := make(map[string]time.Time)
+
+		// First call — should alert.
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("first call: len(alerts) = %d, want 1", len(alerts))
+		}
+		if _, ok := cache["missing-role:coder"]; !ok {
+			t.Error("expected cache entry for missing-role:coder")
+		}
+
+		// Second call — should be throttled.
+		alerts = checkMissingRoles(state, pr, cache)
+		if len(alerts) != 0 {
+			t.Errorf("second call: len(alerts) = %d, want 0 (throttled)", len(alerts))
+		}
+
+		// Agent of that role appears — cache should clear.
+		state.Agents["coder-1"] = models.Agent{Role: "coder", Status: models.AgentStatusIdle}
+		alerts = checkMissingRoles(state, pr, cache)
+		if len(alerts) != 0 {
+			t.Errorf("after agent appears: len(alerts) = %d, want 0", len(alerts))
+		}
+		if _, ok := cache["missing-role:coder"]; ok {
+			t.Error("cache entry for missing-role:coder should be cleared after agent appears")
+		}
+
+		// Agent removed again — should re-fire.
+		delete(state.Agents, "coder-1")
+		alerts = checkMissingRoles(state, pr, cache)
+		if len(alerts) != 1 {
+			t.Errorf("after agent removed: len(alerts) = %d, want 1", len(alerts))
+		}
+	})
+
+	t.Run("unknown role pair — skip gracefully", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+		task.RolePair = "nonexistent-pair"
+
+		state := &models.State{
+			Tasks:  []models.Task{task},
+			Agents: map[string]models.Agent{},
+		}
+		cache := make(map[string]time.Time)
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0 (unknown role pair); alerts: %v", len(alerts), alerts)
+		}
+	})
+
+	t.Run("nil resolver — returns no alerts", func(t *testing.T) {
+		state := &models.State{
+			Tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+			},
+			Agents: map[string]models.Agent{},
+		}
+		cache := make(map[string]time.Time)
+		alerts := checkMissingRoles(state, nil, cache)
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0 (nil resolver)", len(alerts))
+		}
+	})
+
+	t.Run("task without role pair — skipped", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+		task.RolePair = ""
+		state := &models.State{Tasks: []models.Task{task}, Agents: map[string]models.Agent{}}
+		cache := make(map[string]time.Time)
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0 (no role pair)", len(alerts))
+		}
+	})
+
+	t.Run("cache clears when task stops being claimable while role still absent", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		state := &models.State{
+			Tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+			},
+			Agents: map[string]models.Agent{},
+		}
+		cache := make(map[string]time.Time)
+
+		// First call — alerts for missing coder.
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("first call: len(alerts) = %d, want 1", len(alerts))
+		}
+		if _, ok := cache["missing-role:coder"]; !ok {
+			t.Fatal("expected cache entry for missing-role:coder")
+		}
+
+		// Task gets merged — no longer claimable (role still absent).
+		state.Tasks[0].Status = models.TaskStatusMerged
+		alerts = checkMissingRoles(state, pr, cache)
+		if len(alerts) != 0 {
+			t.Errorf("after merge: len(alerts) = %d, want 0", len(alerts))
+		}
+		if _, ok := cache["missing-role:coder"]; ok {
+			t.Error("cache entry for missing-role:coder should be cleared when task stops being claimable")
+		}
+
+		// New task becomes claimable for the same absent role — should re-fire.
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
+		}
+		alerts = checkMissingRoles(state, pr, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("new claimable task: len(alerts) = %d, want 1", len(alerts))
+		}
+		if !strings.Contains(alerts[0].Message, "task-2") {
+			t.Errorf("Message = %q, expected to contain 'task-2'", alerts[0].Message)
+		}
+	})
+
+	t.Run("alert message caps task IDs at 5", func(t *testing.T) {
+		pr := loadTestResolver(t)
+		var tasks []models.Task
+		for i := 0; i < 7; i++ {
+			id := fmt.Sprintf("task-%d", i+1)
+			tasks = append(tasks, testhelpers.BuildTaskByStatus(id, models.TaskStatusReady, now))
+		}
+
+		state := &models.State{
+			Tasks:  tasks,
+			Agents: map[string]models.Agent{},
+		}
+		cache := make(map[string]time.Time)
+		alerts := checkMissingRoles(state, pr, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("len(alerts) = %d, want 1; alerts: %v", len(alerts), alerts)
+		}
+		msg := alerts[0].Message
+		if !strings.Contains(msg, "7 task(s)") {
+			t.Errorf("Message = %q, expected '7 task(s)'", msg)
+		}
+		if !strings.Contains(msg, "... and 2 more") {
+			t.Errorf("Message = %q, expected '... and 2 more'", msg)
+		}
+	})
 }

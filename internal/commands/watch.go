@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/analysis"
@@ -13,6 +15,8 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 const (
@@ -106,6 +110,28 @@ func runChecks(_ context.Context, config WatchConfig) error {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
+	var alerts []alert
+
+	// Load pipeline resolver once for checks that need it.
+	pr, prErr := ops.LoadResolverForModels(config.ProjectRoot)
+	pipelineCacheKey := "pipeline-config-error"
+	if prErr != nil && !errors.Is(prErr, pipeline.ErrConfigNotFound) {
+		// Malformed config: emit one-time alert, don't spam every 10s tick.
+		if _, seen := config.StateCache[pipelineCacheKey]; !seen {
+			alerts = append(alerts, alert{
+				Timestamp: time.Now().UTC(),
+				Level:     alertLevelWarning,
+				Category:  "PIPELINE CONFIG",
+				Message:   prErr.Error(),
+			})
+			config.StateCache[pipelineCacheKey] = time.Now().UTC()
+		}
+	} else {
+		// Clear on success (or ErrConfigNotFound) so a later regression re-alerts.
+		delete(config.StateCache, pipelineCacheKey)
+	}
+	// pr is nil on any error — pipeline-aware checks skip gracefully.
+
 	logPath := lizaPaths.LogPath()
 	checks := []func() []alert{
 		func() []alert { return checkExpiredLeases(state) },
@@ -119,9 +145,8 @@ func runChecks(_ context.Context, config WatchConfig) error {
 		func() []alert { return checkStalled(logPath, config.StateCache) },
 		func() []alert { return checkStaleDrafts(state) },
 		func() []alert { return checkImmediateDiscoveries(state) },
+		func() []alert { return checkMissingRoles(state, pr, config.StateCache) },
 	}
-
-	var alerts []alert
 	for _, check := range checks {
 		alerts = append(alerts, check()...)
 	}
@@ -623,6 +648,123 @@ func checkImmediateDiscoveries(state *models.State) []alert {
 				Category:  "IMMEDIATE DISCOVERY",
 				Message:   fmt.Sprintf("%s — %s (Orchestrator should wake)", disc.ID, disc.Description),
 			})
+		}
+	}
+
+	return alerts
+}
+
+// checkMissingRoles alerts when claimable tasks exist but no agent of the
+// required role is registered. This catches a common first-user mistake (e.g.,
+// starting only a coder but not a code-planner).
+//
+// Design trade-off: Uses IsClaimable which checks both status AND dependency
+// satisfaction, so this only alerts when tasks are *immediately* stuck. Tasks
+// blocked by unmet deps won't trigger an alert even if the needed role is
+// missing — the alert fires later when deps resolve. This is conservative
+// (fewer false positives) at the cost of delayed detection.
+func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache map[string]time.Time) []alert {
+	if pr == nil {
+		return nil
+	}
+
+	// Build set of registered runtime roles from state.Agents.
+	// Any agent with a matching Role field counts, regardless of status —
+	// the point is: is there anyone who could eventually claim this work?
+	registeredRoles := make(map[string]bool)
+	for _, agent := range state.Agents {
+		if agent.Role != "" {
+			registeredRoles[agent.Role] = true
+		}
+	}
+
+	// Map missing runtime role → list of claimable task IDs waiting for that role.
+	missingRoleTasks := make(map[string][]string)
+
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if task.Status.IsTerminal() || task.RolePair == "" {
+			continue
+		}
+
+		// Resolve doer and reviewer runtime roles for this task's role-pair.
+		doerRuntime, err := pr.DoerRole(task.RolePair)
+		if err != nil {
+			continue // unknown role pair — skip gracefully
+		}
+		reviewerRuntime, err := pr.ReviewerRole(task.RolePair)
+		if err != nil {
+			continue
+		}
+
+		// Check doer: skip early if role is registered, then convert to workflow
+		// form for IsClaimable (which does dependency resolution).
+		doerWorkflow, err := roles.ToWorkflow(doerRuntime)
+		if err == nil && !registeredRoles[doerRuntime] && task.IsClaimable(doerWorkflow, state.Tasks, pr) {
+			missingRoleTasks[doerRuntime] = append(missingRoleTasks[doerRuntime], task.ID)
+		}
+
+		// Check reviewer: same pattern.
+		reviewerWorkflow, err := roles.ToWorkflow(reviewerRuntime)
+		if err == nil && !registeredRoles[reviewerRuntime] && task.IsClaimable(reviewerWorkflow, state.Tasks, pr) {
+			missingRoleTasks[reviewerRuntime] = append(missingRoleTasks[reviewerRuntime], task.ID)
+		}
+	}
+
+	// Emit alerts for each missing role, throttled by cache.
+	var alerts []alert
+	now := time.Now().UTC()
+
+	// Sort keys for deterministic alert order.
+	sortedRoles := make([]string, 0, len(missingRoleTasks))
+	for role := range missingRoleTasks {
+		sortedRoles = append(sortedRoles, role)
+	}
+	sort.Strings(sortedRoles)
+
+	for _, role := range sortedRoles {
+		taskIDs := missingRoleTasks[role]
+		cacheKey := "missing-role:" + role
+		if _, seen := cache[cacheKey]; seen {
+			continue
+		}
+
+		// Format task list, capping at 5 IDs.
+		const maxListed = 5
+		listed := taskIDs
+		suffix := ""
+		if len(taskIDs) > maxListed {
+			listed = taskIDs[:maxListed]
+			suffix = fmt.Sprintf("... and %d more", len(taskIDs)-maxListed)
+		}
+		msg := fmt.Sprintf("no registered agent for role %s — %d task(s) waiting (%s",
+			role, len(taskIDs), strings.Join(listed, ", "))
+		if suffix != "" {
+			msg += ", " + suffix
+		}
+		msg += ")"
+
+		alerts = append(alerts, alert{
+			Timestamp: now,
+			Level:     alertLevelWarning,
+			Category:  "MISSING ROLE",
+			Message:   msg,
+		})
+		cache[cacheKey] = now
+	}
+
+	// Clear cache entries for roles no longer in the missing set — either because
+	// an agent appeared or because the waiting tasks stopped being claimable
+	// (merged, abandoned, deps unmet, etc.). Without this, a stale cache entry
+	// would suppress the alert if a *new* task later becomes claimable for the
+	// same absent role.
+	for key := range cache {
+		if !strings.HasPrefix(key, "missing-role:") {
+			continue
+		}
+		role := strings.TrimPrefix(key, "missing-role:")
+		if _, stillMissing := missingRoleTasks[role]; !stillMissing {
+			delete(cache, key)
 		}
 	}
 
