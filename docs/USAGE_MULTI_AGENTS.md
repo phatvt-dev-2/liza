@@ -58,11 +58,8 @@ See [DEMO](DEMO.md) for a full example.
 **Installing the Liza CLI:**
 
 ```bash
-# Build
-make build
-
-# Copy to a directory in PATH
-sudo cp liza liza-mcp /usr/local/bin/
+# Build and install
+make install
 
 # Verify
 liza version
@@ -239,20 +236,20 @@ Each transition between pairs is a **human gate**: the sprint completes, the hum
 #### Sprint Phases
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ Doer Sprint                                          │
-│                                                      │
-│  1. Orchestrator creates task for current pair        │
-│  2. Doer claims task, does work, populates output[]   │
-│  3. Reviewer approves → task merges                  │
-│  4. All tasks done → SPRINT_COMPLETE                 │
-│  5. Sprint checkpoints → HUMAN GATE                  │
-│                                                      │
-│  Human reviews results, then:                        │
+┌───────────────────────────────────────────────────────────────┐
+│ Doer Sprint                                                   │
+│                                                               │
+│  1. Orchestrator creates task for current pair                │
+│  2. Doer claims task, does work, populates output[]           │
+│  3. Reviewer approves → task merges                           │
+│  4. All tasks done → SPRINT_COMPLETE                          │
+│  5. Sprint checkpoints → HUMAN GATE                           │
+│                                                               │
+│  Human reviews results, then:                                 │
 │    liza proceed <task-id> <transition>  (if next pair exists) │
 │    liza resume                          (start next sprint)   │
-│                                                      │
-└─────────────────────────────────────────────────────┘
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 Transitions create child tasks from the parent's `output[]` entries (per-subtask cardinality) or from the parent task itself (one-to-one cardinality). Available transitions are defined in `.liza/pipeline.yaml`.
