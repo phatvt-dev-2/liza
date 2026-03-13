@@ -60,7 +60,8 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
   - 20k LOC of Go (+60k of tests). Liza is not a prompt collection.
   - Agent logs recording for automatic analysis and continuous improvements (token optimization, MCP server usage analysis, ...)
 - **Multi-model:**
-  - Liza is BYOM: Claude, Codex, Mistral, Kimi, Gemini. [Not all are made equal though](docs/demo-benchmark).
+  - Liza wraps provider **CLIs**, not their APIs. This means your existing subscription (Claude Max, ChatGPT Pro, etc.) works — no API keys or per-token billing required — and your personal setup is used.
+  - BYOM: Claude Code, Codex CLI, Kimi, Mistral, Gemini. [Not all are made equal though](docs/demo-benchmark).
 - **Structured workflow:**
   - Defined as a composable and customizable YAML pipeline.
   - Coordination is performed via an auditable YAML **blackboard** (the Kanban board of the agents with full historized state details).
@@ -116,7 +117,8 @@ The multi-agent coding space splits into four categories:
 
 ### Requirements
 
-- A supported coding agent CLI: Claude Code, Codex, Kimi, Mistral, or Gemini (see [Provider Compatibility](#provider-compatibility))
+- A supported coding agent CLI: Claude Code, Codex, Kimi, Mistral, or Gemini (see [Provider Compatibility](#provider-compatibility)).
+  Liza runs on top of these CLIs — your provider subscription covers usage, no separate API billing needed.
 - Git 2.38+ (for full worktree support)
 - Go 1.25.5+ (only for building from source — pre-built binaries available via `install.sh`)
 
