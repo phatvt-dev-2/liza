@@ -1,173 +1,37 @@
 # Activation of the Contract for Pairing Agents
 
-Check [Genesis](../README.md#genesis) for the features.
-
 **WARNING**: Gemini and Mistral are not able to fully comply with the contract.
 It's not possible to make them comply strictly with instructions. They are not recommended models for Liza.
 Prefer Claude or Codex.
 
 ## Two-Layer Settings Architecture
 
-Claude Code unions permissions from **global** and **project** settings. Both are needed:
+Claude Code unions permissions from **global** and **project** settings:
 
-| Layer | File | Managed by | Contains |
-|-------|------|-----------|----------|
+| Layer | File | Managed by                  | Contains                             |
+|-------|------|-----------------------------|--------------------------------------|
 | **Project** | `<project>/.claude/settings.json` | `liza init` (automatic) | Liza MCP tools, skills, git/build commands |
-| **Global** | `~/.claude/settings.json` | Manual (one-time, below) | Personal MCP tools, `additionalDirectories`, `Read(~/.liza/**)` |
-
-`liza init` writes the project layer from the master [`claude-settings.json`](../claude-settings.json). **Do not hand-craft a subset** — agents will be blocked on any missing permission.
-
-The global layer (below) adds machine-specific tools and paths that don't belong in project settings.
+| **Global** | `~/.claude/settings.json` | Optional (user preferences) | Personal MCP tools and settings |
 
 ## Central Config
 
 The recommended way to set up `~/.liza/` is:
 ```bash
-liza setup          # one-time: writes contracts + skills to ~/.liza/
-liza setup --force  # overwrite existing
+liza setup --claude --codex --gemini --mistral          # one-time: writes contracts + skills to ~/.liza/
+liza setup --claude --codex --gemini --mistral --force  # overwrite existing (confirmation still asked per file)
 ```
 
-**Manual / development fallback** — create symlinks (useful when developing liza itself):
 ```bash
-LIZA_DIR=~/Workspace/liza  # adjust to your liza checkout
-mkdir -p ~/.liza
-cd ~/.liza
-ln -s $LIZA_DIR/contracts/CORE.md
-ln -s $LIZA_DIR/contracts/PAIRING_MODE.md
-ln -s $LIZA_DIR/contracts/MULTI_AGENT_MODE.md
-ln -s $LIZA_DIR/contracts/SUBAGENT_MODE.md
-ln -s $LIZA_DIR/contracts/AGENT_TOOLS.md
-ln -s $LIZA_DIR/contracts/COLLABORATION_CONTINUITY.md
-ln -s $LIZA_DIR/skills
+liza init --claude --codex --gemini --mistral           # agent-specific contract activation (system prompt symlink, permissions)
 ```
 
 ## Claude
 
-Create symlinks:
-```bash
-cd ~/.claude
-mkdir -p skills
-for i in ~/.liza/skills/* ; do ln -s "$i" skills/ ; done
-```
+No manual setup required — `liza setup --claude` and `liza init --claude` handle everything.
 
-The contract is followed more strictly if the symlink is created at every repo root.
-`liza init` creates these symlinks automatically. For repos not managed by liza:
-```bash
-cd <REPO_ROOT>
-ln -s ~/.liza/CORE.md CLAUDE.md
-```
-
-In `~/.claude/settings.json`, configure **global** permissions — things that apply across all projects. Adapt to your own MCP tools and paths:
-
-```json
-{
-  "additionalDirectories": ["~/.liza"],
-  "permissions": {
-    "defaultMode": "acceptEdits",
-    "allow": [
-      "Read(~/.claude/**)",
-      "Read(~/.liza/**)",
-
-      "Skill(adr-backfill)",
-      "Skill(clean-code)",
-      "Skill(code-review)",
-      "Skill(debugging)",
-      "Skill(feynman)",
-      "Skill(generic-subagent)",
-      "Skill(software-architecture-review)",
-      "Skill(spec-review)",
-      "Skill(systemic-thinking)",
-      "Skill(testing)",
-      "Skill(black-box-red-testing)",
-
-      "WebFetch",
-      "WebSearch",
-      "LSP",
-
-      "Bash(liza:*)",
-      "Bash(curl:*)",
-      "Bash(wget:*)",
-      "Bash(jq:*)",
-      "Bash(yq:*)",
-      "Bash(sort:*)",
-      "Bash(uniq:*)",
-      "Bash(cut:*)",
-      "Bash(tr:*)",
-      "Bash(diff:*)",
-      "Bash(realpath:*)",
-      "Bash(dirname:*)",
-      "Bash(basename:*)",
-      "Bash(cd:*)",
-      "Bash(echo:*)",
-      "Bash(which:*)",
-      "Bash(file:*)",
-      "Bash(tree:*)",
-      "Bash(env:*)",
-      "Bash(printenv:*)",
-      "Bash(gh:*)",
-      "Bash(git add:*)",
-      "Bash(git checkout:*)",
-      "Bash(git commit:*)",
-      "Bash(git status:*)",
-      "Bash(git diff:*)",
-      "Bash(git log:*)",
-      "Bash(git show:*)",
-      "Bash(git branch:*)",
-      "Bash(git blame:*)",
-      "Bash(git ls-files:*)",
-      "Bash(git grep:*)",
-      "Bash(git worktree:*)",
-      "Bash(git stash:*)",
-      "Bash(git rev-parse:*)",
-      "Bash(pre-commit:*)",
-      "Bash(python:*)",
-      "Bash(python3:*)",
-      "Bash(pytest:*)",
-      "Bash(shellcheck:*)",
-      "Bash(bash:*)",
-      "Bash(ls:*)",
-      "Bash(cat:*)",
-      "Bash(head:*)",
-      "Bash(tail:*)",
-      "Bash(wc:*)",
-      "Bash(date:*)",
-      "Bash(find:*)",
-      "Bash(grep:*)"
-    ]
-  }
-}
-```
-
-Then add your personal MCP tools (IDE integration, documentation servers, etc.) to the same `allow` array. These vary by machine — see your `~/.claude.json` for available MCP servers.
-
-**Permission categories:**
-- `"defaultMode": "acceptEdits"` — Required for Liza agents to work headless (preferred to `"bypassPermissions"` aka YOLO mode)
-- `Read(~/.liza/**)` — Access to contract files
-- `Bash(liza:*)` — Execution of Liza CLI commands
-- `Skill(...)` — Custom skills from `~/.liza/skills/`
-- `WebFetch/WebSearch/LSP` — Built-in Claude tools for web and code navigation
-- Other `Bash(...)` — Safe read-only shell commands (no package managers)
-
-If agents get blocked on additional tools, add them to your global settings. Refer to "Debug a stuck agent interactively" in [DEMO.md](../docs/DEMO.md#troubleshooting) to identify blocking commands.
-
-Verification:
-- Run `claude`
-- Prompt `hello`
+Verification: Run `claude` and prompt `hello`.
 
 ## Codex
-
-Create symlinks:
-```bash
-mkdir -p ~/.codex/skills
-cd ~/.codex
-for i in ~/.liza/skills/* ; do ln -s "$i" skills/ ; done
-```
-
-The contract is followed more strictly if the symlink is created at every repo root:
-```bash
-cd <REPO_ROOT>
-ln -s ~/.liza/CORE.md AGENTS.md
-```
 
 Edit `~/.codex/config.toml` (replace `<USER>` with your username):
 
@@ -191,41 +55,19 @@ args = ["--project-root", "/home/<USER>/Workspace/liza"]
 
 ## Gemini
 
-Create symlinks:
-```bash
-mkdir -p ~/.gemini/skills
-cd ~/.gemini
-for i in ~/.liza/skills/* ; do ln -s "$i" skills/ ; done
-```
-
-The contract is followed more strictly if the symlink is created at every repo root:
-```bash
-cd <REPO_ROOT>
-ln -s ~/.liza/CORE.md GEMINI.md
-```
-
 Add to ~/.gemini/settings.json:
 
 ```json
 {
   "context": {
     "includeDirectories": [
-      "~/.liza",
-      "~/Workspace/liza"
+      "~/.liza"
     ]
   }
 }
 ```
 
 ## Mistral
-
-Symlink the contract as instructions and add skills:
-```bash
-mkdir -p ~/.vibe/prompts ~/.vibe/skills
-cd ~/.vibe
-ln -s ~/.liza/CORE.md prompts/liza.md
-for i in ~/.liza/skills/* ; do ln -s "$i" skills/ ; done
-```
 
 Modify `~/.vibe/config.toml`:
 - Add `system_prompt_id = "liza"` (replace `system_prompt_id = "cli"` with)
@@ -246,8 +88,15 @@ Verification:
 
 ## Kimi (with Claude CLI)
 
+Make sure your claude setup is in place.
+
+Create a `kimi` command (adapt to your settings):
 ```bash
-alias kimi="ANTHROPIC_BASE_URL=https://api.kimi.com/coding/ ANTHROPIC_API_KEY=$KIMI_API_KEY ANTHROPIC_MODEL='kimi-k2.5' claude"
+cat > ~/.local/bin/kimi << EOF
+#!/bin/bash
+source ~/.llm-credentials
+ANTHROPIC_BASE_URL=https://api.kimi.com/coding/ ANTHROPIC_API_KEY=$KIMI_API_KEY ANTHROPIC_MODEL='kimi-k2.5' claude "$@"
+EOF
 ```
 Then run `kimi`
 

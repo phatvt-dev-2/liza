@@ -8,7 +8,6 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -252,9 +251,8 @@ func collectFiles(fsys embed.FS) ([]string, error) {
 }
 
 // confirmMerge prompts the user for yes/no confirmation and returns true if accepted.
-func confirmMerge(prompt string, stdin io.Reader) (bool, error) {
+func confirmMerge(prompt string, reader *bufio.Reader) (bool, error) {
 	fmt.Print(prompt)
-	reader := bufio.NewReader(stdin)
 	response, err := reader.ReadString('\n')
 	if err != nil {
 		return false, fmt.Errorf("failed to read user input: %w", err)
@@ -267,17 +265,14 @@ func confirmMerge(prompt string, stdin io.Reader) (bool, error) {
 // If the file already exists, prompts the user to merge settings.
 // Returns nil on success or if user declines merge.
 // The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
-func WriteClaudeSettings(projectRoot string, stdin io.Reader) error {
-	if stdin == nil {
-		stdin = os.Stdin
-	}
+func WriteClaudeSettings(projectRoot string, reader *bufio.Reader) error {
 	lizaPaths := paths.New(projectRoot)
 	claudeDir := lizaPaths.ClaudeDir()
 	settingsPath := lizaPaths.ClaudeSettingsPath()
 
 	var existingSettings map[string]any
 	if existingData, err := os.ReadFile(settingsPath); err == nil {
-		ok, err := confirmMerge("Should the Liza claude settings be merged into the existing settings file? (y/n): ", stdin)
+		ok, err := confirmMerge("Should the Liza claude settings be merged into the existing settings file? (y/n): ", reader)
 		if err != nil {
 			return err
 		}
@@ -401,15 +396,12 @@ func unionStringArrays(a, b []any) []any {
 // If the file already exists, prompts the user to merge settings.
 // Returns nil on success or if user declines merge.
 // The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
-func WriteMCPSettings(projectRoot string, stdin io.Reader) error {
-	if stdin == nil {
-		stdin = os.Stdin
-	}
+func WriteMCPSettings(projectRoot string, reader *bufio.Reader) error {
 	mcpSettingsPath := filepath.Join(projectRoot, ".mcp.json")
 
 	var existingSettings map[string]any
 	if existingData, err := os.ReadFile(mcpSettingsPath); err == nil {
-		ok, err := confirmMerge("Should the Liza MCP server configuration be merged into the existing .mcp.json file? (y/n): ", stdin)
+		ok, err := confirmMerge("Should the Liza MCP server configuration be merged into the existing .mcp.json file? (y/n): ", reader)
 		if err != nil {
 			return err
 		}

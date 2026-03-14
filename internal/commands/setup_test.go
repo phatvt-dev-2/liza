@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -355,5 +356,208 @@ func TestSetupCommand_CustomAgentToolsFileNotFound(t *testing.T) {
 	// No files should have been written
 	if _, err := os.Stat(filepath.Join(tmpDir, "CORE.md")); err == nil {
 		t.Error("CORE.md should not exist — early validation should prevent any writes")
+	}
+}
+
+// setupWithAgents is a test helper that runs SetupCommand with agent flags,
+// using tmpDir as both the liza dir (TargetDir) and homeDir.
+func setupWithAgents(t *testing.T, agents []string) (lizaDir, homeDir string) {
+	t.Helper()
+	lizaDir = t.TempDir()
+	homeDir = t.TempDir()
+
+	err := SetupCommand(SetupParams{
+		TargetDir: lizaDir,
+		Agents:    agents,
+		HomeDir:   homeDir,
+	})
+	if err != nil {
+		t.Fatalf("SetupCommand failed: %v", err)
+	}
+	return lizaDir, homeDir
+}
+
+func TestSetupCommand_AgentClaude(t *testing.T) {
+	lizaDir, homeDir := setupWithAgents(t, []string{"claude"})
+
+	// Verify skills dir exists
+	skillsDir := filepath.Join(homeDir, ".claude", "skills")
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		t.Fatalf("failed to read skills dir: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("no skill symlinks created")
+	}
+
+	// Verify each entry is a symlink pointing to the liza skills dir
+	for _, entry := range entries {
+		linkPath := filepath.Join(skillsDir, entry.Name())
+		target, err := os.Readlink(linkPath)
+		if err != nil {
+			t.Errorf("%s is not a symlink: %v", entry.Name(), err)
+			continue
+		}
+		expectedTarget := filepath.Join(lizaDir, "skills", entry.Name())
+		if target != expectedTarget {
+			t.Errorf("symlink %s points to %s, want %s", entry.Name(), target, expectedTarget)
+		}
+	}
+
+	// Verify source skills match symlinked skills
+	sourceEntries, _ := os.ReadDir(filepath.Join(lizaDir, "skills"))
+	if len(entries) != len(sourceEntries) {
+		t.Errorf("got %d symlinks, want %d (matching source skills)", len(entries), len(sourceEntries))
+	}
+}
+
+func TestSetupCommand_AgentMistral(t *testing.T) {
+	lizaDir, homeDir := setupWithAgents(t, []string{"mistral"})
+
+	// Verify skills symlinks in .vibe/skills/
+	skillsDir := filepath.Join(homeDir, ".vibe", "skills")
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		t.Fatalf("failed to read .vibe/skills: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("no skill symlinks in .vibe/skills/")
+	}
+
+	// Verify prompts/ dir exists
+	promptsDir := filepath.Join(homeDir, ".vibe", "prompts")
+	if _, err := os.Stat(promptsDir); os.IsNotExist(err) {
+		t.Fatal("prompts/ dir not created for mistral")
+	}
+
+	// Verify prompts/liza.md symlink points to CORE.md
+	lizaLink := filepath.Join(promptsDir, "liza.md")
+	target, err := os.Readlink(lizaLink)
+	if err != nil {
+		t.Fatalf("prompts/liza.md is not a symlink: %v", err)
+	}
+	expectedTarget := filepath.Join(lizaDir, "CORE.md")
+	if target != expectedTarget {
+		t.Errorf("prompts/liza.md points to %s, want %s", target, expectedTarget)
+	}
+}
+
+func TestSetupCommand_AgentIdempotent(t *testing.T) {
+	lizaDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	// Run setup twice
+	for i := 0; i < 2; i++ {
+		err := SetupCommand(SetupParams{
+			TargetDir: lizaDir,
+			Agents:    []string{"claude"},
+			HomeDir:   homeDir,
+			Force:     i > 0, // second run needs --force since files exist
+			Stdin:     strings.NewReader("y\n"),
+		})
+		if err != nil {
+			t.Fatalf("SetupCommand run %d failed: %v", i+1, err)
+		}
+	}
+
+	// Verify symlinks are still correct
+	skillsDir := filepath.Join(homeDir, ".claude", "skills")
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		t.Fatalf("failed to read skills dir: %v", err)
+	}
+	for _, entry := range entries {
+		linkPath := filepath.Join(skillsDir, entry.Name())
+		target, err := os.Readlink(linkPath)
+		if err != nil {
+			t.Errorf("%s is not a symlink after idempotent run: %v", entry.Name(), err)
+			continue
+		}
+		expectedTarget := filepath.Join(lizaDir, "skills", entry.Name())
+		if target != expectedTarget {
+			t.Errorf("symlink %s points to %s, want %s", entry.Name(), target, expectedTarget)
+		}
+	}
+}
+
+func TestSetupCommand_AgentExistingWrongSymlink(t *testing.T) {
+	lizaDir, homeDir := setupWithAgents(t, []string{"claude"})
+
+	// Get a skill name to tamper with
+	skillsDir := filepath.Join(homeDir, ".claude", "skills")
+	entries, _ := os.ReadDir(skillsDir)
+	if len(entries) == 0 {
+		t.Fatal("no skills to test with")
+	}
+	targetSkill := entries[0].Name()
+	linkPath := filepath.Join(skillsDir, targetSkill)
+
+	// Replace with a wrong symlink
+	os.Remove(linkPath)
+	os.Symlink("/wrong/target", linkPath)
+
+	// Run setup again — "y" for bulk overwrite, "y" for AGENT_TOOLS.md, "y" for symlink replacement
+	err := SetupCommand(SetupParams{
+		TargetDir: lizaDir,
+		Agents:    []string{"claude"},
+		HomeDir:   homeDir,
+		Force:     true,
+		Stdin:     strings.NewReader("y\ny\ny\n"),
+	})
+	if err != nil {
+		t.Fatalf("SetupCommand failed: %v", err)
+	}
+
+	// Verify it now points to the correct target
+	target, err := os.Readlink(linkPath)
+	if err != nil {
+		t.Fatalf("not a symlink: %v", err)
+	}
+	expectedTarget := filepath.Join(lizaDir, "skills", targetSkill)
+	if target != expectedTarget {
+		t.Errorf("symlink %s points to %s, want %s", targetSkill, target, expectedTarget)
+	}
+}
+
+func TestSetupCommand_MultipleAgents(t *testing.T) {
+	lizaDir, homeDir := setupWithAgents(t, []string{"claude", "codex"})
+
+	sourceEntries, _ := os.ReadDir(filepath.Join(lizaDir, "skills"))
+	var expectedSkills []string
+	for _, e := range sourceEntries {
+		expectedSkills = append(expectedSkills, e.Name())
+	}
+	sort.Strings(expectedSkills)
+
+	for _, agent := range []struct {
+		name      string
+		configDir string
+	}{
+		{"claude", ".claude"},
+		{"codex", ".codex"},
+	} {
+		skillsDir := filepath.Join(homeDir, agent.configDir, "skills")
+		entries, err := os.ReadDir(skillsDir)
+		if err != nil {
+			t.Fatalf("agent %s: failed to read skills dir: %v", agent.name, err)
+		}
+
+		var gotSkills []string
+		for _, e := range entries {
+			gotSkills = append(gotSkills, e.Name())
+		}
+		sort.Strings(gotSkills)
+
+		if len(gotSkills) != len(expectedSkills) {
+			t.Errorf("agent %s: got %d symlinks, want %d", agent.name, len(gotSkills), len(expectedSkills))
+		}
+		for i, name := range expectedSkills {
+			if i >= len(gotSkills) {
+				break
+			}
+			if gotSkills[i] != name {
+				t.Errorf("agent %s: skill[%d] = %s, want %s", agent.name, i, gotSkills[i], name)
+			}
+		}
 	}
 }

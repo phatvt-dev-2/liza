@@ -1,6 +1,7 @@
 package embedded
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -686,7 +687,7 @@ func TestWriteClaudeSettings_NewFile(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	err := WriteClaudeSettings(tmpDir, nil)
+	err := WriteClaudeSettings(tmpDir, bufio.NewReader(strings.NewReader("")))
 	if err != nil {
 		t.Fatalf("WriteClaudeSettings failed: %v", err)
 	}
@@ -789,7 +790,7 @@ func TestWriteClaudeSettings_MergeAccepted(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := WriteClaudeSettings(tmpDir, stdin)
+	err := WriteClaudeSettings(tmpDir, bufio.NewReader(stdin))
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -885,7 +886,7 @@ func TestWriteClaudeSettings_MergeDeclined(t *testing.T) {
 	// Inject stdin to decline merge
 	stdin := strings.NewReader("n\n")
 
-	err := WriteClaudeSettings(tmpDir, stdin)
+	err := WriteClaudeSettings(tmpDir, bufio.NewReader(stdin))
 	if err != nil {
 		t.Fatalf("WriteClaudeSettings failed: %v", err)
 	}
@@ -912,7 +913,7 @@ func TestWriteClaudeSettings_MergeDeclined(t *testing.T) {
 func TestWriteClaudeSettings_JSONValidity(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	err := WriteClaudeSettings(tmpDir, nil)
+	err := WriteClaudeSettings(tmpDir, bufio.NewReader(strings.NewReader("")))
 	if err != nil {
 		t.Fatalf("WriteClaudeSettings failed: %v", err)
 	}

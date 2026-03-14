@@ -41,10 +41,14 @@ Use --agent-tools to install a custom AGENT_TOOLS.md instead of the embedded def
 		}
 		force, _ := cmd.Flags().GetBool("force")
 		agentToolsPath, _ := cmd.Flags().GetString("agent-tools")
+
+		agents := collectAgentFlags(cmd)
+
 		return commands.SetupCommand(commands.SetupParams{
 			TargetDir:      targetDir,
 			Force:          force,
 			AgentToolsPath: agentToolsPath,
+			Agents:         agents,
 			Stdin:          os.Stdin,
 		})
 	},
@@ -52,7 +56,7 @@ Use --agent-tools to install a custom AGENT_TOOLS.md instead of the embedded def
 
 var initCmd = &cobra.Command{
 	Use:   "init [description]",
-	Short: "Initialize a new Liza workspace",
+	Short: "Initialize a new Liza workspace or enable pairing",
 	Long: `Initialize a new Liza workspace by creating .liza directory structure,
 generating initial state.yaml, and setting up the integration branch.
 
@@ -66,9 +70,28 @@ specify which entry-point to use (must be defined in the config).
 Use --post-worktree-cmd to specify a shell command that runs after every worktree
 creation (e.g. 'make setup', 'npm install'). This ensures worktrees are
 build/test-ready without hardcoding project-specific tooling into Liza.
-Existing workspaces can add post_worktree_cmd to state.yaml's config section.`,
-	Args: cobra.ExactArgs(1),
+Existing workspaces can add post_worktree_cmd to state.yaml's config section.
+
+PAIRING MODE: Use agent flags without a description to create only the contract
+symlinks needed for pairing (no .liza/ workspace):
+  liza init --claude           # creates CLAUDE.md → ~/.liza/CORE.md
+  liza init --claude --codex   # creates CLAUDE.md + AGENTS.md`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		agents := collectAgentFlags(cmd)
+
+		// Pairing mode: agent flags without description
+		if len(args) == 0 {
+			if len(agents) == 0 {
+				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --gemini, --mistral)\nSee: liza init --help")
+			}
+			return commands.InitPairingCommand(commands.InitPairingParams{
+				Agents: agents,
+				Stdin:  os.Stdin,
+			})
+		}
+
+		// Full workspace init
 		description := args[0]
 		specRef, _ := cmd.Flags().GetString("spec")
 		configPath, _ := cmd.Flags().GetString("config")
@@ -114,6 +137,20 @@ Returns detailed error messages if validation fails.`,
 	},
 }
 
+// agentFlagNames is the canonical list of supported agent flag names.
+var agentFlagNames = []string{"claude", "codex", "gemini", "mistral"}
+
+// collectAgentFlags returns the agent names whose boolean flags are set on cmd.
+func collectAgentFlags(cmd *cobra.Command) []string {
+	var agents []string
+	for _, name := range agentFlagNames {
+		if v, _ := cmd.Flags().GetBool(name); v {
+			agents = append(agents, name)
+		}
+	}
+	return agents
+}
+
 func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(setupCmd)
@@ -123,12 +160,20 @@ func init() {
 	// Setup command flags
 	setupCmd.Flags().Bool("force", false, "overwrite existing global config")
 	setupCmd.Flags().String("agent-tools", "", "path to custom AGENT_TOOLS.md (replaces embedded default)")
+	setupCmd.Flags().Bool("claude", false, "create skill symlinks in ~/.claude/")
+	setupCmd.Flags().Bool("codex", false, "create skill symlinks in ~/.codex/")
+	setupCmd.Flags().Bool("gemini", false, "create skill symlinks in ~/.gemini/")
+	setupCmd.Flags().Bool("mistral", false, "create skill symlinks in ~/.vibe/")
 
 	// Init command flags
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")
 	initCmd.Flags().String("config", defaultPipelineConfigPath(), "path to pipeline YAML config file")
 	initCmd.Flags().String("entry-point", "", `entry-point name: "general-objective" or "detailed-spec" in default pipeline (default: auto-classified by orchestrator)`)
 	initCmd.Flags().String("post-worktree-cmd", "", "shell command to run after worktree creation (e.g. 'make setup')")
+	initCmd.Flags().Bool("claude", false, "create CLAUDE.md symlink to ~/.liza/CORE.md")
+	initCmd.Flags().Bool("codex", false, "create AGENTS.md symlink to ~/.liza/CORE.md")
+	initCmd.Flags().Bool("gemini", false, "create GEMINI.md symlink to ~/.liza/CORE.md")
+	initCmd.Flags().Bool("mistral", false, "set up ~/.vibe/ for Liza contract")
 
 	// Validate command flags
 	validateCmd.Flags().Bool("skip-spec-check", false, "skip spec file existence check")

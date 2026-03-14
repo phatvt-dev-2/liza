@@ -909,6 +909,267 @@ func TestInitCommandWithConfig_PostWorktreeCmdOmittedWhenEmpty(t *testing.T) {
 	}
 }
 
+// --- InitPairingCommand tests ---
+
+func TestInitPairingCommand_Claude(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	os.Chdir(gitDir)
+
+	err := InitPairingCommand(InitPairingParams{
+		Agents: []string{"claude"},
+	})
+	if err != nil {
+		t.Fatalf("InitPairingCommand failed: %v", err)
+	}
+
+	// CLAUDE.md should be a symlink to ~/.liza/CORE.md
+	target, err := os.Readlink(filepath.Join(gitDir, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("CLAUDE.md not a symlink: %v", err)
+	}
+	expected := filepath.Join(fakeHome, ".liza", "CORE.md")
+	if target != expected {
+		t.Errorf("CLAUDE.md → %q, want %q", target, expected)
+	}
+
+	// .liza/ directory should NOT exist
+	if _, err := os.Stat(filepath.Join(gitDir, ".liza")); !os.IsNotExist(err) {
+		t.Error(".liza/ directory should not be created in pairing mode")
+	}
+
+	// .claude/settings.json should be written
+	settingsPath := filepath.Join(gitDir, ".claude", "settings.json")
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		t.Error(".claude/settings.json should be created for --claude pairing")
+	}
+
+	// AGENTS.md and GEMINI.md should NOT exist (only --claude)
+	for _, name := range []string{"AGENTS.md", "GEMINI.md"} {
+		if _, err := os.Stat(filepath.Join(gitDir, name)); !os.IsNotExist(err) {
+			t.Errorf("%s should not exist when only --claude is specified", name)
+		}
+	}
+}
+
+func TestInitPairingCommand_MultipleAgents(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	os.Chdir(gitDir)
+
+	err := InitPairingCommand(InitPairingParams{
+		Agents: []string{"claude", "codex", "gemini"},
+	})
+	if err != nil {
+		t.Fatalf("InitPairingCommand failed: %v", err)
+	}
+
+	expected := filepath.Join(fakeHome, ".liza", "CORE.md")
+	for _, tc := range []struct {
+		agent string
+		file  string
+	}{
+		{"claude", "CLAUDE.md"},
+		{"codex", "AGENTS.md"},
+		{"gemini", "GEMINI.md"},
+	} {
+		target, err := os.Readlink(filepath.Join(gitDir, tc.file))
+		if err != nil {
+			t.Errorf("%s (%s): not a symlink: %v", tc.file, tc.agent, err)
+			continue
+		}
+		if target != expected {
+			t.Errorf("%s → %q, want %q", tc.file, target, expected)
+		}
+	}
+}
+
+func TestInitPairingCommand_Idempotent(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	os.Chdir(gitDir)
+
+	// Run twice
+	for i := 0; i < 2; i++ {
+		err := InitPairingCommand(InitPairingParams{
+			Agents: []string{"claude"},
+		})
+		if err != nil {
+			t.Fatalf("run %d: InitPairingCommand failed: %v", i+1, err)
+		}
+	}
+
+	target, err := os.Readlink(filepath.Join(gitDir, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("CLAUDE.md not a symlink: %v", err)
+	}
+	expected := filepath.Join(fakeHome, ".liza", "CORE.md")
+	if target != expected {
+		t.Errorf("CLAUDE.md → %q, want %q", target, expected)
+	}
+}
+
+func TestInitPairingCommand_Mistral(t *testing.T) {
+	fakeHome := setupGlobalLiza(t)
+
+	err := InitPairingCommand(InitPairingParams{
+		Agents: []string{"mistral"},
+	})
+	if err != nil {
+		t.Fatalf("InitPairingCommand failed: %v", err)
+	}
+
+	// ~/.vibe/prompts/liza.md should be a symlink to ~/.liza/CORE.md
+	linkPath := filepath.Join(fakeHome, ".vibe", "prompts", "liza.md")
+	target, err := os.Readlink(linkPath)
+	if err != nil {
+		t.Fatalf("liza.md not a symlink: %v", err)
+	}
+	expected := filepath.Join(fakeHome, ".liza", "CORE.md")
+	if target != expected {
+		t.Errorf("liza.md → %q, want %q", target, expected)
+	}
+
+	// config.toml should contain system_prompt_id = "liza"
+	configPath := filepath.Join(fakeHome, ".vibe", "config.toml")
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("config.toml not created: %v", err)
+	}
+	if !strings.Contains(string(content), `system_prompt_id = "liza"`) {
+		t.Errorf("config.toml missing system_prompt_id = \"liza\", got:\n%s", content)
+	}
+}
+
+func TestInitPairingCommand_MistralReplacesExistingPromptID(t *testing.T) {
+	fakeHome := setupGlobalLiza(t)
+
+	// Pre-create config.toml with system_prompt_id = "cli"
+	vibeDir := filepath.Join(fakeHome, ".vibe")
+	os.MkdirAll(vibeDir, 0755)
+	configPath := filepath.Join(vibeDir, "config.toml")
+	os.WriteFile(configPath, []byte("system_prompt_id = \"cli\"\nother_setting = true\n"), 0644)
+
+	// Provide "y\n" for the config.toml overwrite prompt
+	err := InitPairingCommand(InitPairingParams{
+		Agents: []string{"mistral"},
+		Stdin:  strings.NewReader("y\n"),
+	})
+	if err != nil {
+		t.Fatalf("InitPairingCommand failed: %v", err)
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	if !strings.Contains(text, `system_prompt_id = "liza"`) {
+		t.Errorf("system_prompt_id not replaced, got:\n%s", text)
+	}
+	if strings.Contains(text, `system_prompt_id = "cli"`) {
+		t.Errorf("old system_prompt_id = \"cli\" still present, got:\n%s", text)
+	}
+	if !strings.Contains(text, "other_setting = true") {
+		t.Error("other settings were lost during config.toml update")
+	}
+}
+
+func TestInitPairingCommand_MistralDeclinesOverwrite(t *testing.T) {
+	fakeHome := setupGlobalLiza(t)
+
+	// Pre-create config.toml with system_prompt_id = "cli"
+	vibeDir := filepath.Join(fakeHome, ".vibe")
+	os.MkdirAll(vibeDir, 0755)
+	configPath := filepath.Join(vibeDir, "config.toml")
+	os.WriteFile(configPath, []byte("system_prompt_id = \"cli\"\n"), 0644)
+
+	// Decline the config.toml overwrite
+	err := InitPairingCommand(InitPairingParams{
+		Agents: []string{"mistral"},
+		Stdin:  strings.NewReader("n\n"),
+	})
+	if err != nil {
+		t.Fatalf("InitPairingCommand failed: %v", err)
+	}
+
+	// config.toml should still have "cli"
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), `system_prompt_id = "cli"`) {
+		t.Error("config.toml was modified despite user declining")
+	}
+}
+
+// TestInitPairingCommand_ClaudeBothPromptsSharedReader verifies that when both
+// CLAUDE.md and .claude/settings.json already exist, both prompts are answered
+// from the same stdin stream (no EOF from multiple bufio.NewReader instances).
+func TestInitPairingCommand_ClaudeBothPromptsSharedReader(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	os.Chdir(gitDir)
+
+	coreFile := filepath.Join(fakeHome, ".liza", "CORE.md")
+
+	// Pre-create CLAUDE.md as a regular file (not symlink) to trigger first prompt
+	os.WriteFile(filepath.Join(gitDir, "CLAUDE.md"), []byte("existing"), 0644)
+
+	// Pre-create .claude/settings.json to trigger second prompt (merge confirmation)
+	claudeDir := filepath.Join(gitDir, ".claude")
+	os.MkdirAll(claudeDir, 0755)
+	os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(`{"existing": true}`), 0644)
+
+	// Two "y\n" answers: first for CLAUDE.md overwrite, second for settings merge
+	err := InitPairingCommand(InitPairingParams{
+		Agents: []string{"claude"},
+		Stdin:  strings.NewReader("y\ny\n"),
+	})
+	if err != nil {
+		t.Fatalf("InitPairingCommand failed: %v", err)
+	}
+
+	// CLAUDE.md should now be a symlink to ~/.liza/CORE.md
+	target, err := os.Readlink(filepath.Join(gitDir, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("CLAUDE.md should be a symlink after accepting overwrite: %v", err)
+	}
+	if target != coreFile {
+		t.Errorf("CLAUDE.md → %q, want %q", target, coreFile)
+	}
+
+	// settings.json should have been merged (contains both existing and liza keys)
+	settingsData, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+	if err != nil {
+		t.Fatalf("failed to read settings.json: %v", err)
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(settingsData, &settings); err != nil {
+		t.Fatalf("settings.json is not valid JSON: %v", err)
+	}
+	// Should contain existing user key (preserved during merge)
+	if _, ok := settings["existing"]; !ok {
+		t.Error("settings.json lost existing user key during merge")
+	}
+}
+
 func TestInitCommandWithConfig_EntryPointWithoutConfig(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)

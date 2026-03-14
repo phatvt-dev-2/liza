@@ -155,6 +155,19 @@ make install
 liza version
 ```
 
+```bash
+liza setup  # initial install or liza upgrade: installs contracts + skills to ~/.liza/
+# With: agent-specific activation (skill symlinks)
+liza setup --claude --codex --gemini --mistral
+```
+
+To init your project repo, do:
+```bash
+# With: agent-specific contract activation (system prompt symlink, permissions)
+liza init --claude --codex --gemini --mistral
+```
+See [contract activation](contracts/contract-activation.md) for the additional required steps for other CLI than Claude.
+
 ### Pairing and MAS Modes
 
 - **Pairing**: See [Pairing Guide](docs/USAGE_PAIRING.md) — human-agent collaboration under contract
@@ -163,11 +176,8 @@ liza version
 
 **Pairing mode** — install once, then start coding in any project:
 
-```bash
-liza setup          # One-time: installs contracts + skills to ~/.liza/
-# Then: agent-specific setup (skill symlinks, permissions)
-# See contracts/contract-activation.md
-```
+When starting your CLI session (`claude`, `codex`, ...), pairing mode will be selected automatically.
+It should start by displaying a canary test — Four words coming from four different contract files to show what the agent actually read.
 
 The agent reads the contract, builds mental models, and operates as a senior peer:
 analyzing before acting, presenting approval requests at every state change, validating before claiming done.

@@ -28,6 +28,232 @@ type InitParams struct {
 	Stdin           io.Reader
 }
 
+// initAgentRepoSymlinks maps agent flag names to the repo-root symlink filename.
+// These symlinks point to ~/.liza/CORE.md and enable pairing mode.
+var initAgentRepoSymlinks = map[string]string{
+	"claude": "CLAUDE.md",
+	"codex":  "AGENTS.md",
+	"gemini": "GEMINI.md",
+}
+
+// InitPairingParams holds the parameters for InitPairingCommand.
+type InitPairingParams struct {
+	Agents []string  // agent names (e.g. "claude", "codex", "gemini", "mistral")
+	Stdin  io.Reader // input for interactive prompts (nil = os.Stdin)
+}
+
+// InitPairingCommand creates agent-specific contract symlinks without
+// initializing a full Liza workspace. This enables pairing mode.
+//
+// For claude/codex/gemini: creates repo-root symlinks (e.g. CLAUDE.md → ~/.liza/CORE.md).
+// For mistral: creates ~/.vibe/prompts/liza.md → ~/.liza/CORE.md and sets system_prompt_id in config.toml.
+func InitPairingCommand(params InitPairingParams) error {
+	rawStdin := params.Stdin
+	if rawStdin == nil {
+		rawStdin = os.Stdin
+	}
+	stdin := bufio.NewReader(rawStdin)
+
+	globalDir, err := paths.GlobalLizaDir()
+	if err != nil {
+		return fmt.Errorf("failed to determine global config path: %w", err)
+	}
+	coreFile := filepath.Join(globalDir, "CORE.md")
+	if _, err := os.Stat(coreFile); os.IsNotExist(err) {
+		return fmt.Errorf("global config not found at %s\nRun 'liza setup' first", globalDir)
+	}
+
+	// Classify agents
+	var repoRootNames []string
+	hasClaude := false
+	hasMistral := false
+	for _, agent := range params.Agents {
+		if name, ok := initAgentRepoSymlinks[agent]; ok {
+			repoRootNames = append(repoRootNames, name)
+		}
+		switch agent {
+		case "claude":
+			hasClaude = true
+		case "mistral":
+			hasMistral = true
+		case "codex", "gemini":
+			// handled by repoRootNames above
+		default:
+			return fmt.Errorf("unknown agent: %s", agent)
+		}
+	}
+
+	// Resolve project root for repo-root operations
+	var projectRoot string
+	if len(repoRootNames) > 0 || hasClaude {
+		lizaPaths, err := paths.LizaPathsFromGit()
+		if err != nil {
+			return fmt.Errorf("failed to determine project root: %w", err)
+		}
+		projectRoot = lizaPaths.ProjectRoot()
+	}
+
+	if len(repoRootNames) > 0 {
+		createContractSymlinksFiltered(projectRoot, coreFile, repoRootNames, stdin)
+	}
+
+	// Write/merge .claude/settings.json so agents get required permissions
+	if hasClaude {
+		if err := embedded.WriteClaudeSettings(projectRoot, stdin); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
+		}
+	}
+
+	if hasMistral {
+		if err := setupMistralContract(coreFile, stdin); err != nil {
+			return fmt.Errorf("mistral setup failed: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// createContractSymlinksFiltered creates specific repo-root symlinks to the contract.
+func createContractSymlinksFiltered(projectRoot, contractTarget string, names []string, reader *bufio.Reader) {
+	for _, name := range names {
+		linkPath := filepath.Join(projectRoot, name)
+
+		fi, lstatErr := os.Lstat(linkPath)
+		if lstatErr != nil {
+			if !os.IsNotExist(lstatErr) {
+				fmt.Fprintf(os.Stderr, "Warning: cannot stat %s: %v\n", name, lstatErr)
+				continue
+			}
+		} else {
+			if fi.Mode()&os.ModeSymlink != 0 {
+				target, err := os.Readlink(linkPath)
+				if err == nil && target == contractTarget {
+					fmt.Printf("%s: already correct\n", name)
+					continue
+				}
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: cannot read symlink %s: %v\n", name, err)
+				}
+			}
+
+			fmt.Fprintf(os.Stderr, "Warning: %s already exists but does not point to %s.\n", name, contractTarget)
+			fmt.Fprintf(os.Stderr, "Without this symlink, liza agents will not use liza's contracts.\n")
+			fmt.Fprintf(os.Stderr, "Overwrite %s with symlink to %s? (y/n): ", name, contractTarget)
+
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", name)
+				continue
+			}
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response != "y" && response != "yes" {
+				continue
+			}
+
+			if err := os.Remove(linkPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to remove existing %s: %v\n", name, err)
+				continue
+			}
+		}
+
+		if err := os.Symlink(contractTarget, linkPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", name, err)
+		} else {
+			fmt.Printf("%s → %s\n", name, contractTarget)
+		}
+	}
+}
+
+// setupMistralContract creates ~/.vibe/prompts/liza.md → CORE.md and sets system_prompt_id in config.toml.
+func setupMistralContract(coreFile string, reader *bufio.Reader) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to determine home directory: %w", err)
+	}
+
+	vibeDir := filepath.Join(homeDir, ".vibe")
+	promptsDir := filepath.Join(vibeDir, "prompts")
+	if err := os.MkdirAll(promptsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create %s: %w", promptsDir, err)
+	}
+
+	// Create prompts/liza.md symlink (with confirmation for overwrites)
+	linkPath := filepath.Join(promptsDir, "liza.md")
+	if err := createSymlinkIdempotent(coreFile, linkPath, reader, true); err != nil {
+		return fmt.Errorf("failed to create liza.md symlink: %w", err)
+	}
+
+	// Update config.toml: system_prompt_id = "liza"
+	configPath := filepath.Join(vibeDir, "config.toml")
+	if err := setMistralSystemPrompt(configPath, reader); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// setMistralSystemPrompt ensures system_prompt_id = "liza" in ~/.vibe/config.toml.
+// Prompts user before modifying an existing file.
+func setMistralSystemPrompt(configPath string, reader *bufio.Reader) error {
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Create new config with just the prompt ID — no confirmation needed
+			if err := os.WriteFile(configPath, []byte("system_prompt_id = \"liza\"\n"), 0644); err != nil {
+				return fmt.Errorf("failed to create %s: %w", configPath, err)
+			}
+			fmt.Printf("Created %s with system_prompt_id = \"liza\"\n", configPath)
+			return nil
+		}
+		return fmt.Errorf("failed to read %s: %w", configPath, err)
+	}
+
+	text := string(content)
+
+	// Already set correctly
+	if strings.Contains(text, `system_prompt_id = "liza"`) {
+		fmt.Printf("%s: system_prompt_id already set to \"liza\"\n", configPath)
+		return nil
+	}
+
+	// Needs modification — ask user
+	fmt.Fprintf(os.Stderr, "%s exists and system_prompt_id is not set to \"liza\".\n", configPath)
+	fmt.Fprintf(os.Stderr, "Set system_prompt_id = \"liza\"? (y/n): ")
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping config.toml update\n")
+		return nil
+	}
+	response = strings.TrimSpace(strings.ToLower(response))
+	if response != "y" && response != "yes" {
+		fmt.Fprintf(os.Stderr, "  Skipped %s\n", configPath)
+		return nil
+	}
+
+	// Replace existing system_prompt_id line
+	lines := strings.Split(text, "\n")
+	found := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "system_prompt_id") && strings.Contains(trimmed, "=") {
+			lines[i] = `system_prompt_id = "liza"`
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		// Prepend to file
+		lines = append([]string{`system_prompt_id = "liza"`}, lines...)
+	}
+
+	if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", configPath, err)
+	}
+	fmt.Printf("%s: set system_prompt_id = \"liza\"\n", configPath)
+	return nil
+}
+
 // InitCommand initializes a new Liza workspace.
 // It creates the .liza directory structure, generates initial state.yaml,
 // validates the spec file exists, and creates the integration branch.
@@ -46,12 +272,15 @@ func InitCommand(description string, specRef string, stdin io.Reader) error {
 func InitCommandWithConfig(params InitParams) error {
 	description := params.Description
 	specRef := params.SpecRef
-	stdin := params.Stdin
+	rawStdin := params.Stdin
 	configPath := params.ConfigPath
 	entryPoint := params.EntryPoint
-	if stdin == nil {
-		stdin = os.Stdin
+	if rawStdin == nil {
+		rawStdin = os.Stdin
 	}
+	// Single shared buffered reader — avoids multiple bufio.NewReader instances
+	// consuming from the same underlying reader (which causes EOF for later readers).
+	stdin := bufio.NewReader(rawStdin)
 
 	// Validate and load pipeline config early (before creating .liza dir)
 	var pipelineCfg *pipeline.PipelineConfig
@@ -162,9 +391,21 @@ func InitCommandWithConfig(params InitParams) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write GUARDRAILS.md: %v\n", err)
 	}
 
-	// Write console.sh to project root (non-fatal, always overwrites)
-	if err := embedded.WriteConsoleScript(lizaPaths.ProjectRoot()); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to write console.sh: %v\n", err)
+	// Write console.sh to project root (non-fatal, prompts if exists)
+	consolePath := filepath.Join(lizaPaths.ProjectRoot(), "console.sh")
+	writeConsole := true
+	if _, err := os.Stat(consolePath); err == nil {
+		fmt.Fprintf(os.Stderr, "console.sh already exists. Overwrite? (y/n): ")
+		response, err := stdin.ReadString('\n')
+		response = strings.TrimSpace(strings.ToLower(response))
+		if err != nil || (response != "y" && response != "yes") {
+			writeConsole = false
+		}
+	}
+	if writeConsole {
+		if err := embedded.WriteConsoleScript(lizaPaths.ProjectRoot()); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write console.sh: %v\n", err)
+		}
 	}
 
 	// Generate IDs and timestamps
@@ -300,57 +541,8 @@ func InitCommandWithConfig(params InitParams) error {
 // createContractSymlinks creates CLAUDE.md, AGENTS.md, and GEMINI.md symlinks
 // pointing to the global CORE.md contract. Prompts via stdin when an existing
 // non-symlink file would be overwritten.
-func createContractSymlinks(projectRoot, contractTarget string, stdin io.Reader) {
-	var reader *bufio.Reader
-	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
-		linkPath := filepath.Join(projectRoot, name)
-
-		fi, lstatErr := os.Lstat(linkPath)
-		if lstatErr != nil {
-			if !os.IsNotExist(lstatErr) {
-				fmt.Fprintf(os.Stderr, "Warning: cannot stat %s: %v\n", name, lstatErr)
-				continue
-			}
-			// File doesn't exist — fall through to create symlink.
-		} else {
-			if fi.Mode()&os.ModeSymlink != 0 {
-				target, err := os.Readlink(linkPath)
-				if err == nil && target == contractTarget {
-					continue
-				}
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: cannot read symlink %s: %v\n", name, err)
-				}
-			}
-
-			// Exists but is not the correct symlink — ask permission.
-			if reader == nil {
-				reader = bufio.NewReader(stdin)
-			}
-			fmt.Fprintf(os.Stderr, "Warning: %s already exists but does not point to %s.\n", name, contractTarget)
-			fmt.Fprintf(os.Stderr, "Without this symlink, liza agents will not use liza's contracts.\n")
-			fmt.Fprintf(os.Stderr, "Overwrite %s with symlink to %s? (y/n): ", name, contractTarget)
-
-			response, err := reader.ReadString('\n')
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", name)
-				continue
-			}
-			response = strings.TrimSpace(strings.ToLower(response))
-			if response != "y" && response != "yes" {
-				continue
-			}
-
-			if err := os.Remove(linkPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to remove existing %s: %v\n", name, err)
-				continue
-			}
-		}
-
-		if err := os.Symlink(contractTarget, linkPath); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", name, err)
-		}
-	}
+func createContractSymlinks(projectRoot, contractTarget string, reader *bufio.Reader) {
+	createContractSymlinksFiltered(projectRoot, contractTarget, []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"}, reader)
 }
 
 func createIntegrationBranch() error {
