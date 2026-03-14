@@ -76,10 +76,19 @@ WORKTREE RULES:
   Use {{.WorktreePath}}/path for ALL file operations. Never retype or reconstruct the path.
 - To CREATE new files: use Write directly without Read. Do not attempt Read first (it will error).
 
+CAPABILITY SCOPING:
+The parent epic document contains multiple capabilities. Your task covers ONE capability only.
+Your spec_ref ({{.Task.SpecRef}}) identifies the epic document containing your capability.
+When reading the epic, use only these sections as input:
+- Personas and General Information (shared context for all capabilities)
+- Your assigned capability section (match by task SCOPE)
+Do NOT read or write stories for other capability sections — those are sibling US Writer tasks.
+
 IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.WorktreePath}} for all git commands.
 2. Read the user-story-writing skill FIRST: ~/.liza/skills/user-story-writing/SKILL.md
-3. Read the source material referenced by this task (parent epic, vision doc, spec).
+3. Read the epic at {{.Task.SpecRef}}. Locate your assigned capability by matching task SCOPE.
+   Read only Personas + General Information + that capability section.
 4. Follow the skill protocol: Parse → Write → Self-Review.
 5. Write user stories to the output file path specified by the task.
 6. Validate done_when criteria with concrete checks.

@@ -1817,6 +1817,7 @@ func TestBuildUSWriterContext(t *testing.T) {
 	task.Description = "Write user stories for authentication capability"
 	task.DoneWhen = "User stories cover all authentication requirements"
 	task.Scope = "Authentication capability"
+	task.SpecRef = "specs/epics/ep-001-auth.md"
 	task.Iteration = 1
 	worktree := ".worktrees/us-task-1"
 	task.Worktree = &worktree
@@ -1851,6 +1852,13 @@ func TestBuildUSWriterContext(t *testing.T) {
 		"~/.liza/skills/user-story-writing/SKILL.md",
 		// SMARC criteria
 		"SMARC",
+		// Capability scoping with spec_ref
+		"CAPABILITY SCOPING",
+		"ONE capability only",
+		"specs/epics/ep-001-auth.md",
+		"Personas and General Information",
+		"assigned capability section",
+		"match by task SCOPE",
 		// Worktree rules
 		"WORKTREE RULES",
 		"MUST use -C",
@@ -1880,6 +1888,7 @@ func TestBuildUSReviewerContext(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("us-review-1", models.TaskStatusImplementing, now)
 	task.Description = "Review user stories for authentication capability"
 	task.DoneWhen = "User stories meet quality gates and SMARC criteria"
+	task.SpecRef = "specs/epics/ep-001-auth.md"
 	task.Iteration = 1
 	worktree := ".worktrees/us-review-1"
 	task.Worktree = &worktree
@@ -1934,6 +1943,12 @@ func TestBuildUSReviewerContext(t *testing.T) {
 		// Quality gates
 		"SMARC",
 		"Acceptance criteria",
+		// Capability scoping with spec_ref
+		"CAPABILITY SCOPING",
+		"ONE capability from the parent epic",
+		"specs/epics/ep-001-auth.md",
+		"assigned capability",
+		"match by task SCOPE",
 	}
 	for _, want := range wantContains {
 		if !strings.Contains(prompt, want) {

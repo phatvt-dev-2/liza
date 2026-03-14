@@ -82,15 +82,23 @@ Before submitting verdict, compare this iteration against prior rejection:
 Include this assessment in your rejection reason if rejecting.
 {{- end}}
 
+CAPABILITY SCOPING:
+This task covers ONE capability from the parent epic ({{.Task.SpecRef}}). The epic contains
+multiple capabilities — sibling US Writer tasks cover the others. Verify stories only address
+the assigned capability (match by task SCOPE). Stories covering other capabilities in the
+same epic are Scope Absorption — reject.
+
 REVIEW PHASE:
 1. Early drift check: git -C {{.WorktreePath}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 2. Inspect worktree changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
 3. Read both skills before evaluating: spec-review and user-story-writing.
-4. Validate done_when criteria are satisfied.
-5. Check each user story against the anti-pattern checklist above.
-6. Verify SMARC criteria compliance for every story.
-7. Verify acceptance criteria are testable and user-observable.
-8. Submit verdict with liza_submit_verdict.
+4. Read the epic at {{.Task.SpecRef}}. Locate the assigned capability by matching task SCOPE.
+   Verify stories only cover that capability section — not others in the same epic.
+5. Validate done_when criteria are satisfied.
+6. Check each user story against the anti-pattern checklist above.
+7. Verify SMARC criteria compliance for every story.
+8. Verify acceptance criteria are testable and user-observable.
+9. Submit verdict with liza_submit_verdict.
 
 {{template "verdict_submission" .}}
 {{- end -}}
