@@ -5,14 +5,14 @@
 | Variable | Command | Notes |
 |----------|---------|-------|
 | `$TEST_CMD` | `go test ./...` | |
-| `$COVERAGE_CMD` | `go test -coverprofile=coverage.out ./... && gocover-cobertura < coverage.out > coverage.xml` | Requires `gocover-cobertura` for `diff-cover` compatibility |
+| `$COVERAGE_CMD` | `go test -coverprofile=coverage.out ./... && go tool gocover-cobertura < coverage.out > coverage.xml` | Pinned in `go.mod` via `tool` directive |
 | `$COVERAGE_REPORT` | `coverage.xml` | Cobertura XML via `gocover-cobertura` |
 | `$TYPE_CHECKER` | `go vet ./...` | Go is statically typed — `go vet` catches correctness issues beyond the compiler |
 | `$DEAD_CODE_TOOL` | `deadcode ./...` | Requires `go install golang.org/x/tools/cmd/deadcode@latest`. Also: `staticcheck` with `U1000` check |
 | `$IMPORT_CHECKER` | `goimports -l <files>` | Detects unused/missing imports and formatting |
 | `$CYCLE_CHECKER` | `go build ./...` | Compiler rejects import cycles. For visualization: `godepgraph` |
 
-If `gocover-cobertura` is unavailable: fall back to `go test -coverprofile=coverage.out` and check coverage manually with `go tool cover -func=coverage.out`. Warn that `diff-cover` integration is unavailable.
+If `gocover-cobertura` is unavailable (non-project context): fall back to `go test -coverprofile=coverage.out` and check coverage manually with `go tool cover -func=coverage.out`. Warn that `diff-cover` integration is unavailable.
 
 ## Performance Patterns
 
