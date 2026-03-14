@@ -5,6 +5,9 @@ Status: draft/review/approved/superseded
 ## Goal
 One sentence. What this set of stories achieves when implemented. Measurable.
 
+## Parent Epic
+<path to epic document — capability CAP-NNN, or "none" if written without an epic>
+
 ## Context
 Why this matters. How it fits in the broader system. Dependencies on other story documents or existing components. Keep it brief — the Coder needs orientation, not a lecture.
 

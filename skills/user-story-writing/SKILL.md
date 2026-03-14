@@ -22,11 +22,16 @@ Use this skill when:
 
 Your task provides:
 - An **output file path** assigned by the Orchestrator on the blackboard
-- **References** to one or more sections of source material (vision doc, prior specs, existing code)
+- **References** to one or more sections of source material (epic, vision doc, prior specs,
+  existing code)
+
+When the source is a parent epic, read its Personas, General Information, and the assigned
+capability section — nothing else. The epic's personas, NFRs, assumptions, and open questions
+apply to all stories in this document. Inherit them; do not contradict them.
 
 **Scope discipline (two-tier):**
 - **Upfront:** Read task references and scan existing stories in the same domain for consistency.
-  Same domain = same `stories/` subdirectory, or stories referenced by the same vision doc section.
+  Same domain = same parent directory, or stories referenced by the same source section.
   This minimal consistency check is always permitted.
 - **Reviewer-driven:** Broader expansion (new source material, adjacent codepaths, external docs) only when the
   Story Reviewer's feedback identifies specific additional material to consult.
@@ -160,6 +165,7 @@ Do not invent new prefixes. If something doesn't fit these categories, it likely
 
 | Skill | Relationship |
 |-------|-------------|
+| **epic-writing** | Upstream provider. When the source is an epic, each capability section is a Story Writer task brief. The Story Writer reads the epic's Personas, General Information, and the assigned capability section — nothing else. |
 | **detailed-spec-writing** | Complementary. Stories capture user intent; PRDs capture system requirements. Stories can feed into PRDs for implementation detail. |
 | **spec-review** | Downstream. Validates stories against completeness/consistency/testability checklist. |
 | **spec-backfill** | Complementary. Backfill: specs from code (archaeology). This skill: stories from requirements (forward-looking). |
