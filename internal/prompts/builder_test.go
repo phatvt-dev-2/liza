@@ -1715,6 +1715,15 @@ func TestBuildEpicPlanReviewerContext(t *testing.T) {
 		`"task_id": "task-epic-review-1"`,
 		`"agent_id": "epic-plan-reviewer-1"`,
 
+		// Epic-writing skill reference
+		"epic-writing skill",
+		"~/.liza/skills/epic-writing/SKILL.md",
+
+		// Key anti-patterns beyond checklist gates
+		"Vision Laundering",
+		"Storified Epic",
+		"Opaque Capability",
+
 		// All 6 review gates from spec
 		"Cohesive capability",
 		"Right-sized scope",
@@ -1722,6 +1731,9 @@ func TestBuildEpicPlanReviewerContext(t *testing.T) {
 		"Persona coherence",
 		"Independence",
 		"Vision coverage",
+
+		// Output verification: per-capability (not per-epic)
+		"one entry per capability",
 	}
 	for _, want := range wantContains {
 		if !strings.Contains(prompt, want) {
@@ -1768,18 +1780,20 @@ func TestBuildEpicPlannerContext(t *testing.T) {
 		"liza_set_task_output",
 		"liza_mark_blocked",
 
-		// All 7 granularity signals from spec
-		"Epic spans multiple independent capabilities",
-		"Epic would produce >8 user stories",
-		"done_when requires outcomes across unrelated subsystems",
-		"Epic description contains conjunctions joining unrelated capabilities",
-		"Epic is a single user action with one acceptance criterion",
-		"Epic can be implemented in a single coding task",
-		"Epic would produce <2 meaningful user stories",
+		// Skill reference
+		"EPIC-WRITING SKILL",
+		"~/.liza/skills/epic-writing/SKILL.md",
 
-		// Right-sized epic criteria
+		// Key principles from skill
 		"one cohesive capability area",
 		"3–8 user stories",
+		"Story Writer reads Personas + General Information + capability section",
+		"Completion criteria must be falsifiable",
+
+		// Anti-patterns
+		"Vision Laundering",
+		"Scope Absorption",
+		"Opaque Capability",
 
 		// Worktree rules
 		"WORKTREE RULES",

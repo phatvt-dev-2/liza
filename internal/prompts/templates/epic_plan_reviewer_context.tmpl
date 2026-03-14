@@ -31,6 +31,21 @@ EPIC PLAN REVIEWER TOOLS:
 WORKTREE GIT RULES:
 - All git commands MUST use -C {{.WorktreePath}} to prevent shared state corruption.
 
+EPIC-WRITING SKILL:
+You MUST read the epic-writing skill for full anti-pattern and quality criteria:
+  ~/.liza/skills/epic-writing/SKILL.md
+
+The review checklist below covers sizing and structural gates. The skill covers
+additional anti-patterns not duplicated here — check both when evaluating.
+
+Key anti-patterns beyond the checklist gates:
+- Vision Laundering: capabilities named after technical layers instead of user-facing behavior
+- Storified Epic: capabilities written at story granularity (Given/When/Then) — wrong altitude
+- Opaque Capability: Story Writer needs to re-read the vision to understand what to build
+- Missing Out of Scope: adjacent capabilities left unnamed — Story Writers will absorb them
+- Assumption Burial: strategic assumptions embedded in descriptions instead of surfaced
+- Premature Solutioning: capability descriptions name specific technologies instead of behavioral needs
+
 REVIEW CHECKLIST:
 | Gate | Reject if |
 |------|-----------|
@@ -52,12 +67,13 @@ Include this assessment in your rejection reason if rejecting.
 
 REVIEW PHASE:
 1. Early drift check: git -C {{.WorktreePath}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
-2. Inspect worktree changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
-3. Validate done_when criteria are satisfied.
-4. Verify output[] entries: run liza_get with {"query": "tasks/{{.Task.ID}}"} and confirm
-   output[] has one entry per planned epic with valid desc, done_when, scope, spec_ref.
-5. Verify each proposed epic passes the review checklist above.
-6. Submit verdict with liza_submit_verdict.
+2. Read the epic-writing skill: ~/.liza/skills/epic-writing/SKILL.md
+3. Inspect worktree changes: git -C {{.WorktreePath}} diff {{.BaseCommit}}..{{.ReviewCommit}}
+4. Validate done_when criteria are satisfied.
+5. Verify output[] entries: run liza_get with {"query": "tasks/{{.Task.ID}}"} and confirm
+   output[] has one entry per capability with valid desc, done_when, scope, spec_ref.
+6. Check each proposed capability against the review checklist and anti-pattern table above.
+7. Submit verdict with liza_submit_verdict.
 
 {{template "verdict_submission" .}}
 {{- end -}}
