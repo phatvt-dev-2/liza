@@ -43,7 +43,7 @@ WORKTREE RULES:
 - To CREATE new files: use Write directly without Read. Do not attempt Read first (it will error).
 
 EPIC-WRITING SKILL:
-You MUST read and follow the epic-writing skill before writing any epics:
+You MUST read and follow the epic-writing skill when writing each epic for this task:
   ~/.liza/skills/epic-writing/SKILL.md
 
 Key principles from the skill:
@@ -54,7 +54,8 @@ Key principles from the skill:
 - Personas must include environment/skill level where it affects product behavior
 - Out of Scope is not optional — it protects Story Writers from scope absorption
 - Assumptions resolve behavioral ambiguity only — no premature solutioning
-- If source material spans multiple independent capability areas, flag for splitting
+- If a single epic spans multiple independent capability areas, it is too broad — flag for splitting
+- Producing multiple well-sized epics from one vision source is normal planner behavior
 
 Anti-patterns to avoid:
 - Vision Laundering: capabilities named after technical layers instead of user-facing behavior
@@ -72,7 +73,8 @@ IMPLEMENTATION PHASE:
 4. Follow the skill protocol: Size → Parse → Decompose → Write → Self-Review.
 5. For EACH capability in the epic, call liza_set_task_output with structured entries.
    Each entry becomes a US Writer child task after merge. The Epic Plan Reviewer will verify these.
-   Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary), spec_ref (source).
+   Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary),
+   spec_ref (path to the produced epic document — US Writers use this to locate the parent epic).
 6. Update worktree artifacts required by DONE WHEN.
 7. Validate done_when criteria with concrete checks.
 8. Submit using liza_submit_for_review when complete.

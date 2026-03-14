@@ -67,6 +67,12 @@ func (m *SmartMockCLIExecutor) Execute(ctx context.Context, cliName, agentID, pr
 		return 1, fmt.Errorf("read state: %w", err)
 	}
 
+	// Load pipeline resolver for executing-state checks.
+	pr, prErr := ops.LoadResolverForModels(projectRoot)
+	if prErr != nil {
+		return 1, fmt.Errorf("load pipeline resolver: %w", prErr)
+	}
+
 	var taskID string
 	isReviewer := roles.IsReviewerRole(runtimeRole)
 	for i := range state.Tasks {
@@ -77,7 +83,9 @@ func (m *SmartMockCLIExecutor) Execute(ctx context.Context, cliName, agentID, pr
 				break
 			}
 		} else {
-			if task.AssignedTo != nil && *task.AssignedTo == agentID {
+			// Only match tasks in an executing state — skip tasks already
+			// submitted for review that still have AssignedTo set.
+			if task.AssignedTo != nil && *task.AssignedTo == agentID && models.IsExecutingStatus(task, pr) {
 				taskID = task.ID
 				break
 			}
@@ -118,18 +126,39 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 		AgentID:        agentID,
 		Intent:         fmt.Sprintf("Mock %s work on %s", role, taskID),
 		ValidationPlan: "mock validation passes",
-		FilesToModify:  []string{"mock.txt"},
+		FilesToModify:  []string{fmt.Sprintf("mock-%s.txt", taskID)},
 		TDDNotRequired: "integration test mock — no real code changes",
 	}); err != nil {
 		return fmt.Errorf("WriteCheckpoint: %w", err)
 	}
 
 	// 2. Set output for planner roles (needed for per-subtask transitions).
-	// epic-planner and code-planner produce output[] entries that become child
-	// tasks. us-writer uses a one-to-one transition, but setting output is
-	// harmless and realistic.
-	if role == roles.RuntimeEpicPlanner ||
-		role == roles.RuntimeUSWriter ||
+	// epic-planner produces one output[] entry per capability (2 capabilities
+	// in this test), each becoming a US Writer child task.
+	// code-planner produces one output[] entry per coding task.
+	// us-writer uses a one-to-one transition, but setting output is harmless.
+	if role == roles.RuntimeEpicPlanner {
+		if err := ops.SetTaskOutput(projectRoot, &ops.SetTaskOutputInput{
+			TaskID:  taskID,
+			AgentID: agentID,
+			Output: []models.OutputEntry{
+				{
+					Desc:     fmt.Sprintf("Capability 1 from %s", taskID),
+					DoneWhen: "Capability 1 stories complete",
+					Scope:    "CAP-001 Authentication",
+					SpecRef:  "specs/epics/ep-001-auth.md",
+				},
+				{
+					Desc:     fmt.Sprintf("Capability 2 from %s", taskID),
+					DoneWhen: "Capability 2 stories complete",
+					Scope:    "CAP-002 Authorization",
+					SpecRef:  "specs/epics/ep-001-auth.md",
+				},
+			},
+		}); err != nil {
+			return fmt.Errorf("SetTaskOutput: %w", err)
+		}
+	} else if role == roles.RuntimeUSWriter ||
 		role == roles.RuntimeCodePlanner {
 		if err := ops.SetTaskOutput(projectRoot, &ops.SetTaskOutputInput{
 			TaskID:  taskID,
@@ -149,13 +178,16 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 	g := gitpkg.New(projectRoot)
 	wtPath := g.GetWorktreePath(taskID)
 
-	mockFile := filepath.Join(wtPath, "mock.txt")
+	// Use a unique filename per task to avoid merge conflicts when
+	// multiple worktrees merge to the same integration branch.
+	mockFileName := fmt.Sprintf("mock-%s.txt", taskID)
+	mockFile := filepath.Join(wtPath, mockFileName)
 	content := fmt.Sprintf("Work by %s on %s at %s\n", agentID, taskID, time.Now().Format(time.RFC3339Nano))
 	if err := os.WriteFile(mockFile, []byte(content), 0644); err != nil {
 		return fmt.Errorf("write mock file: %w", err)
 	}
 
-	if err := exec.CommandContext(ctx, "git", "-C", wtPath, "add", "mock.txt").Run(); err != nil {
+	if err := exec.CommandContext(ctx, "git", "-C", wtPath, "add", mockFileName).Run(); err != nil {
 		return fmt.Errorf("git add in worktree %s: %w", wtPath, err)
 	}
 	if err := exec.CommandContext(ctx, "git", "-C", wtPath, "commit", "-m", fmt.Sprintf("Mock work by %s", agentID)).Run(); err != nil {
@@ -360,13 +392,17 @@ func TestFullSprintSequence(t *testing.T) {
 		t.Logf("  Task %-55s  status=%-25s  role_pair=%s", task.ID, task.Status, task.RolePair)
 	}
 
-	// Expected tasks (1 original + 3 created by transitions):
-	//   epic-1                                                    (epic-planning-pair)
-	//   epic-1-epic-to-us-0                                       (us-writing-pair)
-	//   epic-1-epic-to-us-0-us-to-coding                          (code-planning-pair)
-	//   epic-1-epic-to-us-0-us-to-coding-code-plan-to-coding-0    (coding-pair)
-	if len(state.Tasks) != 4 {
-		t.Errorf("Expected 4 tasks, got %d", len(state.Tasks))
+	// Expected tasks (1 original + 6 created by transitions):
+	// The epic planner produces 2 capability entries, so the tree fans out:
+	//   epic-1                                                      (epic-planning-pair)
+	//   epic-1-epic-to-us-0                                         (us-writing-pair, CAP-001)
+	//   epic-1-epic-to-us-1                                         (us-writing-pair, CAP-002)
+	//   epic-1-epic-to-us-0-us-to-coding                            (code-planning-pair)
+	//   epic-1-epic-to-us-1-us-to-coding                            (code-planning-pair)
+	//   epic-1-epic-to-us-0-us-to-coding-code-plan-to-coding-0      (coding-pair)
+	//   epic-1-epic-to-us-1-us-to-coding-code-plan-to-coding-0      (coding-pair)
+	if len(state.Tasks) != 7 {
+		t.Errorf("Expected 7 tasks, got %d", len(state.Tasks))
 	}
 
 	// All tasks should be MERGED.
@@ -376,43 +412,72 @@ func TestFullSprintSequence(t *testing.T) {
 			mergedCount++
 		}
 	}
-	if mergedCount != 4 {
-		t.Errorf("Expected 4 MERGED tasks, got %d", mergedCount)
+	if mergedCount != 7 {
+		t.Errorf("Expected 7 MERGED tasks, got %d", mergedCount)
 	}
 
 	// Verify transitions_executed on source tasks.
 	assertTransitionExecuted(t, state, "epic-1", "epic-to-us")
 
-	usTaskID := "epic-1-epic-to-us-0"
-	assertTransitionExecuted(t, state, usTaskID, "us-to-coding")
+	// Both US tasks should trigger us-to-coding transitions.
+	for _, suffix := range []string{"0", "1"} {
+		usTaskID := "epic-1-epic-to-us-" + suffix
+		assertTransitionExecuted(t, state, usTaskID, "us-to-coding")
 
-	codePlanTaskID := usTaskID + "-us-to-coding"
-	assertTransitionExecuted(t, state, codePlanTaskID, "code-plan-to-coding")
+		codePlanTaskID := usTaskID + "-us-to-coding"
+		assertTransitionExecuted(t, state, codePlanTaskID, "code-plan-to-coding")
+	}
+
+	// Verify capability scoping: each US task has the right scope and spec_ref from output[].
+	usTask0 := state.FindTask("epic-1-epic-to-us-0")
+	usTask1 := state.FindTask("epic-1-epic-to-us-1")
+	if usTask0 != nil {
+		if usTask0.Scope != "CAP-001 Authentication" {
+			t.Errorf("US task 0 scope = %q, want %q", usTask0.Scope, "CAP-001 Authentication")
+		}
+		if usTask0.SpecRef != "specs/epics/ep-001-auth.md" {
+			t.Errorf("US task 0 spec_ref = %q, want %q", usTask0.SpecRef, "specs/epics/ep-001-auth.md")
+		}
+	}
+	if usTask1 != nil {
+		if usTask1.Scope != "CAP-002 Authorization" {
+			t.Errorf("US task 1 scope = %q, want %q", usTask1.Scope, "CAP-002 Authorization")
+		}
+		if usTask1.SpecRef != "specs/epics/ep-001-auth.md" {
+			t.Errorf("US task 1 spec_ref = %q, want %q", usTask1.SpecRef, "specs/epics/ep-001-auth.md")
+		}
+	}
 
 	// Verify mock call count and role coverage.
 	mock.mu.Lock()
 	defer mock.mu.Unlock()
 
-	if len(mock.calls) != 8 {
-		t.Errorf("Expected 8 mock calls, got %d", len(mock.calls))
+	// 2 (epic) + 4 (US x2) + 4 (code-plan x2) + 4 (coding x2) = 14
+	if len(mock.calls) != 14 {
+		t.Errorf("Expected 14 mock calls, got %d", len(mock.calls))
 		for i, call := range mock.calls {
 			t.Logf("  Call %d: %s (%s) on %s [%s]", i, call.AgentID, call.Role, call.TaskID, call.Action)
 		}
 	}
 
-	expectedRoles := []string{
-		roles.RuntimeEpicPlanner, roles.RuntimeEpicPlanReviewer,
-		roles.RuntimeUSWriter, roles.RuntimeUSReviewer,
-		roles.RuntimeCodePlanner, roles.RuntimeCodePlanReviewer,
-		roles.RuntimeCoder, roles.RuntimeCodeReviewer,
+	// Epic roles called once; all downstream roles called twice (one per capability).
+	expectedRoleCounts := map[string]int{
+		roles.RuntimeEpicPlanner:      1,
+		roles.RuntimeEpicPlanReviewer: 1,
+		roles.RuntimeUSWriter:         2,
+		roles.RuntimeUSReviewer:       2,
+		roles.RuntimeCodePlanner:      2,
+		roles.RuntimeCodePlanReviewer: 2,
+		roles.RuntimeCoder:            2,
+		roles.RuntimeCodeReviewer:     2,
 	}
 	roleCounts := make(map[string]int)
 	for _, call := range mock.calls {
 		roleCounts[call.Role]++
 	}
-	for _, role := range expectedRoles {
-		if roleCounts[role] != 1 {
-			t.Errorf("Expected role %s called exactly once, got %d", role, roleCounts[role])
+	for role, want := range expectedRoleCounts {
+		if roleCounts[role] != want {
+			t.Errorf("Expected role %s called %d times, got %d", role, want, roleCounts[role])
 		}
 	}
 }

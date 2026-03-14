@@ -66,8 +66,10 @@ out into N Story Writer tasks before anyone notices the framing was off.
 | Would produce fewer than 2 meaningful user stories | Too narrow — merge with an adjacent epic or promote directly |
 | Cannot be delivered or validated independently of another epic | Too coupled — reconsider the boundary |
 
-If the source material spans multiple independent capability areas, flag this — it may need to be
-split into separate tasks. Do not silently produce multiple epics.
+If a single epic's scope spans multiple independent capability areas, flag this — the epic is too
+broad and needs splitting. This is about epic sizing, not about the number of epics a task produces.
+When a planner task decomposes a vision document, producing multiple well-sized epics from one
+task is normal — apply this skill once per epic boundary.
 
 If sizing is ambiguous, flag before proceeding. A wrong cut here is more expensive to fix than a
 brief hold.
@@ -244,11 +246,15 @@ If it reads like a goal in an OKR, it's too high. Narrow it to something a Story
 **Pairing mode:** All interactive prompts apply. Present the draft epic for human review before
 writing the file. Human may redirect scope, resolve Open Questions inline, or confirm assumptions.
 
-**Liza mode:** Epic Writer operates autonomously within task scope.
+**Liza mode:** Epic Writer operates autonomously within task scope. When a planner task
+decomposes a vision document, the planner applies this skill once per epic boundary it identifies.
+Producing multiple epic artifacts from a single vision source is normal pipeline behavior — the
+"flag for splitting" guidance in Size applies to individual epics that are too broad, not to the
+planner's decomposition of a vision into multiple epics.
 
 | Pairing Prompt | Liza Behavior |
 |----------------|---------------|
-| "Source material spans multiple capability areas — split?" | Flag to Orchestrator via BLOCKED with split recommendation |
+| "Source material spans multiple capability areas — split?" | Applies to a single epic that's too broad. When decomposing a vision into multiple epics, multiple capability areas across epics is expected — flag only if a single epic spans unrelated areas |
 | "Epic would produce >8 stories — where to split?" | Find the natural persona or subsystem seam; flag split rationale in Context |
 | "Epic would produce <2 stories — merge or promote?" | Flag to Orchestrator via BLOCKED with merge/promote recommendation |
 | "This assumption is LOW confidence — resolve?" | Surface in Assumptions section; blocks story-writing until resolved by human |
