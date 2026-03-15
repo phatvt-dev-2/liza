@@ -501,6 +501,61 @@ func TestBuildPrompt_NoScopingForUnplannedTask(t *testing.T) {
 	}
 }
 
+// TestBuildPrompt_IntegrationFixPropagation verifies that when a coder task has
+// IntegrationFix=true, the field propagates into RoleContextData and the
+// integration-fix block renders in the prompt.
+func TestBuildPrompt_IntegrationFixPropagation(t *testing.T) {
+	now := time.Now().UTC()
+	wt := ".worktrees/task-fix"
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:             "task-fix",
+				Description:    "Fix integration conflict",
+				Status:         models.TaskStatusImplementing,
+				Priority:       1,
+				SpecRef:        "spec.md",
+				DoneWhen:       "Conflict resolved",
+				Scope:          "module A",
+				Iteration:      1,
+				IntegrationFix: true,
+				Worktree:       &wt,
+				Created:        now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{
+			IntegrationBranch: "integration",
+		},
+	}
+
+	tmpDir := t.TempDir()
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := testBuildPrompt(t, state, config, "task-fix")
+	if err != nil {
+		t.Fatalf("BuildPrompt() error: %v", err)
+	}
+
+	if !strings.Contains(prompt, "INTEGRATION FIX MODE") {
+		t.Error("prompt should contain INTEGRATION FIX MODE when task.IntegrationFix is true")
+	}
+}
+
 // TestPromptSaving tests prompt file creation
 func TestPromptSaving(t *testing.T) {
 	tmpDir := t.TempDir()

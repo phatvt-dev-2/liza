@@ -149,6 +149,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 	// Doer-specific: coder fields
 	if roleType == "doer" && config.Role == "coder" {
 		data.IntegrationBranch = state.Config.IntegrationBranch
+		data.IntegrationFix = task.IntegrationFix
 		if note, ok := state.Handoff[task.ID]; ok {
 			noteCopy := note
 			data.HandoffNote = &noteCopy
