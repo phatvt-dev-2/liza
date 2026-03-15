@@ -1294,6 +1294,252 @@ pipeline:
 	assertContains(t, err.Error(), "advance")
 }
 
+// --- Roles section tests ---
+
+func TestLoad_RolesSection(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    coder: "Coder"
+    code-reviewer: "Code Reviewer"
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+      description: "Implements code changes"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      context-sections:
+        - assigned-task
+        - worktree-rules
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+      skills:
+        - debugging
+        - testing
+      mandatory-docs: []
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      description: "Reviews code changes"
+      allowed-operations:
+        - submit-verdict
+      skills:
+        - code-review
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines: {}
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	pc, err := Load(cfg)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if len(pc.Pipeline.Roles) != 2 {
+		t.Fatalf("expected 2 roles, got %d", len(pc.Pipeline.Roles))
+	}
+
+	coder, ok := pc.Pipeline.Roles["coder"]
+	if !ok {
+		t.Fatal("missing role coder")
+	}
+	if coder.Type != "doer" {
+		t.Errorf("coder.Type = %q, want %q", coder.Type, "doer")
+	}
+	if coder.DisplayName != "Coder" {
+		t.Errorf("coder.DisplayName = %q, want %q", coder.DisplayName, "Coder")
+	}
+	if coder.Description != "Implements code changes" {
+		t.Errorf("coder.Description = %q", coder.Description)
+	}
+	if coder.Timeouts == nil {
+		t.Fatal("coder.Timeouts is nil")
+	}
+	if coder.Timeouts.Execution != "2h" {
+		t.Errorf("coder.Timeouts.Execution = %q, want %q", coder.Timeouts.Execution, "2h")
+	}
+	if coder.Timeouts.PollInterval != "30s" {
+		t.Errorf("coder.Timeouts.PollInterval = %q, want %q", coder.Timeouts.PollInterval, "30s")
+	}
+	if coder.Timeouts.MaxWait != "30m" {
+		t.Errorf("coder.Timeouts.MaxWait = %q, want %q", coder.Timeouts.MaxWait, "30m")
+	}
+	if len(coder.ContextSections) != 2 {
+		t.Errorf("coder.ContextSections length = %d, want 2", len(coder.ContextSections))
+	}
+	if len(coder.AllowedOperations) != 2 {
+		t.Errorf("coder.AllowedOperations length = %d, want 2", len(coder.AllowedOperations))
+	}
+	if len(coder.Skills) != 2 {
+		t.Errorf("coder.Skills length = %d, want 2", len(coder.Skills))
+	}
+
+	reviewer := pc.Pipeline.Roles["code-reviewer"]
+	if reviewer.Type != "reviewer" {
+		t.Errorf("code-reviewer.Type = %q, want %q", reviewer.Type, "reviewer")
+	}
+	if reviewer.Timeouts != nil {
+		t.Errorf("code-reviewer.Timeouts should be nil, got %+v", reviewer.Timeouts)
+	}
+}
+
+func TestValidate_RoleMissingType(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    coder: "Coder"
+  roles:
+    coder:
+      display-name: "Coder"
+      description: "Implements code changes"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: coder
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+  sub-pipelines: {}
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for missing type field")
+	}
+	assertContains(t, err.Error(), "type")
+	assertContains(t, err.Error(), "required")
+}
+
+func TestValidate_RoleInvalidType(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    coder: "Coder"
+  roles:
+    coder:
+      type: worker
+      display-name: "Coder"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: coder
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+  sub-pipelines: {}
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for invalid type value")
+	}
+	assertContains(t, err.Error(), "worker")
+	assertContains(t, err.Error(), "type")
+}
+
+func TestValidate_RolePairUndefinedRole(t *testing.T) {
+	yamlContent := `
+pipeline:
+  agent-roles:
+    coder: "Coder"
+    reviewer: "Reviewer"
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: reviewer
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+  sub-pipelines: {}
+  entry-points: {}
+`
+	cfg := writeTemp(t, yamlContent)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for role-pair referencing undefined role")
+	}
+	assertContains(t, err.Error(), "reviewer")
+	assertContains(t, err.Error(), "not found in roles")
+}
+
+func TestLoad_EmbeddedPipelineRoles(t *testing.T) {
+	data, err := os.ReadFile("../embedded/pipeline.yaml")
+	if err != nil {
+		t.Fatalf("failed to read embedded pipeline.yaml: %v", err)
+	}
+	cfg, err := LoadFromBytes(data)
+	if err != nil {
+		t.Fatalf("LoadFromBytes failed: %v", err)
+	}
+
+	if len(cfg.Pipeline.Roles) != 9 {
+		t.Fatalf("expected 9 roles, got %d", len(cfg.Pipeline.Roles))
+	}
+
+	expectedRoles := map[string]string{
+		"coder":              "doer",
+		"code-reviewer":      "reviewer",
+		"orchestrator":       "orchestrator",
+		"epic-planner":       "doer",
+		"epic-plan-reviewer": "reviewer",
+		"us-writer":          "doer",
+		"us-reviewer":        "reviewer",
+		"code-planner":       "doer",
+		"code-plan-reviewer": "reviewer",
+	}
+	for name, wantType := range expectedRoles {
+		role, ok := cfg.Pipeline.Roles[name]
+		if !ok {
+			t.Errorf("missing role %q", name)
+			continue
+		}
+		if role.Type != wantType {
+			t.Errorf("role %q: type = %q, want %q", name, role.Type, wantType)
+		}
+		if role.DisplayName == "" {
+			t.Errorf("role %q: display-name is empty", name)
+		}
+	}
+
+	// Verify orchestrator has max-instances: 1.
+	orch := cfg.Pipeline.Roles["orchestrator"]
+	if orch.MaxInstances != 1 {
+		t.Errorf("orchestrator max-instances = %d, want 1", orch.MaxInstances)
+	}
+}
+
 func TestLoad_UnknownFieldRejected(t *testing.T) {
 	yaml := `
 pipeline:

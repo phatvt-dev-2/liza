@@ -27,10 +27,38 @@ type PipelineConfig struct {
 // Pipeline defines agent roles, role-pairs, sub-pipelines, and entry-points.
 type Pipeline struct {
 	AgentRoles          map[string]string      `yaml:"agent-roles"`
+	Roles               map[string]RoleDef     `yaml:"roles,omitempty"`
 	RolePairs           map[string]RolePairDef `yaml:"role-pairs"`
 	SubPipelines        map[string]SubPipeline `yaml:"sub-pipelines"`
 	PipelineTransitions []TransitionDef        `yaml:"pipeline-transitions"`
 	EntryPoints         map[string]string      `yaml:"entry-points"`
+}
+
+// RoleDef defines a role's properties declaratively.
+type RoleDef struct {
+	Type              string      `yaml:"type"`
+	DisplayName       string      `yaml:"display-name"`
+	Description       string      `yaml:"description,omitempty"`
+	MaxInstances      int         `yaml:"max-instances,omitempty"`
+	Timeouts          *TimeoutDef `yaml:"timeouts,omitempty"`
+	ContextSections   []string    `yaml:"context-sections,omitempty"`
+	AllowedOperations []string    `yaml:"allowed-operations,omitempty"`
+	Skills            []string    `yaml:"skills,omitempty"`
+	MandatoryDocs     []string    `yaml:"mandatory-docs,omitempty"`
+}
+
+// TimeoutDef holds duration strings for role-specific timeouts.
+type TimeoutDef struct {
+	Execution    string `yaml:"execution,omitempty"`
+	PollInterval string `yaml:"poll-interval,omitempty"`
+	MaxWait      string `yaml:"max-wait,omitempty"`
+}
+
+// validRoleTypes lists the allowed values for RoleDef.Type.
+var validRoleTypes = map[string]bool{
+	"doer":         true,
+	"reviewer":     true,
+	"orchestrator": true,
 }
 
 // RolePairDef defines a doer-reviewer pair and its state names.
@@ -117,12 +145,31 @@ func validate(cfg *PipelineConfig) error {
 		return fmt.Errorf("pipeline must define at least one role-pair")
 	}
 
+	// Validate roles section if present.
+	for name, role := range p.Roles {
+		if role.Type == "" {
+			return fmt.Errorf("role %q: type field is required", name)
+		}
+		if !validRoleTypes[role.Type] {
+			return fmt.Errorf("role %q: invalid type %q (must be doer, reviewer, or orchestrator)", name, role.Type)
+		}
+	}
+
 	for name, rp := range p.RolePairs {
 		if _, ok := p.AgentRoles[rp.Doer]; !ok {
 			return fmt.Errorf("role-pair %q: doer %q not found in agent-roles", name, rp.Doer)
 		}
 		if _, ok := p.AgentRoles[rp.Reviewer]; !ok {
 			return fmt.Errorf("role-pair %q: reviewer %q not found in agent-roles", name, rp.Reviewer)
+		}
+		// When roles section exists, role-pair references must also be defined there.
+		if len(p.Roles) > 0 {
+			if _, ok := p.Roles[rp.Doer]; !ok {
+				return fmt.Errorf("role-pair %q: doer %q not found in roles", name, rp.Doer)
+			}
+			if _, ok := p.Roles[rp.Reviewer]; !ok {
+				return fmt.Errorf("role-pair %q: reviewer %q not found in roles", name, rp.Reviewer)
+			}
 		}
 	}
 

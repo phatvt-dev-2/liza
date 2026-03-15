@@ -9,6 +9,163 @@ pipeline:
     coder: "Coder"
     code-reviewer: "Code Reviewer"
 
+  roles:
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+      description: "Decomposes goals, manages sprint lifecycle"
+      max-instances: 1
+      timeouts:
+        execution: 4h
+        poll-interval: 60s
+        max-wait: 30m
+      allowed-operations:
+        - add-tasks
+        - supersede-task
+        - sprint-checkpoint
+        - analyze
+        - delete-agent
+        - clear-stale-review-claims
+        - update-sprint-metrics
+      skills:
+        - systemic-thinking
+      mandatory-docs: []
+
+    epic-planner:
+      type: doer
+      display-name: "Epic Planner"
+      description: "Decomposes objectives into structured epics"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+      skills:
+        - epic-writing
+        - systemic-thinking
+      mandatory-docs: []
+
+    epic-plan-reviewer:
+      type: reviewer
+      display-name: "Epic Plan Reviewer"
+      description: "Reviews epic plans, issues binding verdicts"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - submit-verdict
+      skills:
+        - spec-review
+        - systemic-thinking
+      mandatory-docs: []
+
+    us-writer:
+      type: doer
+      display-name: "US Writer"
+      description: "Transforms epics into user stories"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+      skills:
+        - user-story-writing
+      mandatory-docs: []
+
+    us-reviewer:
+      type: reviewer
+      display-name: "US Reviewer"
+      description: "Reviews user stories, issues binding verdicts"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - submit-verdict
+      skills:
+        - spec-review
+      mandatory-docs: []
+
+    code-planner:
+      type: doer
+      display-name: "Code Planner"
+      description: "Creates implementation plans from specs"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+      skills:
+        - software-architecture-review
+      mandatory-docs: []
+
+    code-plan-reviewer:
+      type: reviewer
+      display-name: "Code Plan Reviewer"
+      description: "Reviews implementation plans, issues binding verdicts"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - submit-verdict
+      skills:
+        - software-architecture-review
+        - systemic-thinking
+      mandatory-docs: []
+
+    coder:
+      type: doer
+      display-name: "Coder"
+      description: "Implements code changes in isolated worktrees"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+      skills:
+        - debugging
+        - testing
+        - clean-code
+      mandatory-docs: []
+
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      description: "Reviews code changes, issues binding verdicts"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - submit-verdict
+      skills:
+        - code-review
+        - systemic-thinking
+        - software-architecture-review
+      mandatory-docs: []
+
   role-pairs:
     epic-planning-pair:
       doer: epic-planner
