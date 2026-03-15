@@ -177,7 +177,7 @@ See [contract activation](contracts/contract-activation.md) for the additional r
 **Pairing mode** — install once, then start coding in any project:
 
 When starting your CLI session (`claude`, `codex`, ...), pairing mode will be selected automatically.
-It should start by displaying a canary test — Four words coming from four different contract files to show what the agent actually read.
+It should start by displaying a canary test inspired by [Van Halen's M&M's trick](https://colterreed.com/blog/the-genius-of-banishing-brown-mms/) — Four words coming from four different contract files to show what the agent actually read thoroughly.
 
 The agent reads the contract, builds mental models, and operates as a senior peer:
 analyzing before acting, presenting approval requests at every state change, validating before claiming done.
