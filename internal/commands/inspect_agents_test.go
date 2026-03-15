@@ -27,6 +27,7 @@ func TestInspectAgents(t *testing.T) {
 				Role:            "coder",
 				Status:          models.AgentStatusWorking,
 				PID:             os.Getpid(),
+				Provider:        "claude",
 				CurrentTask:     &task1,
 				LeaseExpires:    &leaseExpires,
 				Heartbeat:       now.Add(-30 * time.Second),
@@ -49,6 +50,7 @@ func TestInspectAgents(t *testing.T) {
 				Role:            "code-reviewer",
 				Status:          models.AgentStatusReviewing,
 				PID:             999999,
+				Provider:        "codex",
 				CurrentTask:     &task2,
 				LeaseExpires:    &leaseExpires,
 				Heartbeat:       now.Add(-10 * time.Second),
@@ -232,6 +234,7 @@ func TestInspectAgent(t *testing.T) {
 				Role:            "coder",
 				Status:          models.AgentStatusWorking,
 				PID:             os.Getpid(),
+				Provider:        "claude",
 				CurrentTask:     &task1,
 				LeaseExpires:    &leaseExpires,
 				Heartbeat:       now.Add(-30 * time.Second),
@@ -659,12 +662,13 @@ func TestFormatAgentValue_IncludesPID(t *testing.T) {
 	}
 }
 
-// TestFormatAgentJSON_IncludesPID tests that JSON format includes PID and ProcessStatus
-func TestFormatAgentJSON_IncludesPID(t *testing.T) {
+// TestFormatAgentJSON_IncludesPIDAndProvider tests that JSON format includes PID, ProcessStatus, and Provider
+func TestFormatAgentJSON_IncludesPIDAndProvider(t *testing.T) {
 	agent := agentInfo{
 		ID:                 "agent-1",
 		Role:               "coder",
 		Status:             "WORKING",
+		Provider:           "claude",
 		PID:                12345,
 		ProcessStatus:      "running",
 		TimeSinceHeartbeat: "30s",
@@ -690,14 +694,18 @@ func TestFormatAgentJSON_IncludesPID(t *testing.T) {
 	if parsed.ProcessStatus != "running" {
 		t.Errorf("JSON output ProcessStatus = %s, want running", parsed.ProcessStatus)
 	}
+	if parsed.Provider != "claude" {
+		t.Errorf("JSON output Provider = %q, want %q", parsed.Provider, "claude")
+	}
 }
 
-// TestFormatAgentYAML_IncludesPID tests that YAML format includes PID and ProcessStatus
-func TestFormatAgentYAML_IncludesPID(t *testing.T) {
+// TestFormatAgentYAML_IncludesPIDAndProvider tests that YAML format includes PID, ProcessStatus, and Provider
+func TestFormatAgentYAML_IncludesPIDAndProvider(t *testing.T) {
 	agent := agentInfo{
 		ID:                 "agent-1",
 		Role:               "coder",
 		Status:             "WORKING",
+		Provider:           "claude",
 		PID:                12345,
 		ProcessStatus:      "running",
 		TimeSinceHeartbeat: "30s",
@@ -722,5 +730,112 @@ func TestFormatAgentYAML_IncludesPID(t *testing.T) {
 	}
 	if parsed.ProcessStatus != "running" {
 		t.Errorf("YAML output ProcessStatus = %s, want running", parsed.ProcessStatus)
+	}
+	if parsed.Provider != "claude" {
+		t.Errorf("YAML output Provider = %q, want %q", parsed.Provider, "claude")
+	}
+}
+
+// TestBuildAgentInfo_Provider tests that buildAgentInfo copies Provider from the model
+func TestBuildAgentInfo_Provider(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name         string
+		provider     string
+		wantProvider string
+	}{
+		{
+			name:         "provider set to claude",
+			provider:     "claude",
+			wantProvider: "claude",
+		},
+		{
+			name:         "provider set to codex",
+			provider:     "codex",
+			wantProvider: "codex",
+		},
+		{
+			name:         "empty provider",
+			provider:     "",
+			wantProvider: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := models.Agent{
+				Role:      "coder",
+				Status:    models.AgentStatusIdle,
+				Provider:  tt.provider,
+				Heartbeat: now,
+				Terminal:  "terminal1",
+			}
+
+			info := buildAgentInfo("coder-1", &agent, nil)
+
+			if info.Provider != tt.wantProvider {
+				t.Errorf("buildAgentInfo() Provider = %q, want %q", info.Provider, tt.wantProvider)
+			}
+		})
+	}
+}
+
+// TestFormatAgentValue_IncludesProvider tests that value format includes Provider
+func TestFormatAgentValue_IncludesProvider(t *testing.T) {
+	tests := []struct {
+		name         string
+		agent        agentInfo
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name: "provider present in output",
+			agent: agentInfo{
+				ID:                 "agent-1",
+				Role:               "coder",
+				Status:             "WORKING",
+				Provider:           "claude",
+				PID:                12345,
+				ProcessStatus:      "running",
+				TimeSinceHeartbeat: "30s",
+				Terminal:           "terminal1",
+			},
+			wantContains: []string{"Provider: claude"},
+		},
+		{
+			name: "empty provider omitted from output",
+			agent: agentInfo{
+				ID:                 "agent-2",
+				Role:               "coder",
+				Status:             "IDLE",
+				Provider:           "",
+				PID:                0,
+				ProcessStatus:      "n/a",
+				TimeSinceHeartbeat: "1m",
+				Terminal:           "terminal2",
+			},
+			wantAbsent: []string{"Provider:"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := formatAgentValue(tt.agent)
+			if err != nil {
+				t.Fatalf("formatAgentValue() error: %v", err)
+			}
+
+			for _, want := range tt.wantContains {
+				if !strings.Contains(output, want) {
+					t.Errorf("formatAgentValue() output should contain %q, got: %s", want, output)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(output, absent) {
+					t.Errorf("formatAgentValue() output should NOT contain %q, got: %s", absent, output)
+				}
+			}
+		})
 	}
 }

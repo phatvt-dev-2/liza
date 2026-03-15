@@ -2,6 +2,9 @@
 ID: {{.ID}}
 Role: {{.Role}}
 Status: {{.Status}}
+{{- if .Provider}}
+Provider: {{.Provider}}
+{{- end}}
 {{- if .CurrentTask}}
 Current Task: {{deref .CurrentTask}}
 {{- else}}

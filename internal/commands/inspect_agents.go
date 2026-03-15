@@ -24,6 +24,7 @@ type agentInfo struct {
 	ID                 string  `json:"id" yaml:"id"`
 	Role               string  `json:"role" yaml:"role"`
 	Status             string  `json:"status" yaml:"status"`
+	Provider           string  `json:"provider,omitempty" yaml:"provider,omitempty"`
 	PID                int     `json:"pid" yaml:"pid"`
 	ProcessStatus      string  `json:"process_status" yaml:"process_status"`
 	CurrentTask        *string `json:"current_task,omitempty" yaml:"current_task,omitempty"`
@@ -105,6 +106,7 @@ func buildAgentInfo(agentID string, agent *models.Agent, currentTask *models.Tas
 		ID:              agentID,
 		Role:            agent.Role,
 		Status:          string(agent.Status),
+		Provider:        agent.Provider,
 		CurrentTask:     agent.CurrentTask,
 		Terminal:        agent.Terminal,
 		IterationsTotal: agent.IterationsTotal,
