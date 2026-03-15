@@ -8,11 +8,13 @@ Spec: `specs/build/3 - Declarative Role Definitions.md#phase-1-declarative-role-
 |---|-------------|---------|
 | R1 | Add `roles` section to pipeline YAML schema | CP1-1 |
 | R2 | Load role definitions at pipeline init, derive classification and mappings | CP1-2 |
-| R3 | Replace hardcoded constants in `internal/roles/` with YAML-driven maps | CP1-3 |
+| R3 | Replace hardcoded constants in `internal/roles/` with YAML-driven maps | CP1-6 (classification functions), CP1-8 (runtime constants + remaining classification callers) |
 | R4 | Replace `NewRoleStrategy()` switch with type-based generic selection | CP1-4 |
 | R5 | Migrate timeout resolution to use role YAML defaults | CP1-5 |
 | R6 | Wire `allowed-operations` into MCP handler authorization | CP1-6 |
 | R7 | Persist `provider` metadata from `--cli` into agent blackboard entry | CP1-7 |
+| — | Absorb `agent-roles` into `roles` (implicit in R1 "YAML Changes" table) | CP1-3 |
+| — | Update architecture docs (spec Context: "must be updated before implementation") | CP1-9 |
 
 ## Current State Analysis
 
@@ -21,22 +23,30 @@ Spec: `specs/build/3 - Declarative Role Definitions.md#phase-1-declarative-role-
 | File | Current Role | Phase 1 Change |
 |------|-------------|----------------|
 | `internal/pipeline/config.go` | Pipeline YAML types + validation | Add `RoleDef`, `TimeoutDef` types; add `Roles` to `Pipeline`; update validation to use `Roles` instead of `AgentRoles` |
-| `internal/pipeline/resolver.go` | State resolution queries | Add role classification methods: `RoleType`, `IsDoerRole`, `IsReviewerRole`, `DoerRoleNames`, `ReviewerRoleNames`, `AllowedOperations`, `RoleTimeouts`, `RoleDisplayName`, `MaxInstances` |
+| `internal/pipeline/resolver.go` | State resolution queries | Add role classification methods: `RoleType`, `IsDoerRole`, `IsReviewerRole`, `DoerRoleNames`, `ReviewerRoleNames`, `AllRoleNames`, `AllowedOperations`, `RoleTimeouts`, `RoleDisplayName`, `MaxInstances` |
 | `internal/embedded/pipeline.yaml` | Default pipeline config | Replace `agent-roles` with full `roles` section for all 9 roles |
-| `internal/roles/roles.go` | Hardcoded constants + classification | Remove classification functions (`DoerRoles`, `ReviewerRoles`, `IsDoerRole`, `IsReviewerRole`); keep string constants for Phase 4 |
+| `internal/roles/roles.go` | Hardcoded constants + classification | Phase 1: remove runtime constants (`Runtime*`), classification functions (`DoerRoles`, `ReviewerRoles`, `IsDoerRole`, `IsReviewerRole`), `AllRuntime()`, `IsValidRuntime()`. Keep: `Claim*` selectors, workflow constants, `ToWorkflow`/`ToRuntime`, `IsValidWorkflow`/`AllWorkflow` (Phase 4) |
 | `internal/agent/strategy.go` | `NewRoleStrategy()` 9-way switch | Replace with 3-way switch on role type + context builder map |
 | `internal/agent/strategy_doer.go` | `DefaultTimeout()` returns 2h; `WaitConfig()` reads coder config keys | Read timeouts from role YAML via resolver |
 | `internal/agent/strategy_reviewer.go` | `DefaultTimeout()` returns 30m; `WaitConfig()` reads reviewer config keys | Read timeouts from role YAML via resolver |
 | `internal/agent/strategy_orchestrator.go` | `DefaultTimeout()` returns 4h; `WaitConfig()` reads orchestrator config keys | Read timeouts from role YAML via resolver |
-| `internal/agent/supervisor.go` | Calls `NewRoleStrategy(config.Role)` | Pass resolver to `NewRoleStrategy` |
+| `internal/agent/supervisor.go` | Calls `NewRoleStrategy(config.Role)` | Pass resolver to `NewRoleStrategy`; replace `roles.RuntimeCoder` ref with string literal |
+| `internal/agent/registration.go` | `registerAgent()` with role checks | Add `cliName` (CP1-7) and `resolver` (CP1-8) params; replace `roles.Runtime*` with resolver methods |
 | `internal/mcp/server.go` | MCP server struct | Cache pipeline resolver for allowed-ops checks |
 | `internal/mcp/middleware.go` | `withRole` middleware | Extend to support allowed-operations check |
 | `internal/mcp/server_registration.go` | Per-handler `roleChecker` closures | Replace with generic allowed-operations check |
-| `internal/mcp/handlers_helpers.go` | `requireDoerRole`, `requireReviewerRole` | Remove (replaced by allowed-operations) |
+| `internal/mcp/handlers_helpers.go` | `requireDoerRole`, `requireReviewerRole` | Remove role-type checkers (CP1-6); migrate `authorizeClaimRelease` to resolver (CP1-8) |
 | `internal/models/agent.go` | `Agent` struct | Add `Provider` field |
-| `internal/agent/registration.go` | `registerAgent()` | Accept and persist `CLIName` as provider |
+| `internal/models/state.go` | `FindOrchestratorID()` | Replace `roles.RuntimeOrchestrator` with string literal |
 | `internal/prompts/wake.go` | `AgentRoles[rp.Doer]` display name lookup | Use `Resolver.RoleDisplayName()` |
 | `internal/ops/proceed.go` | `AgentRoles[rp.Doer]` display name lookup | Use `Resolver.RoleDisplayName()` |
+| `internal/ops/recover_agent.go` | Role-specific recovery logic | Replace `roles.Runtime*` with `resolver.RoleType()` |
+| `internal/ops/recover_task.go` | Role-specific recovery | Replace `roles.Runtime*` with string literals |
+| `internal/ops/submit_review.go` | TDD enforcement gate | Replace `roles.RuntimeCoder` with string literal |
+| `internal/ops/claim_reviewer_task.go` | Reviewer role inference | Replace `roles.RuntimeCodePlanReviewer` with string literal |
+| `cmd/liza/cmd_agent.go` | CLI role validation | Replace `roles.AllRuntime()` with resolver-based validation |
+| `internal/commands/inspect.go` | Agent ID pattern matching | Replace `roles.AllRuntime()` with resolver-based lookup |
+| `specs/architecture/roles.md` | Role architecture docs | Update to reflect declarative roles; mark multiple-orchestrator as superseded |
 
 ### Key architectural observations
 
@@ -52,7 +62,30 @@ Spec: `specs/build/3 - Declarative Role Definitions.md#phase-1-declarative-role-
 
 6. **Provider metadata**: `SupervisorConfig.CLIName` holds the CLI name ("claude", "codex", etc.) but it's never persisted to the blackboard. Adding a `Provider` field to `models.Agent` and passing `CLIName` through `registerAgent()` is a clean, isolated change.
 
+7. **Runtime constants have ~70 call sites** across 15 files. After CP1-4 (strategy) and CP1-6 (MCP authorization) migrate their callers, ~30 sites remain in registration.go, supervisor.go, ops/, models/, cmd/, and commands/. CP1-8 migrates these and removes the constants from `roles.go`.
+
+8. **`releaseTaskClaim` and `authorizeClaimRelease`** use role-name switches for doer/reviewer classification. With the resolver, these become `resolver.RoleType(role)` 3-way switches — naturally extending to cover spec-phase roles (epic-planner, us-writer) which the current code silently ignores.
+
 ## Task Decomposition
+
+### CP1-9: Update specs/architecture/roles.md for declarative roles
+
+**Intent**: Architecture docs reflect the declarative role definitions spec. The spec's Context section requires this update before implementation.
+
+**Approach**:
+- Update Terminology section: replace references to `internal/roles/roles.go` constants with YAML `roles` section as the source of role definitions
+- Update Implementation subsection: document that roles are declared in pipeline YAML with type, display-name, timeouts, allowed-operations, and other properties
+- Update Multiple Agents Per Role table: Orchestrator row changes from "Yes" to "No (max-instances: 1, enforced at registration)" per the spec's constraint
+- Add reference to `specs/build/3 - Declarative Role Definitions.md` as the governing spec
+- Keep existing sections that remain accurate (Shared Capabilities, Shared Constraints, role-specific sections, Agent Identity Protocol)
+
+**Files**: `specs/architecture/roles.md`
+
+**done_when**: `specs/architecture/roles.md` Terminology section references YAML `roles` section instead of `roles.go` constants. Implementation subsection documents declarative YAML role definitions. Orchestrator Multiple Agents row says "No (max-instances: 1)". Document references the Declarative Role Definitions spec.
+
+**Depends on**: none
+
+---
 
 ### CP1-1: Add roles section to pipeline YAML schema
 
@@ -94,7 +127,7 @@ Spec: `specs/build/3 - Declarative Role Definitions.md#phase-1-declarative-role-
 
 **Files**: `internal/pipeline/resolver.go`, `internal/pipeline/resolver_test.go`
 
-**done_when**: `TestRoleType` asserts "coder" → "doer", "code-reviewer" → "reviewer", "orchestrator" → "orchestrator", unknown → error. `TestDoerRoleNames` returns exactly {coder, code-planner, epic-planner, us-writer}. `TestReviewerRoleNames` returns exactly {code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer}. `TestAllowedOperations("coder")` returns the 5 operations from the spec. `TestRoleTimeouts("coder")` returns execution=2h, poll-interval=30s, max-wait=30m.
+**done_when**: `TestRoleType` asserts "coder" → "doer", "code-reviewer" → "reviewer", "orchestrator" → "orchestrator", unknown → error. `TestDoerRoleNames` returns exactly {coder, code-planner, epic-planner, us-writer}. `TestReviewerRoleNames` returns exactly {code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer}. `TestAllRoleNames` returns all 9 role names. `TestAllowedOperations("coder")` returns the 5 operations from the spec. `TestRoleTimeouts("coder")` returns execution=2h, poll-interval=30s, max-wait=30m.
 
 **Depends on**: CP1-1
 
@@ -176,14 +209,14 @@ Spec: `specs/build/3 - Declarative Role Definitions.md#phase-1-declarative-role-
 - Create a new `RoleChecker` factory: `allowedOpsChecker(resolver, toolName) RoleChecker` that returns a `RoleChecker` calling `isOperationAllowed`
 - Replace all per-handler `roleChecker` assignments in `registerMutationTools()` and `registerComplexOperations()` with `allowedOpsChecker(s.resolver, toolName)`
 - Remove `requireDoerRole`, `requireDoerOrOrchestratorRole`, `requireReviewerRole` from `handlers_helpers.go` (no longer needed — allowed-operations subsumes them)
+- Remove `DoerRoles()`, `ReviewerRoles()`, `IsDoerRole()`, `IsReviewerRole()` from `roles.go` (all callers migrated by this task)
 - Keep `requireRole(agentID, expectedRole)` — it's identity verification, not operation authorization
-- Keep `authorizeClaimRelease` — it validates claim-type alignment, which is orthogonal to operation authorization
-- Remove/deprecate `roles.DoerRoles()`, `roles.ReviewerRoles()`, `roles.IsDoerRole()`, `roles.IsReviewerRole()` (all MCP callers migrated)
+- Keep `authorizeClaimRelease` — it validates claim-type alignment, which is orthogonal to operation authorization (migrated to resolver in CP1-8)
 - Update remaining non-MCP callers (agent tests) to use resolver or inline the check
 
 **Files**: `internal/mcp/server.go`, `internal/mcp/middleware.go`, `internal/mcp/server_registration.go`, `internal/mcp/handlers_helpers.go`, `internal/mcp/middleware_test.go`, `internal/mcp/handlers_mutation.go`, `internal/roles/roles.go`, `internal/agent/strategy_test.go`, `internal/integration/full_sprint_test.go`
 
-**done_when**: `liza_submit_for_review` called by `coder-1` succeeds (coder's allowed-operations includes `submit-for-review`). `liza_submit_for_review` called by `code-reviewer-1` is rejected with "operation not allowed" error. `liza_add_tasks` called by `orchestrator-1` succeeds. `liza_add_tasks` called by `coder-1` is rejected. `requireDoerRole` and `requireReviewerRole` functions no longer exist. `roles.IsDoerRole` and `roles.IsReviewerRole` no longer exist in `roles.go`. All tests pass.
+**done_when**: `liza_submit_for_review` called by `coder-1` succeeds (coder's allowed-operations includes `submit-for-review`). `liza_submit_for_review` called by `code-reviewer-1` is rejected with "operation not allowed" error. `liza_add_tasks` called by `orchestrator-1` succeeds. `liza_add_tasks` called by `coder-1` is rejected. `requireDoerRole` and `requireReviewerRole` functions no longer exist. `roles.IsDoerRole` and `roles.IsReviewerRole` no longer exist in `roles.go`. `roles.DoerRoles` and `roles.ReviewerRoles` no longer exist in `roles.go`. All tests pass.
 
 **Depends on**: CP1-2
 
@@ -208,9 +241,40 @@ Spec: `specs/build/3 - Declarative Role Definitions.md#phase-1-declarative-role-
 
 ---
 
+### CP1-8: Remove hardcoded runtime role constants from internal/roles/
+
+**Intent**: The `internal/roles/` package no longer defines hardcoded runtime role name constants or role enumeration functions. Role names, classification, and enumeration come from the pipeline YAML via the resolver. This completes R3.
+
+**Approach**:
+- Remove from `roles.go`: 9 `Runtime*` constants, `AllRuntime()`, `IsValidRuntime()`
+- Convert `runtimeToWorkflow` map keys from `Runtime*` constants to string literals (map itself stays for Phase 4 along with `ToWorkflow`/`ToRuntime`, workflow constants, `IsValidWorkflow`/`AllWorkflow`)
+- Keep `ClaimDoer`/`ClaimReviewer`/`ClaimBoth` (claim-type selectors, not role name constants)
+- Migrate remaining callers (not already handled by CP1-4 and CP1-6):
+  - `registration.go`: orchestrator singularity check → use `resolver.MaxInstances(role)` instead of `role == "orchestrator"` hardcoded check; reviewer stale claims → use `resolver.IsReviewerRole(role)`; `releaseTaskClaim` switch → use `resolver.RoleType(role)` (3-way: doer/reviewer/orchestrator)
+  - `registration.go` signature: add `resolver *pipeline.Resolver` parameter to `registerAgent()`
+  - `supervisor.go:107`: replace `roles.RuntimeCoder` with string literal `"coder"` or `resolver.IsDoerRole(role)` depending on semantic intent
+  - `ops/recover_agent.go`: replace switch on `roles.RuntimeCoder`/`roles.RuntimeCodeReviewer` with `resolver.RoleType(role)` 3-way switch
+  - `ops/recover_task.go`: replace `roles.RuntimeCoder`/`roles.RuntimeCodeReviewer` with string literals (identity check, not classification)
+  - `ops/submit_review.go`: replace `roles.RuntimeCoder` with string literal (identity check for TDD enforcement)
+  - `ops/claim_reviewer_task.go`: replace `roles.RuntimeCodePlanReviewer` with string literal
+  - `models/state.go`: replace `roles.RuntimeOrchestrator` with string literal in `FindOrchestratorID()`
+  - `cmd/liza/cmd_agent.go`: replace `roles.AllRuntime()` with resolver-based validation (load pipeline, call `resolver.AllRoleNames()`)
+  - `commands/inspect.go`: replace `roles.AllRuntime()` with resolver-based lookup
+  - `mcp/handlers_helpers.go`: migrate `authorizeClaimRelease` to use `resolver.RoleType()` instead of switch on specific `Runtime*` constants
+  - Update tests for all modified files
+
+**Files**: `internal/roles/roles.go`, `internal/agent/registration.go`, `internal/agent/registration_test.go`, `internal/agent/supervisor.go`, `internal/agent/supervisor_test.go`, `internal/ops/recover_agent.go`, `internal/ops/recover_agent_test.go`, `internal/ops/recover_task.go`, `internal/ops/recover_task_test.go`, `internal/ops/submit_review.go`, `internal/ops/submit_review_test.go`, `internal/ops/claim_reviewer_task.go`, `internal/models/state.go`, `cmd/liza/cmd_agent.go`, `internal/commands/inspect.go`, `internal/mcp/handlers_helpers.go`, `internal/integration/full_sprint_test.go`
+
+**done_when**: `grep -rn "roles\.Runtime" internal/ cmd/` returns zero matches. `grep -n "func AllRuntime\|func IsValidRuntime" internal/roles/roles.go` returns zero matches. `internal/roles/roles.go` retains only: `Claim*` constants, `Workflow*` constants, `ToWorkflow`/`ToRuntime` functions with string-literal keys, `IsValidWorkflow`/`AllWorkflow` (all Phase 4 scope). `registerAgent` accepts a `resolver` parameter and uses `resolver.MaxInstances(role)` for the singularity check. `releaseTaskClaim` uses `resolver.RoleType(role)` for doer/reviewer classification. `go build ./...` succeeds. All tests pass.
+
+**Depends on**: CP1-4, CP1-6, CP1-7
+
+---
+
 ## Dependency Graph
 
 ```
+CP1-9 (docs)       [independent, complete early]
 CP1-7 (provider)   [independent]
 
 CP1-1 (schema)
@@ -219,20 +283,22 @@ CP1-1 (schema)
         ├─► CP1-4 (strategy switch)
         │     └─► CP1-5 (timeout resolution)
         └─► CP1-6 (allowed-operations)
+
+CP1-8 (remove constants) ◄── CP1-4, CP1-6, CP1-7
 ```
 
 ## Execution Order (recommended)
 
 Parallelizable groups:
-1. **CP1-1** + **CP1-7** (independent foundations)
+1. **CP1-1** + **CP1-7** + **CP1-9** (independent foundations)
 2. **CP1-2** (depends on CP1-1)
 3. **CP1-3** + **CP1-4** + **CP1-6** (all depend on CP1-2, independent of each other)
-4. **CP1-5** (depends on CP1-4)
+4. **CP1-5** + **CP1-8** (CP1-5 depends on CP1-4; CP1-8 depends on CP1-4 + CP1-6 + CP1-7)
 
 ## Out of Scope (Phase 2+)
 
 - Composable prompt sections (`context-sections` YAML → template assembly) — Phase 2
 - Review quorum (`review-policy`, `PARTIALLY_APPROVED` state) — Phase 3
-- Dual name elimination (runtime/workflow unification) — Phase 4
+- Workflow constant elimination (`Workflow*` constants, `ToWorkflow()`/`ToRuntime()`, `IsValidWorkflow`/`AllWorkflow`, `runtimeToWorkflow`/`workflowToRuntime` maps, task model migration to single name form) — Phase 4
 - `mandatory-docs` and `skills` wiring into prompt assembly — Phase 2
 - Custom template blocks — Open Question #1
