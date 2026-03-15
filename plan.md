@@ -1,407 +1,225 @@
-# Declarative Role Definitions — Phase 2 Implementation Plan
+# Implementation Plan: Declarative Roles Fixes
 
-Spec: `specs/build/3 - Declarative Role Definitions.md#phase-2-composable-prompt-sections`
-
-## Spec Requirements (Phase 2)
-
-| # | Requirement | Task(s) |
-|---|-------------|---------|
-| R1 | Decompose existing 9 role templates into modular blocks | CP-2-3 |
-| R2 | Implement generic `BuildRoleContext()` using `context-sections` list | CP-2-3 |
-| R3 | Remove per-role config structs and builder functions | CP-2-5 |
-| R4 | Wire `mandatory-docs` and `skills` into prompt assembly | CP-2-4 |
-| — | Add `context-sections`, `skills`, `mandatory-docs` resolution to Resolver | CP-2-1 |
-| — | Define unified template data struct for all blocks | CP-2-2 |
-
-## Current State Analysis
-
-### Prompt Builder Architecture
-
-The current prompt assembly has three layers:
-
-1. **Per-role config structs** (`internal/prompts/builder.go`): 9 `*ContextConfig` structs (CoderContextConfig, ReviewerContextConfig, etc.) plus 9 internal `*contextData` structs
-2. **Per-role builder functions** (`internal/prompts/builder.go`): 9 `Build*Context()` functions (BuildCoderContext, BuildReviewerContext, etc.)
-3. **Per-role templates** (`internal/prompts/templates/`): 9 monolithic `.tmpl` files (coder_context.tmpl, code_reviewer_context.tmpl, etc.)
-
-Assembly flow:
-- `internal/agent/prompt.go` defines 9 `contextBuilderFunc` implementations that extract data from task/state/config → populate `*ContextConfig` → call `Build*Context()`
-- `internal/agent/strategy.go` maintains a `contextBuilders` map (8 entries) from role name → `contextBuilderFunc`
-- `doerStrategy.BuildPrompt()` and `reviewerStrategy.BuildPrompt()` call `buildPromptWithContext()` which invokes the mapped function
-- `orchestratorStrategy.BuildPrompt()` calls `buildOrchestratorPromptContext()` directly
-
-### Template Overlap
-
-Within each role type, templates share ~80% of their structure:
-- **Doers** share: assigned-task, prior-rejection, worktree-rules, doer-state-transitions, doer-tools
-- **Reviewers** share: review-task, prior-rejection, reviewer-state-transitions, reviewer-tools, anomaly-logging, worktree-rules, review-instructions, rejection-format, verdict-submission
-- **Orchestrator** is unique
-
-### Pipeline YAML State (Post-Phase 1)
-
-`RoleDef` struct already has `ContextSections []string`, `Skills []string`, `MandatoryDocs []string` fields. The YAML has `skills` and `mandatory-docs` populated for all 9 roles but does NOT yet have `context-sections`. No Resolver methods exist for these three fields.
-
-## Architecture Decisions
-
-### BuildRoleContext Signature
-
-```go
-BuildRoleContext(role string, sectionNames []string, data *RoleContextData) (string, error)
-```
-
-Takes section names as a parameter rather than looking them up via a resolver. This keeps the `prompts` package decoupled from the `pipeline` package. The caller in `internal/agent/` looks up `resolver.ContextSections(role)` and passes the result.
-
-### Template Block Convention
-
-Each block is a `.tmpl` file in `internal/prompts/templates/blocks/` using Go `{{define "block-name"}}...{{end}}` syntax. `BuildRoleContext()` iterates over `sectionNames` and executes each named template, concatenating output.
-
-Blocks that vary by role use conditionals on `{{.Role}}` within the template.
-
-### RoleContextData Struct
-
-A single struct in `internal/prompts/role_context.go` covers all role types. Fields unused by a particular role are zero-valued. Key field categories:
-
-- **Identity**: Role, AgentID, RoleType
-- **Task**: TaskID, Description, DoneWhen, Scope, SpecRef, Worktree, IterationNum, AttemptNum, PriorRejection
-- **Review**: ReviewCycles, ScopeExtensions
-- **Plan scoping**: GoalSpecRef, SiblingTasks, TotalPlanTasks, TaskOrdinal
-- **Coder-specific**: IntegrationBranch, HandoffNote
-- **Orchestrator**: DashboardOutput, WakeInstruction, AgentStates, SprintMetrics, ActivePolicies, BlockedTasks, CheckpointSummary, PipelineConfig
-- **Config/State**: ProjectRoot, StatePath, SpecsDir, GoalDesc
-- **Declarative** (from pipeline YAML): MandatoryDocs, Skills
-
-## Context-Sections for All 9 Roles
-
-Source of truth for `context-sections` in `internal/embedded/pipeline.yaml`. Every role includes `mandatory-docs` and `skills-affinity` as the final two entries.
-
-### coder
-```yaml
-context-sections:
-  - assigned-task
-  - collective-plan-scoping
-  - handoff-resume
-  - integration-fix
-  - prior-rejection
-  - doer-state-transitions
-  - doer-tools
-  - anomaly-logging
-  - blocking-protocol
-  - worktree-rules
-  - commit-workflow
-  - implementation-phase
-  - submission-phase
-  - mandatory-docs
-  - skills-affinity
-```
-
-### code-reviewer
-```yaml
-context-sections:
-  - review-task
-  - collective-plan-scoping
-  - scope-extensions
-  - prior-rejection
-  - reviewer-state-transitions
-  - reviewer-tools
-  - anomaly-logging
-  - worktree-rules
-  - review-instructions
-  - rejection-format
-  - verdict-submission
-  - mandatory-docs
-  - skills-affinity
-```
-
-### orchestrator
-```yaml
-context-sections:
-  - orchestrator-dashboard
-  - wake-instructions
-  - mandatory-docs
-  - skills-affinity
-```
-
-### code-planner
-```yaml
-context-sections:
-  - assigned-task
-  - collective-plan-scoping
-  - prior-rejection
-  - doer-state-transitions
-  - doer-tools
-  - worktree-rules
-  - task-decomposition
-  - implementation-phase
-  - mandatory-docs
-  - skills-affinity
-```
-
-### code-plan-reviewer
-```yaml
-context-sections:
-  - review-task
-  - collective-plan-scoping
-  - prior-rejection
-  - reviewer-state-transitions
-  - reviewer-tools
-  - anomaly-logging
-  - worktree-rules
-  - review-instructions
-  - rejection-format
-  - verdict-submission
-  - mandatory-docs
-  - skills-affinity
-```
-
-### epic-planner
-```yaml
-context-sections:
-  - assigned-task
-  - prior-rejection
-  - doer-state-transitions
-  - doer-tools
-  - worktree-rules
-  - capability-scoping
-  - implementation-phase
-  - mandatory-docs
-  - skills-affinity
-```
-
-### epic-plan-reviewer
-```yaml
-context-sections:
-  - review-task
-  - prior-rejection
-  - reviewer-state-transitions
-  - reviewer-tools
-  - anomaly-logging
-  - worktree-rules
-  - review-instructions
-  - rejection-format
-  - verdict-submission
-  - mandatory-docs
-  - skills-affinity
-```
-
-### us-writer
-```yaml
-context-sections:
-  - assigned-task
-  - collective-plan-scoping
-  - prior-rejection
-  - doer-state-transitions
-  - doer-tools
-  - worktree-rules
-  - capability-scoping
-  - implementation-phase
-  - mandatory-docs
-  - skills-affinity
-```
-
-### us-reviewer
-```yaml
-context-sections:
-  - review-task
-  - collective-plan-scoping
-  - prior-rejection
-  - reviewer-state-transitions
-  - reviewer-tools
-  - anomaly-logging
-  - worktree-rules
-  - review-instructions
-  - rejection-format
-  - verdict-submission
-  - mandatory-docs
-  - skills-affinity
-```
-
-### Unique Block Names (26 total)
-
-| Block | Used By | Notes |
-|-------|---------|-------|
-| assigned-task | coder, code-planner, epic-planner, us-writer | Parameterized: renders task header per role |
-| review-task | code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer | Parameterized: renders review header per role |
-| collective-plan-scoping | coder, code-reviewer, code-planner, code-plan-reviewer, us-writer, us-reviewer | Shared: plan context + sibling tasks |
-| handoff-resume | coder | Coder-only: handoff context |
-| integration-fix | coder | Existing coder_integration_fix.tmpl content |
-| prior-rejection | all except orchestrator | Shared: renders prior rejection feedback |
-| doer-state-transitions | coder, code-planner, epic-planner, us-writer | Parameterized by role |
-| doer-tools | coder, code-planner, epic-planner, us-writer | Parameterized by role |
-| reviewer-state-transitions | code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer | Parameterized by role |
-| reviewer-tools | code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer | Parameterized by role |
-| anomaly-logging | coder, all reviewers | Shared |
-| blocking-protocol | coder | Coder-only |
-| worktree-rules | all except orchestrator | Shared |
-| commit-workflow | coder | Coder-only |
-| implementation-phase | coder, code-planner, epic-planner, us-writer | Parameterized by role |
-| submission-phase | coder | Coder-only |
-| scope-extensions | code-reviewer | Reviewer scope extensions |
-| review-instructions | code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer | Parameterized by role |
-| rejection-format | code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer | Shared |
-| verdict-submission | code-reviewer, code-plan-reviewer, epic-plan-reviewer, us-reviewer | Existing verdict_submission.tmpl content |
-| orchestrator-dashboard | orchestrator | Orchestrator-only |
-| wake-instructions | orchestrator | Orchestrator-only (includes wake sub-templates) |
-| task-decomposition | code-planner | Code-planner-only |
-| capability-scoping | epic-planner, us-writer | Shared: spec-phase capability scoping |
-| mandatory-docs | all 9 roles | New: renders mandatory doc list from YAML (CP-2-4) |
-| skills-affinity | all 9 roles | New: renders skills list from YAML (CP-2-4) |
-
-## Task Decomposition
-
-### CP-2-1: Add context-sections, skills, and mandatory-docs resolution to Resolver and pipeline YAML
-
-**Intent**: Pipeline Resolver provides methods to query context-sections, skills, and mandatory-docs for any role, and all 9 roles in pipeline.yaml have context-sections populated.
-
-**Approach**:
-- Add three methods to `pipeline.Resolver`:
-  - `ContextSections(name string) ([]string, error)` — returns ordered context-sections list
-  - `Skills(name string) ([]string, error)` — returns skills list
-  - `MandatoryDocs(name string) ([]string, error)` — returns mandatory-docs list
-- `RoleDef` already has `ContextSections`, `Skills`, `MandatoryDocs` fields (added in Phase 1)
-- Populate `context-sections` for all 9 roles in `internal/embedded/pipeline.yaml` matching the lists in this plan's "Context-Sections for All 9 Roles" section
-- Add tests for the three new methods
-
-**Files**: `internal/pipeline/resolver.go`, `internal/pipeline/resolver_test.go`, `internal/embedded/pipeline.yaml`
-
-**desc**: Add ContextSections(), Skills(), and MandatoryDocs() methods to the pipeline Resolver, and populate context-sections in pipeline YAML for all 9 roles
-
-**done_when**: Resolver.ContextSections("coder") returns the 15-element list matching the plan's coder context-sections; Resolver.Skills("coder") returns ["debugging", "testing", "clean-code"]; Resolver.MandatoryDocs("coder") returns []; all 9 roles in internal/embedded/pipeline.yaml have context-sections matching the plan's "Context-Sections for All 9 Roles" section including mandatory-docs and skills-affinity as final entries for every role; tests in internal/pipeline/resolver_test.go verify the three new methods for at least coder, code-reviewer, and orchestrator; existing pipeline tests pass unchanged
-
-**scope**: internal/pipeline/resolver.go, internal/pipeline/resolver_test.go, internal/embedded/pipeline.yaml
-
-**spec_ref**: specs/build/3 - Declarative Role Definitions.md#phase-2-composable-prompt-sections
-
-**Depends on**: none
+Spec: /home/tangi/Workspace/liza/todo-mas.md
 
 ---
 
-### CP-2-2: Define RoleContextData struct as the unified template data type for all role template blocks
+## Phase 1 -- Hardcoded role names and resolver-based classification
 
-**Intent**: A single RoleContextData struct serves as the template data type for all modular blocks across all role types.
+### CP1: Replace hardcoded role lists in authorizeClaimRelease with resolver-based classification
 
-**Approach**:
-- Define `RoleContextData` struct in `internal/prompts/role_context.go` as a superset of all existing `*contextData` structs
-- Field categories: identity (Role, AgentID, RoleType), task (TaskID, Description, DoneWhen, Scope, SpecRef, Worktree, IterationNum, AttemptNum, PriorRejection), review (ReviewCycles, ScopeExtensions), plan scoping (GoalSpecRef, SiblingTasks, TotalPlanTasks, TaskOrdinal), coder-specific (IntegrationBranch, HandoffNote), orchestrator (DashboardOutput, WakeInstruction, AgentStates, SprintMetrics, ActivePolicies, BlockedTasks, CheckpointSummary, PipelineConfig), config/state (ProjectRoot, StatePath, SpecsDir, GoalDesc), and declarative (MandatoryDocs, Skills)
-- Callers construct the struct directly — no factory function required (construction logic stays in `internal/agent/` where task/state/config are available)
-- Add tests verifying struct can be populated for representative role types
+**Intent:** authorizeClaimRelease currently enumerates role names by hand. A custom YAML-defined doer role hits the default branch and is rejected. Replace the switch with resolver.RoleType() classification.
 
-**Files**: `internal/prompts/role_context.go`, `internal/prompts/role_context_test.go`
+**Changes:**
+- `internal/mcp/handlers_helpers.go`: Change authorizeClaimRelease signature to accept a *pipeline.Resolver. Replace the role-name switch with resolver.RoleType(agentRole) calls: orchestrator allows all, doer allows only doer claims, reviewer allows only reviewer claims, unknown errors. When resolver is nil, fail closed (reject).
+- `internal/mcp/handlers_mutation.go`: Update handleReleaseClaim to pass s.resolver to authorizeClaimRelease.
+- `internal/mcp/handlers_helpers_test.go`: Update existing authorizeClaimRelease tests to pass a resolver, and add a test case for a custom doer role (e.g., data-engineer) that verifies it is accepted.
 
-**desc**: Define RoleContextData struct as the unified template data type for all role template blocks
+**Scope:** `internal/mcp/handlers_helpers.go`, `internal/mcp/handlers_mutation.go`, `internal/mcp/handlers_helpers_test.go`
 
-**done_when**: RoleContextData struct exists in internal/prompts/role_context.go with exported fields covering identity (Role, AgentID, RoleType), task (TaskID, Description, DoneWhen, Scope, SpecRef, Worktree, IterationNum, AttemptNum, PriorRejection), review (ReviewCycles, ScopeExtensions), plan scoping (GoalSpecRef, SiblingTasks, TotalPlanTasks, TaskOrdinal), coder-specific (IntegrationBranch, HandoffNote), orchestrator (DashboardOutput, WakeInstruction, AgentStates, SprintMetrics, ActivePolicies, BlockedTasks, CheckpointSummary, PipelineConfig), config/state (ProjectRoot, StatePath, SpecsDir, GoalDesc), and declarative (MandatoryDocs, Skills); tests in internal/prompts/role_context_test.go verify struct population for coder, code-reviewer, and orchestrator with type-appropriate field values
+**Done when:** authorizeClaimRelease no longer contains any hardcoded role name strings. A test with a custom YAML-defined doer role (e.g., data-engineer-1) passes the authorization check for doer claim release. A test with a custom reviewer role passes for reviewer claim release. Nil resolver rejects all.
 
-**scope**: internal/prompts/role_context.go, internal/prompts/role_context_test.go
-
-**spec_ref**: specs/build/3 - Declarative Role Definitions.md#phase-2-composable-prompt-sections
-
-**Depends on**: none
+**Spec ref:** todo-mas.md -- Phase 1, [concern] internal/mcp/handlers_helpers.go:142-155
 
 ---
 
-### CP-2-3: Decompose templates into modular blocks and implement BuildRoleContext()
+### CP2: Replace hardcoded role=="coder" in recover_agent.go worktree cleanup with resolver-based doer check
 
-**Intent**: Existing monolithic role templates are decomposed into reusable blocks, and BuildRoleContext() assembles them by iterating over the context-sections list.
+**Intent:** RecoverAgent only removes worktrees when role == "coder". Custom doer roles with worktrees skip cleanup on crash. Replace the literal string check with resolver-based type classification.
 
-**Approach**:
-- Create block `.tmpl` files in `internal/prompts/templates/blocks/` for 24 section names (all from the plan's unique block names table except mandatory-docs and skills-affinity which are CP-2-4)
-- Each block uses `{{define "block-name"}}...{{end}}` and receives `*RoleContextData`
-- Extract content from existing monolithic templates into the corresponding blocks
-- Blocks with role-varying content (doer-state-transitions, doer-tools, reviewer-tools, implementation-phase, review-instructions) use conditionals on `.Role`
-- Implement `BuildRoleContext(role string, sectionNames []string, data *RoleContextData) (string, error)` in `internal/prompts/builder.go` — iterates sectionNames, executes each named template with data, concatenates results
-- Add equivalence tests: for each of the 9 roles, verify that BuildRoleContext() with the correct section list and populated RoleContextData produces output containing the same key content strings as existing Build*Context() output
-- Preserve old monolithic template files (deletion is CP-2-5)
+**Changes:**
+- `internal/ops/recover_agent.go`: At the worktree removal check (currently if role == "coder"), use the resolver (already loaded later in the function -- move the resolver load earlier) to check resolver.RoleType(role) == "doer" instead. Also add the nil-resolver warning log (from CP8) since the resolver load is being moved earlier.
+- `internal/ops/recover_agent_test.go`: Add a test case verifying that a custom doer role worktree is cleaned up during recovery.
 
-**Files**: `internal/prompts/templates/blocks/` (24 new .tmpl files), `internal/prompts/builder.go` (BuildRoleContext function), `internal/prompts/builder_test.go` (equivalence tests)
+**Scope:** `internal/ops/recover_agent.go`, `internal/ops/recover_agent_test.go`
 
-**desc**: Decompose existing 9 monolithic role templates into 24 modular block .tmpl files and implement BuildRoleContext(role string, sectionNames []string, data *RoleContextData) that assembles them
+**Done when:** The string "coder" no longer appears in the worktree-removal condition in recover_agent.go. A test with a custom doer role (e.g., data-engineer) verifies worktree removal occurs during recovery.
 
-**done_when**: 24 block .tmpl files exist in internal/prompts/templates/blocks/ covering all section names from the plan's unique block names table except mandatory-docs and skills-affinity; BuildRoleContext(role string, sectionNames []string, data *RoleContextData) (string, error) exists in internal/prompts/builder.go; equivalence tests in internal/prompts/builder_test.go verify that for all 9 roles BuildRoleContext() output contains the same key content strings as existing Build*Context() output; old monolithic template files in internal/prompts/templates/ are preserved; no existing builder_test.go tests are broken
-
-**scope**: internal/prompts/templates/blocks/ (24 new .tmpl files), internal/prompts/builder.go (BuildRoleContext function), internal/prompts/builder_test.go (equivalence tests)
-
-**spec_ref**: specs/build/3 - Declarative Role Definitions.md#phase-2-composable-prompt-sections
-
-**Depends on**: CP-2-1, CP-2-2
+**Spec ref:** todo-mas.md -- Phase 1, [concern] internal/ops/recover_agent.go:72
 
 ---
 
-### CP-2-4: Create mandatory-docs and skills-affinity template blocks
+### CP3: Replace hardcoded runtimeRole=="coder" in TDD enforcement with resolver-based doer type check
 
-**Intent**: New template blocks render the declarative mandatory-docs and skills lists from pipeline YAML into the prompt output.
+**Intent:** submit_review.go TDD enforcement only applies to literal "coder" role. Custom doer roles skip TDD checks. Replace with resolver-based classification.
 
-**Approach**:
-- Create `internal/prompts/templates/blocks/mandatory_docs.tmpl`: renders "=== MANDATORY DOCUMENTS ===" header and lists each doc path when `MandatoryDocs` is non-empty; renders nothing when empty
-- Create `internal/prompts/templates/blocks/skills_affinity.tmpl`: renders "=== SKILLS AFFINITY ===" header and lists each skill name when `Skills` is non-empty; renders nothing when empty
-- Both blocks receive `*RoleContextData` and read the `.MandatoryDocs` / `.Skills` fields
-- Add tests verifying rendering with populated and empty lists
+**Changes:**
+- `internal/ops/submit_review.go`: The resolver is already loaded above the check. Replace runtimeRole == "coder" with a check against the resolver: roleType, _ := resolver.RoleType(runtimeRole); roleType == "doer". This ensures all doer roles (including custom ones) are subject to TDD enforcement for coding tasks.
+- `internal/ops/submit_review_test.go`: Add a test verifying TDD enforcement triggers for a custom doer role submitting a coding task.
 
-**Files**: `internal/prompts/templates/blocks/mandatory_docs.tmpl`, `internal/prompts/templates/blocks/skills_affinity.tmpl`, `internal/prompts/builder_test.go`
+**Scope:** `internal/ops/submit_review.go`, `internal/ops/submit_review_test.go`
 
-**desc**: Create mandatory-docs and skills-affinity template blocks that render declarative lists from RoleContextData into prompt output
+**Done when:** The string "coder" no longer appears in the TDD enforcement condition in submit_review.go. A test with a custom doer role verifies TDD enforcement applies.
 
-**done_when**: mandatory_docs.tmpl exists in internal/prompts/templates/blocks/ and renders a MANDATORY DOCUMENTS section when MandatoryDocs is non-empty and renders empty string when MandatoryDocs is empty; skills_affinity.tmpl exists in internal/prompts/templates/blocks/ and renders a SKILLS AFFINITY section when Skills is non-empty and renders empty string when Skills is empty; tests in internal/prompts/builder_test.go verify rendering with populated lists and with empty lists for both blocks
-
-**scope**: internal/prompts/templates/blocks/mandatory_docs.tmpl, internal/prompts/templates/blocks/skills_affinity.tmpl, internal/prompts/builder_test.go
-
-**spec_ref**: specs/build/3 - Declarative Role Definitions.md#phase-2-composable-prompt-sections
-
-**Depends on**: CP-2-2, CP-2-3
+**Spec ref:** todo-mas.md -- Phase 1, [concern] submit_review.go:123
 
 ---
 
-### CP-2-5: Migrate callers to BuildRoleContext() and remove per-role builder code
+### CP4: Replace hardcoded role=="code-plan-reviewer" in claim_reviewer_task.go workflow inference with resolver-based lookup
 
-**Intent**: All prompt assembly uses BuildRoleContext() via resolver context-sections. Per-role builder infrastructure is removed.
+**Intent:** When workflowRole is empty, ClaimReviewerTask infers it from the agent ID by checking for "code-plan-reviewer". Custom reviewer roles fall through to the default "code-reviewer". Replace with resolver-based role-pair lookup.
 
-**Approach**:
-- Modify `buildPromptWithContext()` in `internal/agent/prompt.go`: replace `contextBuilderFunc` invocation with lookup of `resolver.ContextSections(role)`, construction of `RoleContextData`, and call to `BuildRoleContext()`
-- Modify `buildOrchestratorPromptContext()`: same pattern using orchestrator's context-sections
-- Strategy BuildPrompt() methods pass resolver to the updated prompt assembly functions
-- Remove from `internal/agent/strategy.go`: `contextBuilders` map
-- Remove from `internal/agent/prompt.go`: `contextBuilderFunc` type, all 9 named context builder functions (coderContext, codePlannerContext, epicPlannerContext, usWriterContext, codeReviewerContext, codePlanReviewerContext, epicPlanReviewerContext, usReviewerContext, orchestratorContext)
-- Remove from `internal/prompts/builder.go`: all 9 `*ContextConfig` structs (OrchestratorContextConfig, CoderContextConfig, ReviewerContextConfig, CodePlannerContextConfig, CodePlanReviewerContextConfig, EpicPlannerContextConfig, USWriterContextConfig, USReviewerContextConfig, EpicPlanReviewerContextConfig), all 9 `Build*Context()` functions, all 9 internal `*contextData` structs
-- Delete from `internal/prompts/templates/`: 9 old monolithic `*_context.tmpl` files (orchestrator_context.tmpl, coder_context.tmpl, code_reviewer_context.tmpl, code_planner_context.tmpl, code_plan_reviewer_context.tmpl, epic_planner_context.tmpl, epic_plan_reviewer_context.tmpl, us_writer_context.tmpl, us_reviewer_context.tmpl)
-- Update tests with mechanical adjustments (function signatures, imports) preserving test intent
+**Changes:**
+- `internal/ops/claim_reviewer_task.go`: When workflowRole is empty, use the resolver to determine the workflow role. The resolver is already loaded as pb.pr below -- move it up. Use the resolver to look up the reviewer role from its role-pair configuration. If resolver is unavailable, fall back to existing behavior.
+- `internal/ops/claim_reviewer_task_test.go`: Add a test verifying that a custom reviewer role (e.g., security-reviewer) with a correctly configured role-pair can claim review tasks without explicitly passing workflowRole.
 
-**Files**: `internal/agent/strategy.go`, `internal/agent/prompt.go`, `internal/agent/prompt_test.go`, `internal/prompts/builder.go`, `internal/prompts/builder_test.go`, `internal/prompts/templates/` (delete 9 old files), `internal/agent/strategy_doer.go`, `internal/agent/strategy_reviewer.go`, `internal/agent/strategy_orchestrator.go`
+**Scope:** `internal/ops/claim_reviewer_task.go`, `internal/ops/claim_reviewer_task_test.go`
 
-**desc**: Migrate callers from per-role Build*Context() to BuildRoleContext() and remove per-role builder code
+**Done when:** The literal string "code-plan-reviewer" no longer appears in the workflow role inference logic. A test with a custom reviewer role verifies correct workflow role inference.
 
-**done_when**: buildPromptWithContext() in internal/agent/prompt.go calls BuildRoleContext() via resolver.ContextSections() instead of contextBuilderFunc; buildOrchestratorPromptContext() calls BuildRoleContext() via resolver.ContextSections() instead of orchestratorContext(); contextBuilders map no longer exists in internal/agent/strategy.go; contextBuilderFunc type no longer exists in internal/agent/prompt.go; all 9 named context builder functions no longer exist in internal/agent/prompt.go; all 9 *ContextConfig structs no longer exist in internal/prompts/builder.go; all 9 Build*Context() functions no longer exist in internal/prompts/builder.go; 9 old monolithic *_context.tmpl files are deleted from internal/prompts/templates/; go build ./... succeeds; all tests pass with mechanical updates where needed
+**Spec ref:** todo-mas.md -- Phase 1, [concern] claim_reviewer_task.go:45
 
-**scope**: internal/agent/strategy.go, internal/agent/prompt.go, internal/agent/prompt_test.go, internal/prompts/builder.go, internal/prompts/builder_test.go, internal/prompts/templates/ (delete 9 old files), internal/agent/strategy_doer.go, internal/agent/strategy_reviewer.go, internal/agent/strategy_orchestrator.go
+---
 
-**spec_ref**: specs/build/3 - Declarative Role Definitions.md#phase-2-composable-prompt-sections
+### CP5: Enforce orchestrator singularity by resolved type, not role key
 
-**Depends on**: CP-2-3, CP-2-4
+**Intent:** registration.go counts live agents by exact role name match (agent.Role == role). Two different orchestrator role keys can register concurrently (one instance each), violating the spec type-based singularity requirement.
+
+**Changes:**
+- `internal/agent/registration.go`: In the singularity check within registerAgent, when the registering role resolves to type: orchestrator, count all live agents whose resolved type is "orchestrator" (not just agent.Role == role). Keep the existing per-role-key max-instances check for non-orchestrator roles.
+- `internal/agent/registration_test.go`: Add a test that attempts to register two agents with different orchestrator role keys (e.g., orchestrator-1 and lead-orchestrator-1) and verifies the second registration is rejected.
+
+**Scope:** `internal/agent/registration.go`, `internal/agent/registration_test.go`
+
+**Done when:** Registering a second agent with a different role key but type: orchestrator is rejected. Existing per-role-key max-instances enforcement for non-orchestrator roles is unaffected.
+
+**Spec ref:** todo-mas.md -- Phase 1, [blocker] registration.go:69
+
+---
+
+### CP6: Resolve orchestrator from state by type, not literal role name
+
+**Intent:** FindOrchestratorID() in state.go matches agent.Role == "orchestrator" literally. A custom orchestrator role key (e.g., lead-orchestrator) is not found, breaking auto-resolution for liza_add_tasks / liza_supersede_task.
+
+**Changes:**
+- `internal/ops/resolve_orchestrator.go`: Update ResolveOrchestratorFromState to accept an optional *pipeline.Resolver. When provided, iterate agents checking resolver.RoleType(agent.Role) == "orchestrator". When nil, fall back to state.FindOrchestratorID() (existing literal match).
+- `internal/mcp/handlers_mutation.go`: Update resolveOrchestratorID to pass s.resolver to ResolveOrchestratorFromState.
+- `cmd/liza/main.go`: Update the call site to pass the resolver if available, or nil.
+- `internal/ops/resolve_orchestrator_test.go`: Add a test with a custom orchestrator role key that verifies type-based resolution succeeds.
+
+**Scope:** `internal/ops/resolve_orchestrator.go`, `internal/ops/resolve_orchestrator_test.go`, `internal/mcp/handlers_mutation.go`, `cmd/liza/main.go`
+
+**Done when:** An agent registered with a custom role key whose resolved type is "orchestrator" is found by ResolveOrchestratorFromState. The literal string "orchestrator" is no longer the sole matching criterion. Existing tests still pass for the standard "orchestrator" role key.
+
+**Spec ref:** todo-mas.md -- Phase 1, [blocker] state.go:57 and handlers_mutation.go:14
+
+---
+
+### CP7: Surface pipeline load error in nil-resolver error path
+
+**Intent:** When pipeline config fails to load, the MCP server stores a nil resolver. All operationChecker-guarded tools fail with a generic message that does not include why. The spec suggests surfacing the original load error.
+
+**Changes:**
+- `internal/mcp/server.go`: Store the pipeline load error on the Server struct (e.g., resolverLoadErr error). In isOperationAllowed (or wherever the nil-resolver error is surfaced), include the stored error in the message.
+
+**Scope:** `internal/mcp/server.go`
+
+**Done when:** When the pipeline config fails to load, MCP tool error messages include the original load error text (not just "pipeline resolver not loaded"). Verified by a test that creates a server with an invalid pipeline config and checks the error message from an operation-checked tool.
+
+**Spec ref:** todo-mas.md -- Phase 1, [suggestion] internal/mcp/server.go:26-33
+
+---
+
+### CP8: Add log line for nil-resolver roleType fallback in recover_agent.go
+
+**Intent:** When the resolver is nil during recovery, roleType silently falls through to an empty string and no claim release happens. Add a log line for debuggability.
+
+**Changes:**
+- `internal/ops/recover_agent.go`: In the bb.Modify closure, when resolver is nil, add a slog.Warn indicating claim release was skipped due to missing resolver.
+
+**Scope:** `internal/ops/recover_agent.go`
+
+**Done when:** When resolver is nil during agent recovery, a warning log line is emitted indicating the claim release was skipped due to missing resolver.
+
+**Spec ref:** todo-mas.md -- Phase 1, [suggestion] internal/ops/recover_agent.go:102-106
+
+---
+
+## Phase 2 -- Template naming, IntegrationFix propagation, test-YAML parity
+
+### CP9: Rename template defines from underscores to hyphens to match YAML section names
+
+**Intent:** Templates define themselves as mandatory_docs and skills_affinity, but the YAML references mandatory-docs and skills-affinity. BuildRoleContext passes YAML section names to ExecuteTemplate with no normalization, causing runtime failures.
+
+**Changes:**
+- `internal/prompts/templates/blocks/mandatory_docs.tmpl`: Change define "mandatory_docs" to define "mandatory-docs".
+- `internal/prompts/templates/blocks/skills_affinity.tmpl`: Change define "skills_affinity" to define "skills-affinity".
+- `internal/prompts/builder_test.go`: Update block-level tests (TestBlockMandatoryDocs_*, TestBlockSkillsAffinity_*) to use hyphen names when executing templates.
+
+**Scope:** `internal/prompts/templates/blocks/mandatory_docs.tmpl`, `internal/prompts/templates/blocks/skills_affinity.tmpl`, `internal/prompts/builder_test.go`
+
+**Done when:** Template define names match the YAML section keys exactly (mandatory-docs, skills-affinity). Block-level tests pass with hyphen names. BuildRoleContext with these section names does not error.
+
+**Spec ref:** todo-mas.md -- Phase 2, [blocker] builder.go:190 / templates
+
+---
+
+### CP10: Propagate task.IntegrationFix into RoleContextData in buildTaskRoleContextData
+
+**Intent:** RoleContextData.IntegrationFix exists and the integration-fix template block depends on it, but buildTaskRoleContextData() never copies task.IntegrationFix into the data object. Coder prompts silently lose integration-fix workflow instructions.
+
+**Changes:**
+- `internal/agent/prompt.go`: In the doer-specific block (currently gated by roleType == "doer" && config.Role == "coder"), add data.IntegrationFix = task.IntegrationFix. Also relax the gate: IntegrationBranch and IntegrationFix should be set for all doer roles, not just literal "coder". Change config.Role == "coder" to just roleType == "doer".
+- `internal/agent/prompt_test.go` (or equivalent): Add a test verifying that when a task has IntegrationFix: true, the resulting RoleContextData.IntegrationFix is true.
+
+**Scope:** `internal/agent/prompt.go`, `internal/agent/prompt_test.go`
+
+**Done when:** buildTaskRoleContextData sets data.IntegrationFix = task.IntegrationFix for all doer roles. A test with task.IntegrationFix = true verifies the field is propagated. The config.Role == "coder" gate is replaced by roleType == "doer".
+
+**Spec ref:** todo-mas.md -- Phase 2, [blocker] prompt.go:149 / role_context.go:38
+
+---
+
+### CP11: Drive TestBuildRoleContext_AllRoles section lists from production pipeline YAML
+
+**Intent:** Test section lists are hardcoded subsets of the YAML context-sections, masking drift. The mandatory-docs and skills-affinity blockers went undetected because tests skip them. Drive tests from resolver.ContextSections(role) or the embedded pipeline.
+
+**Changes:**
+- `internal/prompts/builder_test.go`: In TestBuildRoleContext_AllRoles, replace hardcoded section lists with sections loaded from the production pipeline YAML (via embedded.PipelineConfig() and pipeline.LoadFromBytes() and resolver.ContextSections(role)). This ensures tests exercise the exact sections defined in the YAML.
+- `internal/agent/strategy_test.go`: Update testPipelineYAML to include mandatory-docs and skills-affinity in all roles context-sections, matching the production pipeline.
+
+**Scope:** `internal/prompts/builder_test.go`, `internal/agent/strategy_test.go`
+
+**Done when:** TestBuildRoleContext_AllRoles loads section names from the embedded pipeline YAML rather than hardcoding them. strategy_test.go test fixture includes mandatory-docs and skills-affinity for all roles. Adding or removing a section in the YAML automatically affects test coverage.
+
+**Spec ref:** todo-mas.md -- Phase 2, [concern] builder_test.go:989-995 and [concern] strategy_test.go:27
 
 ---
 
 ## Dependency Graph
 
 ```
-CP-2-1 (resolver + YAML)     CP-2-2 (RoleContextData)
-    └─────────┬─────────────────┘
-              ▼
-       CP-2-3 (blocks + BuildRoleContext)
-              │
-              ▼
-       CP-2-4 (mandatory-docs + skills-affinity)
-              │
-              ▼
-       CP-2-5 (migration + cleanup)
+CP1  (authorizeClaimRelease)     -- no dependencies
+CP2  (recover_agent worktree)    -- no dependencies
+CP3  (TDD enforcement)           -- no dependencies
+CP4  (claim_reviewer workflow)   -- no dependencies
+CP5  (orchestrator singularity)  -- no dependencies
+CP6  (orchestrator resolution)   -- no dependencies
+CP7  (pipeline error surface)    -- no dependencies
+CP8  (nil-resolver log)          -- no dependencies
+CP9  (template naming)           -- no dependencies
+CP10 (IntegrationFix propagation) -- no dependencies
+CP11 (test-YAML parity)          -- depends on CP9
 ```
 
-## Execution Order
+All Phase 1 tasks (CP1-CP8) are independent.
+All Phase 2 tasks (CP9-CP11) are independent except CP11 depends on CP9 (template names must match before tests can load real sections).
 
-Parallelizable groups:
-1. **CP-2-1** + **CP-2-2** (independent foundations)
-2. **CP-2-3** (depends on CP-2-1 and CP-2-2)
-3. **CP-2-4** (depends on CP-2-2 and CP-2-3)
-4. **CP-2-5** (depends on CP-2-3 and CP-2-4)
+## Spec Coverage Mapping
 
-## Out of Scope
-
-- Review quorum (`review-policy`, `PARTIALLY_APPROVED` state) — Phase 3
-- Dual name elimination (`Workflow*` constants, `ToWorkflow()`/`ToRuntime()`) — Phase 4
-- Custom template blocks (user-defined blocks in project root) — Open Question #1
+| Spec Item | Task |
+|-----------|------|
+| Phase 1: [concern] handlers_helpers.go:142-155 -- hardcoded role names in authorizeClaimRelease | CP1 |
+| Phase 1: [concern] recover_agent.go:72 -- role == "coder" for worktree removal | CP2 |
+| Phase 1: [concern] submit_review.go:123 -- runtimeRole == "coder" for TDD enforcement | CP3 |
+| Phase 1: [concern] claim_reviewer_task.go:45 -- role == "code-plan-reviewer" for workflow inference | CP4 |
+| Phase 1: [blocker] registration.go:69 -- singularity per role key, not type | CP5 |
+| Phase 1: [blocker] state.go:57 / handlers_mutation.go:14 -- hardcoded orchestrator literal | CP6 |
+| Phase 1: [suggestion] server.go:26-33 -- pipeline load error surfacing | CP7 |
+| Phase 1: [suggestion] recover_agent.go:102-106 -- nil-resolver fallback log | CP8 |
+| Phase 1: [concern] handlers_helpers.go:137 / recover_agent.go:71 -- custom doer/reviewer claim release | CP1 + CP2 (covered) |
+| Phase 2: [blocker] builder.go:190 / pipeline.yaml / templates -- template define vs YAML name mismatch | CP9 |
+| Phase 2: [blocker] prompt.go:149 / role_context.go:38 -- IntegrationFix not propagated | CP10 |
+| Phase 2: [concern] builder_test.go:989-995 -- hardcoded test section lists | CP11 |
+| Phase 2: [concern] strategy_test.go:27 -- test fixture omits sections | CP11 |
+| Phase 2: [blocker] templates mandatory_docs/skills_affinity -- underscore vs hyphen | CP9 (same fix) |
