@@ -191,15 +191,15 @@ func TestNewRoleStrategy(t *testing.T) {
 		wantType     string // "doer", "reviewer", "orchestrator"
 		wantWorkflow string
 	}{
-		{roles.RuntimeCoder, "doer", roles.WorkflowCoder},
-		{roles.RuntimeCodePlanner, "doer", roles.WorkflowCodePlanner},
-		{roles.RuntimeEpicPlanner, "doer", roles.WorkflowEpicPlanner},
-		{roles.RuntimeUSWriter, "doer", roles.WorkflowUSWriter},
-		{roles.RuntimeCodeReviewer, "reviewer", roles.WorkflowCodeReviewer},
-		{roles.RuntimeCodePlanReviewer, "reviewer", roles.WorkflowCodePlanReviewer},
-		{roles.RuntimeEpicPlanReviewer, "reviewer", roles.WorkflowEpicPlanReviewer},
-		{roles.RuntimeUSReviewer, "reviewer", roles.WorkflowUSReviewer},
-		{roles.RuntimeOrchestrator, "orchestrator", ""},
+		{"coder", "doer", roles.WorkflowCoder},
+		{"code-planner", "doer", roles.WorkflowCodePlanner},
+		{"epic-planner", "doer", roles.WorkflowEpicPlanner},
+		{"us-writer", "doer", roles.WorkflowUSWriter},
+		{"code-reviewer", "reviewer", roles.WorkflowCodeReviewer},
+		{"code-plan-reviewer", "reviewer", roles.WorkflowCodePlanReviewer},
+		{"epic-plan-reviewer", "reviewer", roles.WorkflowEpicPlanReviewer},
+		{"us-reviewer", "reviewer", roles.WorkflowUSReviewer},
+		{"orchestrator", "orchestrator", ""},
 	}
 
 	for _, tt := range tests {
@@ -355,15 +355,15 @@ func TestDefaultTimeout(t *testing.T) {
 		want time.Duration
 	}{
 		// Type defaults (no YAML applied): doer=2h, reviewer=30m, orchestrator=4h
-		{roles.RuntimeCoder, 2 * time.Hour},
-		{roles.RuntimeCodePlanner, 2 * time.Hour},
-		{roles.RuntimeEpicPlanner, 2 * time.Hour},
-		{roles.RuntimeUSWriter, 2 * time.Hour},
-		{roles.RuntimeCodeReviewer, 30 * time.Minute},
-		{roles.RuntimeCodePlanReviewer, 30 * time.Minute},
-		{roles.RuntimeEpicPlanReviewer, 30 * time.Minute},
-		{roles.RuntimeUSReviewer, 30 * time.Minute},
-		{roles.RuntimeOrchestrator, 4 * time.Hour},
+		{"coder", 2 * time.Hour},
+		{"code-planner", 2 * time.Hour},
+		{"epic-planner", 2 * time.Hour},
+		{"us-writer", 2 * time.Hour},
+		{"code-reviewer", 30 * time.Minute},
+		{"code-plan-reviewer", 30 * time.Minute},
+		{"epic-plan-reviewer", 30 * time.Minute},
+		{"us-reviewer", 30 * time.Minute},
+		{"orchestrator", 4 * time.Hour},
 	}
 
 	for _, tt := range tests {
@@ -384,7 +384,7 @@ func TestDefaultTimeout(t *testing.T) {
 		yaml := minimalPipelineYAML("1h", "30s", "30m", "4h", "60s", "30m")
 		r := loadTestResolver(t, yaml)
 
-		s, err := NewRoleStrategy(roles.RuntimeCoder, r)
+		s, err := NewRoleStrategy("coder", r)
 		if err != nil {
 			t.Fatalf("NewRoleStrategy error: %v", err)
 		}
@@ -399,7 +399,7 @@ func TestDefaultTimeout(t *testing.T) {
 		yaml := minimalPipelineYAML("2h", "30s", "30m", "6h", "60s", "30m")
 		r := loadTestResolver(t, yaml)
 
-		s, err := NewRoleStrategy(roles.RuntimeOrchestrator, r)
+		s, err := NewRoleStrategy("orchestrator", r)
 		if err != nil {
 			t.Fatalf("NewRoleStrategy error: %v", err)
 		}
@@ -416,7 +416,7 @@ func TestDefaultTimeout(t *testing.T) {
 		yaml := minimalPipelineYAML("2h", "30s", "30m", "4h", "60s", "30m")
 		r := loadTestResolver(t, yaml)
 
-		s, err := NewRoleStrategy(roles.RuntimeCoder, r)
+		s, err := NewRoleStrategy("coder", r)
 		if err != nil {
 			t.Fatalf("NewRoleStrategy error: %v", err)
 		}
@@ -438,17 +438,17 @@ func TestWaitConfig(t *testing.T) {
 		wantMaxWait time.Duration
 	}{
 		// Doer roles use Coder defaults
-		{roles.RuntimeCoder, 30 * time.Second, 1800 * time.Second},
-		{roles.RuntimeCodePlanner, 30 * time.Second, 1800 * time.Second},
-		{roles.RuntimeEpicPlanner, 30 * time.Second, 1800 * time.Second},
-		{roles.RuntimeUSWriter, 30 * time.Second, 1800 * time.Second},
+		{"coder", 30 * time.Second, 1800 * time.Second},
+		{"code-planner", 30 * time.Second, 1800 * time.Second},
+		{"epic-planner", 30 * time.Second, 1800 * time.Second},
+		{"us-writer", 30 * time.Second, 1800 * time.Second},
 		// Reviewer roles use Reviewer defaults
-		{roles.RuntimeCodeReviewer, 30 * time.Second, 1800 * time.Second},
-		{roles.RuntimeCodePlanReviewer, 30 * time.Second, 1800 * time.Second},
-		{roles.RuntimeEpicPlanReviewer, 30 * time.Second, 1800 * time.Second},
-		{roles.RuntimeUSReviewer, 30 * time.Second, 1800 * time.Second},
+		{"code-reviewer", 30 * time.Second, 1800 * time.Second},
+		{"code-plan-reviewer", 30 * time.Second, 1800 * time.Second},
+		{"epic-plan-reviewer", 30 * time.Second, 1800 * time.Second},
+		{"us-reviewer", 30 * time.Second, 1800 * time.Second},
 		// Orchestrator uses Orchestrator defaults
-		{roles.RuntimeOrchestrator, 60 * time.Second, 1800 * time.Second},
+		{"orchestrator", 60 * time.Second, 1800 * time.Second},
 	}
 
 	zeroState := &models.State{}
@@ -472,7 +472,7 @@ func TestWaitConfig(t *testing.T) {
 	// Verify each category reads the correct config keys (not each other's).
 	t.Run("custom_config/doer", func(t *testing.T) {
 		state := &models.State{Config: models.Config{CoderPollInterval: 5, CoderMaxWait: 60}}
-		s, _ := NewRoleStrategy(roles.RuntimeCoder, resolver)
+		s, _ := NewRoleStrategy("coder", resolver)
 		poll, maxWait := s.WaitConfig(state)
 		if poll != 5*time.Second || maxWait != 60*time.Second {
 			t.Errorf("doer WaitConfig() = (%v, %v), want (5s, 1m0s)", poll, maxWait)
@@ -481,7 +481,7 @@ func TestWaitConfig(t *testing.T) {
 
 	t.Run("custom_config/reviewer", func(t *testing.T) {
 		state := &models.State{Config: models.Config{ReviewerPollInterval: 10, ReviewerMaxWait: 120}}
-		s, _ := NewRoleStrategy(roles.RuntimeCodeReviewer, resolver)
+		s, _ := NewRoleStrategy("code-reviewer", resolver)
 		poll, maxWait := s.WaitConfig(state)
 		if poll != 10*time.Second || maxWait != 120*time.Second {
 			t.Errorf("reviewer WaitConfig() = (%v, %v), want (10s, 2m0s)", poll, maxWait)
@@ -490,7 +490,7 @@ func TestWaitConfig(t *testing.T) {
 
 	t.Run("custom_config/orchestrator", func(t *testing.T) {
 		state := &models.State{Config: models.Config{OrchestratorPollInterval: 15, OrchestratorMaxWait: 300}}
-		s, _ := NewRoleStrategy(roles.RuntimeOrchestrator, resolver)
+		s, _ := NewRoleStrategy("orchestrator", resolver)
 		poll, maxWait := s.WaitConfig(state)
 		if poll != 15*time.Second || maxWait != 300*time.Second {
 			t.Errorf("orchestrator WaitConfig() = (%v, %v), want (15s, 5m0s)", poll, maxWait)
@@ -500,12 +500,12 @@ func TestWaitConfig(t *testing.T) {
 	// Cross-contamination: doer config should NOT affect reviewer or orchestrator
 	t.Run("custom_config/isolation", func(t *testing.T) {
 		state := &models.State{Config: models.Config{CoderPollInterval: 99, CoderMaxWait: 99}}
-		reviewer, _ := NewRoleStrategy(roles.RuntimeCodeReviewer, resolver)
+		reviewer, _ := NewRoleStrategy("code-reviewer", resolver)
 		poll, _ := reviewer.WaitConfig(state)
 		if poll == 99*time.Second {
 			t.Error("reviewer should not read CoderPollInterval")
 		}
-		orch, _ := NewRoleStrategy(roles.RuntimeOrchestrator, resolver)
+		orch, _ := NewRoleStrategy("orchestrator", resolver)
 		poll, _ = orch.WaitConfig(state)
 		if poll == 99*time.Second {
 			t.Error("orchestrator should not read CoderPollInterval")
@@ -518,7 +518,7 @@ func TestWaitConfig(t *testing.T) {
 		yaml := minimalPipelineYAML("2h", "45s", "20m", "4h", "60s", "30m")
 		r := loadTestResolver(t, yaml)
 
-		s, _ := NewRoleStrategy(roles.RuntimeCoder, r)
+		s, _ := NewRoleStrategy("coder", r)
 		applyResolverTimeouts(t, s, r, "coder")
 
 		zeroState := &models.State{}
@@ -536,7 +536,7 @@ func TestWaitConfig(t *testing.T) {
 		yaml := minimalPipelineYAML("2h", "45s", "20m", "4h", "60s", "30m")
 		r := loadTestResolver(t, yaml)
 
-		s, _ := NewRoleStrategy(roles.RuntimeCoder, r)
+		s, _ := NewRoleStrategy("coder", r)
 		applyResolverTimeouts(t, s, r, "coder")
 
 		// state.yaml overrides YAML values
@@ -555,7 +555,7 @@ func TestWaitConfig(t *testing.T) {
 		yaml := minimalPipelineYAML("2h", "30s", "30m", "4h", "90s", "45m")
 		r := loadTestResolver(t, yaml)
 
-		s, _ := NewRoleStrategy(roles.RuntimeOrchestrator, r)
+		s, _ := NewRoleStrategy("orchestrator", r)
 		applyResolverTimeouts(t, s, r, "orchestrator")
 
 		zeroState := &models.State{}
@@ -592,7 +592,7 @@ func TestDoerPreWork_IsNoOp(t *testing.T) {
 // TestOrchestratorPreWork_IsNoOp verifies orchestrator PreWork returns (false, nil).
 func TestOrchestratorPreWork_IsNoOp(t *testing.T) {
 	resolver := testResolver(t)
-	s, err := NewRoleStrategy(roles.RuntimeOrchestrator, resolver)
+	s, err := NewRoleStrategy("orchestrator", resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy() error = %v", err)
 	}
@@ -608,7 +608,7 @@ func TestOrchestratorPreWork_IsNoOp(t *testing.T) {
 // TestOrchestratorClaimTask_ReturnsEmpty verifies orchestrator ClaimTask returns ("", "", nil).
 func TestOrchestratorClaimTask_ReturnsEmpty(t *testing.T) {
 	resolver := testResolver(t)
-	s, err := NewRoleStrategy(roles.RuntimeOrchestrator, resolver)
+	s, err := NewRoleStrategy("orchestrator", resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy() error = %v", err)
 	}
@@ -688,7 +688,7 @@ func TestReviewerEffectiveMaxRetries(t *testing.T) {
 // claimedTaskID is empty (no task was claimed).
 func TestDoerPostExecution_NilClaimedTaskID(t *testing.T) {
 	resolver := testResolver(t)
-	s, err := NewRoleStrategy(roles.RuntimeCoder, resolver)
+	s, err := NewRoleStrategy("coder", resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy() error = %v", err)
 	}
@@ -698,10 +698,10 @@ func TestDoerPostExecution_NilClaimedTaskID(t *testing.T) {
 	}
 }
 
-// TestAllRolesHaveStrategy ensures every role from roles.AllRuntime() has a strategy.
+// TestAllRolesHaveStrategy ensures every role from resolver.AllRoleNames() has a strategy.
 func TestAllRolesHaveStrategy(t *testing.T) {
 	resolver := testResolver(t)
-	for _, role := range roles.AllRuntime() {
+	for _, role := range resolver.AllRoleNames() {
 		t.Run(role, func(t *testing.T) {
 			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {

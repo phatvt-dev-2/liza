@@ -154,6 +154,20 @@ func (r *Resolver) RoleTimeouts(name string) (*ResolvedTimeouts, error) {
 	}, nil
 }
 
+// MaxInstances returns the max-instances for the named role.
+// Orchestrator roles always return 1 regardless of YAML value (spec invariant).
+// Returns 0 (unlimited) if the field is unset for non-orchestrator roles.
+func (r *Resolver) MaxInstances(name string) (int, error) {
+	role, ok := r.config.Pipeline.Roles[name]
+	if !ok {
+		return 0, fmt.Errorf("unknown role %q", name)
+	}
+	if role.Type == "orchestrator" {
+		return 1, nil
+	}
+	return role.MaxInstances, nil
+}
+
 // RoleDisplayName returns the display-name for the named role.
 // Returns the role key itself if the role is not found or has no display-name.
 func (r *Resolver) RoleDisplayName(name string) string {

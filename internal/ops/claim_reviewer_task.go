@@ -9,7 +9,6 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ClaimReviewerTaskInput contains the parameters for claiming a reviewer task.
@@ -43,7 +42,7 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 	if workflowRole == "" {
 		// Backward-compatible default: infer from agent_id, then default to code reviewer.
 		role, err := identity.ExtractRole(input.AgentID)
-		if err == nil && role == roles.RuntimeCodePlanReviewer {
+		if err == nil && role == "code-plan-reviewer" {
 			workflowRole = models.RoleCodePlanReviewer
 		} else {
 			workflowRole = models.RoleCodeReviewer

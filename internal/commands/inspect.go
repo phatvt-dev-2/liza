@@ -9,8 +9,8 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/render"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // InspectOptions contains options for the inspect command
@@ -65,8 +65,16 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 		return handleEntityQuery(state, query, args[1:], opts)
 	}
 
+	// Load role names from pipeline config for agent ID pattern detection
+	var roleNames []string
+	if opts.ProjectRoot != "" {
+		if cfg, err := pipeline.LoadFrozen(opts.ProjectRoot); err == nil {
+			roleNames = pipeline.NewResolver(cfg).AllRoleNames()
+		}
+	}
+
 	// Check if query looks like an agent ID pattern
-	if isAgentIDPattern(query) {
+	if isAgentIDPattern(query, roleNames) {
 		// Route to agent handler with the ID
 		return handleEntityQuery(state, "agents", []string{query}, opts)
 	}
@@ -81,9 +89,10 @@ func isKnownEntityType(query string) bool {
 	return slices.Contains(knownTypes, query)
 }
 
-// isAgentIDPattern returns true if the query looks like an agent ID
-func isAgentIDPattern(query string) bool {
-	for _, role := range roles.AllRuntime() {
+// isAgentIDPattern returns true if the query looks like an agent ID.
+// roleNames are the valid runtime role names from the pipeline config.
+func isAgentIDPattern(query string, roleNames []string) bool {
+	for _, role := range roleNames {
 		if strings.HasPrefix(query, role+"-") {
 			return true
 		}

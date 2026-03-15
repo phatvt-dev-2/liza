@@ -161,7 +161,8 @@ func TestRegisterAgent(t *testing.T) {
 
 			bb := testhelpers.WriteInitialState(t, statePath, state)
 
-			err := registerAgent(bb, tmpDir, tt.agentID, tt.role, "terminal-1", 1800, tt.provider)
+			resolver := testResolver(t)
+			err := registerAgent(bb, tmpDir, tt.agentID, tt.role, "terminal-1", 1800, tt.provider, resolver)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("registerAgent() error = %v, wantErr %v", err, tt.wantErr)
@@ -224,10 +225,12 @@ func TestRegisterAgentConcurrent(t *testing.T) {
 	successes := make(chan bool, numGoroutines)
 	errors := make(chan error, numGoroutines)
 
+	resolver := testResolver(t)
+
 	// Launch multiple goroutines trying to register the same agent ID
 	for range numGoroutines {
 		go func() {
-			err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800, "claude")
+			err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800, "claude", resolver)
 			if err != nil {
 				errors <- err
 			} else {
@@ -246,7 +249,7 @@ func TestRegisterAgentConcurrent(t *testing.T) {
 		case err := <-errors:
 			errorCount++
 			// Verify error is about collision
-			if !strings.Contains(err.Error(), "collision") && !strings.Contains(err.Error(), "already registered") {
+			if !strings.Contains(err.Error(), "collision") && !strings.Contains(err.Error(), "already has") {
 				t.Errorf("Expected collision error, got: %v", err)
 			}
 		case <-time.After(5 * time.Second):
@@ -320,7 +323,8 @@ func TestRegisterAgentStoresPID(t *testing.T) {
 	agentID := "coder-1"
 	role := "coder"
 
-	err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800, "claude")
+	resolver := testResolver(t)
+	err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800, "claude", resolver)
 	if err != nil {
 		t.Fatalf("registerAgent() error = %v", err)
 	}
@@ -363,7 +367,8 @@ func TestOrchestratorStatusTransitions(t *testing.T) {
 
 	// Register orchestrator agent
 	agentID := "orchestrator-1"
-	err := registerAgent(bb, tmpDir, agentID, "orchestrator", "terminal-1", 1800, "claude")
+	resolver := testResolver(t)
+	err := registerAgent(bb, tmpDir, agentID, "orchestrator", "terminal-1", 1800, "claude", resolver)
 	if err != nil {
 		t.Fatalf("registerAgent() error = %v", err)
 	}
@@ -795,11 +800,12 @@ func TestRegisterSecondOrchestratorBlocked(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800, "claude")
+	resolver := testResolver(t)
+	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800, "claude", resolver)
 	if err == nil {
 		t.Fatal("expected error registering second orchestrator, got nil")
 	}
-	if !strings.Contains(err.Error(), "orchestrator already registered") {
+	if !strings.Contains(err.Error(), "already has") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -820,7 +826,8 @@ func TestRegisterOrchestratorTakeoverExpired(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800, "claude")
+	resolver2 := testResolver(t)
+	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800, "claude", resolver2)
 	if err != nil {
 		t.Fatalf("expected registration to succeed with expired peer, got: %v", err)
 	}

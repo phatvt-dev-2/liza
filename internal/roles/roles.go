@@ -6,20 +6,6 @@ import (
 	"fmt"
 )
 
-// Runtime role names used in agent configuration, CLI, and supervisor.
-// These are the hyphenated forms that appear in agent IDs like "code-reviewer-1".
-const (
-	RuntimeCoder            = "coder"
-	RuntimeCodeReviewer     = "code-reviewer"
-	RuntimeOrchestrator     = "orchestrator"
-	RuntimeCodePlanner      = "code-planner"
-	RuntimeCodePlanReviewer = "code-plan-reviewer"
-	RuntimeEpicPlanner      = "epic-planner"
-	RuntimeEpicPlanReviewer = "epic-plan-reviewer"
-	RuntimeUSWriter         = "us-writer"
-	RuntimeUSReviewer       = "us-reviewer"
-)
-
 // Claim-type selectors used by ReleaseClaim to indicate which claim slot to release.
 // These are NOT role names — a code-planner releases its claim with ClaimDoer,
 // a code-plan-reviewer with ClaimReviewer.
@@ -45,28 +31,28 @@ const (
 
 // runtimeToWorkflow maps runtime role names to workflow role names.
 var runtimeToWorkflow = map[string]string{
-	RuntimeCoder:            WorkflowCoder,
-	RuntimeCodeReviewer:     WorkflowCodeReviewer,
-	RuntimeOrchestrator:     WorkflowOrchestrator,
-	RuntimeCodePlanner:      WorkflowCodePlanner,
-	RuntimeCodePlanReviewer: WorkflowCodePlanReviewer,
-	RuntimeEpicPlanner:      WorkflowEpicPlanner,
-	RuntimeEpicPlanReviewer: WorkflowEpicPlanReviewer,
-	RuntimeUSWriter:         WorkflowUSWriter,
-	RuntimeUSReviewer:       WorkflowUSReviewer,
+	"coder":              WorkflowCoder,
+	"code-reviewer":      WorkflowCodeReviewer,
+	"orchestrator":       WorkflowOrchestrator,
+	"code-planner":       WorkflowCodePlanner,
+	"code-plan-reviewer": WorkflowCodePlanReviewer,
+	"epic-planner":       WorkflowEpicPlanner,
+	"epic-plan-reviewer": WorkflowEpicPlanReviewer,
+	"us-writer":          WorkflowUSWriter,
+	"us-reviewer":        WorkflowUSReviewer,
 }
 
 // workflowToRuntime maps workflow role names to runtime role names.
 var workflowToRuntime = map[string]string{
-	WorkflowCoder:            RuntimeCoder,
-	WorkflowCodeReviewer:     RuntimeCodeReviewer,
-	WorkflowOrchestrator:     RuntimeOrchestrator,
-	WorkflowCodePlanner:      RuntimeCodePlanner,
-	WorkflowCodePlanReviewer: RuntimeCodePlanReviewer,
-	WorkflowEpicPlanner:      RuntimeEpicPlanner,
-	WorkflowEpicPlanReviewer: RuntimeEpicPlanReviewer,
-	WorkflowUSWriter:         RuntimeUSWriter,
-	WorkflowUSReviewer:       RuntimeUSReviewer,
+	WorkflowCoder:            "coder",
+	WorkflowCodeReviewer:     "code-reviewer",
+	WorkflowOrchestrator:     "orchestrator",
+	WorkflowCodePlanner:      "code-planner",
+	WorkflowCodePlanReviewer: "code-plan-reviewer",
+	WorkflowEpicPlanner:      "epic-planner",
+	WorkflowEpicPlanReviewer: "epic-plan-reviewer",
+	WorkflowUSWriter:         "us-writer",
+	WorkflowUSReviewer:       "us-reviewer",
 }
 
 // ToWorkflow converts a runtime role name to its workflow equivalent.
@@ -87,26 +73,10 @@ func ToRuntime(workflowRole string) (string, error) {
 	return "", fmt.Errorf("unknown workflow role: %s", workflowRole)
 }
 
-// IsValidRuntime checks if the given role is a valid runtime role.
-func IsValidRuntime(role string) bool {
-	_, ok := runtimeToWorkflow[role]
-	return ok
-}
-
 // IsValidWorkflow checks if the given role is a valid workflow role.
 func IsValidWorkflow(role string) bool {
 	_, ok := workflowToRuntime[role]
 	return ok
-}
-
-// AllRuntime returns all valid runtime role names.
-func AllRuntime() []string {
-	return []string{
-		RuntimeCoder, RuntimeCodeReviewer, RuntimeOrchestrator,
-		RuntimeCodePlanner, RuntimeCodePlanReviewer,
-		RuntimeEpicPlanner, RuntimeEpicPlanReviewer,
-		RuntimeUSWriter, RuntimeUSReviewer,
-	}
 }
 
 // AllWorkflow returns all valid workflow role names.

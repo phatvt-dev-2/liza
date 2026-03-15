@@ -11,7 +11,6 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // validateIdentity validates agent ID format: {role}-{number}
@@ -49,7 +48,8 @@ func validateIdentity(agentID, role string) error {
 // registerAgent registers an agent with collision detection.
 // provider identifies the CLI provider (e.g. "claude", "codex") and is persisted
 // for review quorum provider-diversity checks.
-func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int, provider string) error {
+// resolver is used for role classification (singularity, reviewer detection).
+func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int, provider string, resolver *pipeline.Resolver) error {
 	logger := GetLogger()
 	now := time.Now().UTC()
 	leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
@@ -66,14 +66,21 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 			logger.Info("Taking over expired agent lease", "agent_id", agentID)
 		}
 
-		// Prevent multiple orchestrators: at most one orchestrator may be registered
-		if role == roles.RuntimeOrchestrator {
-			for id, agent := range state.Agents {
-				if id != agentID && agent.Role == roles.RuntimeOrchestrator {
-					if agent.LeaseExpires != nil && agent.LeaseExpires.After(now) {
-						return fmt.Errorf("orchestrator already registered: %s (expires %s); only one orchestrator is allowed",
-							id, agent.LeaseExpires.Format(time.RFC3339))
+		// Singularity check via resolver: at most N instances per role.
+		if resolver != nil {
+			maxInst, err := resolver.MaxInstances(role)
+			if err == nil && maxInst > 0 {
+				liveCount := 0
+				for id, agent := range state.Agents {
+					if id != agentID && agent.Role == role {
+						if agent.LeaseExpires != nil && agent.LeaseExpires.After(now) {
+							liveCount++
+						}
 					}
+				}
+				if liveCount >= maxInst {
+					return fmt.Errorf("role %s already has %d live agent(s) (max %d); only %d instance(s) allowed",
+						role, liveCount, maxInst, maxInst)
 				}
 			}
 		}
@@ -97,10 +104,13 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 		return err
 	}
 
-	// If code-reviewer: clear stale review claims
-	if role == roles.RuntimeCodeReviewer {
-		if _, err := ops.ClearStaleReviewClaims(projectRoot); err != nil {
-			logger.Warn("Failed to clear stale review claims", "error", err, "role", role)
+	// If reviewer role: clear stale review claims
+	if resolver != nil {
+		roleType, rtErr := resolver.RoleType(role)
+		if rtErr == nil && roleType == "reviewer" {
+			if _, err := ops.ClearStaleReviewClaims(projectRoot); err != nil {
+				logger.Warn("Failed to clear stale review claims", "error", err, "role", role)
+			}
 		}
 	}
 
@@ -144,6 +154,7 @@ func unregisterAgent(bb *db.Blackboard, agentID, projectRoot string) {
 // the claim fields. Best-effort: logs warnings instead of failing.
 // pipelineTransitions and resolver are pre-loaded by the caller (outside bb.Modify)
 // to avoid disk I/O under the state lock.
+// Uses resolver.RoleType() for doer/reviewer classification.
 func releaseTaskClaim(state *models.State, task *models.Task, role, agentID string, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, resolver *pipeline.Resolver, now time.Time) {
 	logger := GetLogger()
 	reason := "agent interrupted"
@@ -161,16 +172,23 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 		}
 	}
 
-	// Collapse roles into claim types: doer (AssignedTo) vs reviewer (ReviewingBy).
-	switch role {
-	case roles.RuntimeCoder, roles.RuntimeCodePlanner:
+	// Classify role using resolver for doer/reviewer determination.
+	roleType := ""
+	if resolver != nil {
+		if rt, err := resolver.RoleType(role); err == nil {
+			roleType = rt
+		}
+	}
+
+	switch roleType {
+	case "doer":
 		if task.Status == activeExecuting {
 			transitionTask(releasedInitial)
 		}
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
 
-	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
+	case "reviewer":
 		if task.Status == activeReviewing {
 			transitionTask(releasedSubmitted)
 		}

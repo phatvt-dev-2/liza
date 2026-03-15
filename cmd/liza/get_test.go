@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"gopkg.in/yaml.v3"
@@ -33,6 +34,11 @@ func TestGetCommand(t *testing.T) {
 	lizaDir := filepath.Join(tmpDir, paths.LizaDirName)
 	if err := os.MkdirAll(lizaDir, 0755); err != nil {
 		t.Fatalf("failed to create .liza dir: %v", err)
+	}
+
+	// Write pipeline config so role-based agent ID detection works
+	if err := embedded.WritePipelineConfig(lizaDir); err != nil {
+		t.Fatalf("failed to write pipeline config: %v", err)
 	}
 
 	// Create a minimal test state

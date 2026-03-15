@@ -29,7 +29,6 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -149,7 +148,7 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 	// in this test), each becoming a US Writer child task.
 	// code-planner produces one output[] entry per coding task.
 	// us-writer uses a one-to-one transition, but setting output is harmless.
-	if role == roles.RuntimeEpicPlanner {
+	if role == "epic-planner" {
 		if err := ops.SetTaskOutput(projectRoot, &ops.SetTaskOutputInput{
 			TaskID:  taskID,
 			AgentID: agentID,
@@ -170,8 +169,8 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 		}); err != nil {
 			return fmt.Errorf("SetTaskOutput: %w", err)
 		}
-	} else if role == roles.RuntimeUSWriter ||
-		role == roles.RuntimeCodePlanner {
+	} else if role == "us-writer" ||
+		role == "code-planner" {
 		if err := ops.SetTaskOutput(projectRoot, &ops.SetTaskOutputInput{
 			TaskID:  taskID,
 			AgentID: agentID,
@@ -373,23 +372,23 @@ func TestFullSprintSequence(t *testing.T) {
 
 	// ── Phase 1: Epic Planning ─────────────────────────────────────────
 	t.Log("=== Phase 1: Epic Planning ===")
-	runSupervisor("epic-planner-1", roles.RuntimeEpicPlanner)
-	runSupervisor("epic-plan-reviewer-1", roles.RuntimeEpicPlanReviewer)
+	runSupervisor("epic-planner-1", "epic-planner")
+	runSupervisor("epic-plan-reviewer-1", "epic-plan-reviewer")
 
 	// ── Phase 2: US Writing ────────────────────────────────────────────
 	t.Log("=== Phase 2: US Writing ===")
-	runSupervisor("us-writer-1", roles.RuntimeUSWriter)
-	runSupervisor("us-reviewer-1", roles.RuntimeUSReviewer)
+	runSupervisor("us-writer-1", "us-writer")
+	runSupervisor("us-reviewer-1", "us-reviewer")
 
 	// ── Phase 3: Code Planning ─────────────────────────────────────────
 	t.Log("=== Phase 3: Code Planning ===")
-	runSupervisor("code-planner-1", roles.RuntimeCodePlanner)
-	runSupervisor("code-plan-reviewer-1", roles.RuntimeCodePlanReviewer)
+	runSupervisor("code-planner-1", "code-planner")
+	runSupervisor("code-plan-reviewer-1", "code-plan-reviewer")
 
 	// ── Phase 4: Coding ────────────────────────────────────────────────
 	t.Log("=== Phase 4: Coding ===")
-	runSupervisor("coder-1", roles.RuntimeCoder)
-	runSupervisor("code-reviewer-1", roles.RuntimeCodeReviewer)
+	runSupervisor("coder-1", "coder")
+	runSupervisor("code-reviewer-1", "code-reviewer")
 
 	// ── Assertions ─────────────────────────────────────────────────────
 	t.Log("=== Assertions ===")
@@ -474,14 +473,14 @@ func TestFullSprintSequence(t *testing.T) {
 
 	// Epic roles called once; all downstream roles called twice (one per capability).
 	expectedRoleCounts := map[string]int{
-		roles.RuntimeEpicPlanner:      1,
-		roles.RuntimeEpicPlanReviewer: 1,
-		roles.RuntimeUSWriter:         2,
-		roles.RuntimeUSReviewer:       2,
-		roles.RuntimeCodePlanner:      2,
-		roles.RuntimeCodePlanReviewer: 2,
-		roles.RuntimeCoder:            2,
-		roles.RuntimeCodeReviewer:     2,
+		"epic-planner":       1,
+		"epic-plan-reviewer": 1,
+		"us-writer":          2,
+		"us-reviewer":        2,
+		"code-planner":       2,
+		"code-plan-reviewer": 2,
+		"coder":              2,
+		"code-reviewer":      2,
 	}
 	roleCounts := make(map[string]int)
 	for _, call := range mock.calls {

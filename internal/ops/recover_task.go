@@ -9,7 +9,6 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // RecoverTaskResult contains the outcome of recovering a task.
@@ -94,10 +93,10 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 		// Coder takes precedence for primary claiming agent
 		if coderAgentID != "" {
 			result.AgentID = coderAgentID
-			result.AgentRole = roles.RuntimeCoder
+			result.AgentRole = "coder"
 		} else if reviewerAgentID != "" {
 			result.AgentID = reviewerAgentID
-			result.AgentRole = roles.RuntimeCodeReviewer
+			result.AgentRole = "code-reviewer"
 		}
 	} else if !force {
 		return nil, fmt.Errorf("task %s not found in state, use --force to clean up git artifacts anyway", taskID)

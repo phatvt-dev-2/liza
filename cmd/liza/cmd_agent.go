@@ -14,7 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/roles"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/spf13/cobra"
 )
 
@@ -92,8 +92,13 @@ Example:
 			return err
 		}
 
-		if !slices.Contains(roles.AllRuntime(), role) {
-			return fmt.Errorf("invalid role: %s (valid: %s)", role, strings.Join(roles.AllRuntime(), ", "))
+		pipelineCfg, pipelineErr := pipeline.LoadFrozen(projectRoot)
+		if pipelineErr != nil {
+			return fmt.Errorf("failed to load pipeline config: %w", pipelineErr)
+		}
+		validRoles := pipeline.NewResolver(pipelineCfg).AllRoleNames()
+		if !slices.Contains(validRoles, role) {
+			return fmt.Errorf("invalid role: %s (valid: %s)", role, strings.Join(validRoles, ", "))
 		}
 
 		cliName, _ := cmd.Flags().GetString("cli")

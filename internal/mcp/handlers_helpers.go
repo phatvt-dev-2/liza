@@ -140,13 +140,13 @@ func authorizeClaimRelease(agentID, claimRole string) error {
 	}
 	agentRole, _ := identity.ExtractRole(agentID)
 	switch agentRole {
-	case roles.RuntimeOrchestrator:
+	case "orchestrator":
 		return nil
-	case roles.RuntimeCoder, roles.RuntimeCodePlanner:
+	case "coder", "code-planner", "epic-planner", "us-writer":
 		if claimRole != roles.ClaimDoer {
 			return fmt.Errorf("agent %s (role %s) can only release doer claims", agentID, agentRole)
 		}
-	case roles.RuntimeCodeReviewer, roles.RuntimeCodePlanReviewer:
+	case "code-reviewer", "code-plan-reviewer", "epic-plan-reviewer", "us-reviewer":
 		if claimRole != roles.ClaimReviewer {
 			return fmt.Errorf("agent %s (role %s) can only release reviewer claims", agentID, agentRole)
 		}

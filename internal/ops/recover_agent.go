@@ -8,7 +8,6 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // RecoverAgentResult contains the outcome of recovering a crashed agent.
@@ -70,7 +69,7 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 	}
 
 	// Phase 2: Git side effects (outside lock) — remove worktree for coders
-	if role == roles.RuntimeCoder && taskID != "" {
+	if role == "coder" && taskID != "" {
 		g := git.New(projectRoot)
 		if err := g.RemoveWorktree(taskID); err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("worktree removal: %v", err))
@@ -100,18 +99,24 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 			task := state.FindTask(taskID)
 			if task != nil {
 				effectiveCoderRelease, effectiveReviewerRelease := resolveClaimReleaseStatuses(task, resolver)
-				switch role {
-				case roles.RuntimeCoder:
+				roleType := ""
+				if resolver != nil {
+					if rt, rtErr := resolver.RoleType(role); rtErr == nil {
+						roleType = rt
+					}
+				}
+				switch roleType {
+				case "doer":
 					released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, true, agentID, reason, now)
 					if err != nil {
-						result.Warnings = append(result.Warnings, fmt.Sprintf("coder claim release: %v", err))
+						result.Warnings = append(result.Warnings, fmt.Sprintf("doer claim release: %v", err))
 					}
 					if released {
 						result.ClaimReleased = true
 						// Clear worktree reference since we removed it
 						task.Worktree = nil
 					}
-				case roles.RuntimeCodeReviewer:
+				case "reviewer":
 					released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, true, agentID, reason, now)
 					if err != nil {
 						result.Warnings = append(result.Warnings, fmt.Sprintf("reviewer claim release: %v", err))

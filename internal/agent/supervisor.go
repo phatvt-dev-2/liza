@@ -15,13 +15,12 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // SupervisorConfig contains all configuration for the agent supervisor
 type SupervisorConfig struct {
 	AgentID          string
-	Role             string // roles.RuntimeCoder, roles.RuntimeCodeReviewer, roles.RuntimeOrchestrator
+	Role             string // runtime role name from pipeline YAML (e.g. "coder", "code-reviewer", "orchestrator")
 	ProjectRoot      string
 	StatePath        string
 	LogPath          string
@@ -105,7 +104,7 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, task
 
 		task.Exit42RestartCount = outcome.RestartCount
 
-		if role != roles.RuntimeCoder {
+		if role != "coder" {
 			return nil
 		}
 		if outcome.RestartCount <= restartLimit {
@@ -405,7 +404,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		ApplyYAMLTimeouts(strategy, timeouts.Execution, timeouts.PollInterval, timeouts.MaxWait)
 	}
 
-	if err := registerAgent(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800, config.CLIName); err != nil {
+	if err := registerAgent(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800, config.CLIName, resolver); err != nil {
 		return err
 	}
 	defer unregisterAgent(bb, config.AgentID, config.ProjectRoot)

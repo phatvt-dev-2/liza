@@ -13,7 +13,6 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // SubmitForReviewResult contains the outcome of submitting a task for review.
@@ -121,7 +120,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	}
 
 	// TDD enforcement: code tasks must include test files (coder role only).
-	if runtimeRole == roles.RuntimeCoder && task.EffectiveType() == models.TaskTypeCoding && task.BaseCommit != nil {
+	if runtimeRole == "coder" && task.EffectiveType() == models.TaskTypeCoding && task.BaseCommit != nil {
 		hasTests, err := HasTestFiles(g, taskID, *task.BaseCommit)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check test files: %w", err)

@@ -9,7 +9,6 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
-	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -105,14 +104,14 @@ func TestExit42RestartTracker_ExponentialBackoffAndCap(t *testing.T) {
 	state.Tasks = []models.Task{task}
 	state.Config.Exit42RestartThreshold = 99
 	state.Config.Exit42MaxBackoffSeconds = 8
-	state.Agents[agentID] = models.Agent{Role: roles.RuntimeCoder, Status: models.AgentStatusWorking}
+	state.Agents[agentID] = models.Agent{Role: "coder", Status: models.AgentStatusWorking}
 
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 	tracker := newExit42RestartTracker()
 
 	var delays []time.Duration
 	for i := 0; i < 4; i++ {
-		outcome, err := tracker.Handle(bb, tmpDir, roles.RuntimeCoder, task.ID, agentID)
+		outcome, err := tracker.Handle(bb, tmpDir, "coder", task.ID, agentID)
 		if err != nil {
 			t.Fatalf("Handle() error on attempt %d: %v", i+1, err)
 		}
@@ -161,13 +160,13 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{task}
 	state.Config.Exit42RestartThreshold = 2
-	state.Agents[agentID] = models.Agent{Role: roles.RuntimeCoder, Status: models.AgentStatusWorking}
+	state.Agents[agentID] = models.Agent{Role: "coder", Status: models.AgentStatusWorking}
 
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 	tracker := newExit42RestartTracker()
 
 	// First attempt
-	outcome, err := tracker.Handle(bb, tmpDir, roles.RuntimeCoder, task.ID, agentID)
+	outcome, err := tracker.Handle(bb, tmpDir, "coder", task.ID, agentID)
 	if err != nil {
 		t.Fatalf("Handle() error on attempt 1: %v", err)
 	}
@@ -176,7 +175,7 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 	}
 
 	// Second attempt (at threshold)
-	outcome, err = tracker.Handle(bb, tmpDir, roles.RuntimeCoder, task.ID, agentID)
+	outcome, err = tracker.Handle(bb, tmpDir, "coder", task.ID, agentID)
 	if err != nil {
 		t.Fatalf("Handle() error on attempt 2: %v", err)
 	}
@@ -185,7 +184,7 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 	}
 
 	// Third attempt (over threshold)
-	outcome, err = tracker.Handle(bb, tmpDir, roles.RuntimeCoder, task.ID, agentID)
+	outcome, err = tracker.Handle(bb, tmpDir, "coder", task.ID, agentID)
 	if err != nil {
 		t.Fatalf("Handle() error on attempt 3: %v", err)
 	}
@@ -262,7 +261,7 @@ func TestResumeHandoff_ExtractedOp_Integration(t *testing.T) {
 	task.Worktree = &tmpDir
 	state.Tasks = []models.Task{task}
 	state.Agents[agentID] = models.Agent{
-		Role:   roles.RuntimeCoder,
+		Role:   "coder",
 		Status: models.AgentStatusHandoff,
 	}
 
@@ -377,7 +376,7 @@ func TestExtractedOps_BehavioralParity(t *testing.T) {
 		task.Worktree = &expectedWorktree
 		state.Tasks = []models.Task{task}
 		state.Agents[agentID] = models.Agent{
-			Role:   roles.RuntimeCoder,
+			Role:   "coder",
 			Status: models.AgentStatusHandoff,
 		}
 
@@ -437,7 +436,7 @@ func BenchmarkResumeHandoff(b *testing.B) {
 	task.AssignedTo = &agentID
 	state.Tasks = []models.Task{task}
 	state.Agents[agentID] = models.Agent{
-		Role:   roles.RuntimeCoder,
+		Role:   "coder",
 		Status: models.AgentStatusHandoff,
 	}
 
