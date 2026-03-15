@@ -2,15 +2,16 @@
 
 Spec: /home/tangi/Workspace/liza/todo-mas.md
 
-## Revision Notes (Iteration 3)
+## Revision Notes (Iteration 4)
 
-Addresses iteration 2 rejection blocker:
-- **CP4 fallback contradiction** — The change description said "fall back to existing behavior when resolver unavailable", but the done_when said the literal string must not appear. Analysis shows `loadPipelineBundle` already returns an error on failure (claim_reviewer_task.go:62-64), so there is no nil-resolver path inside this function. Removed the fallback clause entirely: move `loadPipelineBundle` before the inference, use `roles.ToWorkflow(role)` to convert extracted role to workflow form. No literal string, no fallback, no contradiction.
+Addresses iteration 3 rejection blocker:
+- **CP9 scope too broad** — CP9 broadened the `config.Role == "coder"` gate to `roleType == "doer"` for all doer roles. The spec item is narrowly about `task.IntegrationFix` not being copied into `RoleContextData` for the coder prompt path. The production pipeline only includes `integration-fix` in coder context-sections (`pipeline.yaml:212-217`), and the existing gate is coder-specific (`prompt.go:149-156`). Narrowed CP9 to add the missing `data.IntegrationFix` assignment inside the existing coder block without changing the gate condition.
 
 Prior iteration fixes (still in effect):
-1. **CP2/CP8 overlap** — Merged old CP2 (worktree cleanup) and old CP8 (nil-resolver log) into new CP2.
-2. **CP7 missing test file** — Added `internal/mcp/server_test.go` to CP7 scope.
-3. **CP8 scope/test mismatch** — Resolved by merge into CP2.
+1. **CP4 fallback contradiction** — Removed the fallback clause; uses `roles.ToWorkflow(role)` only.
+2. **CP2/CP8 overlap** — Merged old CP2 (worktree cleanup) and old CP8 (nil-resolver log) into new CP2.
+3. **CP7 missing test file** — Added `internal/mcp/server_test.go` to CP7 scope.
+4. **CP8 scope/test mismatch** — Resolved by merge into CP2.
 
 ---
 
@@ -152,15 +153,15 @@ Prior iteration fixes (still in effect):
 
 ### CP9: Propagate task.IntegrationFix into RoleContextData in buildTaskRoleContextData
 
-**Intent:** RoleContextData.IntegrationFix exists and the integration-fix template block depends on it, but buildTaskRoleContextData() never copies task.IntegrationFix into the data object. Coder prompts silently lose integration-fix workflow instructions.
+**Intent:** RoleContextData.IntegrationFix exists and the integration-fix template block depends on it, but buildTaskRoleContextData() never copies task.IntegrationFix into the data object. Coder prompts silently lose integration-fix workflow instructions for conflicted tasks.
 
 **Changes:**
-- `internal/agent/prompt.go`: In the doer-specific block (currently gated by roleType == "doer" && config.Role == "coder"), add data.IntegrationFix = task.IntegrationFix. Also relax the gate: IntegrationBranch and IntegrationFix should be set for all doer roles, not just literal "coder". Change config.Role == "coder" to just roleType == "doer".
-- `internal/agent/prompt_test.go`: Add a test verifying that when a task has IntegrationFix: true, the resulting RoleContextData.IntegrationFix is true.
+- `internal/agent/prompt.go`: Inside the existing coder-specific doer block (gated by `roleType == "doer" && config.Role == "coder"`, line 150), add `data.IntegrationFix = task.IntegrationFix`. The gate condition is unchanged — the production pipeline only includes `integration-fix` in coder context-sections (`pipeline.yaml:212-217`).
+- `internal/agent/prompt_test.go`: Add a test verifying that when a coder task has IntegrationFix: true, the resulting RoleContextData.IntegrationFix is true.
 
 **Scope:** `internal/agent/prompt.go`, `internal/agent/prompt_test.go`
 
-**Done when:** buildTaskRoleContextData sets data.IntegrationFix = task.IntegrationFix for all doer roles. A test with task.IntegrationFix = true verifies the field is propagated. The config.Role == "coder" gate is replaced by roleType == "doer".
+**Done when:** buildTaskRoleContextData sets data.IntegrationFix = task.IntegrationFix inside the existing coder-specific doer block (gate unchanged). A test with a coder task having IntegrationFix = true verifies the field is propagated.
 
 **Spec ref:** todo-mas.md -- Phase 2, [blocker] prompt.go:149 / role_context.go:38
 
@@ -215,6 +216,6 @@ All Phase 2 tasks (CP8-CP10) are independent except CP10 depends on CP8 (templat
 | Phase 1: [concern] handlers_helpers.go:137 / recover_agent.go:71 -- custom doer/reviewer claim release | CP1 + CP2 (covered) |
 | Phase 2: [blocker] builder.go:190 / pipeline.yaml / templates -- template define vs YAML name mismatch | CP8 |
 | Phase 2: [blocker] templates mandatory_docs/skills_affinity -- underscore vs hyphen | CP8 (same fix) |
-| Phase 2: [blocker] prompt.go:149 / role_context.go:38 -- IntegrationFix not propagated | CP9 |
+| Phase 2: [blocker] prompt.go:149 / role_context.go:38 -- IntegrationFix not propagated (coder path) | CP9 |
 | Phase 2: [concern] builder_test.go:989-995 -- hardcoded test section lists | CP10 |
 | Phase 2: [concern] strategy_test.go:27 -- test fixture omits sections | CP10 |
