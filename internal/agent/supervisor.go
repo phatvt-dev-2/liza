@@ -390,7 +390,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return err
 	}
 
-	if err := registerAgent(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800); err != nil {
+	if err := registerAgent(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800, config.CLIName); err != nil {
 		return err
 	}
 	defer unregisterAgent(bb, config.AgentID, config.ProjectRoot)

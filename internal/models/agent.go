@@ -34,6 +34,7 @@ type Agent struct {
 	LeaseExpires    *time.Time     `yaml:"lease_expires,omitempty"`
 	Heartbeat       time.Time      `yaml:"heartbeat"`
 	Terminal        string         `yaml:"terminal"`
+	Provider        string         `yaml:"provider,omitempty"`
 	IterationsTotal int            `yaml:"iterations_total"`
 	ContextPercent  int            `yaml:"context_percent"`
 	PID             int            `yaml:"pid,omitempty"`

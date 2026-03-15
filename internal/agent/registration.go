@@ -46,8 +46,10 @@ func validateIdentity(agentID, role string) error {
 	return nil
 }
 
-// registerAgent registers an agent with collision detection
-func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int) error {
+// registerAgent registers an agent with collision detection.
+// provider identifies the CLI provider (e.g. "claude", "codex") and is persisted
+// for review quorum provider-diversity checks.
+func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int, provider string) error {
 	logger := GetLogger()
 	now := time.Now().UTC()
 	leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
@@ -83,6 +85,7 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 			Status:       models.AgentStatusIdle,
 			Heartbeat:    now,
 			Terminal:     terminal,
+			Provider:     provider,
 			LeaseExpires: &leaseExpires,
 			PID:          pid,
 		}

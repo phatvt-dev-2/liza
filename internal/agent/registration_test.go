@@ -102,6 +102,7 @@ func TestRegisterAgent(t *testing.T) {
 		name           string
 		agentID        string
 		role           string
+		provider       string
 		existingAgent  *models.Agent
 		expectRegister bool
 		wantErr        bool
@@ -111,14 +112,16 @@ func TestRegisterAgent(t *testing.T) {
 			name:           "new agent registration",
 			agentID:        "coder-1",
 			role:           "coder",
+			provider:       "claude",
 			existingAgent:  nil,
 			expectRegister: true,
 			wantErr:        false,
 		},
 		{
-			name:    "collision with valid lease",
-			agentID: "coder-1",
-			role:    "coder",
+			name:     "collision with valid lease",
+			agentID:  "coder-1",
+			role:     "coder",
+			provider: "claude",
 			existingAgent: &models.Agent{
 				Role:         "coder",
 				Status:       models.AgentStatusWorking,
@@ -130,9 +133,10 @@ func TestRegisterAgent(t *testing.T) {
 			errMsg:         "collision",
 		},
 		{
-			name:    "takeover expired lease",
-			agentID: "coder-1",
-			role:    "coder",
+			name:     "takeover expired lease",
+			agentID:  "coder-1",
+			role:     "coder",
+			provider: "codex",
 			existingAgent: &models.Agent{
 				Role:         "coder",
 				Status:       models.AgentStatusWorking,
@@ -157,7 +161,7 @@ func TestRegisterAgent(t *testing.T) {
 
 			bb := testhelpers.WriteInitialState(t, statePath, state)
 
-			err := registerAgent(bb, tmpDir, tt.agentID, tt.role, "terminal-1", 1800)
+			err := registerAgent(bb, tmpDir, tt.agentID, tt.role, "terminal-1", 1800, tt.provider)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("registerAgent() error = %v, wantErr %v", err, tt.wantErr)
@@ -189,6 +193,11 @@ func TestRegisterAgent(t *testing.T) {
 					t.Errorf("Expected role %s, got %s", tt.role, agent.Role)
 				}
 
+				// Verify provider is stored
+				if agent.Provider != tt.provider {
+					t.Errorf("Expected provider %q, got %q", tt.provider, agent.Provider)
+				}
+
 				// Verify PID is stored
 				if agent.PID == 0 {
 					t.Error("Expected PID to be set (non-zero)")
@@ -218,7 +227,7 @@ func TestRegisterAgentConcurrent(t *testing.T) {
 	// Launch multiple goroutines trying to register the same agent ID
 	for range numGoroutines {
 		go func() {
-			err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800)
+			err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800, "claude")
 			if err != nil {
 				errors <- err
 			} else {
@@ -311,7 +320,7 @@ func TestRegisterAgentStoresPID(t *testing.T) {
 	agentID := "coder-1"
 	role := "coder"
 
-	err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800)
+	err := registerAgent(bb, tmpDir, agentID, role, "terminal-1", 1800, "claude")
 	if err != nil {
 		t.Fatalf("registerAgent() error = %v", err)
 	}
@@ -354,7 +363,7 @@ func TestOrchestratorStatusTransitions(t *testing.T) {
 
 	// Register orchestrator agent
 	agentID := "orchestrator-1"
-	err := registerAgent(bb, tmpDir, agentID, "orchestrator", "terminal-1", 1800)
+	err := registerAgent(bb, tmpDir, agentID, "orchestrator", "terminal-1", 1800, "claude")
 	if err != nil {
 		t.Fatalf("registerAgent() error = %v", err)
 	}
@@ -786,7 +795,7 @@ func TestRegisterSecondOrchestratorBlocked(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800)
+	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800, "claude")
 	if err == nil {
 		t.Fatal("expected error registering second orchestrator, got nil")
 	}
@@ -811,7 +820,7 @@ func TestRegisterOrchestratorTakeoverExpired(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800)
+	err := registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800, "claude")
 	if err != nil {
 		t.Fatalf("expected registration to succeed with expired peer, got: %v", err)
 	}
