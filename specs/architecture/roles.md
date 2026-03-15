@@ -2,24 +2,25 @@
 
 ## Terminology
 
-**Implementation:** Role constants are defined in `internal/roles/roles.go`, which provides:
-- Runtime names (hyphenated: `coder`, `code-reviewer`, `orchestrator`) — used in agent IDs and CLI
-- Workflow names (underscore: `coder`, `code_reviewer`) — used in YAML state
-- Bidirectional mapping: `ToWorkflow()` and `ToRuntime()` convert between the two forms
+**Implementation:** Roles are defined declaratively in the pipeline YAML under the `roles` section
+(see [Declarative Role Definitions](../build/3%20-%20Declarative%20Role%20Definitions.md)).
+Each role entry specifies its `type` (doer, reviewer, orchestrator), display name, timeouts,
+context sections, allowed operations, and skills. Role classification and mappings are derived
+from the YAML at load time — no hardcoded role constants.
 
-| Canonical Name | YAML Identifier | Agent ID Prefix | Agent Name Pattern |
-|----------------|-----------------|-----------------|-------------------|
-| Orchestrator | `orchestrator` | `orchestrator-` | `orchestrator-1`, `orchestrator-2` |
-| Code Planner | `code_planner` | `code-planner-` | `code-planner-1`, `code-planner-2` |
-| Code Plan Reviewer | `code_plan_reviewer` | `code-plan-reviewer-` | `code-plan-reviewer-1`, `code-plan-reviewer-2` |
+| Canonical Name | YAML Key | Agent ID Prefix | Agent Name Pattern |
+|----------------|----------|-----------------|-------------------|
+| Orchestrator | `orchestrator` | `orchestrator-` | `orchestrator-1` |
+| Code Planner | `code-planner` | `code-planner-` | `code-planner-1`, `code-planner-2` |
+| Code Plan Reviewer | `code-plan-reviewer` | `code-plan-reviewer-` | `code-plan-reviewer-1`, `code-plan-reviewer-2` |
 | Coder | `coder` | `coder-` | `coder-1`, `coder-2` |
-| Code Reviewer | `code_reviewer` | `code-reviewer-` | `code-reviewer-1`, `code-reviewer-2` |
+| Code Reviewer | `code-reviewer` | `code-reviewer-` | `code-reviewer-1`, `code-reviewer-2` |
 
 **Usage Rules:**
 - **Prose/documentation:** Use canonical name ("Code Reviewer validates...")
-- **YAML role field:** Use identifier (`role: code_reviewer`)
+- **YAML role key:** Use the hyphenated key from the `roles` section (`role: code-reviewer`)
 - **Agent IDs:** Use prefix form (`code-reviewer-1`, `coder-2`)
-- **Role → ID mapping:** `code_reviewer` maps to `code-reviewer-` prefix
+- **Single name form:** The YAML key is the canonical identifier — used in pipeline YAML, task model, agent IDs, and CLI. There is no separate "workflow" form.
 
 **ID Validation Regex:** `^(coder|code-reviewer|orchestrator|code-planner|code-plan-reviewer)-[0-9]+$`
 
@@ -31,7 +32,7 @@ Running multiple agents of the same role is fully supported:
 |------|--------------------------|-------|
 | Coder | Yes | Each coder claims independent tasks; no coordination needed |
 | Code Reviewer | Yes | Reviewers claim independent review tasks; merge safety via working-tree-less `liza wt-merge` |
-| Orchestrator | Yes | Multiple orchestrators can process blocked tasks concurrently |
+| Orchestrator | No (`max-instances: 1`) | Singular orchestrator enforced at registration (see [Declarative Role Definitions](../build/3%20-%20Declarative%20Role%20Definitions.md#constraints)) |
 
 **Concurrency Safety:**
 - Task claiming: File locking on `state.yaml` ensures atomic claim operations
@@ -529,6 +530,7 @@ The supervisor (human or orchestration script) MUST:
 
 ## Related Documents
 
+- [Declarative Role Definitions](../build/3%20-%20Declarative%20Role%20Definitions.md) — roles as first-class YAML objects (type, timeouts, allowed operations, context sections)
 - [Agent Initialization](../protocols/agent-initialization.md) — startup sequence from spawn to first action
 - [Task Lifecycle](../protocols/task-lifecycle.md) — claim, iterate, review, merge
 - [State Machines](state-machines.md) — task and agent state transitions
