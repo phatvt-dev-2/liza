@@ -2,6 +2,13 @@
 
 Spec: /home/tangi/Workspace/liza/todo-mas.md
 
+## Revision Notes (Iteration 2)
+
+Addresses three rejection blockers:
+1. **CP2/CP8 overlap** — Merged old CP2 (worktree cleanup) and old CP8 (nil-resolver log) into new CP2. Both changes touch the same function in recover_agent.go and are tightly coupled (moving the resolver load earlier for the worktree check exposes the nil-resolver fallback path where the log belongs). Single intent: resolver-based recovery with proper nil-resolver handling.
+2. **CP7 missing test file** — Added `internal/mcp/server_test.go` to CP7 scope and changes.
+3. **CP8 scope/test mismatch** — Resolved by merge into CP2 (test file `recover_agent_test.go` already in scope).
+
 ---
 
 ## Phase 1 -- Hardcoded role names and resolver-based classification
@@ -23,19 +30,19 @@ Spec: /home/tangi/Workspace/liza/todo-mas.md
 
 ---
 
-### CP2: Replace hardcoded role=="coder" in recover_agent.go worktree cleanup with resolver-based doer check
+### CP2: Make recover_agent.go fully resolver-based with nil-resolver warning
 
-**Intent:** RecoverAgent only removes worktrees when role == "coder". Custom doer roles with worktrees skip cleanup on crash. Replace the literal string check with resolver-based type classification.
+**Intent:** RecoverAgent has two resolver gaps: (1) worktree removal checks role == "coder" literally — custom doer roles skip cleanup on crash; (2) when the resolver is nil, roleType silently falls through to empty string and no claim release happens, with no log. Fix both: replace the literal string check with resolver-based type classification, and add a warning log when resolver is nil.
 
 **Changes:**
-- `internal/ops/recover_agent.go`: At the worktree removal check (currently if role == "coder"), use the resolver (already loaded later in the function -- move the resolver load earlier) to check resolver.RoleType(role) == "doer" instead. Also add the nil-resolver warning log (from CP8) since the resolver load is being moved earlier.
-- `internal/ops/recover_agent_test.go`: Add a test case verifying that a custom doer role worktree is cleaned up during recovery.
+- `internal/ops/recover_agent.go`: At the worktree removal check (currently if role == "coder"), use the resolver to check resolver.RoleType(role) == "doer" instead. In the bb.Modify closure, when resolver is nil, add a slog.Warn indicating claim release was skipped due to missing resolver.
+- `internal/ops/recover_agent_test.go`: Add a test case verifying that a custom doer role worktree is cleaned up during recovery. Add a test case verifying the warning log is emitted when resolver is nil during recovery.
 
 **Scope:** `internal/ops/recover_agent.go`, `internal/ops/recover_agent_test.go`
 
-**Done when:** The string "coder" no longer appears in the worktree-removal condition in recover_agent.go. A test with a custom doer role (e.g., data-engineer) verifies worktree removal occurs during recovery.
+**Done when:** The string "coder" no longer appears in the worktree-removal condition in recover_agent.go. A test with a custom doer role (e.g., data-engineer) verifies worktree removal occurs during recovery. When resolver is nil during agent recovery, a warning log line is emitted indicating claim release was skipped due to missing resolver, verified by test.
 
-**Spec ref:** todo-mas.md -- Phase 1, [concern] internal/ops/recover_agent.go:72
+**Spec ref:** todo-mas.md -- Phase 1, [concern] internal/ops/recover_agent.go:72 and [suggestion] internal/ops/recover_agent.go:102-106
 
 ---
 
@@ -111,8 +118,9 @@ Spec: /home/tangi/Workspace/liza/todo-mas.md
 
 **Changes:**
 - `internal/mcp/server.go`: Store the pipeline load error on the Server struct (e.g., resolverLoadErr error). In isOperationAllowed (or wherever the nil-resolver error is surfaced), include the stored error in the message.
+- `internal/mcp/server_test.go`: Add a test that creates a server with an invalid pipeline config and verifies the error message from an operation-checked tool includes the original load error text.
 
-**Scope:** `internal/mcp/server.go`
+**Scope:** `internal/mcp/server.go`, `internal/mcp/server_test.go`
 
 **Done when:** When the pipeline config fails to load, MCP tool error messages include the original load error text (not just "pipeline resolver not loaded"). Verified by a test that creates a server with an invalid pipeline config and checks the error message from an operation-checked tool.
 
@@ -120,24 +128,9 @@ Spec: /home/tangi/Workspace/liza/todo-mas.md
 
 ---
 
-### CP8: Add log line for nil-resolver roleType fallback in recover_agent.go
-
-**Intent:** When the resolver is nil during recovery, roleType silently falls through to an empty string and no claim release happens. Add a log line for debuggability.
-
-**Changes:**
-- `internal/ops/recover_agent.go`: In the bb.Modify closure, when resolver is nil, add a slog.Warn indicating claim release was skipped due to missing resolver.
-
-**Scope:** `internal/ops/recover_agent.go`
-
-**Done when:** When resolver is nil during agent recovery, a warning log line is emitted indicating the claim release was skipped due to missing resolver.
-
-**Spec ref:** todo-mas.md -- Phase 1, [suggestion] internal/ops/recover_agent.go:102-106
-
----
-
 ## Phase 2 -- Template naming, IntegrationFix propagation, test-YAML parity
 
-### CP9: Rename template defines from underscores to hyphens to match YAML section names
+### CP8: Rename template defines from underscores to hyphens to match YAML section names
 
 **Intent:** Templates define themselves as mandatory_docs and skills_affinity, but the YAML references mandatory-docs and skills-affinity. BuildRoleContext passes YAML section names to ExecuteTemplate with no normalization, causing runtime failures.
 
@@ -154,13 +147,13 @@ Spec: /home/tangi/Workspace/liza/todo-mas.md
 
 ---
 
-### CP10: Propagate task.IntegrationFix into RoleContextData in buildTaskRoleContextData
+### CP9: Propagate task.IntegrationFix into RoleContextData in buildTaskRoleContextData
 
 **Intent:** RoleContextData.IntegrationFix exists and the integration-fix template block depends on it, but buildTaskRoleContextData() never copies task.IntegrationFix into the data object. Coder prompts silently lose integration-fix workflow instructions.
 
 **Changes:**
 - `internal/agent/prompt.go`: In the doer-specific block (currently gated by roleType == "doer" && config.Role == "coder"), add data.IntegrationFix = task.IntegrationFix. Also relax the gate: IntegrationBranch and IntegrationFix should be set for all doer roles, not just literal "coder". Change config.Role == "coder" to just roleType == "doer".
-- `internal/agent/prompt_test.go` (or equivalent): Add a test verifying that when a task has IntegrationFix: true, the resulting RoleContextData.IntegrationFix is true.
+- `internal/agent/prompt_test.go`: Add a test verifying that when a task has IntegrationFix: true, the resulting RoleContextData.IntegrationFix is true.
 
 **Scope:** `internal/agent/prompt.go`, `internal/agent/prompt_test.go`
 
@@ -170,7 +163,7 @@ Spec: /home/tangi/Workspace/liza/todo-mas.md
 
 ---
 
-### CP11: Drive TestBuildRoleContext_AllRoles section lists from production pipeline YAML
+### CP10: Drive TestBuildRoleContext_AllRoles section lists from production pipeline YAML
 
 **Intent:** Test section lists are hardcoded subsets of the YAML context-sections, masking drift. The mandatory-docs and skills-affinity blockers went undetected because tests skip them. Drive tests from resolver.ContextSections(role) or the embedded pipeline.
 
@@ -190,20 +183,19 @@ Spec: /home/tangi/Workspace/liza/todo-mas.md
 
 ```
 CP1  (authorizeClaimRelease)     -- no dependencies
-CP2  (recover_agent worktree)    -- no dependencies
+CP2  (recover_agent resolver)    -- no dependencies
 CP3  (TDD enforcement)           -- no dependencies
 CP4  (claim_reviewer workflow)   -- no dependencies
 CP5  (orchestrator singularity)  -- no dependencies
 CP6  (orchestrator resolution)   -- no dependencies
 CP7  (pipeline error surface)    -- no dependencies
-CP8  (nil-resolver log)          -- no dependencies
-CP9  (template naming)           -- no dependencies
-CP10 (IntegrationFix propagation) -- no dependencies
-CP11 (test-YAML parity)          -- depends on CP9
+CP8  (template naming)           -- no dependencies
+CP9  (IntegrationFix propagation) -- no dependencies
+CP10 (test-YAML parity)          -- depends on CP8
 ```
 
-All Phase 1 tasks (CP1-CP8) are independent.
-All Phase 2 tasks (CP9-CP11) are independent except CP11 depends on CP9 (template names must match before tests can load real sections).
+All Phase 1 tasks (CP1-CP7) are independent.
+All Phase 2 tasks (CP8-CP10) are independent except CP10 depends on CP8 (template names must match before tests can load real sections).
 
 ## Spec Coverage Mapping
 
@@ -211,15 +203,15 @@ All Phase 2 tasks (CP9-CP11) are independent except CP11 depends on CP9 (templat
 |-----------|------|
 | Phase 1: [concern] handlers_helpers.go:142-155 -- hardcoded role names in authorizeClaimRelease | CP1 |
 | Phase 1: [concern] recover_agent.go:72 -- role == "coder" for worktree removal | CP2 |
+| Phase 1: [suggestion] recover_agent.go:102-106 -- nil-resolver fallback log | CP2 |
 | Phase 1: [concern] submit_review.go:123 -- runtimeRole == "coder" for TDD enforcement | CP3 |
 | Phase 1: [concern] claim_reviewer_task.go:45 -- role == "code-plan-reviewer" for workflow inference | CP4 |
 | Phase 1: [blocker] registration.go:69 -- singularity per role key, not type | CP5 |
 | Phase 1: [blocker] state.go:57 / handlers_mutation.go:14 -- hardcoded orchestrator literal | CP6 |
 | Phase 1: [suggestion] server.go:26-33 -- pipeline load error surfacing | CP7 |
-| Phase 1: [suggestion] recover_agent.go:102-106 -- nil-resolver fallback log | CP8 |
 | Phase 1: [concern] handlers_helpers.go:137 / recover_agent.go:71 -- custom doer/reviewer claim release | CP1 + CP2 (covered) |
-| Phase 2: [blocker] builder.go:190 / pipeline.yaml / templates -- template define vs YAML name mismatch | CP9 |
-| Phase 2: [blocker] prompt.go:149 / role_context.go:38 -- IntegrationFix not propagated | CP10 |
-| Phase 2: [concern] builder_test.go:989-995 -- hardcoded test section lists | CP11 |
-| Phase 2: [concern] strategy_test.go:27 -- test fixture omits sections | CP11 |
-| Phase 2: [blocker] templates mandatory_docs/skills_affinity -- underscore vs hyphen | CP9 (same fix) |
+| Phase 2: [blocker] builder.go:190 / pipeline.yaml / templates -- template define vs YAML name mismatch | CP8 |
+| Phase 2: [blocker] templates mandatory_docs/skills_affinity -- underscore vs hyphen | CP8 (same fix) |
+| Phase 2: [blocker] prompt.go:149 / role_context.go:38 -- IntegrationFix not propagated | CP9 |
+| Phase 2: [concern] builder_test.go:989-995 -- hardcoded test section lists | CP10 |
+| Phase 2: [concern] strategy_test.go:27 -- test fixture omits sections | CP10 |
