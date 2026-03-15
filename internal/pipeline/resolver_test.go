@@ -320,3 +320,23 @@ func TestResolver_TransitionTargetRolePair_PipelineTransition(t *testing.T) {
 		t.Errorf("TransitionTargetRolePair = %q, want %q", rp, "us-writing-pair")
 	}
 }
+
+func TestResolver_RoleDisplayName(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+
+	// Known role returns display-name.
+	if got := r.RoleDisplayName("coder"); got != "Coder" {
+		t.Errorf("RoleDisplayName(coder) = %q, want %q", got, "Coder")
+	}
+	if got := r.RoleDisplayName("code-reviewer"); got != "Code Reviewer" {
+		t.Errorf("RoleDisplayName(code-reviewer) = %q, want %q", got, "Code Reviewer")
+	}
+	if got := r.RoleDisplayName("orchestrator"); got != "Orchestrator" {
+		t.Errorf("RoleDisplayName(orchestrator) = %q, want %q", got, "Orchestrator")
+	}
+
+	// Unknown role returns key itself.
+	if got := r.RoleDisplayName("nonexistent"); got != "nonexistent" {
+		t.Errorf("RoleDisplayName(nonexistent) = %q, want %q", got, "nonexistent")
+	}
+}

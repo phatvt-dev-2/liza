@@ -340,15 +340,31 @@ func setupPipelineConfig(t *testing.T) string {
 		t.Fatalf("mkdir .liza: %v", err)
 	}
 	yaml := `pipeline:
-  agent-roles:
-    epic-planner: "Epic Planner"
-    epic-plan-reviewer: "Epic Plan Reviewer"
-    us-writer: "US Writer"
-    us-reviewer: "US Reviewer"
-    code-planner: "Code Planner"
-    code-plan-reviewer: "Code Plan Reviewer"
-    coder: "Coder"
-    code-reviewer: "Code Reviewer"
+  roles:
+    epic-planner:
+      type: doer
+      display-name: "Epic Planner"
+    epic-plan-reviewer:
+      type: reviewer
+      display-name: "Epic Plan Reviewer"
+    us-writer:
+      type: doer
+      display-name: "US Writer"
+    us-reviewer:
+      type: reviewer
+      display-name: "US Reviewer"
+    code-planner:
+      type: doer
+      display-name: "Code Planner"
+    code-plan-reviewer:
+      type: reviewer
+      display-name: "Code Plan Reviewer"
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
   role-pairs:
     epic-planning-pair:
       doer: epic-planner

@@ -24,9 +24,8 @@ type PipelineConfig struct {
 	Pipeline Pipeline `yaml:"pipeline"`
 }
 
-// Pipeline defines agent roles, role-pairs, sub-pipelines, and entry-points.
+// Pipeline defines roles, role-pairs, sub-pipelines, and entry-points.
 type Pipeline struct {
-	AgentRoles          map[string]string      `yaml:"agent-roles"`
 	Roles               map[string]RoleDef     `yaml:"roles,omitempty"`
 	RolePairs           map[string]RolePairDef `yaml:"role-pairs"`
 	SubPipelines        map[string]SubPipeline `yaml:"sub-pipelines"`
@@ -156,20 +155,11 @@ func validate(cfg *PipelineConfig) error {
 	}
 
 	for name, rp := range p.RolePairs {
-		if _, ok := p.AgentRoles[rp.Doer]; !ok {
-			return fmt.Errorf("role-pair %q: doer %q not found in agent-roles", name, rp.Doer)
+		if _, ok := p.Roles[rp.Doer]; !ok {
+			return fmt.Errorf("role-pair %q: doer %q not found in roles", name, rp.Doer)
 		}
-		if _, ok := p.AgentRoles[rp.Reviewer]; !ok {
-			return fmt.Errorf("role-pair %q: reviewer %q not found in agent-roles", name, rp.Reviewer)
-		}
-		// When roles section exists, role-pair references must also be defined there.
-		if len(p.Roles) > 0 {
-			if _, ok := p.Roles[rp.Doer]; !ok {
-				return fmt.Errorf("role-pair %q: doer %q not found in roles", name, rp.Doer)
-			}
-			if _, ok := p.Roles[rp.Reviewer]; !ok {
-				return fmt.Errorf("role-pair %q: reviewer %q not found in roles", name, rp.Reviewer)
-			}
+		if _, ok := p.Roles[rp.Reviewer]; !ok {
+			return fmt.Errorf("role-pair %q: reviewer %q not found in roles", name, rp.Reviewer)
 		}
 	}
 

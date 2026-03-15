@@ -687,11 +687,19 @@ func TestProceed_PipelineRejectsAutoTransition(t *testing.T) {
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
 	autoYAML := `pipeline:
-  agent-roles:
-    code-planner: "Code Planner"
-    code-plan-reviewer: "Code Plan Reviewer"
-    coder: "Coder"
-    code-reviewer: "Code Reviewer"
+  roles:
+    code-planner:
+      type: doer
+      display-name: "Code Planner"
+    code-plan-reviewer:
+      type: reviewer
+      display-name: "Code Plan Reviewer"
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
 
   role-pairs:
     code-planning-pair:

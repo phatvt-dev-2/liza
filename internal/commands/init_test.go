@@ -582,11 +582,19 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 
 // validPipelineYAML is a minimal valid pipeline config for testing.
 const validPipelineYAML = `pipeline:
-  agent-roles:
-    code-planner: "Code Planner"
-    code-plan-reviewer: "Code Plan Reviewer"
-    coder: "Coder"
-    code-reviewer: "Code Reviewer"
+  roles:
+    code-planner:
+      type: doer
+      display-name: "Code Planner"
+    code-plan-reviewer:
+      type: reviewer
+      display-name: "Code Plan Reviewer"
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
 
   role-pairs:
     code-planning-pair:
@@ -783,7 +791,6 @@ func TestInitCommandWithConfig_InvalidConfig(t *testing.T) {
 
 	// Write invalid pipeline config (missing required fields)
 	invalidYAML := `pipeline:
-  agent-roles: {}
   role-pairs: {}
 `
 	configPath := writePipelineConfig(t, tmpDir, invalidYAML)

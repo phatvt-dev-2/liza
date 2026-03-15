@@ -30,9 +30,9 @@ func TestLoad_ValidConfig(t *testing.T) {
 		t.Error("missing role-pair code-planning-pair")
 	}
 
-	// Verify agent-roles parsed.
-	if len(cfg.Pipeline.AgentRoles) != 4 {
-		t.Fatalf("expected 4 agent-roles, got %d", len(cfg.Pipeline.AgentRoles))
+	// Verify roles parsed.
+	if len(cfg.Pipeline.Roles) != 4 {
+		t.Fatalf("expected 4 roles, got %d", len(cfg.Pipeline.Roles))
 	}
 
 	// Verify sub-pipelines parsed.
@@ -58,9 +58,13 @@ func TestLoad_ValidConfig(t *testing.T) {
 func TestLoad_MissingStateField(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    coder: "Coder"
-    reviewer: "Reviewer"
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
   role-pairs:
     pair-a:
       doer: coder
@@ -86,9 +90,13 @@ pipeline:
 func TestLoad_DuplicateStateNames(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -131,9 +139,13 @@ pipeline:
 func TestLoad_DuplicateTransitionNames(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -183,9 +195,13 @@ pipeline:
 func TestLoad_DuplicateTransitionNames_AcrossSubPipelines(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -258,9 +274,13 @@ pipeline:
 func TestLoad_InvalidTransitionReference(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -294,9 +314,13 @@ pipeline:
 func TestLoad_UnknownCardinality(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -341,9 +365,13 @@ pipeline:
 func TestLoad_UnknownTrigger(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -389,9 +417,13 @@ pipeline:
 func TestLoad_RolePairInMultipleSubPipelines(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     shared-pair:
       doer: a
@@ -435,9 +467,13 @@ pipeline:
 func TestLoad_EntryPointRolePairNotInSubPipeline(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -481,9 +517,13 @@ pipeline:
 func TestLoad_EntryPointNonexistentSubPipeline(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -511,11 +551,13 @@ pipeline:
 	assertContains(t, err.Error(), "not found")
 }
 
-func TestLoad_DoerNotInAgentRoles(t *testing.T) {
+func TestLoad_DoerNotInRoles(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    a: "A"
+  roles:
+    a:
+      type: reviewer
+      display-name: "A"
   role-pairs:
     pair-a:
       doer: unknown
@@ -533,7 +575,7 @@ pipeline:
 	cfg := writeTemp(t, yaml)
 	_, err := Load(cfg)
 	if err == nil {
-		t.Fatal("expected error for doer not in agent-roles")
+		t.Fatal("expected error for doer not in roles")
 	}
 	assertContains(t, err.Error(), "doer")
 	assertContains(t, err.Error(), "unknown")
@@ -542,9 +584,13 @@ pipeline:
 func TestLoad_TransitionFromPairNotInSubPipelineSteps(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -901,9 +947,9 @@ func TestLoad_Phase2ValidConfig(t *testing.T) {
 		}
 	}
 
-	// Verify 8 agent-roles.
-	if len(cfg.Pipeline.AgentRoles) != 8 {
-		t.Fatalf("expected 8 agent-roles, got %d", len(cfg.Pipeline.AgentRoles))
+	// Verify 9 roles (8 agent roles + orchestrator).
+	if len(cfg.Pipeline.Roles) != 9 {
+		t.Fatalf("expected 9 roles, got %d", len(cfg.Pipeline.Roles))
 	}
 
 	// Verify 2 sub-pipelines.
@@ -983,9 +1029,13 @@ func TestParse3PartRef(t *testing.T) {
 func TestLoad_PipelineTransition_Invalid3PartRef(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -1033,9 +1083,13 @@ pipeline:
 func TestLoad_PipelineTransition_SameSubPipeline(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -1080,9 +1134,13 @@ pipeline:
 func TestLoad_PipelineTransition_NonexistentSubPipeline(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -1131,9 +1189,13 @@ pipeline:
 func TestLoad_PipelineTransition_RolePairNotInSubPipeline(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -1181,9 +1243,13 @@ pipeline:
 func TestLoad_PipelineTransition_InvalidPhase(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -1231,9 +1297,13 @@ pipeline:
 func TestLoad_DuplicateTransitionNames_PipelineAndSubPipeline(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    a: "A"
-    b: "B"
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
   role-pairs:
     pair-a:
       doer: a
@@ -1299,9 +1369,6 @@ pipeline:
 func TestLoad_RolesSection(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    coder: "Coder"
-    code-reviewer: "Code Reviewer"
   roles:
     coder:
       type: doer
@@ -1400,8 +1467,6 @@ pipeline:
 func TestValidate_RoleMissingType(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    coder: "Coder"
   roles:
     coder:
       display-name: "Coder"
@@ -1432,8 +1497,6 @@ pipeline:
 func TestValidate_RoleInvalidType(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    coder: "Coder"
   roles:
     coder:
       type: worker
@@ -1464,9 +1527,6 @@ pipeline:
 func TestValidate_RolePairUndefinedRole(t *testing.T) {
 	yamlContent := `
 pipeline:
-  agent-roles:
-    coder: "Coder"
-    reviewer: "Reviewer"
   roles:
     coder:
       type: doer
@@ -1543,9 +1603,13 @@ func TestLoad_EmbeddedPipelineRoles(t *testing.T) {
 func TestLoad_UnknownFieldRejected(t *testing.T) {
 	yaml := `
 pipeline:
-  agent-roles:
-    coder: "Coder"
-    reviewer: "Reviewer"
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
   role-pairs:
     pair-a:
       doer: coder

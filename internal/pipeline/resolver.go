@@ -154,6 +154,16 @@ func (r *Resolver) RoleTimeouts(name string) (*ResolvedTimeouts, error) {
 	}, nil
 }
 
+// RoleDisplayName returns the display-name for the named role.
+// Returns the role key itself if the role is not found or has no display-name.
+func (r *Resolver) RoleDisplayName(name string) string {
+	role, ok := r.config.Pipeline.Roles[name]
+	if !ok || role.DisplayName == "" {
+		return name
+	}
+	return role.DisplayName
+}
+
 // roleNamesByType returns the sorted names of all roles matching the given type.
 func (r *Resolver) roleNamesByType(roleType string) []string {
 	var names []string

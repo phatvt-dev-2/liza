@@ -230,7 +230,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 // pending transition. The idempotency guard in proceedInner (TransitionsExecuted map)
 // prevents duplicate child creation.
 func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
-	resolver, cfg, err := loadResolver(projectRoot)
+	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
@@ -267,7 +267,7 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 
 			for _, transitionName := range available {
 				// Resolve transition def (allows both manual and auto triggers for supervisor)
-				tDef, err := buildTransitionDefFromPipeline(resolver, cfg, transitionName)
+				tDef, err := buildTransitionDefFromPipeline(resolver, transitionName)
 				if err != nil {
 					log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", task.ID, transitionName, err)
 					continue
@@ -318,7 +318,7 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 // buildTransitionDefFromPipeline resolves a transition definition from pipeline config.
 // This is the shared helper used by both resolveTransitionDef (with trigger check)
 // and ExecuteAvailableTransitions (without trigger check).
-func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig, transitionName string) (transitionDef, error) {
+func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName string) (transitionDef, error) {
 	td, err := resolver.Transition(transitionName)
 	if err != nil {
 		return transitionDef{}, err
@@ -341,7 +341,7 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, cfg *pipeline.P
 	var doerDisplay string
 	rp, rpErr := resolver.RolePair(targetPair)
 	if rpErr == nil {
-		doerDisplay = cfg.Pipeline.AgentRoles[rp.Doer]
+		doerDisplay = resolver.RoleDisplayName(rp.Doer)
 	}
 
 	return transitionDef{
@@ -445,7 +445,7 @@ func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, er
 		return transitionDef{}, fmt.Errorf("transition %q has trigger %q; only manual transitions can be executed via proceed", transitionName, td.Trigger)
 	}
 
-	return buildTransitionDefFromPipeline(resolver, cfg, transitionName)
+	return buildTransitionDefFromPipeline(resolver, transitionName)
 }
 
 // resolvePhaseRef resolves a phase reference to a concrete TaskStatus.

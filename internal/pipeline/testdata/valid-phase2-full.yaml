@@ -1,14 +1,4 @@
 pipeline:
-  agent-roles:
-    epic-planner: "Epic Planner"
-    epic-plan-reviewer: "Epic Plan Reviewer"
-    us-writer: "US Writer"
-    us-reviewer: "US Reviewer"
-    code-planner: "Code Planner"
-    code-plan-reviewer: "Code Plan Reviewer"
-    coder: "Coder"
-    code-reviewer: "Code Reviewer"
-
   roles:
     coder:
       type: doer

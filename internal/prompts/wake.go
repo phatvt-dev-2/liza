@@ -101,6 +101,7 @@ func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) (wak
 	if err != nil {
 		return data, err
 	}
+	resolver := pipeline.NewResolver(cfg)
 
 	// Build sorted entry-point list for deterministic template output.
 	var eps []wakeEntryPointData
@@ -110,7 +111,7 @@ func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) (wak
 			continue
 		}
 		rolePair := parts[1]
-		displayName := resolveDoerDisplayName(cfg, rolePair)
+		displayName := resolveDoerDisplayName(resolver, rolePair)
 		eps = append(eps, wakeEntryPointData{
 			Name:        epName,
 			RolePair:    rolePair,
@@ -129,7 +130,7 @@ func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) (wak
 		parts := strings.SplitN(epValue, ".", 2)
 		if len(parts) == 2 {
 			data.ResolvedRolePair = parts[1]
-			data.ResolvedDisplayName = resolveDoerDisplayName(cfg, parts[1])
+			data.ResolvedDisplayName = resolveDoerDisplayName(resolver, parts[1])
 			data.ResolvedTaskIDPrefix = strings.TrimSuffix(parts[1], "-pair")
 		}
 	}
@@ -147,16 +148,14 @@ func entryPointNames(cfg *pipeline.PipelineConfig) []string {
 	return names
 }
 
-// resolveDoerDisplayName looks up the doer's display name for a role-pair.
-func resolveDoerDisplayName(cfg *pipeline.PipelineConfig, rolePair string) string {
-	rp, ok := cfg.Pipeline.RolePairs[rolePair]
-	if !ok {
+// resolveDoerDisplayName looks up the doer's display name for a role-pair
+// using the Resolver to access the roles section.
+func resolveDoerDisplayName(resolver *pipeline.Resolver, rolePair string) string {
+	rp, err := resolver.RolePair(rolePair)
+	if err != nil {
 		return rolePair
 	}
-	if name, ok := cfg.Pipeline.AgentRoles[rp.Doer]; ok {
-		return name
-	}
-	return rp.Doer
+	return resolver.RoleDisplayName(rp.Doer)
 }
 
 func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeTemplateData, planningTasks []planningTaskData) (string, error) {
