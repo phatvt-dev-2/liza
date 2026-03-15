@@ -400,6 +400,11 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return err
 	}
 
+	// Apply YAML-sourced timeouts from pipeline config to the strategy.
+	if timeouts, tErr := resolver.RoleTimeouts(config.Role); tErr == nil {
+		ApplyYAMLTimeouts(strategy, timeouts.Execution, timeouts.PollInterval, timeouts.MaxWait)
+	}
+
 	if err := registerAgent(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800, config.CLIName); err != nil {
 		return err
 	}

@@ -12,19 +12,50 @@ import (
 
 // doerStrategy handles task-implementing roles: coder, code-planner, epic-planner, us-writer.
 type doerStrategy struct {
-	role         string             // runtime role (e.g. "coder")
-	workflowRole string             // workflow role (e.g. "coder")
-	buildContext contextBuilderFunc // per-role prompt context builder
+	role             string             // runtime role (e.g. "coder")
+	workflowRole     string             // workflow role (e.g. "coder")
+	buildContext     contextBuilderFunc // per-role prompt context builder
+	executionTimeout time.Duration      // from YAML; 0 = use type default
+	yamlPollSec      int                // from YAML; 0 = use type default
+	yamlMaxWaitSec   int                // from YAML; 0 = use type default
 }
 
+const defaultDoerTimeout = 2 * time.Hour
+
 func (s *doerStrategy) DefaultTimeout() time.Duration {
-	return 2 * time.Hour
+	if s.executionTimeout > 0 {
+		return s.executionTimeout
+	}
+	return defaultDoerTimeout
 }
 
 func (s *doerStrategy) WaitConfig(state *models.State) (pollInterval, maxWait time.Duration) {
-	poll := nonZeroOr(state.Config.CoderPollInterval, models.DefaultCoderPollInterval)
-	max := nonZeroOr(state.Config.CoderMaxWait, models.DefaultCoderMaxWait)
+	poll := nonZeroOr(state.Config.CoderPollInterval, nonZeroOr(s.yamlPollSec, models.DefaultCoderPollInterval))
+	max := nonZeroOr(state.Config.CoderMaxWait, nonZeroOr(s.yamlMaxWaitSec, models.DefaultCoderMaxWait))
 	return time.Duration(poll) * time.Second, time.Duration(max) * time.Second
+}
+
+// ApplyYAMLTimeouts sets YAML-sourced timeout overrides on a strategy.
+// Used by RunSupervisor to inject role-specific timeouts from pipeline config.
+func ApplyYAMLTimeouts(s RoleStrategy, execution, pollInterval, maxWait time.Duration) {
+	execDur := execution
+	pollSec := int(pollInterval.Seconds())
+	maxWaitSec := int(maxWait.Seconds())
+
+	switch v := s.(type) {
+	case *doerStrategy:
+		v.executionTimeout = execDur
+		v.yamlPollSec = pollSec
+		v.yamlMaxWaitSec = maxWaitSec
+	case *reviewerStrategy:
+		v.executionTimeout = execDur
+		v.yamlPollSec = pollSec
+		v.yamlMaxWaitSec = maxWaitSec
+	case *orchestratorStrategy:
+		v.executionTimeout = execDur
+		v.yamlPollSec = pollSec
+		v.yamlMaxWaitSec = maxWaitSec
+	}
 }
 
 func (s *doerStrategy) PreWork(_ context.Context, _ *db.Blackboard, _ SupervisorConfig) (bool, error) {

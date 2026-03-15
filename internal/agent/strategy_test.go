@@ -113,6 +113,74 @@ pipeline:
     detailed-spec: coding-subpipeline.code-planning-pair
 `)
 
+// minimalPipelineYAML returns a valid pipeline YAML fixture with the current
+// roles-only schema. Timeout values can be overridden per-role via overrides.
+func minimalPipelineYAML(coderExec, coderPoll, coderMaxWait, orchExec, orchPoll, orchMaxWait string) string {
+	return `pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+      timeouts:
+        execution: ` + coderExec + `
+        poll-interval: ` + coderPoll + `
+        max-wait: ` + coderMaxWait + `
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+      timeouts:
+        execution: ` + orchExec + `
+        poll-interval: ` + orchPoll + `
+        max-wait: ` + orchMaxWait + `
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+      transitions: []
+  entry-points:
+    detailed-spec: coding-subpipeline.coding-pair
+`
+}
+
+// loadTestResolver creates a pipeline resolver from an inline YAML fixture.
+func loadTestResolver(t *testing.T, yaml string) *pipeline.Resolver {
+	t.Helper()
+	cfg, err := pipeline.LoadFromBytes([]byte(yaml))
+	if err != nil {
+		t.Fatalf("LoadFromBytes failed: %v", err)
+	}
+	return pipeline.NewResolver(cfg)
+}
+
+// applyResolverTimeouts loads timeouts from the resolver for the given role
+// and applies them to the strategy.
+func applyResolverTimeouts(t *testing.T, s RoleStrategy, r *pipeline.Resolver, role string) {
+	t.Helper()
+	timeouts, err := r.RoleTimeouts(role)
+	if err != nil {
+		t.Fatalf("RoleTimeouts(%q) error: %v", role, err)
+	}
+	ApplyYAMLTimeouts(s, timeouts.Execution, timeouts.PollInterval, timeouts.MaxWait)
+}
+
 // TestNewRoleStrategy verifies the factory creates the correct strategy type
 // with correct role and workflowRole for all 9 runtime roles.
 func TestNewRoleStrategy(t *testing.T) {
@@ -286,6 +354,7 @@ func TestDefaultTimeout(t *testing.T) {
 		role string
 		want time.Duration
 	}{
+		// Type defaults (no YAML applied): doer=2h, reviewer=30m, orchestrator=4h
 		{roles.RuntimeCoder, 2 * time.Hour},
 		{roles.RuntimeCodePlanner, 2 * time.Hour},
 		{roles.RuntimeEpicPlanner, 2 * time.Hour},
@@ -308,6 +377,55 @@ func TestDefaultTimeout(t *testing.T) {
 			}
 		})
 	}
+
+	// Verify YAML-sourced timeout overrides the type default.
+	// Uses production path: NewRoleStrategy + resolver + ApplyYAMLTimeouts.
+	t.Run("yaml_override/coder_1h", func(t *testing.T) {
+		yaml := minimalPipelineYAML("1h", "30s", "30m", "4h", "60s", "30m")
+		r := loadTestResolver(t, yaml)
+
+		s, err := NewRoleStrategy(roles.RuntimeCoder, r)
+		if err != nil {
+			t.Fatalf("NewRoleStrategy error: %v", err)
+		}
+		applyResolverTimeouts(t, s, r, "coder")
+
+		if got := s.DefaultTimeout(); got != 1*time.Hour {
+			t.Errorf("DefaultTimeout() = %v, want 1h (from modified YAML)", got)
+		}
+	})
+
+	t.Run("yaml_override/orchestrator_6h", func(t *testing.T) {
+		yaml := minimalPipelineYAML("2h", "30s", "30m", "6h", "60s", "30m")
+		r := loadTestResolver(t, yaml)
+
+		s, err := NewRoleStrategy(roles.RuntimeOrchestrator, r)
+		if err != nil {
+			t.Fatalf("NewRoleStrategy error: %v", err)
+		}
+		applyResolverTimeouts(t, s, r, "orchestrator")
+
+		if got := s.DefaultTimeout(); got != 6*time.Hour {
+			t.Errorf("DefaultTimeout() = %v, want 6h (from modified YAML)", got)
+		}
+	})
+
+	t.Run("yaml_default/coder_matches_yaml", func(t *testing.T) {
+		// Standard YAML values match type defaults — proves the path works even
+		// when values happen to equal the type default.
+		yaml := minimalPipelineYAML("2h", "30s", "30m", "4h", "60s", "30m")
+		r := loadTestResolver(t, yaml)
+
+		s, err := NewRoleStrategy(roles.RuntimeCoder, r)
+		if err != nil {
+			t.Fatalf("NewRoleStrategy error: %v", err)
+		}
+		applyResolverTimeouts(t, s, r, "coder")
+
+		if got := s.DefaultTimeout(); got != 2*time.Hour {
+			t.Errorf("DefaultTimeout() = %v, want 2h (from YAML)", got)
+		}
+	})
 }
 
 // TestWaitConfig verifies each role resolves the correct config keys and defaults.
@@ -391,6 +509,62 @@ func TestWaitConfig(t *testing.T) {
 		poll, _ = orch.WaitConfig(state)
 		if poll == 99*time.Second {
 			t.Error("orchestrator should not read CoderPollInterval")
+		}
+	})
+
+	// Three-level hierarchy: state.yaml > YAML > type default
+	t.Run("hierarchy/yaml_overrides_type_default", func(t *testing.T) {
+		// YAML sets coder poll=45s, max-wait=20m — differs from type defaults (30s, 30m)
+		yaml := minimalPipelineYAML("2h", "45s", "20m", "4h", "60s", "30m")
+		r := loadTestResolver(t, yaml)
+
+		s, _ := NewRoleStrategy(roles.RuntimeCoder, r)
+		applyResolverTimeouts(t, s, r, "coder")
+
+		zeroState := &models.State{}
+		poll, maxWait := s.WaitConfig(zeroState)
+		if poll != 45*time.Second {
+			t.Errorf("poll = %v, want 45s (from YAML)", poll)
+		}
+		if maxWait != 20*time.Minute {
+			t.Errorf("maxWait = %v, want 20m (from YAML)", maxWait)
+		}
+	})
+
+	t.Run("hierarchy/state_overrides_yaml", func(t *testing.T) {
+		// YAML sets coder poll=45s, max-wait=20m
+		yaml := minimalPipelineYAML("2h", "45s", "20m", "4h", "60s", "30m")
+		r := loadTestResolver(t, yaml)
+
+		s, _ := NewRoleStrategy(roles.RuntimeCoder, r)
+		applyResolverTimeouts(t, s, r, "coder")
+
+		// state.yaml overrides YAML values
+		state := &models.State{Config: models.Config{CoderPollInterval: 10, CoderMaxWait: 120}}
+		poll, maxWait := s.WaitConfig(state)
+		if poll != 10*time.Second {
+			t.Errorf("poll = %v, want 10s (state.yaml overrides YAML)", poll)
+		}
+		if maxWait != 120*time.Second {
+			t.Errorf("maxWait = %v, want 2m (state.yaml overrides YAML)", maxWait)
+		}
+	})
+
+	t.Run("hierarchy/orchestrator_yaml_overrides_type_default", func(t *testing.T) {
+		// YAML sets orchestrator poll=90s, max-wait=45m
+		yaml := minimalPipelineYAML("2h", "30s", "30m", "4h", "90s", "45m")
+		r := loadTestResolver(t, yaml)
+
+		s, _ := NewRoleStrategy(roles.RuntimeOrchestrator, r)
+		applyResolverTimeouts(t, s, r, "orchestrator")
+
+		zeroState := &models.State{}
+		poll, maxWait := s.WaitConfig(zeroState)
+		if poll != 90*time.Second {
+			t.Errorf("poll = %v, want 90s (from YAML)", poll)
+		}
+		if maxWait != 45*time.Minute {
+			t.Errorf("maxWait = %v, want 45m (from YAML)", maxWait)
 		}
 	})
 }

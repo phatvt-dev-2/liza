@@ -16,11 +16,14 @@ const defaultMaxMergeRetries = 3
 // reviewerStrategy handles review roles: code-reviewer, code-plan-reviewer,
 // epic-plan-reviewer, us-reviewer.
 type reviewerStrategy struct {
-	role         string             // runtime role
-	workflowRole string             // workflow role
-	buildContext contextBuilderFunc // per-role prompt context builder
-	mergeRetries int                // current retry counter (mutable per-loop state)
-	maxRetries   int                // max merge retries before proceeding (0 = use default)
+	role             string             // runtime role
+	workflowRole     string             // workflow role
+	buildContext     contextBuilderFunc // per-role prompt context builder
+	mergeRetries     int                // current retry counter (mutable per-loop state)
+	maxRetries       int                // max merge retries before proceeding (0 = use default)
+	executionTimeout time.Duration      // from YAML; 0 = use type default
+	yamlPollSec      int                // from YAML; 0 = use type default
+	yamlMaxWaitSec   int                // from YAML; 0 = use type default
 }
 
 func (s *reviewerStrategy) effectiveMaxRetries() int {
@@ -30,13 +33,18 @@ func (s *reviewerStrategy) effectiveMaxRetries() int {
 	return defaultMaxMergeRetries
 }
 
+const defaultReviewerTimeout = 30 * time.Minute
+
 func (s *reviewerStrategy) DefaultTimeout() time.Duration {
-	return 30 * time.Minute
+	if s.executionTimeout > 0 {
+		return s.executionTimeout
+	}
+	return defaultReviewerTimeout
 }
 
 func (s *reviewerStrategy) WaitConfig(state *models.State) (pollInterval, maxWait time.Duration) {
-	poll := nonZeroOr(state.Config.ReviewerPollInterval, models.DefaultReviewerPollInterval)
-	max := nonZeroOr(state.Config.ReviewerMaxWait, models.DefaultReviewerMaxWait)
+	poll := nonZeroOr(state.Config.ReviewerPollInterval, nonZeroOr(s.yamlPollSec, models.DefaultReviewerPollInterval))
+	max := nonZeroOr(state.Config.ReviewerMaxWait, nonZeroOr(s.yamlMaxWaitSec, models.DefaultReviewerMaxWait))
 	return time.Duration(poll) * time.Second, time.Duration(max) * time.Second
 }
 

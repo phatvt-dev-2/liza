@@ -11,15 +11,24 @@ import (
 )
 
 // orchestratorStrategy handles the orchestrator role.
-type orchestratorStrategy struct{}
+type orchestratorStrategy struct {
+	executionTimeout time.Duration // from YAML; 0 = use type default
+	yamlPollSec      int           // from YAML; 0 = use type default
+	yamlMaxWaitSec   int           // from YAML; 0 = use type default
+}
+
+const defaultOrchestratorTimeout = 4 * time.Hour
 
 func (s *orchestratorStrategy) DefaultTimeout() time.Duration {
-	return 4 * time.Hour
+	if s.executionTimeout > 0 {
+		return s.executionTimeout
+	}
+	return defaultOrchestratorTimeout
 }
 
 func (s *orchestratorStrategy) WaitConfig(state *models.State) (pollInterval, maxWait time.Duration) {
-	poll := nonZeroOr(state.Config.OrchestratorPollInterval, models.DefaultOrchestratorPollInterval)
-	max := nonZeroOr(state.Config.OrchestratorMaxWait, models.DefaultOrchestratorMaxWait)
+	poll := nonZeroOr(state.Config.OrchestratorPollInterval, nonZeroOr(s.yamlPollSec, models.DefaultOrchestratorPollInterval))
+	max := nonZeroOr(state.Config.OrchestratorMaxWait, nonZeroOr(s.yamlMaxWaitSec, models.DefaultOrchestratorMaxWait))
 	return time.Duration(poll) * time.Second, time.Duration(max) * time.Second
 }
 
