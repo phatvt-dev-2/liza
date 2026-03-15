@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 const defaultMaxMergeRetries = 3
@@ -18,7 +19,7 @@ const defaultMaxMergeRetries = 3
 type reviewerStrategy struct {
 	role             string             // runtime role
 	workflowRole     string             // workflow role
-	buildContext     contextBuilderFunc // per-role prompt context builder
+	resolver         *pipeline.Resolver // pipeline resolver for context sections
 	mergeRetries     int                // current retry counter (mutable per-loop state)
 	maxRetries       int                // max merge retries before proceeding (0 = use default)
 	executionTimeout time.Duration      // from YAML; 0 = use type default
@@ -149,7 +150,7 @@ func (s *reviewerStrategy) PreExecution(_ *db.Blackboard, _ SupervisorConfig) er
 }
 
 func (s *reviewerStrategy) BuildPrompt(state *models.State, config SupervisorConfig, taskID string) (string, error) {
-	return buildPromptWithContext(state, config, taskID, s.buildContext)
+	return buildPromptWithContext(state, config, taskID, s.resolver)
 }
 
 func (s *reviewerStrategy) PostExecution(_ *db.Blackboard, _ SupervisorConfig, _, _ string, _ *models.State) error {

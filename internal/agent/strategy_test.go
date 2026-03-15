@@ -30,30 +30,117 @@ pipeline:
     orchestrator:
       type: orchestrator
       display-name: "Orchestrator"
+      context-sections:
+        - orchestrator-dashboard
+        - wake-instructions
     epic-planner:
       type: doer
       display-name: "Epic Planner"
+      context-sections:
+        - assigned-task
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - worktree-rules
+        - capability-scoping
+        - implementation-phase
     epic-plan-reviewer:
       type: reviewer
       display-name: "Epic Plan Reviewer"
+      context-sections:
+        - review-task
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
     us-writer:
       type: doer
       display-name: "US Writer"
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - worktree-rules
+        - capability-scoping
+        - implementation-phase
     us-reviewer:
       type: reviewer
       display-name: "US Reviewer"
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
     code-planner:
       type: doer
       display-name: "Code Planner"
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - worktree-rules
+        - task-decomposition
+        - implementation-phase
     code-plan-reviewer:
       type: reviewer
       display-name: "Code Plan Reviewer"
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
     coder:
       type: doer
       display-name: "Coder"
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - handoff-resume
+        - integration-fix
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - anomaly-logging
+        - blocking-protocol
+        - worktree-rules
+        - commit-workflow
+        - implementation-phase
+        - submission-phase
     code-reviewer:
       type: reviewer
       display-name: "Code Reviewer"
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - scope-extensions
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
 
   role-pairs:
     coding-pair:
@@ -221,8 +308,8 @@ func TestNewRoleStrategy(t *testing.T) {
 				if ds.workflowRole != tt.wantWorkflow {
 					t.Errorf("workflowRole = %q, want %q", ds.workflowRole, tt.wantWorkflow)
 				}
-				if ds.buildContext == nil {
-					t.Error("buildContext should not be nil")
+				if ds.resolver == nil {
+					t.Error("resolver should not be nil")
 				}
 			case "reviewer":
 				rs, ok := s.(*reviewerStrategy)
@@ -235,8 +322,8 @@ func TestNewRoleStrategy(t *testing.T) {
 				if rs.workflowRole != tt.wantWorkflow {
 					t.Errorf("workflowRole = %q, want %q", rs.workflowRole, tt.wantWorkflow)
 				}
-				if rs.buildContext == nil {
-					t.Error("buildContext should not be nil")
+				if rs.resolver == nil {
+					t.Error("resolver should not be nil")
 				}
 			case "orchestrator":
 				if _, ok := s.(*orchestratorStrategy); !ok {
@@ -331,9 +418,9 @@ pipeline:
 	if ds.workflowRole != "data-engineer" {
 		t.Errorf("workflowRole = %q, want %q", ds.workflowRole, "data-engineer")
 	}
-	// Custom role has no registered context builder (nil is expected)
-	if ds.buildContext != nil {
-		t.Error("custom role should have nil buildContext (no registered builder)")
+	// Custom role gets the shared resolver (not nil)
+	if ds.resolver == nil {
+		t.Error("custom role should have a resolver")
 	}
 
 	// Custom reviewer role gets *reviewerStrategy

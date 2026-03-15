@@ -8,13 +8,14 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 // doerStrategy handles task-implementing roles: coder, code-planner, epic-planner, us-writer.
 type doerStrategy struct {
 	role             string             // runtime role (e.g. "coder")
 	workflowRole     string             // workflow role (e.g. "coder")
-	buildContext     contextBuilderFunc // per-role prompt context builder
+	resolver         *pipeline.Resolver // pipeline resolver for context sections
 	executionTimeout time.Duration      // from YAML; 0 = use type default
 	yamlPollSec      int                // from YAML; 0 = use type default
 	yamlMaxWaitSec   int                // from YAML; 0 = use type default
@@ -101,7 +102,7 @@ func (s *doerStrategy) PreExecution(_ *db.Blackboard, _ SupervisorConfig) error 
 }
 
 func (s *doerStrategy) BuildPrompt(state *models.State, config SupervisorConfig, taskID string) (string, error) {
-	return buildPromptWithContext(state, config, taskID, s.buildContext)
+	return buildPromptWithContext(state, config, taskID, s.resolver)
 }
 
 func (s *doerStrategy) PostExecution(bb *db.Blackboard, config SupervisorConfig, _ string, claimedTaskID string, _ *models.State) error {

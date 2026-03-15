@@ -8,13 +8,15 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 // orchestratorStrategy handles the orchestrator role.
 type orchestratorStrategy struct {
-	executionTimeout time.Duration // from YAML; 0 = use type default
-	yamlPollSec      int           // from YAML; 0 = use type default
-	yamlMaxWaitSec   int           // from YAML; 0 = use type default
+	resolver         *pipeline.Resolver // pipeline resolver for context sections
+	executionTimeout time.Duration      // from YAML; 0 = use type default
+	yamlPollSec      int                // from YAML; 0 = use type default
+	yamlMaxWaitSec   int                // from YAML; 0 = use type default
 }
 
 const defaultOrchestratorTimeout = 4 * time.Hour
@@ -64,7 +66,7 @@ func (s *orchestratorStrategy) PreExecution(bb *db.Blackboard, config Supervisor
 }
 
 func (s *orchestratorStrategy) BuildPrompt(state *models.State, config SupervisorConfig, _ string) (string, error) {
-	return buildOrchestratorPromptContext(state, config)
+	return buildOrchestratorPromptContext(state, config, s.resolver)
 }
 
 func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config SupervisorConfig, _, _ string, stateBefore *models.State) error {

@@ -5,13 +5,10 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
 )
-
-// contextBuilderFunc returns the role-specific context string for a task-based role.
-// It does NOT include the base prompt or InitialTask suffix — those are handled by
-// buildPromptWithContext.
-type contextBuilderFunc func(task *models.Task, state *models.State, config SupervisorConfig) (string, error)
 
 // baseConfigFrom constructs the BasePromptConfig shared by all roles.
 func baseConfigFrom(state *models.State, config SupervisorConfig, taskID string) prompts.BasePromptConfig {
@@ -28,8 +25,8 @@ func baseConfigFrom(state *models.State, config SupervisorConfig, taskID string)
 }
 
 // buildPromptWithContext builds a complete prompt for any task-based role:
-// base prompt + task lookup + role-specific context + InitialTask suffix.
-func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID string, ctxFn contextBuilderFunc) (string, error) {
+// base prompt + task lookup + role-specific context via BuildRoleContext + InitialTask suffix.
+func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID string, resolver *pipeline.Resolver) (string, error) {
 	prompt, err := prompts.BuildBasePrompt(baseConfigFrom(state, config, taskID))
 	if err != nil {
 		return "", fmt.Errorf("building base prompt: %w", err)
@@ -40,7 +37,14 @@ func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID
 		return "", &errors.NotFoundError{Entity: "task", ID: taskID}
 	}
 
-	context, err := ctxFn(task, state, config)
+	sections, err := resolver.ContextSections(config.Role)
+	if err != nil {
+		return "", fmt.Errorf("context sections for role %q: %w", config.Role, err)
+	}
+
+	data := buildTaskRoleContextData(task, state, config, resolver)
+
+	context, err := prompts.BuildRoleContext(config.Role, sections, data)
 	if err != nil {
 		return "", err
 	}
@@ -54,14 +58,42 @@ func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID
 }
 
 // buildOrchestratorPromptContext builds the complete prompt for the orchestrator role.
-// Unlike task-based roles, the orchestrator has no task to look up.
-func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig) (string, error) {
+// Unlike task-based roles, the orchestrator has no task to look up. Dashboard and wake
+// instruction content is pre-rendered and passed through block templates.
+func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig, resolver *pipeline.Resolver) (string, error) {
 	prompt, err := prompts.BuildBasePrompt(baseConfigFrom(state, config, ""))
 	if err != nil {
 		return "", fmt.Errorf("building base prompt: %w", err)
 	}
 
-	context, err := orchestratorContext(state, config)
+	sections, err := resolver.ContextSections(config.Role)
+	if err != nil {
+		return "", fmt.Errorf("context sections for role %q: %w", config.Role, err)
+	}
+
+	dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, config.ProjectRoot, config.AgentID)
+	if err != nil {
+		return "", err
+	}
+
+	skills, _ := resolver.Skills(config.Role)
+	mandatoryDocs, _ := resolver.MandatoryDocs(config.Role)
+
+	data := &prompts.RoleContextData{
+		Role:            config.Role,
+		AgentID:         config.AgentID,
+		RoleType:        "orchestrator",
+		DashboardOutput: dashboard,
+		WakeInstruction: wakeInstruction,
+		ProjectRoot:     config.ProjectRoot,
+		StatePath:       config.StatePath,
+		SpecsDir:        config.SpecsDir,
+		GoalDesc:        state.Goal.Description,
+		Skills:          skills,
+		MandatoryDocs:   mandatoryDocs,
+	}
+
+	context, err := prompts.BuildRoleContext(config.Role, sections, data)
 	if err != nil {
 		return "", err
 	}
@@ -74,122 +106,90 @@ func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig
 	return prompt, nil
 }
 
-// --- Named context builder functions (one per task-based role) ---
-
-func coderContext(task *models.Task, state *models.State, config SupervisorConfig) (string, error) {
-	var handoffNote *models.HandoffNote
-	if note, ok := state.Handoff[task.ID]; ok {
-		noteCopy := note
-		handoffNote = &noteCopy
-	}
+// buildTaskRoleContextData constructs RoleContextData for task-based roles (doers and reviewers).
+func buildTaskRoleContextData(task *models.Task, state *models.State, config SupervisorConfig, resolver *pipeline.Resolver) *prompts.RoleContextData {
+	roleType, _ := resolver.RoleType(config.Role)
 
 	siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
 
-	coderConfig := prompts.CoderContextConfig{
-		ProjectRoot:       config.ProjectRoot,
-		AgentID:           config.AgentID,
-		IntegrationBranch: state.Config.IntegrationBranch,
-		HandoffNote:       handoffNote,
-		GoalSpecRef:       state.Goal.SpecRef,
-		SiblingTasks:      siblingTasks,
-		TotalPlanTasks:    totalPlanTasks,
-		TaskOrdinal:       taskOrdinal,
-	}
-	return prompts.BuildCoderContext(task, coderConfig)
-}
+	data := &prompts.RoleContextData{
+		// Identity
+		Role:     config.Role,
+		AgentID:  config.AgentID,
+		RoleType: roleType,
 
-func codePlannerContext(task *models.Task, state *models.State, config SupervisorConfig) (string, error) {
-	siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
+		// Task
+		TaskID:       task.ID,
+		Description:  task.Description,
+		DoneWhen:     task.DoneWhen,
+		Scope:        task.Scope,
+		SpecRef:      task.SpecRef,
+		Worktree:     resolveWorktreePath(config.ProjectRoot, task.Worktree),
+		IterationNum: task.Iteration,
+		AttemptNum:   len(task.Attempted) + 1,
 
-	plannerConfig := prompts.CodePlannerContextConfig{
-		ProjectRoot:    config.ProjectRoot,
-		AgentID:        config.AgentID,
+		// Plan scoping
 		GoalSpecRef:    state.Goal.SpecRef,
 		SiblingTasks:   siblingTasks,
 		TotalPlanTasks: totalPlanTasks,
 		TaskOrdinal:    taskOrdinal,
-	}
-	return prompts.BuildCodePlannerContext(task, plannerConfig)
-}
 
-func codeReviewerContext(task *models.Task, state *models.State, config SupervisorConfig) (string, error) {
-	siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
-
-	reviewerConfig := prompts.ReviewerContextConfig{
-		ProjectRoot:    config.ProjectRoot,
-		AgentID:        config.AgentID,
-		GoalSpecRef:    state.Goal.SpecRef,
-		SiblingTasks:   siblingTasks,
-		TotalPlanTasks: totalPlanTasks,
-		TaskOrdinal:    taskOrdinal,
-	}
-	return prompts.BuildReviewerContext(task, reviewerConfig)
-}
-
-func codePlanReviewerContext(task *models.Task, state *models.State, config SupervisorConfig) (string, error) {
-	siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
-
-	reviewerConfig := prompts.CodePlanReviewerContextConfig{
-		ProjectRoot:    config.ProjectRoot,
-		AgentID:        config.AgentID,
-		GoalSpecRef:    state.Goal.SpecRef,
-		SiblingTasks:   siblingTasks,
-		TotalPlanTasks: totalPlanTasks,
-		TaskOrdinal:    taskOrdinal,
-	}
-	return prompts.BuildCodePlanReviewerContext(task, reviewerConfig)
-}
-
-func epicPlannerContext(task *models.Task, _ *models.State, config SupervisorConfig) (string, error) {
-	epicPlannerConfig := prompts.EpicPlannerContextConfig{
+		// Config/state
 		ProjectRoot: config.ProjectRoot,
-		AgentID:     config.AgentID,
+		StatePath:   config.StatePath,
+		SpecsDir:    config.SpecsDir,
+		GoalDesc:    state.Goal.Description,
 	}
-	return prompts.BuildEpicPlannerContext(task, epicPlannerConfig)
+
+	// Prior rejection
+	if task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null" {
+		data.PriorRejection = *task.RejectionReason
+	}
+
+	// Doer-specific: coder fields
+	if roleType == "doer" && config.Role == "coder" {
+		data.IntegrationBranch = state.Config.IntegrationBranch
+		if note, ok := state.Handoff[task.ID]; ok {
+			noteCopy := note
+			data.HandoffNote = &noteCopy
+		}
+	}
+
+	// Reviewer-specific fields
+	if roleType == "reviewer" {
+		data.BaseCommit = derefString(task.BaseCommit)
+		data.ReviewCommit = derefString(task.ReviewCommit)
+		data.AssignedTo = derefString(task.AssignedTo)
+		if task.AssignedTo != nil {
+			data.ScopeExtensions = ops.GetLatestScopeExtensions(task.History, *task.AssignedTo)
+		}
+	}
+
+	// Declarative fields from pipeline YAML
+	if skills, err := resolver.Skills(config.Role); err == nil {
+		data.Skills = skills
+	}
+	if mandatoryDocs, err := resolver.MandatoryDocs(config.Role); err == nil {
+		data.MandatoryDocs = mandatoryDocs
+	}
+
+	return data
 }
 
-func epicPlanReviewerContext(task *models.Task, _ *models.State, config SupervisorConfig) (string, error) {
-	epicPlanReviewerConfig := prompts.EpicPlanReviewerContextConfig{
-		ProjectRoot: config.ProjectRoot,
-		AgentID:     config.AgentID,
+// resolveWorktreePath returns the absolute worktree path, or "" if worktree is nil.
+func resolveWorktreePath(projectRoot string, worktree *string) string {
+	if worktree == nil {
+		return ""
 	}
-	return prompts.BuildEpicPlanReviewerContext(task, epicPlanReviewerConfig)
+	return fmt.Sprintf("%s/%s", projectRoot, *worktree)
 }
 
-func usWriterContext(task *models.Task, state *models.State, config SupervisorConfig) (string, error) {
-	siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
-
-	usWriterConfig := prompts.USWriterContextConfig{
-		ProjectRoot:    config.ProjectRoot,
-		AgentID:        config.AgentID,
-		GoalSpecRef:    state.Goal.SpecRef,
-		SiblingTasks:   siblingTasks,
-		TotalPlanTasks: totalPlanTasks,
-		TaskOrdinal:    taskOrdinal,
+// derefString returns the value pointed to by s, or "" if s is nil.
+func derefString(s *string) string {
+	if s == nil {
+		return ""
 	}
-	return prompts.BuildUSWriterContext(task, usWriterConfig)
-}
-
-func usReviewerContext(task *models.Task, state *models.State, config SupervisorConfig) (string, error) {
-	siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
-
-	usReviewerConfig := prompts.USReviewerContextConfig{
-		ProjectRoot:    config.ProjectRoot,
-		AgentID:        config.AgentID,
-		GoalSpecRef:    state.Goal.SpecRef,
-		SiblingTasks:   siblingTasks,
-		TotalPlanTasks: totalPlanTasks,
-		TaskOrdinal:    taskOrdinal,
-	}
-	return prompts.BuildUSReviewerContext(task, usReviewerConfig)
-}
-
-func orchestratorContext(state *models.State, config SupervisorConfig) (string, error) {
-	orchestratorConfig := prompts.OrchestratorContextConfig{
-		ProjectRoot: config.ProjectRoot,
-		AgentID:     config.AgentID,
-	}
-	return prompts.BuildOrchestratorContext(state, orchestratorConfig)
+	return *s
 }
 
 // collectSiblingTasks returns summaries of sibling tasks in the sprint plan (excluding currentTaskID),

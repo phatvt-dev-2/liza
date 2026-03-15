@@ -21,12 +21,6 @@ type BasePromptConfig struct {
 	GoalSpecRef string
 }
 
-// OrchestratorContextConfig contains configuration for building orchestrator context
-type OrchestratorContextConfig struct {
-	ProjectRoot string
-	AgentID     string
-}
-
 // SiblingTaskSummary provides minimal context about sibling tasks in the same sprint
 type SiblingTaskSummary struct {
 	ID          string
@@ -34,105 +28,15 @@ type SiblingTaskSummary struct {
 	Status      string
 }
 
-// CoderContextConfig contains configuration for building coder context
-type CoderContextConfig struct {
-	ProjectRoot       string
-	AgentID           string
-	IntegrationBranch string
-	HandoffNote       *models.HandoffNote
-	GoalSpecRef       string
-	SiblingTasks      []SiblingTaskSummary
-	TotalPlanTasks    int
-	TaskOrdinal       int // 1-based position in sprint plan
-}
-
-// ReviewerContextConfig contains configuration for building reviewer context
-type ReviewerContextConfig struct {
-	ProjectRoot    string
-	AgentID        string
-	GoalSpecRef    string
-	SiblingTasks   []SiblingTaskSummary
-	TotalPlanTasks int
-	TaskOrdinal    int // 1-based position in sprint plan
-}
-
-// CodePlannerContextConfig contains configuration for building code-planner context
-type CodePlannerContextConfig struct {
-	ProjectRoot    string
-	AgentID        string
-	GoalSpecRef    string
-	SiblingTasks   []SiblingTaskSummary
-	TotalPlanTasks int
-	TaskOrdinal    int
-}
-
-// CodePlanReviewerContextConfig contains configuration for building code-plan-reviewer context
-type CodePlanReviewerContextConfig struct {
-	ProjectRoot    string
-	AgentID        string
-	GoalSpecRef    string
-	SiblingTasks   []SiblingTaskSummary
-	TotalPlanTasks int
-	TaskOrdinal    int
-}
-
-// EpicPlannerContextConfig contains configuration for building epic-planner context
-type EpicPlannerContextConfig struct {
-	ProjectRoot string
-	AgentID     string
-}
-
-// USWriterContextConfig contains configuration for building us-writer context
-type USWriterContextConfig struct {
-	ProjectRoot    string
-	AgentID        string
-	GoalSpecRef    string
-	SiblingTasks   []SiblingTaskSummary
-	TotalPlanTasks int
-	TaskOrdinal    int
-}
-
-// USReviewerContextConfig contains configuration for building us-reviewer context
-type USReviewerContextConfig struct {
-	ProjectRoot    string
-	AgentID        string
-	GoalSpecRef    string
-	SiblingTasks   []SiblingTaskSummary
-	TotalPlanTasks int
-	TaskOrdinal    int
-}
-
-func resolveWorktreePath(projectRoot string, worktree *string) string {
-	if worktree == nil {
-		return ""
-	}
-	return fmt.Sprintf("%s/%s", projectRoot, *worktree)
-}
-
 // BuildBasePrompt creates the base bootstrap prompt for all agents
 func BuildBasePrompt(config BasePromptConfig) (string, error) {
 	return executeTemplate("base_prompt", config)
 }
 
-// orchestratorContextData is the template data for orchestrator_context.tmpl
-type orchestratorContextData struct {
-	AgentID              string
-	WakeTrigger          string
-	SprintNumber         int
-	SprintHistory        []models.SprintSummary
-	TotalTasks           int
-	Merged               int
-	InProgress           int
-	Unclaimed            int
-	Blocked              int
-	IntegrationFailed    int
-	HypothesisExhausted  int
-	ImmediateDiscoveries int
-	WakeInstructions     string
-}
-
-// BuildOrchestratorContext creates orchestrator-specific context with sprint state
-func BuildOrchestratorContext(state *models.State, config OrchestratorContextConfig) (string, error) {
+// RenderOrchestratorDashboard pre-renders the orchestrator dashboard and wake instruction
+// strings for use as RoleContextData.DashboardOutput and RoleContextData.WakeInstruction.
+// This replaces the old BuildOrchestratorContext + orchestrator_context.tmpl approach.
+func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID string) (dashboard, wakeInstruction string, err error) {
 	totalTasks := len(state.Tasks)
 	merged := countTasksByStatus(state.Tasks, models.TaskStatusMerged)
 	blocked := countTasksByStatus(state.Tasks, models.TaskStatusBlocked)
@@ -146,7 +50,7 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 	hypothesisExhausted := countHypothesisExhausted(state.Tasks)
 	immediateDiscoveries := countImmediateDiscoveries(state.Discovered)
 
-	detCtx, detErr := ops.LoadDetectionContext(config.ProjectRoot)
+	detCtx, detErr := ops.LoadDetectionContext(projectRoot)
 	var sprintTerminals []models.TaskStatus
 	var planningPairs map[string]bool
 	if detErr == nil {
@@ -163,234 +67,89 @@ func BuildOrchestratorContext(state *models.State, config OrchestratorContextCon
 
 	wakeTrigger := determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, sprintComplete, planningTasks)
 
-	wakeData, err := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, config.ProjectRoot)
-	if err != nil {
-		return "", fmt.Errorf("building wake template data: %w", err)
+	wakeData, wakeErr := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, projectRoot)
+	if wakeErr != nil {
+		return "", "", fmt.Errorf("building wake template data: %w", wakeErr)
 	}
 
-	wakeInstructions, err := buildInstructionsForWakeTrigger(wakeTrigger, config.AgentID, wakeData, planningTasks)
-	if err != nil {
-		return "", fmt.Errorf("building wake instructions: %w", err)
+	wakeInstructions, instrErr := buildInstructionsForWakeTrigger(wakeTrigger, agentID, wakeData, planningTasks)
+	if instrErr != nil {
+		return "", "", fmt.Errorf("building wake instructions: %w", instrErr)
 	}
 
-	data := orchestratorContextData{
-		AgentID:              config.AgentID,
-		WakeTrigger:          wakeTrigger,
-		SprintNumber:         state.Sprint.Number,
-		SprintHistory:        state.SprintHistory,
-		TotalTasks:           totalTasks,
-		Merged:               merged,
-		InProgress:           inProgress,
-		Unclaimed:            unclaimed,
-		Blocked:              blocked,
-		IntegrationFailed:    integrationFailed,
-		HypothesisExhausted:  hypothesisExhausted,
-		ImmediateDiscoveries: immediateDiscoveries,
-		WakeInstructions:     wakeInstructions,
+	// Build the dashboard string (replaces orchestrator_context.tmpl rendering)
+	var b strings.Builder
+	b.WriteString("\n\n=== ORCHESTRATOR CONTEXT ===\n")
+	b.WriteString(fmt.Sprintf("WAKE TRIGGER: %s\n", wakeTrigger))
+	b.WriteString("\nSPRINT STATE:\n")
+	if state.Sprint.Number > 0 {
+		b.WriteString(fmt.Sprintf("- Sprint number: %d\n", state.Sprint.Number))
 	}
-	return executeTemplate("orchestrator_context", data)
-}
-
-// coderContextData is the template data for coder_context.tmpl
-type coderContextData struct {
-	Task              *models.Task
-	Config            CoderContextConfig
-	WorktreePath      string
-	HasPriorRejection bool
-}
-
-// BuildCoderContext creates coder-specific context with task details
-func BuildCoderContext(task *models.Task, config CoderContextConfig) (string, error) {
-	data := coderContextData{
-		Task:              task,
-		Config:            config,
-		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
-		HasPriorRejection: hasPriorRejection(task),
+	if len(state.SprintHistory) > 0 {
+		b.WriteString(fmt.Sprintf("- Previous sprints: %d\n", len(state.SprintHistory)))
+		for _, sh := range state.SprintHistory {
+			b.WriteString(fmt.Sprintf("  - %s: %s (%d tasks done)\n", sh.ID, sh.Status, sh.TasksDone))
+		}
 	}
-	return executeTemplate("coder_context", data)
-}
+	b.WriteString(fmt.Sprintf("- Total tasks: %d\n", totalTasks))
+	b.WriteString(fmt.Sprintf("- Merged: %d\n", merged))
+	b.WriteString(fmt.Sprintf("- In progress: %d\n", inProgress))
+	b.WriteString(fmt.Sprintf("- Unclaimed: %d\n", unclaimed))
+	b.WriteString(fmt.Sprintf("- Blocked: %d\n", blocked))
+	b.WriteString(fmt.Sprintf("- Integration failed: %d\n", integrationFailed))
+	b.WriteString(fmt.Sprintf("- Hypothesis exhausted: %d\n", hypothesisExhausted))
+	b.WriteString(fmt.Sprintf("- Immediate discoveries: %d\n", immediateDiscoveries))
 
-// reviewerContextData is the template data for code_reviewer_context.tmpl
-type reviewerContextData struct {
-	Task              *models.Task
-	Config            ReviewerContextConfig
-	WorktreePath      string
-	BaseCommit        string
-	ReviewCommit      string
-	AssignedTo        string
-	HasPriorRejection bool
-	ScopeExtensions   []map[string]string
-}
+	b.WriteString(fmt.Sprintf(`
+ORCHESTRATOR COMMANDS:
+- liza_add_tasks — Add one or more tasks to blackboard (atomic per task, with validation)
+  Tool parameters: {"tasks": [{"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...]}], "agent_id": "%s"}
+- liza_supersede_task — Supersede task
+  Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "%s"}
+- liza_wt_delete — Delete worktree for abandoned/superseded/blocked tasks
+  Tool parameters: {"task_id": "...", "agent_id": "%s"}
+- liza_sprint_checkpoint — Create sprint checkpoint for human review (pauses all agents)
+  Tool parameters: {"agent_id": "%s"}
+- liza_update_sprint_metrics — Recompute sprint metrics from current state
+  Tool parameters: {"agent_id": "%s"}
 
-// codePlannerContextData is the template data for code_planner_context.tmpl
-type codePlannerContextData struct {
-	Task              *models.Task
-	Config            CodePlannerContextConfig
-	WorktreePath      string
-	HasPriorRejection bool
-}
+ANOMALY LOGGING:
+| Event | Type | Required Fields |
+|-------|------|-----------------|
+| Two coders failed same task | hypothesis_exhaustion | — |
+| Spec gap discovered | spec_gap | — |
+| Review stuck in cycles | review_deadlock | — |
+| Multiple reviewers failed | review_exhaustion | reviewers_failed, common_blocker |
+| Protocol ambiguity | system_ambiguity | protocol_section, question |
+Format: anomalies: [{id, type, task, reporter, timestamp (ISO 8601), details: {<fields>}}]
 
-// epicPlannerContextData is the template data for epic_planner_context.tmpl
-type epicPlannerContextData struct {
-	Task              *models.Task
-	Config            EpicPlannerContextConfig
-	WorktreePath      string
-	HasPriorRejection bool
-}
+SELF-VALIDATION GATES (verify before adding each task):
+| Gate | Requirement |
+|------|-------------|
+| Spec reference | Each task must cite spec |
+| Success criteria | Each task must have falsifiable done |
+| Scope boundary | IN scope stated (functional area, not file names) |
+| Dependency check | Dependencies stated if any |
+| TDD inclusion | Code tasks include tests |
 
-// codePlanReviewerContextData is the template data for code_plan_reviewer_context.tmpl
-type codePlanReviewerContextData struct {
-	Task              *models.Task
-	Config            CodePlanReviewerContextConfig
-	WorktreePath      string
-	BaseCommit        string
-	ReviewCommit      string
-	AssignedTo        string
-	HasPriorRejection bool
-}
+FIELD FORMAT GUIDELINES:
+- done: observable behavior, specific, falsifiable. Bad: "works correctly". Good: "GET /users returns 200"
+- spec: path to spec optionally with #anchor
 
-// EpicPlanReviewerContextConfig contains configuration for building epic-plan-reviewer context
-type EpicPlanReviewerContextConfig struct {
-	ProjectRoot string
-	AgentID     string
-}
+TASK CREATION ORDER:
+When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. liza_add_tasks validates that all `+"`depends`"+` IDs already exist; creating a task that references a not-yet-created dependency will fail.
 
-// epicPlanReviewerContextData is the template data for epic_plan_reviewer_context.tmpl
-type epicPlanReviewerContextData struct {
-	Task              *models.Task
-	Config            EpicPlanReviewerContextConfig
-	WorktreePath      string
-	BaseCommit        string
-	ReviewCommit      string
-	AssignedTo        string
-	HasPriorRejection bool
-}
+ERROR RECOVERY:
+On MCP tool errors, diagnose the root cause before retrying. Read the error message, investigate the constraint that failed (e.g. missing dependency, invalid state), and fix the underlying issue. Do NOT retry the same call blindly.
 
-// usWriterContextData is the template data for us_writer_context.tmpl
-type usWriterContextData struct {
-	Task              *models.Task
-	Config            USWriterContextConfig
-	WorktreePath      string
-	HasPriorRejection bool
-}
+MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
+Work unit = all planned state changes executed. Do NOT exit until all tools have been called.
+`, agentID, agentID, agentID, agentID, agentID))
 
-// usReviewerContextData is the template data for us_reviewer_context.tmpl
-type usReviewerContextData struct {
-	Task              *models.Task
-	Config            USReviewerContextConfig
-	WorktreePath      string
-	BaseCommit        string
-	ReviewCommit      string
-	AssignedTo        string
-	HasPriorRejection bool
-}
+	// Wake instruction is rendered separately by the wake-instructions block
+	wakeInstr := fmt.Sprintf("INSTRUCTIONS:\n%s", wakeInstructions)
 
-// BuildReviewerContext creates reviewer-specific context with review details
-func BuildReviewerContext(task *models.Task, config ReviewerContextConfig) (string, error) {
-	var scopeExtensions []map[string]string
-	if task.AssignedTo != nil {
-		scopeExtensions = ops.GetLatestScopeExtensions(task.History, *task.AssignedTo)
-	}
-
-	data := reviewerContextData{
-		Task:              task,
-		Config:            config,
-		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
-		BaseCommit:        derefString(task.BaseCommit),
-		ReviewCommit:      derefString(task.ReviewCommit),
-		AssignedTo:        derefString(task.AssignedTo),
-		HasPriorRejection: hasPriorRejection(task),
-		ScopeExtensions:   scopeExtensions,
-	}
-	return executeTemplate("code_reviewer_context", data)
-}
-
-// BuildCodePlannerContext creates code-planner-specific context with task details
-func BuildCodePlannerContext(task *models.Task, config CodePlannerContextConfig) (string, error) {
-	data := codePlannerContextData{
-		Task:              task,
-		Config:            config,
-		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
-		HasPriorRejection: hasPriorRejection(task),
-	}
-	return executeTemplate("code_planner_context", data)
-}
-
-// BuildCodePlanReviewerContext creates code-plan-reviewer-specific context with review details
-func BuildCodePlanReviewerContext(task *models.Task, config CodePlanReviewerContextConfig) (string, error) {
-	data := codePlanReviewerContextData{
-		Task:              task,
-		Config:            config,
-		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
-		BaseCommit:        derefString(task.BaseCommit),
-		ReviewCommit:      derefString(task.ReviewCommit),
-		AssignedTo:        derefString(task.AssignedTo),
-		HasPriorRejection: hasPriorRejection(task),
-	}
-	return executeTemplate("code_plan_reviewer_context", data)
-}
-
-// BuildEpicPlanReviewerContext creates epic-plan-reviewer-specific context with review details
-func BuildEpicPlanReviewerContext(task *models.Task, config EpicPlanReviewerContextConfig) (string, error) {
-	data := epicPlanReviewerContextData{
-		Task:              task,
-		Config:            config,
-		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
-		BaseCommit:        derefString(task.BaseCommit),
-		ReviewCommit:      derefString(task.ReviewCommit),
-		AssignedTo:        derefString(task.AssignedTo),
-		HasPriorRejection: hasPriorRejection(task),
-	}
-	return executeTemplate("epic_plan_reviewer_context", data)
-}
-
-// BuildEpicPlannerContext creates epic-planner-specific context with task details and decomposition guidance
-func BuildEpicPlannerContext(task *models.Task, config EpicPlannerContextConfig) (string, error) {
-	data := epicPlannerContextData{
-		Task:              task,
-		Config:            config,
-		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
-		HasPriorRejection: hasPriorRejection(task),
-	}
-	return executeTemplate("epic_planner_context", data)
-}
-
-// BuildUSWriterContext creates us-writer-specific context with task details
-func BuildUSWriterContext(task *models.Task, config USWriterContextConfig) (string, error) {
-	data := usWriterContextData{
-		Task:              task,
-		Config:            config,
-		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
-		HasPriorRejection: hasPriorRejection(task),
-	}
-	return executeTemplate("us_writer_context", data)
-}
-
-// BuildUSReviewerContext creates us-reviewer-specific context with review details
-func BuildUSReviewerContext(task *models.Task, config USReviewerContextConfig) (string, error) {
-	data := usReviewerContextData{
-		Task:              task,
-		Config:            config,
-		WorktreePath:      resolveWorktreePath(config.ProjectRoot, task.Worktree),
-		BaseCommit:        derefString(task.BaseCommit),
-		ReviewCommit:      derefString(task.ReviewCommit),
-		AssignedTo:        derefString(task.AssignedTo),
-		HasPriorRejection: hasPriorRejection(task),
-	}
-	return executeTemplate("us_reviewer_context", data)
-}
-
-// derefString returns the value pointed to by s, or "" if s is nil.
-func derefString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
-// hasPriorRejection reports whether the task has actionable rejection feedback from a prior iteration
-func hasPriorRejection(task *models.Task) bool {
-	return task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null"
+	return b.String(), wakeInstr, nil
 }
 
 func countTasksByStatus(tasks []models.Task, status models.TaskStatus) int {
