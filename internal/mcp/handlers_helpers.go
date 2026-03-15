@@ -7,6 +7,7 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -132,26 +133,34 @@ func (e *RoleError) Error() string {
 }
 
 // authorizeClaimRelease validates that the agent's runtime role is authorized
-// to release the requested claim type. Orchestrator can release any claim;
-// others can only release claims matching their own role category.
-func authorizeClaimRelease(agentID, claimRole string) error {
+// to release the requested claim type. Uses the pipeline resolver to classify
+// roles by type (doer, reviewer, orchestrator) instead of hardcoded role names.
+// Nil resolver rejects all requests (fail-closed).
+func authorizeClaimRelease(agentID, claimRole string, resolver *pipeline.Resolver) error {
+	if resolver == nil {
+		return fmt.Errorf("pipeline resolver not loaded — cannot authorize claim release")
+	}
 	if err := identity.ValidateFormat(agentID); err != nil {
 		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
 	}
 	agentRole, _ := identity.ExtractRole(agentID)
-	switch agentRole {
+	roleType, err := resolver.RoleType(agentRole)
+	if err != nil {
+		return fmt.Errorf("agent %s has unrecognized role %q for claim release", agentID, agentRole)
+	}
+	switch roleType {
 	case "orchestrator":
 		return nil
-	case "coder", "code-planner", "epic-planner", "us-writer":
+	case "doer":
 		if claimRole != roles.ClaimDoer {
 			return fmt.Errorf("agent %s (role %s) can only release doer claims", agentID, agentRole)
 		}
-	case "code-reviewer", "code-plan-reviewer", "epic-plan-reviewer", "us-reviewer":
+	case "reviewer":
 		if claimRole != roles.ClaimReviewer {
 			return fmt.Errorf("agent %s (role %s) can only release reviewer claims", agentID, agentRole)
 		}
 	default:
-		return fmt.Errorf("agent %s has unrecognized role %q for claim release", agentID, agentRole)
+		return fmt.Errorf("agent %s has unrecognized role type %q for claim release", agentID, roleType)
 	}
 	return nil
 }

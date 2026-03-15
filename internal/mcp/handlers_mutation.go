@@ -221,7 +221,7 @@ func (s *Server) handleReleaseClaim(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := authorizeClaimRelease(agentID, role); err != nil {
+	if err := authorizeClaimRelease(agentID, role, s.resolver); err != nil {
 		return nil, err
 	}
 
