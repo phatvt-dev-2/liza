@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -839,5 +840,70 @@ func TestRegisterOrchestratorTakeoverExpired(t *testing.T) {
 	}
 	if _, ok := readState.Agents["orchestrator-2"]; !ok {
 		t.Error("orchestrator-2 should be registered")
+	}
+}
+
+// TestRegisterSecondOrchestratorBlockedDespiteMisconfiguredMaxInstances verifies
+// that orchestrator singularity holds even when pipeline YAML sets max-instances: 2.
+// This is the spec invariant: orchestrator is always singular regardless of YAML.
+func TestRegisterSecondOrchestratorBlockedDespiteMisconfiguredMaxInstances(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Build a resolver from YAML that misconfigures orchestrator with max-instances: 2.
+	misconfiguredYAML := []byte(`
+pipeline:
+  roles:
+    orchestrator:
+      type: orchestrator
+      max-instances: 2
+      display-name: "Orchestrator"
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := pipeline.LoadFromBytes(misconfiguredYAML)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	resolver := pipeline.NewResolver(cfg)
+
+	state := testhelpers.CreateValidState()
+	state.Agents["orchestrator-1"] = models.Agent{
+		Role:         "orchestrator",
+		Status:       models.AgentStatusPlanning,
+		LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(10 * time.Minute)),
+		Heartbeat:    time.Now().UTC(),
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	// Even though YAML says max-instances: 2, resolver coerces to 1 for orchestrator.
+	// A second live orchestrator must be rejected.
+	err = registerAgent(bb, tmpDir, "orchestrator-2", "orchestrator", "terminal-2", 1800, "claude", resolver)
+	if err == nil {
+		t.Fatal("expected error registering second orchestrator with misconfigured max-instances: 2, got nil")
+	}
+	if !strings.Contains(err.Error(), "already has") {
+		t.Errorf("unexpected error message: %v", err)
 	}
 }

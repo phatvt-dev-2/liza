@@ -340,3 +340,64 @@ func TestResolver_RoleDisplayName(t *testing.T) {
 		t.Errorf("RoleDisplayName(nonexistent) = %q, want %q", got, "nonexistent")
 	}
 }
+
+// TestMaxInstances_OrchestratorCoercedToOne verifies the spec invariant that
+// orchestrator roles always return max-instances=1 regardless of YAML value.
+// Regression test for the misconfiguration case where YAML sets max-instances: 2.
+func TestMaxInstances_OrchestratorCoercedToOne(t *testing.T) {
+	// Build a config where orchestrator explicitly sets max-instances: 2.
+	yamlData := []byte(`
+pipeline:
+  roles:
+    orchestrator:
+      type: orchestrator
+      max-instances: 2
+      display-name: "Orchestrator"
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := LoadFromBytes(yamlData)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	r := NewResolver(cfg)
+
+	// Despite YAML saying max-instances: 2, resolver must coerce to 1.
+	got, err := r.MaxInstances("orchestrator")
+	if err != nil {
+		t.Fatalf("MaxInstances(orchestrator): %v", err)
+	}
+	if got != 1 {
+		t.Errorf("MaxInstances(orchestrator) = %d, want 1 (spec invariant: orchestrator singularity)", got)
+	}
+
+	// Non-orchestrator roles should honor their YAML value.
+	got, err = r.MaxInstances("coder")
+	if err != nil {
+		t.Fatalf("MaxInstances(coder): %v", err)
+	}
+	if got != 0 {
+		t.Errorf("MaxInstances(coder) = %d, want 0 (unset = unlimited)", got)
+	}
+}
