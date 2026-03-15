@@ -20,6 +20,11 @@ func (s *Server) handleGet(params map[string]any) (any, error) {
 	if f, ok := params["format"].(string); ok && f != "" {
 		format = f
 	}
+	// Normalize "text" → "value": MCP schema uses "text" (natural for agents),
+	// but the inspect backend uses "value" as the canonical format name.
+	if format == "text" {
+		format = "value"
+	}
 
 	opts := commands.InspectOptions{
 		Format:      format,

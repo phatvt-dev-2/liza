@@ -131,6 +131,43 @@ func TestHandleGetTasksSlashID(t *testing.T) {
 	}
 }
 
+// TestHandleGetTextFormat verifies that format "text" is normalized to "value"
+func TestHandleGetTextFormat(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspace(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	// Get result with "text" format
+	textResult, err := server.handleGet(map[string]any{
+		"query":  "tasks/task-1",
+		"format": "text",
+	})
+	if err != nil {
+		t.Fatalf("handleGet with format=text failed: %v", err)
+	}
+
+	// Get result with "value" format
+	valueResult, err := server.handleGet(map[string]any{
+		"query":  "tasks/task-1",
+		"format": "value",
+	})
+	if err != nil {
+		t.Fatalf("handleGet with format=value failed: %v", err)
+	}
+
+	// Extract content text from both results
+	extractText := func(result any) string {
+		content := result.(map[string]any)["content"].([]any)
+		return content[0].(map[string]any)["text"].(string)
+	}
+
+	if extractText(textResult) != extractText(valueResult) {
+		t.Errorf("format=text and format=value produced different output:\ntext:  %s\nvalue: %s",
+			extractText(textResult), extractText(valueResult))
+	}
+}
+
 // TestHandleStatus verifies liza_status
 func TestHandleStatus(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspace(t)

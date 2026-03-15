@@ -47,7 +47,7 @@ func (s *Server) registerReadOnlyTools() {
 				},
 				"format": {
 					Type:        "string",
-					Description: "Output format (json, yaml, text)",
+					Description: "Output format (json, yaml, value). 'text' is accepted as alias for 'value'",
 					Default:     "json",
 				},
 			},
