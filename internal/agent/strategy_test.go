@@ -6,12 +6,118 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
 )
+
+// testResolver returns a pipeline.Resolver built from a minimal but complete
+// pipeline YAML containing all 9 standard roles. Tests use this instead of
+// loading from disk, ensuring deterministic behavior without file I/O.
+func testResolver(t *testing.T) *pipeline.Resolver {
+	t.Helper()
+	cfg, err := pipeline.LoadFromBytes(testPipelineYAML)
+	if err != nil {
+		t.Fatalf("testResolver: %v", err)
+	}
+	return pipeline.NewResolver(cfg)
+}
+
+// testPipelineYAML is the minimal pipeline config with all 9 standard roles
+// and the required role-pairs, sub-pipelines, and entry-points.
+var testPipelineYAML = []byte(`
+pipeline:
+  roles:
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+    epic-planner:
+      type: doer
+      display-name: "Epic Planner"
+    epic-plan-reviewer:
+      type: reviewer
+      display-name: "Epic Plan Reviewer"
+    us-writer:
+      type: doer
+      display-name: "US Writer"
+    us-reviewer:
+      type: reviewer
+      display-name: "US Reviewer"
+    code-planner:
+      type: doer
+      display-name: "Code Planner"
+    code-plan-reviewer:
+      type: reviewer
+      display-name: "Code Plan Reviewer"
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+    code-planning-pair:
+      doer: code-planner
+      reviewer: code-plan-reviewer
+      states:
+        initial: DRAFT_CODING_PLAN
+        executing: CODE_PLANNING
+        submitted: CODING_PLAN_TO_REVIEW
+        reviewing: REVIEWING_CODING_PLAN
+        approved: CODING_PLAN_APPROVED
+        rejected: CODING_PLAN_REJECTED
+    epic-planning-pair:
+      doer: epic-planner
+      reviewer: epic-plan-reviewer
+      states:
+        initial: DRAFT_EPIC
+        executing: PLANNING_EPIC
+        submitted: EPIC_TO_REVIEW
+        reviewing: REVIEWING_EPIC
+        approved: EPIC_APPROVED
+        rejected: EPIC_REJECTED
+    us-writing-pair:
+      doer: us-writer
+      reviewer: us-reviewer
+      states:
+        initial: DRAFT_USER_STORIES
+        executing: WRITING_USER_STORIES
+        submitted: USER_STORIES_TO_REVIEW
+        reviewing: REVIEWING_USER_STORIES
+        approved: USER_STORIES_APPROVED
+        rejected: USER_STORIES_REJECTED
+
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - code-planning-pair
+        - coding-pair
+      transitions:
+        - name: code-plan-to-coding
+          from: code-planning-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+
+  entry-points:
+    detailed-spec: coding-subpipeline.code-planning-pair
+`)
 
 // TestNewRoleStrategy verifies the factory creates the correct strategy type
 // with correct role and workflowRole for all 9 runtime roles.
 func TestNewRoleStrategy(t *testing.T) {
+	resolver := testResolver(t)
+
 	tests := []struct {
 		role         string
 		wantType     string // "doer", "reviewer", "orchestrator"
@@ -30,7 +136,7 @@ func TestNewRoleStrategy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.role, func(t *testing.T) {
-			s, err := NewRoleStrategy(tt.role)
+			s, err := NewRoleStrategy(tt.role, resolver)
 			if err != nil {
 				t.Fatalf("NewRoleStrategy(%q) error = %v", tt.role, err)
 			}
@@ -75,14 +181,107 @@ func TestNewRoleStrategy(t *testing.T) {
 
 // TestNewRoleStrategy_UnknownRole verifies the factory returns an error for unknown roles.
 func TestNewRoleStrategy_UnknownRole(t *testing.T) {
-	_, err := NewRoleStrategy("nonexistent-role")
+	resolver := testResolver(t)
+	_, err := NewRoleStrategy("nonexistent-role", resolver)
 	if err == nil {
 		t.Fatal("expected error for unknown role, got nil")
 	}
 }
 
+// TestNewRoleStrategy_CustomYAMLRole verifies that a hypothetical new doer role
+// defined in YAML gets *doerStrategy without modifying the NewRoleStrategy switch.
+// This uses the real pipeline resolver (not a mock), exercising the production path.
+func TestNewRoleStrategy_CustomYAMLRole(t *testing.T) {
+	// Pipeline config with a custom "data-engineer" doer role not in contextBuilders map.
+	customYAML := []byte(`
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+    data-engineer:
+      type: doer
+      display-name: "Data Engineer"
+    data-reviewer:
+      type: reviewer
+      display-name: "Data Reviewer"
+
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+    data-pair:
+      doer: data-engineer
+      reviewer: data-reviewer
+      states:
+        initial: DRAFT_DATA
+        executing: IMPLEMENTING_DATA
+        submitted: DATA_READY_FOR_REVIEW
+        reviewing: REVIEWING_DATA
+        approved: DATA_APPROVED
+        rejected: DATA_REJECTED
+
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+      transitions: []
+
+  entry-points:
+    code: coding-subpipeline.coding-pair
+`)
+
+	cfg, err := pipeline.LoadFromBytes(customYAML)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	resolver := pipeline.NewResolver(cfg)
+
+	// Custom doer role gets *doerStrategy
+	s, err := NewRoleStrategy("data-engineer", resolver)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy(data-engineer) error = %v", err)
+	}
+	ds, ok := s.(*doerStrategy)
+	if !ok {
+		t.Fatalf("expected *doerStrategy for custom doer role, got %T", s)
+	}
+	if ds.role != "data-engineer" {
+		t.Errorf("role = %q, want %q", ds.role, "data-engineer")
+	}
+	// Custom role uses its own name as workflowRole (no entry in roles.ToWorkflow)
+	if ds.workflowRole != "data-engineer" {
+		t.Errorf("workflowRole = %q, want %q", ds.workflowRole, "data-engineer")
+	}
+	// Custom role has no registered context builder (nil is expected)
+	if ds.buildContext != nil {
+		t.Error("custom role should have nil buildContext (no registered builder)")
+	}
+
+	// Custom reviewer role gets *reviewerStrategy
+	s2, err := NewRoleStrategy("data-reviewer", resolver)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy(data-reviewer) error = %v", err)
+	}
+	if _, ok := s2.(*reviewerStrategy); !ok {
+		t.Fatalf("expected *reviewerStrategy for custom reviewer role, got %T", s2)
+	}
+}
+
 // TestDefaultTimeout verifies correct timeout per category.
 func TestDefaultTimeout(t *testing.T) {
+	resolver := testResolver(t)
+
 	tests := []struct {
 		role string
 		want time.Duration
@@ -100,7 +299,7 @@ func TestDefaultTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.role, func(t *testing.T) {
-			s, err := NewRoleStrategy(tt.role)
+			s, err := NewRoleStrategy(tt.role, resolver)
 			if err != nil {
 				t.Fatalf("NewRoleStrategy(%q) error = %v", tt.role, err)
 			}
@@ -113,6 +312,8 @@ func TestDefaultTimeout(t *testing.T) {
 
 // TestWaitConfig verifies each role resolves the correct config keys and defaults.
 func TestWaitConfig(t *testing.T) {
+	resolver := testResolver(t)
+
 	tests := []struct {
 		role        string
 		wantPoll    time.Duration
@@ -136,7 +337,7 @@ func TestWaitConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.role+"/defaults", func(t *testing.T) {
-			s, err := NewRoleStrategy(tt.role)
+			s, err := NewRoleStrategy(tt.role, resolver)
 			if err != nil {
 				t.Fatalf("NewRoleStrategy(%q) error = %v", tt.role, err)
 			}
@@ -153,7 +354,7 @@ func TestWaitConfig(t *testing.T) {
 	// Verify each category reads the correct config keys (not each other's).
 	t.Run("custom_config/doer", func(t *testing.T) {
 		state := &models.State{Config: models.Config{CoderPollInterval: 5, CoderMaxWait: 60}}
-		s, _ := NewRoleStrategy(roles.RuntimeCoder)
+		s, _ := NewRoleStrategy(roles.RuntimeCoder, resolver)
 		poll, maxWait := s.WaitConfig(state)
 		if poll != 5*time.Second || maxWait != 60*time.Second {
 			t.Errorf("doer WaitConfig() = (%v, %v), want (5s, 1m0s)", poll, maxWait)
@@ -162,7 +363,7 @@ func TestWaitConfig(t *testing.T) {
 
 	t.Run("custom_config/reviewer", func(t *testing.T) {
 		state := &models.State{Config: models.Config{ReviewerPollInterval: 10, ReviewerMaxWait: 120}}
-		s, _ := NewRoleStrategy(roles.RuntimeCodeReviewer)
+		s, _ := NewRoleStrategy(roles.RuntimeCodeReviewer, resolver)
 		poll, maxWait := s.WaitConfig(state)
 		if poll != 10*time.Second || maxWait != 120*time.Second {
 			t.Errorf("reviewer WaitConfig() = (%v, %v), want (10s, 2m0s)", poll, maxWait)
@@ -171,7 +372,7 @@ func TestWaitConfig(t *testing.T) {
 
 	t.Run("custom_config/orchestrator", func(t *testing.T) {
 		state := &models.State{Config: models.Config{OrchestratorPollInterval: 15, OrchestratorMaxWait: 300}}
-		s, _ := NewRoleStrategy(roles.RuntimeOrchestrator)
+		s, _ := NewRoleStrategy(roles.RuntimeOrchestrator, resolver)
 		poll, maxWait := s.WaitConfig(state)
 		if poll != 15*time.Second || maxWait != 300*time.Second {
 			t.Errorf("orchestrator WaitConfig() = (%v, %v), want (15s, 5m0s)", poll, maxWait)
@@ -181,12 +382,12 @@ func TestWaitConfig(t *testing.T) {
 	// Cross-contamination: doer config should NOT affect reviewer or orchestrator
 	t.Run("custom_config/isolation", func(t *testing.T) {
 		state := &models.State{Config: models.Config{CoderPollInterval: 99, CoderMaxWait: 99}}
-		reviewer, _ := NewRoleStrategy(roles.RuntimeCodeReviewer)
+		reviewer, _ := NewRoleStrategy(roles.RuntimeCodeReviewer, resolver)
 		poll, _ := reviewer.WaitConfig(state)
 		if poll == 99*time.Second {
 			t.Error("reviewer should not read CoderPollInterval")
 		}
-		orch, _ := NewRoleStrategy(roles.RuntimeOrchestrator)
+		orch, _ := NewRoleStrategy(roles.RuntimeOrchestrator, resolver)
 		poll, _ = orch.WaitConfig(state)
 		if poll == 99*time.Second {
 			t.Error("orchestrator should not read CoderPollInterval")
@@ -196,9 +397,10 @@ func TestWaitConfig(t *testing.T) {
 
 // TestDoerPreWork_IsNoOp verifies doer PreWork returns (false, nil).
 func TestDoerPreWork_IsNoOp(t *testing.T) {
+	resolver := testResolver(t)
 	for _, role := range roles.DoerRoles() {
 		t.Run(role, func(t *testing.T) {
-			s, err := NewRoleStrategy(role)
+			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {
 				t.Fatalf("NewRoleStrategy(%q) error = %v", role, err)
 			}
@@ -215,7 +417,8 @@ func TestDoerPreWork_IsNoOp(t *testing.T) {
 
 // TestOrchestratorPreWork_IsNoOp verifies orchestrator PreWork returns (false, nil).
 func TestOrchestratorPreWork_IsNoOp(t *testing.T) {
-	s, err := NewRoleStrategy(roles.RuntimeOrchestrator)
+	resolver := testResolver(t)
+	s, err := NewRoleStrategy(roles.RuntimeOrchestrator, resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy() error = %v", err)
 	}
@@ -230,7 +433,8 @@ func TestOrchestratorPreWork_IsNoOp(t *testing.T) {
 
 // TestOrchestratorClaimTask_ReturnsEmpty verifies orchestrator ClaimTask returns ("", "", nil).
 func TestOrchestratorClaimTask_ReturnsEmpty(t *testing.T) {
-	s, err := NewRoleStrategy(roles.RuntimeOrchestrator)
+	resolver := testResolver(t)
+	s, err := NewRoleStrategy(roles.RuntimeOrchestrator, resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy() error = %v", err)
 	}
@@ -245,9 +449,10 @@ func TestOrchestratorClaimTask_ReturnsEmpty(t *testing.T) {
 
 // TestReviewerPostExecution_IsNoOp verifies reviewer PostExecution returns nil.
 func TestReviewerPostExecution_IsNoOp(t *testing.T) {
+	resolver := testResolver(t)
 	for _, role := range roles.ReviewerRoles() {
 		t.Run(role, func(t *testing.T) {
-			s, err := NewRoleStrategy(role)
+			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {
 				t.Fatalf("NewRoleStrategy(%q) error = %v", role, err)
 			}
@@ -260,9 +465,10 @@ func TestReviewerPostExecution_IsNoOp(t *testing.T) {
 
 // TestDoerPreExecution_IsNoOp verifies doer PreExecution returns nil.
 func TestDoerPreExecution_IsNoOp(t *testing.T) {
+	resolver := testResolver(t)
 	for _, role := range roles.DoerRoles() {
 		t.Run(role, func(t *testing.T) {
-			s, err := NewRoleStrategy(role)
+			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {
 				t.Fatalf("NewRoleStrategy(%q) error = %v", role, err)
 			}
@@ -275,9 +481,10 @@ func TestDoerPreExecution_IsNoOp(t *testing.T) {
 
 // TestReviewerPreExecution_IsNoOp verifies reviewer PreExecution returns nil.
 func TestReviewerPreExecution_IsNoOp(t *testing.T) {
+	resolver := testResolver(t)
 	for _, role := range roles.ReviewerRoles() {
 		t.Run(role, func(t *testing.T) {
-			s, err := NewRoleStrategy(role)
+			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {
 				t.Fatalf("NewRoleStrategy(%q) error = %v", role, err)
 			}
@@ -306,7 +513,8 @@ func TestReviewerEffectiveMaxRetries(t *testing.T) {
 // TestDoerPostExecution_NilClaimedTaskID verifies PostExecution is a no-op when
 // claimedTaskID is empty (no task was claimed).
 func TestDoerPostExecution_NilClaimedTaskID(t *testing.T) {
-	s, err := NewRoleStrategy(roles.RuntimeCoder)
+	resolver := testResolver(t)
+	s, err := NewRoleStrategy(roles.RuntimeCoder, resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy() error = %v", err)
 	}
@@ -318,9 +526,10 @@ func TestDoerPostExecution_NilClaimedTaskID(t *testing.T) {
 
 // TestAllRolesHaveStrategy ensures every role from roles.AllRuntime() has a strategy.
 func TestAllRolesHaveStrategy(t *testing.T) {
+	resolver := testResolver(t)
 	for _, role := range roles.AllRuntime() {
 		t.Run(role, func(t *testing.T) {
-			s, err := NewRoleStrategy(role)
+			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {
 				t.Fatalf("NewRoleStrategy(%q) error = %v", role, err)
 			}

@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -385,7 +386,16 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return err
 	}
 
-	strategy, err := NewRoleStrategy(config.Role)
+	// Load pipeline resolver for role type classification.
+	// The resolver reads role definitions from the pipeline YAML,
+	// enabling custom YAML-defined roles without Go code changes.
+	pipelineCfg, pipelineErr := pipeline.LoadFrozen(config.ProjectRoot)
+	if pipelineErr != nil {
+		return fmt.Errorf("loading pipeline config for strategy selection: %w", pipelineErr)
+	}
+	resolver := pipeline.NewResolver(pipelineCfg)
+
+	strategy, err := NewRoleStrategy(config.Role, resolver)
 	if err != nil {
 		return err
 	}

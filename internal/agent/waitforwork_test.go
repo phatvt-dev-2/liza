@@ -80,7 +80,7 @@ func TestWaitForCoderWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			strategy, _ := NewRoleStrategy("coder")
+			strategy, _ := NewRoleStrategy("coder", testResolver(t))
 			hasWork, err := strategy.WaitForWork(ctx, bb, config, 10*time.Millisecond, 100*time.Millisecond)
 
 			if err != nil {
@@ -151,7 +151,7 @@ func TestWaitForReviewerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			strategy, _ := NewRoleStrategy("code-reviewer")
+			strategy, _ := NewRoleStrategy("code-reviewer", testResolver(t))
 			hasWork, err := strategy.WaitForWork(ctx, db.New(statePath), config, 10*time.Millisecond, 100*time.Millisecond)
 
 			if err != nil {
@@ -235,7 +235,7 @@ func TestWaitForCodePlannerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			strategy, _ := NewRoleStrategy("code-planner")
+			strategy, _ := NewRoleStrategy("code-planner", testResolver(t))
 			hasWork, err := strategy.WaitForWork(ctx, db.New(statePath), config, 10*time.Millisecond, 100*time.Millisecond)
 			if err != nil {
 				t.Fatalf("WaitForWork() error = %v", err)
@@ -287,7 +287,7 @@ func TestWaitForCodePlanReviewerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			strategy, _ := NewRoleStrategy("code-plan-reviewer")
+			strategy, _ := NewRoleStrategy("code-plan-reviewer", testResolver(t))
 			hasWork, err := strategy.WaitForWork(ctx, db.New(statePath), config, 10*time.Millisecond, 100*time.Millisecond)
 			if err != nil {
 				t.Fatalf("WaitForWork() error = %v", err)
@@ -348,7 +348,7 @@ func TestWaitForOrchestratorWork(t *testing.T) {
 			defer cancel()
 
 			// Orchestrator now respects maxWait parameter (uses 100ms timeout for test)
-			strategy, _ := NewRoleStrategy("orchestrator")
+			strategy, _ := NewRoleStrategy("orchestrator", testResolver(t))
 			hasWork, err := strategy.WaitForWork(ctx, db.New(statePath), config, 10*time.Millisecond, 100*time.Millisecond)
 
 			if err != nil {
@@ -383,7 +383,7 @@ func TestOrchestratorRespectsMaxWaitConfig(t *testing.T) {
 	// Test with a short maxWait - orchestrator should timeout when maxWait is reached
 	ctx := context.Background()
 	startTime := time.Now()
-	strategy, _ := NewRoleStrategy("orchestrator")
+	strategy, _ := NewRoleStrategy("orchestrator", testResolver(t))
 	hasWork, err := strategy.WaitForWork(ctx, db.New(statePath), config, 10*time.Millisecond, 150*time.Millisecond)
 	elapsed := time.Since(startTime)
 
@@ -482,7 +482,7 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 			resultCh := make(chan bool, 1)
 			errCh := make(chan error, 1)
 
-			strategy, _ := NewRoleStrategy(tt.role)
+			strategy, _ := NewRoleStrategy(tt.role, testResolver(t))
 			go func() {
 				hasWork, err := strategy.WaitForWork(ctx, bb, config, 10*time.Millisecond, 5*time.Second)
 				if err != nil {
@@ -546,7 +546,7 @@ func TestWaitForWorkCancellation(t *testing.T) {
 	// Start waiting in goroutine
 	errCh := make(chan error, 1)
 	started := make(chan struct{})
-	strategy, _ := NewRoleStrategy("coder")
+	strategy, _ := NewRoleStrategy("coder", testResolver(t))
 	go func() {
 		close(started)
 		_, err := strategy.WaitForWork(ctx, bb, config, 10*time.Millisecond, 10*time.Second)
@@ -586,7 +586,7 @@ func TestWaitForWorkTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	startTime := time.Now()
-	strategy, _ := NewRoleStrategy("coder")
+	strategy, _ := NewRoleStrategy("coder", testResolver(t))
 	hasWork, err := strategy.WaitForWork(ctx, bb, config, 10*time.Millisecond, 200*time.Millisecond)
 	elapsed := time.Since(startTime)
 
@@ -623,7 +623,7 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 
 	// Start waiting in background
 	started := make(chan struct{})
-	strategy, _ := NewRoleStrategy("coder")
+	strategy, _ := NewRoleStrategy("coder", testResolver(t))
 	config := SupervisorConfig{StatePath: statePath, ProjectRoot: tmpDir, AgentID: "coder-1"}
 	go func() {
 		close(started)
@@ -747,7 +747,7 @@ func TestAbortPrecedenceOverWork(t *testing.T) {
 	defer cancel()
 
 	// Should return false (ABORT), not true (work available)
-	strategy, _ := NewRoleStrategy("coder")
+	strategy, _ := NewRoleStrategy("coder", testResolver(t))
 	config := SupervisorConfig{StatePath: statePath, ProjectRoot: tmpDir, AgentID: "coder-1"}
 	hasWork, err := strategy.WaitForWork(ctx, bb, config, 10*time.Millisecond, 100*time.Millisecond)
 
@@ -945,7 +945,7 @@ func TestWaitForEpicPlannerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			strategy, _ := NewRoleStrategy("epic-planner")
+			strategy, _ := NewRoleStrategy("epic-planner", testResolver(t))
 			hasWork, err := strategy.WaitForWork(ctx, db.New(statePath), config, 10*time.Millisecond, 100*time.Millisecond)
 			if err != nil {
 				t.Fatalf("WaitForWork() error = %v", err)
@@ -1017,7 +1017,7 @@ func TestWaitForEpicPlanReviewerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			strategy, _ := NewRoleStrategy("epic-plan-reviewer")
+			strategy, _ := NewRoleStrategy("epic-plan-reviewer", testResolver(t))
 			hasWork, err := strategy.WaitForWork(ctx, db.New(statePath), config, 10*time.Millisecond, 100*time.Millisecond)
 			if err != nil {
 				t.Fatalf("WaitForWork() error = %v", err)
@@ -1089,7 +1089,7 @@ func TestWaitForUSWriterWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			strategy, _ := NewRoleStrategy("us-writer")
+			strategy, _ := NewRoleStrategy("us-writer", testResolver(t))
 			hasWork, err := strategy.WaitForWork(ctx, db.New(statePath), config, 10*time.Millisecond, 100*time.Millisecond)
 			if err != nil {
 				t.Fatalf("WaitForWork() error = %v", err)
@@ -1161,7 +1161,7 @@ func TestWaitForUSReviewerWork(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 
-			strategy, _ := NewRoleStrategy("us-reviewer")
+			strategy, _ := NewRoleStrategy("us-reviewer", testResolver(t))
 			hasWork, err := strategy.WaitForWork(ctx, db.New(statePath), config, 10*time.Millisecond, 100*time.Millisecond)
 			if err != nil {
 				t.Fatalf("WaitForWork() error = %v", err)
@@ -1191,7 +1191,7 @@ func TestWaitForCoderWorkDetectsResumableHandoff(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	strategy, _ := NewRoleStrategy("coder")
+	strategy, _ := NewRoleStrategy("coder", testResolver(t))
 	config := SupervisorConfig{StatePath: statePath, ProjectRoot: tmpDir, AgentID: "coder-1"}
 	hasWork, err := strategy.WaitForWork(ctx, bb, config, 10*time.Millisecond, 200*time.Millisecond)
 	if err != nil {

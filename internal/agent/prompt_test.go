@@ -16,7 +16,8 @@ import (
 // Strategy creation failure is always fatal; BuildPrompt errors are returned.
 func testBuildPrompt(t *testing.T, state *models.State, config SupervisorConfig, taskID string) (string, error) {
 	t.Helper()
-	strategy, err := NewRoleStrategy(config.Role)
+	resolver := testResolver(t)
+	strategy, err := NewRoleStrategy(config.Role, resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy(%q) error = %v", config.Role, err)
 	}

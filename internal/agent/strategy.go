@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -40,39 +41,52 @@ type RoleStrategy interface {
 	PostExecution(bb *db.Blackboard, config SupervisorConfig, taskID, claimedTaskID string, stateBefore *models.State) error
 }
 
+// contextBuilders maps known role names to their prompt context builder functions.
+// Roles not in this map (e.g., user-defined YAML roles) get nil buildContext —
+// strategy creation succeeds, but BuildPrompt will return an error until
+// Phase 2 introduces composable prompt sections.
+var contextBuilders = map[string]contextBuilderFunc{
+	"coder":              coderContext,
+	"code-planner":       codePlannerContext,
+	"epic-planner":       epicPlannerContext,
+	"us-writer":          usWriterContext,
+	"code-reviewer":      codeReviewerContext,
+	"code-plan-reviewer": codePlanReviewerContext,
+	"epic-plan-reviewer": epicPlanReviewerContext,
+	"us-reviewer":        usReviewerContext,
+}
+
 // NewRoleStrategy creates the appropriate strategy for the given runtime role.
-func NewRoleStrategy(role string) (RoleStrategy, error) {
-	workflowRole, err := roles.ToWorkflow(role)
+// The resolver determines the role's type (doer/reviewer/orchestrator) from the
+// pipeline YAML, enabling custom YAML-defined roles to get the correct strategy
+// without modifying this function.
+func NewRoleStrategy(role string, resolver *pipeline.Resolver) (RoleStrategy, error) {
+	roleType, err := resolver.RoleType(role)
 	if err != nil {
 		return nil, fmt.Errorf("unknown role %q: %w", role, err)
 	}
 
-	switch role {
-	// Doer roles
-	case roles.RuntimeCoder:
-		return &doerStrategy{role: role, workflowRole: workflowRole, buildContext: coderContext}, nil
-	case roles.RuntimeCodePlanner:
-		return &doerStrategy{role: role, workflowRole: workflowRole, buildContext: codePlannerContext}, nil
-	case roles.RuntimeEpicPlanner:
-		return &doerStrategy{role: role, workflowRole: workflowRole, buildContext: epicPlannerContext}, nil
-	case roles.RuntimeUSWriter:
-		return &doerStrategy{role: role, workflowRole: workflowRole, buildContext: usWriterContext}, nil
+	// Derive workflowRole for backward compatibility (Phase 4 removes this).
+	// For known roles, use the canonical mapping; for custom roles, use the
+	// role name itself as the workflow name.
+	workflowRole, wfErr := roles.ToWorkflow(role)
+	if wfErr != nil {
+		workflowRole = role
+	}
 
-	// Reviewer roles
-	case roles.RuntimeCodeReviewer:
-		return &reviewerStrategy{role: role, workflowRole: workflowRole, buildContext: codeReviewerContext}, nil
-	case roles.RuntimeCodePlanReviewer:
-		return &reviewerStrategy{role: role, workflowRole: workflowRole, buildContext: codePlanReviewerContext}, nil
-	case roles.RuntimeEpicPlanReviewer:
-		return &reviewerStrategy{role: role, workflowRole: workflowRole, buildContext: epicPlanReviewerContext}, nil
-	case roles.RuntimeUSReviewer:
-		return &reviewerStrategy{role: role, workflowRole: workflowRole, buildContext: usReviewerContext}, nil
+	// Look up per-role context builder. nil is acceptable for custom roles —
+	// strategy creation succeeds, BuildPrompt will error if called without
+	// a registered builder (Phase 2 will add composable prompt sections).
+	ctxBuilder := contextBuilders[role]
 
-	// Orchestrator
-	case roles.RuntimeOrchestrator:
+	switch roleType {
+	case "doer":
+		return &doerStrategy{role: role, workflowRole: workflowRole, buildContext: ctxBuilder}, nil
+	case "reviewer":
+		return &reviewerStrategy{role: role, workflowRole: workflowRole, buildContext: ctxBuilder}, nil
+	case "orchestrator":
 		return &orchestratorStrategy{}, nil
-
 	default:
-		return nil, fmt.Errorf("no strategy for role %q", role)
+		return nil, fmt.Errorf("unsupported role type %q for role %q", roleType, role)
 	}
 }
