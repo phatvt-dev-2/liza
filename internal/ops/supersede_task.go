@@ -24,16 +24,16 @@ type SupersedeResult struct {
 // linking it to one or more replacement task IDs. No terminal I/O.
 func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, agentID string) (*SupersedeResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if len(replacementIDs) == 0 {
-		return nil, fmt.Errorf("at least one replacement task ID is required")
+		return nil, &PreconditionError{Reason: "at least one replacement task ID is required"}
 	}
 	if reason == "" {
-		return nil, fmt.Errorf("rescope reason is required")
+		return nil, &PreconditionError{Reason: "rescope reason is required"}
 	}
 	if agentID == "" {
-		return nil, fmt.Errorf("orchestrator agent ID is required")
+		return nil, &PreconditionError{Reason: "orchestrator agent ID is required"}
 	}
 
 	lp := paths.New(projectRoot)
@@ -54,7 +54,7 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 	if originalStatus != models.TaskStatusBlocked &&
 		originalStatus != models.TaskStatusRejected &&
 		originalStatus != models.TaskStatusReady {
-		return nil, fmt.Errorf("cannot supersede task %s in status %s (must be BLOCKED, REJECTED, or READY)", taskID, originalStatus)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("cannot supersede task %s in status %s (must be BLOCKED, REJECTED, or READY)", taskID, originalStatus)}
 	}
 
 	// Phase 2: Atomic State Update
@@ -66,7 +66,7 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 		}
 
 		if currentTask.Status != originalStatus {
-			return fmt.Errorf("cannot supersede task %s: status changed from %s to %s", taskID, originalStatus, currentTask.Status)
+			return &PreconditionError{Reason: fmt.Sprintf("cannot supersede task %s: status changed from %s to %s", taskID, originalStatus, currentTask.Status)}
 		}
 
 		if err := currentTask.TransitionWith(models.TaskStatusSuperseded, pb.transitions); err != nil {

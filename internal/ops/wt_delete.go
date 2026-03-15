@@ -22,7 +22,7 @@ type DeleteWorktreeResult struct {
 // BLOCKED, ABANDONED, SUPERSEDED, or MERGED tasks are eligible. No terminal I/O.
 func DeleteWorktree(projectRoot, taskID string) (*DeleteWorktreeResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 
 	lp := paths.New(projectRoot)
@@ -40,7 +40,7 @@ func DeleteWorktree(projectRoot, taskID string) (*DeleteWorktreeResult, error) {
 	case models.TaskStatusMerged:
 		warnings = append(warnings, fmt.Sprintf("Task %s is MERGED — worktree should already be cleaned", taskID))
 	default:
-		return nil, fmt.Errorf("cannot delete worktree for task %s (status: %s), deletion only allowed for: BLOCKED, ABANDONED, SUPERSEDED, MERGED", taskID, task.Status)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("cannot delete worktree for task %s (status: %s), deletion only allowed for: BLOCKED, ABANDONED, SUPERSEDED, MERGED", taskID, task.Status)}
 	}
 
 	if task.Worktree == nil {

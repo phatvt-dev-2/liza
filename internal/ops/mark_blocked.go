@@ -21,19 +21,19 @@ type MarkBlockedResult struct {
 // questions per the blocking protocol. Uses pipeline-defined executing statuses.
 func MarkBlocked(projectRoot, taskID, reason string, questions []string, agentID string) (*MarkBlockedResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if reason == "" {
-		return nil, fmt.Errorf("reason is required")
+		return nil, &PreconditionError{Reason: "reason is required"}
 	}
 	if agentID == "" {
-		return nil, fmt.Errorf("agent ID is required")
+		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
 	if len(questions) == 0 {
-		return nil, fmt.Errorf("at least 1 question is required")
+		return nil, &PreconditionError{Reason: "at least 1 question is required"}
 	}
 	if len(questions) > 3 {
-		return nil, fmt.Errorf("maximum 3 questions allowed per blocking protocol")
+		return nil, &PreconditionError{Reason: "maximum 3 questions allowed per blocking protocol"}
 	}
 
 	lp := paths.New(projectRoot)
@@ -60,11 +60,11 @@ func MarkBlocked(projectRoot, taskID, reason string, questions []string, agentID
 		}
 
 		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return fmt.Errorf("task must be in an executing status to be marked blocked, current status: %s", task.Status)
+			return &PreconditionError{Reason: fmt.Sprintf("task must be in an executing status to be marked blocked, current status: %s", task.Status)}
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
-			return fmt.Errorf("only the assigned agent can mark task as blocked")
+			return &PreconditionError{Reason: "only the assigned agent can mark task as blocked"}
 		}
 
 		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {

@@ -43,10 +43,10 @@ type claimWorktreePhaseResult struct {
 // Returns a structured ClaimResult on success. No terminal I/O.
 func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if agentID == "" {
-		return nil, fmt.Errorf("agent ID is required")
+		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
 
 	// Worktree path is deterministic from taskID — always "worktrees/<taskID>".
@@ -86,7 +86,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	}
 
 	if task.RolePair == "" {
-		return nil, fmt.Errorf("task %s has no role_pair set", taskID)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
 	}
 
 	// Resolve statuses from pipeline config
@@ -115,13 +115,13 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	case models.TaskStatusIntegrationFailed:
 		strategy = integrationFixClaimStrategy{}
 	default:
-		return nil, fmt.Errorf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is %s (not claimable by %s)", taskID, task.Status, runtimeRole)}
 	}
 	pipelineTransitions = BuildPipelineTransitions(resolver)
 
 	agent, exists := state.Agents[agentID]
 	if exists && agent.CurrentTask != nil && *agent.CurrentTask != "" && *agent.CurrentTask != taskID {
-		return nil, fmt.Errorf("agent %s is already working on task %s", agentID, *agent.CurrentTask)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("agent %s is already working on task %s", agentID, *agent.CurrentTask)}
 	}
 
 	// Store values for Phase 2
@@ -154,12 +154,12 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 			return nil, fmt.Errorf("failed to enforce iteration limit: %w", err)
 		}
 
-		return nil, fmt.Errorf(
+		return nil, &PreconditionError{Reason: fmt.Sprintf(
 			"task %s reached max iterations (%d/%d) and was transitioned to BLOCKED",
 			taskID,
 			blockedIteration,
 			blockedLimit,
-		)
+		)}
 	}
 
 	// --- Phase 2: Handle Worktree ---
@@ -216,7 +216,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		if worktreeCreated {
 			worktreePath := filepath.Join(lp.ProjectRoot(), worktreeRel)
 			if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
-				return fmt.Errorf("worktree directory does not exist: %s", worktreePath)
+				return &PreconditionError{Reason: fmt.Sprintf("worktree directory does not exist: %s", worktreePath)}
 			}
 		}
 

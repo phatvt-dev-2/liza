@@ -239,10 +239,10 @@ func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string)
 // No terminal I/O — integration test output is captured and returned in the result or error.
 func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if agentID == "" {
-		return nil, fmt.Errorf("agent ID is required")
+		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
 
 	// Setup paths
@@ -263,11 +263,11 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 	pr := pb.pr
 
 	if !models.IsApprovedForMerge(task, pr) {
-		return nil, fmt.Errorf("task must be in an approved state to merge (current status: %s)", task.Status)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task must be in an approved state to merge (current status: %s)", task.Status)}
 	}
 
 	if task.ReviewCommit == nil {
-		return nil, fmt.Errorf("task has no review_commit")
+		return nil, &PreconditionError{Reason: "task has no review_commit"}
 	}
 
 	// Initialize git wrapper

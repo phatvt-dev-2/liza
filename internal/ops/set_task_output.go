@@ -20,24 +20,24 @@ type SetTaskOutputInput struct {
 // a pipeline-defined executing status). Overwrites any existing output (idempotent).
 func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 	if input.TaskID == "" {
-		return fmt.Errorf("task_id is required")
+		return &PreconditionError{Reason: "task_id is required"}
 	}
 	if input.AgentID == "" {
-		return fmt.Errorf("agent_id is required")
+		return &PreconditionError{Reason: "agent_id is required"}
 	}
 	if len(input.Output) == 0 {
-		return fmt.Errorf("output is required (at least one entry)")
+		return &PreconditionError{Reason: "output is required (at least one entry)"}
 	}
 
 	for i, entry := range input.Output {
 		if entry.Desc == "" {
-			return fmt.Errorf("output[%d].desc is required", i)
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].desc is required", i)}
 		}
 		if entry.DoneWhen == "" {
-			return fmt.Errorf("output[%d].done_when is required", i)
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].done_when is required", i)}
 		}
 		if entry.Scope == "" {
-			return fmt.Errorf("output[%d].scope is required", i)
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].scope is required", i)}
 		}
 	}
 
@@ -69,7 +69,7 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 		}
 
 		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return fmt.Errorf("task %s is not in an executing state (current status: %s)", input.TaskID, task.Status)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing state (current status: %s)", input.TaskID, task.Status)}
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != input.AgentID {
@@ -77,7 +77,7 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 			if task.AssignedTo != nil {
 				currentAgent = *task.AssignedTo
 			}
-			return fmt.Errorf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}
 		}
 
 		task.Output = input.Output

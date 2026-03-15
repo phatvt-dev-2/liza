@@ -54,25 +54,25 @@ func (e *PostWriteValidationError) Unwrap() error {
 // and appends to the activity log. No terminal I/O.
 func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID string) (*AddTaskResult, error) {
 	if orchestratorID == "" {
-		return nil, fmt.Errorf("orchestrator agent ID is required")
+		return nil, &PreconditionError{Reason: "orchestrator agent ID is required"}
 	}
 	if err := paths.ValidateTaskID(input.ID); err != nil {
 		return nil, fmt.Errorf("invalid task ID: %w", err)
 	}
 	if input.Description == "" {
-		return nil, fmt.Errorf("description is required")
+		return nil, &PreconditionError{Reason: "description is required"}
 	}
 	if input.SpecRef == "" {
-		return nil, fmt.Errorf("spec_ref is required")
+		return nil, &PreconditionError{Reason: "spec_ref is required"}
 	}
 	if input.DoneWhen == "" {
-		return nil, fmt.Errorf("done_when is required")
+		return nil, &PreconditionError{Reason: "done_when is required"}
 	}
 	if input.Scope == "" {
-		return nil, fmt.Errorf("scope is required")
+		return nil, &PreconditionError{Reason: "scope is required"}
 	}
 	if input.Priority < 1 {
-		return nil, fmt.Errorf("priority must be positive, got %d", input.Priority)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("priority must be positive, got %d", input.Priority)}
 	}
 
 	if input.Type == "" {
@@ -140,7 +140,7 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 
 	err = bb.Modify(func(state *models.State) error {
 		if state.FindTask(input.ID) != nil {
-			return fmt.Errorf("task '%s' already exists in %s", input.ID, statePath)
+			return &PreconditionError{Reason: fmt.Sprintf("task '%s' already exists", input.ID)}
 		}
 		state.Tasks = append(state.Tasks, newTask)
 
@@ -207,11 +207,11 @@ type AddTaskItemResult struct {
 // independently; failed tasks don't block subsequent ones.
 func AddTasks(statePath, logPath string, input *AddTasksInput) (*AddTasksResult, error) {
 	if len(input.Tasks) == 0 {
-		return nil, fmt.Errorf("at least one task is required")
+		return nil, &PreconditionError{Reason: "at least one task is required"}
 	}
 	orchestratorID := input.OrchestratorID
 	if orchestratorID == "" {
-		return nil, fmt.Errorf("orchestrator agent ID is required")
+		return nil, &PreconditionError{Reason: "orchestrator agent ID is required"}
 	}
 	result := &AddTasksResult{Results: make([]AddTaskItemResult, 0, len(input.Tasks))}
 	for i := range input.Tasks {

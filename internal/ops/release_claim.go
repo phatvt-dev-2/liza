@@ -108,12 +108,12 @@ func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, p
 	lease := cfg.leaseFieldFn(task)
 
 	if agent != nil && lease == nil && !force {
-		return false, fmt.Errorf(cfg.missingLeaseMsg, task.ID)
+		return false, &PreconditionError{Reason: fmt.Sprintf(cfg.missingLeaseMsg, task.ID)}
 	}
 
 	if lease != nil && !force {
 		if lease.After(now) {
-			return false, fmt.Errorf(cfg.activeLeaseMsg, lease.Format(time.RFC3339))
+			return false, &PreconditionError{Reason: fmt.Sprintf(cfg.activeLeaseMsg, lease.Format(time.RFC3339))}
 		}
 	}
 
@@ -143,11 +143,11 @@ func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, p
 // force, refuses if lease is still valid. No terminal I/O.
 func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID string) (*ReleaseClaimResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 
 	if role != roles.ClaimReviewer && role != roles.ClaimDoer && role != roles.ClaimBoth {
-		return nil, fmt.Errorf("role must be reviewer, doer, or both, got: %s", role)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("role must be reviewer, doer, or both, got: %s", role)}
 	}
 
 	if agentID == "" {
@@ -199,7 +199,7 @@ func ReleaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 		}
 
 		if !releasedReviewer && !releasedDoer {
-			return fmt.Errorf("no claims to release for task %s", taskID)
+			return &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}
 		}
 
 		return nil

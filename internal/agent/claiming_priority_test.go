@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -519,8 +520,8 @@ func TestClaimReviewerTask_NoReviewableTasks(t *testing.T) {
 	}
 
 	// claimReviewerTask wraps the error in a Modify() call, so check for substring
-	if err.Error() != "modification function failed: no reviewable tasks found" {
-		t.Errorf("Expected 'modification function failed: no reviewable tasks found' error, got: %v", err)
+	if !strings.Contains(err.Error(), "no reviewable tasks found") {
+		t.Errorf("Expected error containing 'no reviewable tasks found', got: %v", err)
 	}
 }
 

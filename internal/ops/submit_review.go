@@ -29,13 +29,13 @@ type SubmitForReviewResult struct {
 // No terminal I/O.
 func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitForReviewResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if commitSHA == "" {
-		return nil, fmt.Errorf("commit SHA is required")
+		return nil, &PreconditionError{Reason: "commit SHA is required"}
 	}
 	if agentID == "" {
-		return nil, fmt.Errorf("LIZA_AGENT_ID is required")
+		return nil, &PreconditionError{Reason: "LIZA_AGENT_ID is required"}
 	}
 
 	lp := paths.New(projectRoot)
@@ -58,7 +58,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
 	if task.RolePair == "" {
-		return nil, fmt.Errorf("task %s has no role_pair set", taskID)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
 	}
 	expectedCurrentStatus, err := resolver.ExecutingStatus(task.RolePair)
 	if err != nil {
@@ -71,7 +71,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	pipelineTransitions := BuildPipelineTransitions(resolver)
 
 	if task.Status != expectedCurrentStatus {
-		return nil, fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)}
 	}
 
 	if task.AssignedTo == nil || *task.AssignedTo != agentID {
@@ -79,11 +79,11 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		if task.AssignedTo != nil {
 			currentAgent = *task.AssignedTo
 		}
-		return nil, fmt.Errorf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)}
 	}
 
 	if task.Worktree == nil {
-		return nil, fmt.Errorf("task %s has no worktree", taskID)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no worktree", taskID)}
 	}
 
 	// Pre-execution checkpoint required before submission
@@ -96,7 +96,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	wtPath := g.GetWorktreePath(taskID)
 
 	if _, err := os.Stat(wtPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("worktree directory does not exist: %s", wtPath)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("worktree directory does not exist: %s", wtPath)}
 	}
 
 	wtBranch, err := g.GetWorktreeBranch(wtPath)
@@ -107,9 +107,9 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	expectedBranch := paths.TaskBranchPrefix + taskID
 	if wtBranch != expectedBranch {
 		if wtBranch == "" {
-			return nil, fmt.Errorf("worktree is in detached HEAD state (expected branch: %s)", expectedBranch)
+			return nil, &PreconditionError{Reason: fmt.Sprintf("worktree is in detached HEAD state (expected branch: %s)", expectedBranch)}
 		}
-		return nil, fmt.Errorf("worktree is on branch %s (expected: %s)", wtBranch, expectedBranch)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("worktree is on branch %s (expected: %s)", wtBranch, expectedBranch)}
 	}
 
 	preRebaseCommit, err := g.GetWorktreeHEAD(taskID)
@@ -117,7 +117,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, fmt.Errorf("failed to get pre-rebase commit SHA: %w", err)
 	}
 	if commitSHA != preRebaseCommit {
-		return nil, fmt.Errorf("provided commit SHA %s does not match worktree HEAD %s", commitSHA, preRebaseCommit)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit SHA %s does not match worktree HEAD %s", commitSHA, preRebaseCommit)}
 	}
 
 	// TDD enforcement: code tasks must include test files (coder role only).
@@ -184,7 +184,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		}
 
 		if task.Status != expectedCurrentStatus {
-			return fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)}
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
@@ -192,7 +192,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 			if task.AssignedTo != nil {
 				currentAgent = *task.AssignedTo
 			}
-			return fmt.Errorf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)}
 		}
 
 		if err := task.TransitionWith(targetSubmittedStatus, pipelineTransitions); err != nil {

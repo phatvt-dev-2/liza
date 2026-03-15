@@ -29,22 +29,22 @@ type VerdictResult struct {
 // No terminal I/O.
 func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*VerdictResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if verdict == "" {
-		return nil, fmt.Errorf("verdict is required")
+		return nil, &PreconditionError{Reason: "verdict is required"}
 	}
 	if agentID == "" {
-		return nil, fmt.Errorf("LIZA_AGENT_ID is required")
+		return nil, &PreconditionError{Reason: "LIZA_AGENT_ID is required"}
 	}
 
 	verdict = strings.ToUpper(verdict)
 	if verdict != "APPROVED" && verdict != "REJECTED" {
-		return nil, fmt.Errorf("verdict must be APPROVED or REJECTED, got: %s", verdict)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("verdict must be APPROVED or REJECTED, got: %s", verdict)}
 	}
 
 	if verdict == "REJECTED" && reason == "" {
-		return nil, fmt.Errorf("rejection reason is required for REJECTED verdict")
+		return nil, &PreconditionError{Reason: "rejection reason is required for REJECTED verdict"}
 	}
 
 	lp := paths.New(projectRoot)
@@ -66,7 +66,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
 	if task.RolePair == "" {
-		return nil, fmt.Errorf("task %s has no role_pair set", taskID)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
 	}
 	expectedReviewingStatus, err := resolver.ReviewingStatus(task.RolePair)
 	if err != nil {
@@ -84,12 +84,12 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 
 	// Fast-fail before git operations; re-checked authoritatively inside Modify.
 	if task.Status != expectedReviewingStatus {
-		return nil, fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedReviewingStatus, task.Status)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedReviewingStatus, task.Status)}
 	}
 
 	// Phase 2: Validate ReviewCommit exists and matches worktree HEAD
 	if task.ReviewCommit == nil {
-		return nil, fmt.Errorf("task %s has no review_commit — cannot submit verdict", taskID)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no review_commit — cannot submit verdict", taskID)}
 	}
 
 	g := git.New(projectRoot)
@@ -104,7 +104,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 			return nil, fmt.Errorf("failed to get worktree HEAD: %w", headErr)
 		}
 		if *task.ReviewCommit != wtHEAD {
-			return nil, fmt.Errorf("review_commit %s does not match worktree HEAD %s — worktree was modified after submission", *task.ReviewCommit, wtHEAD)
+			return nil, &PreconditionError{Reason: fmt.Sprintf("review_commit %s does not match worktree HEAD %s — worktree was modified after submission", *task.ReviewCommit, wtHEAD)}
 		}
 	}
 
@@ -120,7 +120,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		}
 
 		if task.Status != expectedReviewingStatus {
-			return fmt.Errorf("task %s is not %s (current status: %s)", taskID, expectedReviewingStatus, task.Status)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedReviewingStatus, task.Status)}
 		}
 
 		transitionTask := func(to models.TaskStatus) error {

@@ -33,19 +33,19 @@ type WriteCheckpointInput struct {
 // The checkpoint must be written before submitting for review.
 func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 	if input.TaskID == "" {
-		return fmt.Errorf("task_id is required")
+		return &PreconditionError{Reason: "task_id is required"}
 	}
 	if input.AgentID == "" {
-		return fmt.Errorf("agent_id is required")
+		return &PreconditionError{Reason: "agent_id is required"}
 	}
 	if input.Intent == "" {
-		return fmt.Errorf("intent is required")
+		return &PreconditionError{Reason: "intent is required"}
 	}
 	if input.ValidationPlan == "" {
-		return fmt.Errorf("validation_plan is required")
+		return &PreconditionError{Reason: "validation_plan is required"}
 	}
 	if len(input.FilesToModify) == 0 {
-		return fmt.Errorf("files_to_modify is required (at least one file)")
+		return &PreconditionError{Reason: "files_to_modify is required (at least one file)"}
 	}
 
 	lp := paths.New(projectRoot)
@@ -72,7 +72,7 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 		}
 
 		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return fmt.Errorf("task %s is not in an executing state (current status: %s)", input.TaskID, task.Status)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing state (current status: %s)", input.TaskID, task.Status)}
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != input.AgentID {
@@ -80,7 +80,7 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 			if task.AssignedTo != nil {
 				currentAgent = *task.AssignedTo
 			}
-			return fmt.Errorf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}
 		}
 
 		extra := map[string]any{

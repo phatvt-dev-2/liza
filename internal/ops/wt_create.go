@@ -27,7 +27,7 @@ type CreateWorktreeResult struct {
 // deletes any existing worktree first (for reassignment). No terminal I/O.
 func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 
 	lp := paths.New(projectRoot)
@@ -42,7 +42,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 
 	pr, _ := LoadResolverForModels(projectRoot)
 	if !models.IsExecutingStatus(task, pr) {
-		return nil, fmt.Errorf("task %s is not in an executing state (status: %s)", taskID, task.Status)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing state (status: %s)", taskID, task.Status)}
 	}
 
 	integrationBranch := state.Config.IntegrationBranch

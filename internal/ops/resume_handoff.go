@@ -27,7 +27,7 @@ type ResumeHandoffResult struct {
 // Returns Found=false when no resumable handoff exists.
 func ResumeHandoff(input ResumeHandoffInput) (*ResumeHandoffResult, error) {
 	if input.AgentID == "" {
-		return nil, fmt.Errorf("agent ID is required")
+		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
 
 	lp := paths.New(input.ProjectRoot)
@@ -64,7 +64,7 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 			continue
 		}
 		if task.Worktree == nil {
-			return nil, fmt.Errorf("handoff task %s missing worktree", task.ID)
+			return nil, &PreconditionError{Reason: fmt.Sprintf("handoff task %s missing worktree", task.ID)}
 		}
 
 		id := task.ID
@@ -76,10 +76,10 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 				return &lizaerrors.NotFoundError{Entity: "task", ID: id}
 			}
 			if !isExecutingStatus(t.Status, executingStatuses) {
-				return fmt.Errorf("task %s is no longer in an executing state (current: %s)", id, t.Status)
+				return &PreconditionError{Reason: fmt.Sprintf("task %s is no longer in an executing state (current: %s)", id, t.Status)}
 			}
 			if t.AssignedTo == nil || *t.AssignedTo != agentID {
-				return fmt.Errorf("task %s is no longer assigned to %s", id, agentID)
+				return &PreconditionError{Reason: fmt.Sprintf("task %s is no longer assigned to %s", id, agentID)}
 			}
 
 			if t.LeaseExpires == nil || t.LeaseExpires.Before(now) {

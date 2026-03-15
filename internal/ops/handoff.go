@@ -22,16 +22,16 @@ type HandoffResult struct {
 // transitions the initiating agent to HANDOFF status. No terminal I/O.
 func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*HandoffResult, error) {
 	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if summary == "" {
-		return nil, fmt.Errorf("summary is required")
+		return nil, &PreconditionError{Reason: "summary is required"}
 	}
 	if nextAction == "" {
-		return nil, fmt.Errorf("next action is required")
+		return nil, &PreconditionError{Reason: "next action is required"}
 	}
 	if agentID == "" {
-		return nil, fmt.Errorf("LIZA_AGENT_ID is required")
+		return nil, &PreconditionError{Reason: "LIZA_AGENT_ID is required"}
 	}
 
 	lp := paths.New(projectRoot)
@@ -61,11 +61,11 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 		}
 
 		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return fmt.Errorf("task %s is not in an executing status (current status: %s)", taskID, task.Status)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing status (current status: %s)", taskID, task.Status)}
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
-			return fmt.Errorf("task %s is not assigned to agent %s", taskID, agentID)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s", taskID, agentID)}
 		}
 
 		task.HandoffPending = true

@@ -33,7 +33,7 @@ type ClaimReviewerTaskResult struct {
 // the agent status. This operation is reachable from both MCP and CLI consumers.
 func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, error) {
 	if input.AgentID == "" {
-		return nil, fmt.Errorf("agent ID is required")
+		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
 	if input.LeaseDuration <= 0 {
 		input.LeaseDuration = models.DefaultLeaseDurationSeconds
@@ -78,16 +78,16 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		task := pickRandomFromTopTier(candidates)
 
 		if task == nil {
-			return fmt.Errorf("no reviewable tasks found")
+			return &PreconditionError{Reason: "no reviewable tasks found"}
 		}
 
 		// Invariant: task must have review_commit before it can be claimed for review
 		if task.ReviewCommit == nil {
-			return fmt.Errorf("task %s has no review_commit — cannot claim for review", task.ID)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s has no review_commit — cannot claim for review", task.ID)}
 		}
 
 		if task.RolePair == "" {
-			return fmt.Errorf("task %s has no role_pair set", task.ID)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", task.ID)}
 		}
 		reviewing, err := pr.ReviewingStatus(task.RolePair)
 		if err != nil {
