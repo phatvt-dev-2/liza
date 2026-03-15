@@ -15,14 +15,15 @@ import (
 
 // Server represents the MCP server
 type Server struct {
-	projectRoot string
-	logPath     string
-	logger      *slog.Logger
-	bb          *db.Blackboard
-	resolver    *pipeline.Resolver
-	tools       map[string]protocol.Tool
-	resources   map[string]protocol.Resource
-	handlers    map[string]ToolHandler
+	projectRoot     string
+	logPath         string
+	logger          *slog.Logger
+	bb              *db.Blackboard
+	resolver        *pipeline.Resolver
+	pipelineLoadErr error // non-nil when pipeline config failed to load
+	tools           map[string]protocol.Tool
+	resources       map[string]protocol.Resource
+	handlers        map[string]ToolHandler
 }
 
 // NewServer creates a new MCP server.
@@ -41,14 +42,15 @@ func NewServer(projectRoot, logPath string) *Server {
 	}
 
 	s := &Server{
-		projectRoot: projectRoot,
-		logPath:     logPath,
-		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
-		bb:          db.For(paths.New(projectRoot).StatePath()),
-		resolver:    resolver,
-		tools:       make(map[string]protocol.Tool),
-		resources:   make(map[string]protocol.Resource),
-		handlers:    make(map[string]ToolHandler),
+		projectRoot:     projectRoot,
+		logPath:         logPath,
+		logger:          slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		bb:              db.For(paths.New(projectRoot).StatePath()),
+		resolver:        resolver,
+		pipelineLoadErr: err,
+		tools:           make(map[string]protocol.Tool),
+		resources:       make(map[string]protocol.Resource),
+		handlers:        make(map[string]ToolHandler),
 	}
 
 	s.registerReadOnlyTools()

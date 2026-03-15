@@ -35,7 +35,7 @@ func (s *Server) handleAddTasks(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := isOperationAllowed(s.resolver, agentID, "liza_add_tasks"); err != nil {
+	if err := isOperationAllowed(s.resolver, s.pipelineLoadErr, agentID, "liza_add_tasks"); err != nil {
 		return nil, err
 	}
 

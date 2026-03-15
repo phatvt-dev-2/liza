@@ -208,14 +208,14 @@ func TestIsOperationAllowed(t *testing.T) {
 	resolver := testMiddlewareResolver(t)
 
 	t.Run("allows coder submit-for-review", func(t *testing.T) {
-		err := isOperationAllowed(resolver, "coder-1", "liza_submit_for_review")
+		err := isOperationAllowed(resolver, nil, "coder-1", "liza_submit_for_review")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("rejects coder add-tasks", func(t *testing.T) {
-		err := isOperationAllowed(resolver, "coder-1", "liza_add_tasks")
+		err := isOperationAllowed(resolver, nil, "coder-1", "liza_add_tasks")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -232,14 +232,14 @@ func TestIsOperationAllowed(t *testing.T) {
 	})
 
 	t.Run("allows orchestrator add-tasks", func(t *testing.T) {
-		err := isOperationAllowed(resolver, "orchestrator-1", "liza_add_tasks")
+		err := isOperationAllowed(resolver, nil, "orchestrator-1", "liza_add_tasks")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("rejects reviewer submit-for-review", func(t *testing.T) {
-		err := isOperationAllowed(resolver, "code-reviewer-1", "liza_submit_for_review")
+		err := isOperationAllowed(resolver, nil, "code-reviewer-1", "liza_submit_for_review")
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -250,7 +250,7 @@ func TestIsOperationAllowed(t *testing.T) {
 	})
 
 	t.Run("rejects invalid agent ID", func(t *testing.T) {
-		err := isOperationAllowed(resolver, "invalid", "liza_submit_for_review")
+		err := isOperationAllowed(resolver, nil, "invalid", "liza_submit_for_review")
 		if err == nil {
 			t.Fatal("expected error for invalid agent ID")
 		}
@@ -260,7 +260,7 @@ func TestIsOperationAllowed(t *testing.T) {
 	})
 
 	t.Run("rejects nil resolver", func(t *testing.T) {
-		err := isOperationAllowed(nil, "coder-1", "liza_submit_for_review")
+		err := isOperationAllowed(nil, nil, "coder-1", "liza_submit_for_review")
 		if err == nil {
 			t.Fatal("expected error for nil resolver")
 		}
@@ -274,7 +274,7 @@ func TestOperationChecker(t *testing.T) {
 	resolver := testMiddlewareResolver(t)
 
 	t.Run("returns nil for allowed operation", func(t *testing.T) {
-		checker := operationChecker(resolver, "liza_submit_for_review")
+		checker := operationChecker(resolver, nil, "liza_submit_for_review")
 		err := checker("coder-1")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -282,7 +282,7 @@ func TestOperationChecker(t *testing.T) {
 	})
 
 	t.Run("returns OperationError for disallowed", func(t *testing.T) {
-		checker := operationChecker(resolver, "liza_add_tasks")
+		checker := operationChecker(resolver, nil, "liza_add_tasks")
 		err := checker("coder-1")
 		if err == nil {
 			t.Fatal("expected error")
@@ -298,7 +298,7 @@ func TestTypeChecker(t *testing.T) {
 	resolver := testMiddlewareResolver(t)
 
 	t.Run("allows matching role type", func(t *testing.T) {
-		checker := typeChecker(resolver, "doer")
+		checker := typeChecker(resolver, nil, "doer")
 		err := checker("coder-1")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -306,7 +306,7 @@ func TestTypeChecker(t *testing.T) {
 	})
 
 	t.Run("rejects non-matching role type", func(t *testing.T) {
-		checker := typeChecker(resolver, "doer")
+		checker := typeChecker(resolver, nil, "doer")
 		err := checker("code-reviewer-1")
 		if err == nil {
 			t.Fatal("expected error")
@@ -321,7 +321,7 @@ func TestTypeChecker(t *testing.T) {
 	})
 
 	t.Run("allows multi-type match", func(t *testing.T) {
-		checker := typeChecker(resolver, "doer", "orchestrator")
+		checker := typeChecker(resolver, nil, "doer", "orchestrator")
 		err := checker("orchestrator-1")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -329,7 +329,7 @@ func TestTypeChecker(t *testing.T) {
 	})
 
 	t.Run("rejects invalid agent ID", func(t *testing.T) {
-		checker := typeChecker(resolver, "doer")
+		checker := typeChecker(resolver, nil, "doer")
 		err := checker("badid")
 		if err == nil {
 			t.Fatal("expected error")
@@ -340,7 +340,7 @@ func TestTypeChecker(t *testing.T) {
 	})
 
 	t.Run("rejects nil resolver", func(t *testing.T) {
-		checker := typeChecker(nil, "doer")
+		checker := typeChecker(nil, nil, "doer")
 		err := checker("coder-1")
 		if err == nil {
 			t.Fatal("expected error")

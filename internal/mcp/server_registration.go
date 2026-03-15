@@ -185,7 +185,7 @@ func (s *Server) registerMutationTools() {
 				},
 			},
 			handler:     s.handleClaimTask,
-			roleChecker: typeChecker(s.resolver, "doer"),
+			roleChecker: typeChecker(s.resolver, s.pipelineLoadErr, "doer"),
 		},
 
 		// liza_submit_for_review tool
@@ -213,7 +213,7 @@ func (s *Server) registerMutationTools() {
 				},
 			},
 			handler:     s.handleSubmitForReview,
-			roleChecker: operationChecker(s.resolver, "liza_submit_for_review"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_submit_for_review"),
 		},
 
 		// liza_handoff tool
@@ -245,7 +245,7 @@ func (s *Server) registerMutationTools() {
 				},
 			},
 			handler:     s.handleHandoff,
-			roleChecker: operationChecker(s.resolver, "liza_handoff"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_handoff"),
 		},
 
 		// liza_submit_verdict tool
@@ -278,7 +278,7 @@ func (s *Server) registerMutationTools() {
 				},
 			},
 			handler:     s.handleSubmitVerdict,
-			roleChecker: operationChecker(s.resolver, "liza_submit_verdict"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_submit_verdict"),
 		},
 
 		// liza_mark_blocked tool
@@ -404,7 +404,7 @@ func (s *Server) registerMutationTools() {
 				},
 			},
 			handler:     s.handleSupersede,
-			roleChecker: operationChecker(s.resolver, "liza_supersede_task"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_supersede_task"),
 		},
 	})
 }
@@ -438,7 +438,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleWtCreate,
-			roleChecker: typeChecker(s.resolver, "doer"),
+			roleChecker: typeChecker(s.resolver, s.pipelineLoadErr, "doer"),
 		},
 
 		// liza_wt_delete tool
@@ -462,7 +462,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleWtDelete,
-			roleChecker: typeChecker(s.resolver, "doer", "orchestrator"),
+			roleChecker: typeChecker(s.resolver, s.pipelineLoadErr, "doer", "orchestrator"),
 		},
 
 		// liza_wt_merge tool
@@ -486,7 +486,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleWtMerge,
-			roleChecker: typeChecker(s.resolver, "reviewer"),
+			roleChecker: typeChecker(s.resolver, s.pipelineLoadErr, "reviewer"),
 		},
 
 		// liza_analyze tool
@@ -506,7 +506,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleAnalyze,
-			roleChecker: operationChecker(s.resolver, "liza_analyze"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_analyze"),
 		},
 
 		// liza_update_sprint_metrics tool
@@ -526,7 +526,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleUpdateSprintMetrics,
-			roleChecker: operationChecker(s.resolver, "liza_update_sprint_metrics"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_update_sprint_metrics"),
 		},
 
 		// liza_sprint_checkpoint tool
@@ -546,7 +546,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleSprintCheckpoint,
-			roleChecker: operationChecker(s.resolver, "liza_sprint_checkpoint"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_sprint_checkpoint"),
 		},
 
 		// liza_clear_stale_review_claims tool
@@ -566,7 +566,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleClearStaleReviews,
-			roleChecker: operationChecker(s.resolver, "liza_clear_stale_review_claims"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_clear_stale_review_claims"),
 		},
 
 		// liza_write_checkpoint tool
@@ -618,7 +618,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleWriteCheckpoint,
-			roleChecker: operationChecker(s.resolver, "liza_write_checkpoint"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_write_checkpoint"),
 		},
 
 		// liza_set_task_output tool
@@ -646,7 +646,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleSetTaskOutput,
-			roleChecker: operationChecker(s.resolver, "liza_set_task_output"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_set_task_output"),
 		},
 
 		// liza_delete_agent tool
@@ -679,7 +679,7 @@ func (s *Server) registerComplexOperations() {
 				},
 			},
 			handler:     s.handleDeleteAgent,
-			roleChecker: operationChecker(s.resolver, "liza_delete_agent"),
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_delete_agent"),
 		},
 	})
 }

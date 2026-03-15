@@ -1,6 +1,9 @@
 package mcp
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -71,6 +74,60 @@ func TestToolRegistration(t *testing.T) {
 		if !found {
 			t.Errorf("Expected tool %s to be registered", expected)
 		}
+	}
+}
+
+// TestNilResolverSurfacesPipelineLoadError verifies that when the pipeline
+// config fails to load, operation-checked tool errors include the original
+// load error text, not just "pipeline resolver not loaded".
+func TestNilResolverSurfacesPipelineLoadError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .liza dir with invalid pipeline.yaml
+	lizaDir := filepath.Join(tmpDir, ".liza")
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lizaDir, "pipeline.yaml"), []byte("not: valid: yaml: {{{"), 0644); err != nil {
+		t.Fatalf("write pipeline: %v", err)
+	}
+	// Write minimal state so blackboard init succeeds
+	if err := os.WriteFile(filepath.Join(lizaDir, "state.yaml"), []byte("tasks: []\nagents: {}\n"), 0644); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	server := NewServer(tmpDir, filepath.Join(lizaDir, "log.yaml"))
+
+	// Server should be created (fail-closed, not crash)
+	if server == nil {
+		t.Fatal("expected server to be created even with invalid pipeline")
+	}
+	if server.resolver != nil {
+		t.Fatal("expected nil resolver with invalid pipeline config")
+	}
+
+	// Call an operation-checked tool handler (liza_submit_for_review)
+	handler, ok := server.GetHandler("liza_submit_for_review")
+	if !ok {
+		t.Fatal("expected liza_submit_for_review handler to be registered")
+	}
+
+	_, err := handler(map[string]any{
+		"task_id":    "task-1",
+		"commit_sha": "abc123",
+		"agent_id":   "coder-1",
+	})
+	if err == nil {
+		t.Fatal("expected error from operation-checked tool with nil resolver")
+	}
+
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "pipeline resolver not loaded") {
+		t.Errorf("expected 'pipeline resolver not loaded' in error, got: %s", errMsg)
+	}
+	// The key assertion: error must include the original load error, not just the generic message
+	if !strings.Contains(errMsg, "parsing pipeline config") {
+		t.Errorf("expected original load error text in message, got: %s", errMsg)
 	}
 }
 

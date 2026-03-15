@@ -65,11 +65,14 @@ func mcpToolToOperation(toolName string) string {
 // isOperationAllowed checks whether the agent identified by agentID is permitted
 // to invoke the given MCP tool, based on the pipeline YAML allowed-operations.
 // Returns nil if allowed, OperationError if not.
-func isOperationAllowed(resolver *pipeline.Resolver, agentID, mcpToolName string) error {
+func isOperationAllowed(resolver *pipeline.Resolver, pipelineLoadErr error, agentID, mcpToolName string) error {
 	if err := identity.ValidateFormat(agentID); err != nil {
 		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
 	}
 	if resolver == nil {
+		if pipelineLoadErr != nil {
+			return fmt.Errorf("pipeline resolver not loaded — cannot authorize operations: %v", pipelineLoadErr)
+		}
 		return fmt.Errorf("pipeline resolver not loaded — cannot authorize operations")
 	}
 
@@ -90,9 +93,9 @@ func isOperationAllowed(resolver *pipeline.Resolver, agentID, mcpToolName string
 // operationChecker returns a RoleChecker that validates the agent's role has the
 // given MCP tool in its YAML allowed-operations list. This is the declarative
 // replacement for the hardcoded requireDoerRole/requireReviewerRole helpers.
-func operationChecker(resolver *pipeline.Resolver, mcpToolName string) RoleChecker {
+func operationChecker(resolver *pipeline.Resolver, pipelineLoadErr error, mcpToolName string) RoleChecker {
 	return func(agentID string) error {
-		return isOperationAllowed(resolver, agentID, mcpToolName)
+		return isOperationAllowed(resolver, pipelineLoadErr, agentID, mcpToolName)
 	}
 }
 
@@ -100,12 +103,15 @@ func operationChecker(resolver *pipeline.Resolver, mcpToolName string) RoleCheck
 // (doer, reviewer, orchestrator) matches one of the allowed types.
 // This is the declarative replacement for tools that need role-type
 // authorization but don't have explicit allowed-operations entries.
-func typeChecker(resolver *pipeline.Resolver, allowedTypes ...string) RoleChecker {
+func typeChecker(resolver *pipeline.Resolver, pipelineLoadErr error, allowedTypes ...string) RoleChecker {
 	return func(agentID string) error {
 		if err := identity.ValidateFormat(agentID); err != nil {
 			return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
 		}
 		if resolver == nil {
+			if pipelineLoadErr != nil {
+				return fmt.Errorf("pipeline resolver not loaded — cannot authorize operations: %v", pipelineLoadErr)
+			}
 			return fmt.Errorf("pipeline resolver not loaded — cannot authorize operations")
 		}
 		role, _ := identity.ExtractRole(agentID)
