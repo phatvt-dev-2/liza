@@ -2,6 +2,7 @@ package ops
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -321,6 +322,193 @@ func TestRecoverAgent_DoubleRecover(t *testing.T) {
 	}
 	if result2.AgentDeleted {
 		t.Error("Second recovery should not report AgentDeleted")
+	}
+}
+
+// TestRecoverAgent_CustomDoerRole_WorktreeRemoval verifies that a custom doer role
+// (data-engineer) triggers worktree removal during recovery, proving the condition
+// is resolver-based rather than hardcoded to "coder".
+func TestRecoverAgent_CustomDoerRole_WorktreeRemoval(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Override with custom pipeline that defines data-engineer as a doer role.
+	customPipeline := []byte(`pipeline:
+  roles:
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+    data-engineer:
+      type: doer
+      display-name: "Data Engineer"
+    data-reviewer:
+      type: reviewer
+      display-name: "Data Reviewer"
+  role-pairs:
+    data-pair:
+      doer: data-engineer
+      reviewer: data-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    data-subpipeline:
+      steps:
+        - data-pair
+  entry-points:
+    default: data-subpipeline.data-pair
+`)
+	pipelinePath := filepath.Join(tmpDir, ".liza", "pipeline.yaml")
+	if err := os.WriteFile(pipelinePath, customPipeline, 0644); err != nil {
+		t.Fatalf("Failed to write custom pipeline: %v", err)
+	}
+
+	taskRef := "task-de-1"
+	now := time.Now().UTC()
+	leaseExpires := now.Add(-10 * time.Minute)
+	worktreeRef := ".worktrees/task-de-1"
+	state := testhelpers.CreateValidState()
+	state.Agents["data-engineer-1"] = models.Agent{
+		Role:         "data-engineer",
+		Status:       models.AgentStatusWorking,
+		CurrentTask:  &taskRef,
+		LeaseExpires: &leaseExpires,
+		PID:          999999, // dead PID
+	}
+	state.Tasks = append(state.Tasks, models.Task{
+		ID:           "task-de-1",
+		Description:  "data engineering task",
+		Status:       models.TaskStatusImplementing,
+		RolePair:     "data-pair",
+		Priority:     1,
+		AssignedTo:   strPtr("data-engineer-1"),
+		Worktree:     &worktreeRef,
+		LeaseExpires: &leaseExpires,
+		SpecRef:      "spec.md",
+		DoneWhen:     "tests pass",
+		Scope:        "small",
+	})
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := RecoverAgent(tmpDir, "data-engineer-1", false, "crashed")
+	if err != nil {
+		t.Fatalf("RecoverAgent() error: %v", err)
+	}
+
+	// Worktree removal should have been attempted (will fail since no real git repo,
+	// but the attempt proves the resolver-based path was taken).
+	worktreeAttempted := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "worktree removal") {
+			worktreeAttempted = true
+			break
+		}
+	}
+	if !worktreeAttempted {
+		t.Error("Expected worktree removal to be attempted for custom doer role data-engineer")
+	}
+
+	if !result.ClaimReleased {
+		t.Error("Expected ClaimReleased=true")
+	}
+	if !result.AgentDeleted {
+		t.Error("Expected AgentDeleted=true")
+	}
+
+	// Verify task state was properly released
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	task := readState.FindTask("task-de-1")
+	if task == nil {
+		t.Fatal("Task should still exist")
+	}
+	if task.AssignedTo != nil {
+		t.Error("Task AssignedTo should be nil after recovery")
+	}
+}
+
+// TestRecoverAgent_NilResolver_WarningLogLine verifies that when the resolver is nil
+// during agent recovery, a warning log line is emitted indicating claim release was
+// skipped due to missing resolver.
+func TestRecoverAgent_NilResolver_WarningLogLine(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Manually create .liza dir WITHOUT pipeline config so resolver is nil.
+	lizaDir := filepath.Join(tmpDir, ".liza")
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatalf("Failed to create .liza dir: %v", err)
+	}
+	lockPath := filepath.Join(lizaDir, "state.yaml.lock")
+	if err := os.WriteFile(lockPath, []byte{}, 0644); err != nil {
+		t.Fatalf("Failed to create lock file: %v", err)
+	}
+
+	stateFile := filepath.Join(lizaDir, "state.yaml")
+	taskRef := "task-nil-1"
+	now := time.Now().UTC()
+	leaseExpires := now.Add(-10 * time.Minute)
+	state := testhelpers.CreateValidState()
+	state.Agents["coder-1"] = models.Agent{
+		Role:         "coder",
+		Status:       models.AgentStatusWorking,
+		CurrentTask:  &taskRef,
+		LeaseExpires: &leaseExpires,
+		PID:          999999,
+	}
+	state.Tasks = append(state.Tasks, models.Task{
+		ID:           "task-nil-1",
+		Description:  "test task",
+		Status:       models.TaskStatusImplementing,
+		RolePair:     "coding-pair",
+		Priority:     1,
+		AssignedTo:   strPtr("coder-1"),
+		LeaseExpires: &leaseExpires,
+		SpecRef:      "spec.md",
+		DoneWhen:     "tests pass",
+		Scope:        "small",
+	})
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Capture log output during recovery.
+	logOutput := captureLogOutput(t, func() {
+		result, err := RecoverAgent(tmpDir, "coder-1", false, "crashed")
+		if err != nil {
+			t.Fatalf("RecoverAgent() error: %v", err)
+		}
+
+		// result.Warnings should mention claim release skipped
+		found := false
+		for _, w := range result.Warnings {
+			if strings.Contains(w, "claim release skipped") && strings.Contains(w, "resolver not loaded") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected warning about claim release skipped, got: %v", result.Warnings)
+		}
+
+		if result.ClaimReleased {
+			t.Error("ClaimReleased should be false when resolver is nil")
+		}
+		if !result.AgentDeleted {
+			t.Error("Expected AgentDeleted=true even with nil resolver")
+		}
+	})
+
+	// Verify the actual log line was emitted.
+	if !strings.Contains(logOutput, "claim release skipped") {
+		t.Errorf("Expected log output to contain 'claim release skipped', got: %q", logOutput)
+	}
+	if !strings.Contains(logOutput, "resolver not loaded") {
+		t.Errorf("Expected log output to contain 'resolver not loaded', got: %q", logOutput)
 	}
 }
 

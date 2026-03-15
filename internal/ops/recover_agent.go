@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -23,7 +24,7 @@ type RecoverAgentResult struct {
 }
 
 // RecoverAgent performs full recovery for a crashed agent: releases task claims,
-// removes worktrees (for coders), and deletes the agent from state.
+// removes worktrees (for doer roles), and deletes the agent from state.
 // Idempotent: returns AlreadyClean=true if agent not found.
 // Without force, refuses if the agent's PID is still alive.
 // No terminal I/O.
@@ -68,22 +69,25 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 		TaskID:  taskID,
 	}
 
-	// Phase 2: Git side effects (outside lock) — remove worktree for coders
-	if role == "coder" && taskID != "" {
-		g := git.New(projectRoot)
-		if err := g.RemoveWorktree(taskID); err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("worktree removal: %v", err))
-		} else {
-			result.WorktreeRemoved = true
-		}
-	}
-
+	// Load resolver early — needed for both worktree removal and claim release.
 	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("pipeline config: %v", resolverErr))
 	} else {
 		pipelineTransitions = BuildPipelineTransitions(resolver)
+	}
+
+	// Phase 2: Git side effects (outside lock) — remove worktree for doer roles
+	if taskID != "" && resolver != nil {
+		if rt, rtErr := resolver.RoleType(role); rtErr == nil && rt == "doer" {
+			g := git.New(projectRoot)
+			if err := g.RemoveWorktree(taskID); err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("worktree removal: %v", err))
+			} else {
+				result.WorktreeRemoved = true
+			}
+		}
 	}
 
 	// Phase 3: State modify (atomic)
@@ -98,31 +102,34 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 		if taskID != "" {
 			task := state.FindTask(taskID)
 			if task != nil {
-				effectiveCoderRelease, effectiveReviewerRelease := resolveClaimReleaseStatuses(task, resolver)
-				roleType := ""
-				if resolver != nil {
+				if resolver == nil {
+					log.Printf("WARNING: recover-agent %s: claim release skipped for task %s — resolver not loaded", agentID, taskID)
+					result.Warnings = append(result.Warnings, fmt.Sprintf("claim release skipped for task %s — resolver not loaded", taskID))
+				} else {
+					effectiveCoderRelease, effectiveReviewerRelease := resolveClaimReleaseStatuses(task, resolver)
+					roleType := ""
 					if rt, rtErr := resolver.RoleType(role); rtErr == nil {
 						roleType = rt
 					}
-				}
-				switch roleType {
-				case "doer":
-					released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, true, agentID, reason, now)
-					if err != nil {
-						result.Warnings = append(result.Warnings, fmt.Sprintf("doer claim release: %v", err))
-					}
-					if released {
-						result.ClaimReleased = true
-						// Clear worktree reference since we removed it
-						task.Worktree = nil
-					}
-				case "reviewer":
-					released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, true, agentID, reason, now)
-					if err != nil {
-						result.Warnings = append(result.Warnings, fmt.Sprintf("reviewer claim release: %v", err))
-					}
-					if released {
-						result.ClaimReleased = true
+					switch roleType {
+					case "doer":
+						released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, true, agentID, reason, now)
+						if err != nil {
+							result.Warnings = append(result.Warnings, fmt.Sprintf("doer claim release: %v", err))
+						}
+						if released {
+							result.ClaimReleased = true
+							// Clear worktree reference since we removed it
+							task.Worktree = nil
+						}
+					case "reviewer":
+						released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, true, agentID, reason, now)
+						if err != nil {
+							result.Warnings = append(result.Warnings, fmt.Sprintf("reviewer claim release: %v", err))
+						}
+						if released {
+							result.ClaimReleased = true
+						}
 					}
 				}
 			} else {
