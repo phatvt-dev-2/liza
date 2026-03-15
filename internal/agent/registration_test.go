@@ -843,6 +843,146 @@ func TestRegisterOrchestratorTakeoverExpired(t *testing.T) {
 	}
 }
 
+// TestRegisterOrchestratorSingularityAcrossRoleKeys verifies that orchestrator
+// singularity is enforced by resolved type, not role key. Two different YAML role
+// keys that both resolve to type: orchestrator must not coexist.
+func TestRegisterOrchestratorSingularityAcrossRoleKeys(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Pipeline with two distinct orchestrator role keys.
+	twoOrchYAML := []byte(`
+pipeline:
+  roles:
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+    lead-orchestrator:
+      type: orchestrator
+      display-name: "Lead Orchestrator"
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := pipeline.LoadFromBytes(twoOrchYAML)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	resolver := pipeline.NewResolver(cfg)
+
+	state := testhelpers.CreateValidState()
+	// Register first orchestrator with role key "orchestrator".
+	state.Agents["orchestrator-1"] = models.Agent{
+		Role:         "orchestrator",
+		Status:       models.AgentStatusPlanning,
+		LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(10 * time.Minute)),
+		Heartbeat:    time.Now().UTC(),
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	// Attempt to register a second orchestrator with a DIFFERENT role key.
+	// Must be rejected because the resolved type is still "orchestrator".
+	err = registerAgent(bb, tmpDir, "lead-orchestrator-1", "lead-orchestrator", "terminal-2", 1800, "claude", resolver)
+	if err == nil {
+		t.Fatal("expected error registering second orchestrator with different role key, got nil")
+	}
+	if !strings.Contains(err.Error(), "orchestrator") {
+		t.Errorf("error should mention orchestrator, got: %v", err)
+	}
+}
+
+// TestRegisterNonOrchestratorMaxInstancesUnaffected verifies that per-role-key
+// max-instances enforcement for non-orchestrator roles is unchanged.
+func TestRegisterNonOrchestratorMaxInstancesUnaffected(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Pipeline with two doer roles that have max-instances: 1.
+	yaml := []byte(`
+pipeline:
+  roles:
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+    coder:
+      type: doer
+      max-instances: 1
+      display-name: "Coder"
+    data-engineer:
+      type: doer
+      max-instances: 1
+      display-name: "Data Engineer"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := pipeline.LoadFromBytes(yaml)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	resolver := pipeline.NewResolver(cfg)
+
+	state := testhelpers.CreateValidState()
+	// Register a coder (doer, max-instances: 1).
+	state.Agents["coder-1"] = models.Agent{
+		Role:         "coder",
+		Status:       models.AgentStatusWorking,
+		LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(10 * time.Minute)),
+		Heartbeat:    time.Now().UTC(),
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	// A second coder should be rejected (same role key, max-instances: 1).
+	err = registerAgent(bb, tmpDir, "coder-2", "coder", "terminal-2", 1800, "claude", resolver)
+	if err == nil {
+		t.Fatal("expected error registering second coder, got nil")
+	}
+
+	// A data-engineer (different doer role key, max-instances: 1) should succeed
+	// because non-orchestrator roles are checked per-role-key, not per-type.
+	err = registerAgent(bb, tmpDir, "data-engineer-1", "data-engineer", "terminal-3", 1800, "claude", resolver)
+	if err != nil {
+		t.Fatalf("data-engineer registration should succeed (different role key), got: %v", err)
+	}
+}
+
 // TestRegisterSecondOrchestratorBlockedDespiteMisconfiguredMaxInstances verifies
 // that orchestrator singularity holds even when pipeline YAML sets max-instances: 2.
 // This is the spec invariant: orchestrator is always singular regardless of YAML.

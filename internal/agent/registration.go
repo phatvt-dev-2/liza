@@ -67,18 +67,38 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 		}
 
 		// Singularity check via resolver: at most N instances per role.
+		// For orchestrator roles, singularity is enforced by resolved type
+		// (not role key) so that two different orchestrator role keys cannot
+		// coexist. Non-orchestrator roles use per-role-key counting.
 		if resolver != nil {
 			maxInst, err := resolver.MaxInstances(role)
 			if err == nil && maxInst > 0 {
+				roleType, _ := resolver.RoleType(role)
 				liveCount := 0
 				for id, agent := range state.Agents {
-					if id != agentID && agent.Role == role {
-						if agent.LeaseExpires != nil && agent.LeaseExpires.After(now) {
+					if id == agentID {
+						continue
+					}
+					if agent.LeaseExpires == nil || !agent.LeaseExpires.After(now) {
+						continue
+					}
+					if roleType == "orchestrator" {
+						// Count all live agents whose resolved type is orchestrator.
+						if rt, rtErr := resolver.RoleType(agent.Role); rtErr == nil && rt == "orchestrator" {
+							liveCount++
+						}
+					} else {
+						// Non-orchestrator: count by exact role key.
+						if agent.Role == role {
 							liveCount++
 						}
 					}
 				}
 				if liveCount >= maxInst {
+					if roleType == "orchestrator" {
+						return fmt.Errorf("type orchestrator already has %d live agent(s); only %d instance(s) allowed",
+							liveCount, maxInst)
+					}
 					return fmt.Errorf("role %s already has %d live agent(s) (max %d); only %d instance(s) allowed",
 						role, liveCount, maxInst, maxInst)
 				}
