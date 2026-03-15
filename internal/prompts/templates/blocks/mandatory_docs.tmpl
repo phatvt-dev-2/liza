@@ -1,0 +1,9 @@
+{{- define "mandatory_docs" -}}
+{{- if .MandatoryDocs}}
+
+=== MANDATORY DOCUMENTS ===
+{{- range .MandatoryDocs}}
+- {{.}}
+{{- end}}
+{{- end}}
+{{- end -}}

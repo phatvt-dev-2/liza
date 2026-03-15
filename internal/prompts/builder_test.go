@@ -1,10 +1,12 @@
 package prompts
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
@@ -1983,5 +1985,135 @@ func TestBuildUSReviewerContext(t *testing.T) {
 		if strings.Contains(prompt, notWant) {
 			t.Errorf("BuildUSReviewerContext() should not contain %q", notWant)
 		}
+	}
+}
+
+func TestBlockMandatoryDocs_Populated(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/mandatory_docs.tmpl"))
+
+	data := RoleContextData{
+		MandatoryDocs: []string{
+			"docs/architecture.md",
+			"docs/api-reference.md",
+			"specs/security-policy.md",
+		},
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "mandatory_docs", &data)
+	if err != nil {
+		t.Fatalf("failed to execute mandatory_docs template: %v", err)
+	}
+
+	result := buf.String()
+
+	if !strings.Contains(result, "MANDATORY DOCUMENTS") {
+		t.Error("expected MANDATORY DOCUMENTS section header")
+	}
+	for _, doc := range data.MandatoryDocs {
+		if !strings.Contains(result, "- "+doc) {
+			t.Errorf("expected mandatory doc %q in output", doc)
+		}
+	}
+}
+
+func TestBlockMandatoryDocs_Empty(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/mandatory_docs.tmpl"))
+
+	data := RoleContextData{
+		MandatoryDocs: nil,
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "mandatory_docs", &data)
+	if err != nil {
+		t.Fatalf("failed to execute mandatory_docs template: %v", err)
+	}
+
+	if buf.String() != "" {
+		t.Errorf("expected empty output for nil MandatoryDocs, got %q", buf.String())
+	}
+}
+
+func TestBlockMandatoryDocs_EmptySlice(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/mandatory_docs.tmpl"))
+
+	data := RoleContextData{
+		MandatoryDocs: []string{},
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "mandatory_docs", &data)
+	if err != nil {
+		t.Fatalf("failed to execute mandatory_docs template: %v", err)
+	}
+
+	if buf.String() != "" {
+		t.Errorf("expected empty output for empty MandatoryDocs slice, got %q", buf.String())
+	}
+}
+
+func TestBlockSkillsAffinity_Populated(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/skills_affinity.tmpl"))
+
+	data := RoleContextData{
+		Skills: []string{
+			"debugging",
+			"testing",
+			"clean-code",
+		},
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "skills_affinity", &data)
+	if err != nil {
+		t.Fatalf("failed to execute skills_affinity template: %v", err)
+	}
+
+	result := buf.String()
+
+	if !strings.Contains(result, "SKILLS AFFINITY") {
+		t.Error("expected SKILLS AFFINITY section header")
+	}
+	for _, skill := range data.Skills {
+		if !strings.Contains(result, "- "+skill) {
+			t.Errorf("expected skill %q in output", skill)
+		}
+	}
+}
+
+func TestBlockSkillsAffinity_Empty(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/skills_affinity.tmpl"))
+
+	data := RoleContextData{
+		Skills: nil,
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "skills_affinity", &data)
+	if err != nil {
+		t.Fatalf("failed to execute skills_affinity template: %v", err)
+	}
+
+	if buf.String() != "" {
+		t.Errorf("expected empty output for nil Skills, got %q", buf.String())
+	}
+}
+
+func TestBlockSkillsAffinity_EmptySlice(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/skills_affinity.tmpl"))
+
+	data := RoleContextData{
+		Skills: []string{},
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "skills_affinity", &data)
+	if err != nil {
+		t.Fatalf("failed to execute skills_affinity template: %v", err)
+	}
+
+	if buf.String() != "" {
+		t.Errorf("expected empty output for empty Skills slice, got %q", buf.String())
 	}
 }

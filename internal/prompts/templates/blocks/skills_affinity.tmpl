@@ -1,0 +1,9 @@
+{{- define "skills_affinity" -}}
+{{- if .Skills}}
+
+=== SKILLS AFFINITY ===
+{{- range .Skills}}
+- {{.}}
+{{- end}}
+{{- end}}
+{{- end -}}
