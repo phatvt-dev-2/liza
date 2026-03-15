@@ -8,7 +8,7 @@ description: Quantitative and qualitative code quality assessment with prioritiz
 **Target directories:** If the target directory for REPORT_FILE does not exist, create it. The assessment is the first artifact that justifies the directory's existence.
 
 **Recommended Tools:** Make sure you've read ~/.liza/AGENT_TOOLS.md
-list_directory_tree and warpgrep_codebase_search (fast and token-efficient semantic search) may be specifically useful.
+list_directory_tree and codebase_search (fast and token-efficient semantic search) may be specifically useful.
 
 Quality is not a binary. Measure it, grade it, and direct investment where it will compound.
 

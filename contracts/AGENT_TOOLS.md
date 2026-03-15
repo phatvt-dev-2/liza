@@ -41,7 +41,7 @@ Any non destructive tool by default.
 |-------------------------------------------|--------------|----------|
 | Exact keyword ("TODO") | Grep | — |
 | Find files by name | JetBrains `find_files_by_name_keyword` | Glob |
-| Semantic code search ("how does X work?") | **Warp Grep** (`mcp__morph-mcp__warpgrep_codebase_search`) | Task(Explore) only if WarpGrep insufficient |
+| Semantic code search ("how does X work?") | **morph-mcp** (`mcp__morph-mcp__codebase_search`) | Task(Explore) only if morph-mcp insufficient |
 | Symbol info at position | JetBrains `get_symbol_info` | LSP `hover` |
 | Find references | LSP `findReferences` | Grep |
 | Call hierarchy (callers/callees) | LSP `incomingCalls`/`outgoingCalls` | Task(Explore) if LSP not configured |
@@ -50,10 +50,10 @@ Any non destructive tool by default.
 
 **Tool characteristics:**
 - **Grep**: Fastest, exact matches only, no synthesis
-- **Warp Grep**: **first choice** for codebase understanding: targeted semantic discovery ("how does X work?"), especially when file paths are unknown. Fallback to native tools (Task Explore, rg) only if insufficient.
+- **morph-mcp codebase_search**: **first choice** for codebase understanding: targeted semantic discovery ("how does X work?"), especially when file paths are unknown. Fallback to native tools (Task Explore, rg) only if insufficient.
 - **JetBrains** (when IDE available): Indexed, fast, includes docstrings and IDE diagnostics. Prefer over LSP for symbol info and workspace search
 - **LSP**: Precise type info, references, call hierarchy (requires language server configured)
-- **Task(Explore)**: Use for broad synthesis across many files, architectural relationship mapping, or when Warp Grep returns incomplete/ambiguous results.
+- **Task(Explore)**: Use for broad synthesis across many files, architectural relationship mapping, or when morph-mcp returns incomplete/ambiguous results.
 
 **LSP prerequisite:** Language must have LSP configured (Python: `[tool.pyright]` in pyproject.toml; TS: tsconfig.json). If not configured, use Task(Explore) for call hierarchy and definitions.
 
@@ -65,7 +65,7 @@ Any non destructive tool by default.
 
 **Morph-MCP**:
 - *Fast Apply (`edit_file`)*: Shows only changed lines using `// ... existing code ...` placeholders. Avoids reading full files into context. Skip for files >2000 lines.
-- *Warp Grep*: Multi-turn search subagent running parallel grep/read cycles. See "Codebase Exploration" section for when to use.
+- *codebase_search*: Multi-turn search subagent running parallel grep/read cycles. See "Codebase Exploration" section for when to use.
 
 **fetch MCP**: Exact content without summarization — use when you need raw HTML, pagination, or WebFetch is blocked.
 

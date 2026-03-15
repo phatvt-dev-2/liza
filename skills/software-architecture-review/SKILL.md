@@ -6,7 +6,7 @@ description: Software Architecture Review Protocol
 **REVIEW_FILE** = `specs/architecture/architecture-review.md`
 
 **Recommended Tools:** Make sure you've read ~/.liza/AGENT_TOOLS.md
-list_directory_tree and warpgrep_codebase_search (fast and token efficient semantic search) may be specifically useful.
+list_directory_tree and codebase_search (fast and token-efficient semantic search) may be specifically useful.
 
 Architecture is about trade-offs, not truths. Raise questions, suggest directions, avoid astronautics.
 
@@ -257,7 +257,7 @@ Do NOT proceed with enrichment without explicit user choice. The prompt exists b
 
    **Inverse grep:** Pick 3 keywords that appear frequently in existing findings (e.g., `config`, `async`, `test`). Search for files that DON'T contain them — what's happening in the unlabeled parts? This catches architectural islands — code that exists outside the main patterns.
 
-   **Warp Grep queries:** Use natural language to find what regex misses:
+   **Semantic search queries:** Use natural language to find what regex misses:
    - "Find try/except blocks that return None or pass without logging"
    - "Find file open operations without existence checks"
    - "Find where data fields are renamed or transformed between different conventions"
