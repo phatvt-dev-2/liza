@@ -202,6 +202,7 @@ function extractToolDetail(name, input) {
     const path = input.path || "";
     return path ? `${pat} in ${path}` : pat;
   }
+  if (name === "Skill") return (input.skill || "").slice(0, 80);
   if (name === "Task") return (input.description || "").slice(0, 80);
   if (name === "TaskCreate") return (input.subject || "").slice(0, 80);
   if (name === "TaskUpdate") return `#${input.taskId || ""} → ${input.status || ""}`;
@@ -243,6 +244,13 @@ function findStruggleSequences(timeline) {
     i = end + 1;
   }
   return sequences;
+}
+
+const SKILL_PATH_RE = /skills\/([a-z][a-z0-9_-]*)\/SKILL\.md$/;
+function extractSkillFromPath(path) {
+  if (!path) return null;
+  const m = path.match(SKILL_PATH_RE);
+  return m ? m[1] : null;
 }
 
 // --- Analysis ---
@@ -303,6 +311,16 @@ function analyzeCodex(parsed) {
     }
   }
 
+  // --- Skill Invocations (sparse: detect read_text_file of SKILL.md) ---
+  const skillInvocations = {};
+  for (const item of items) {
+    if (item.type === "mcp_tool_call" && (item.tool === "read_text_file" || item.tool === "read_file")) {
+      const path = item.arguments?.path || "";
+      const skill = extractSkillFromPath(path);
+      if (skill) skillInvocations[skill] = (skillInvocations[skill] || 0) + 1;
+    }
+  }
+
   // --- Tool Result Breakdown ---
   const toolResultBreakdown = {};
   for (const t of timeline) {
@@ -352,6 +370,7 @@ function analyzeCodex(parsed) {
     breakdown: itemsByType, totalCharsAll, topItems,
     timeline, toolResultBreakdown, efficiencyInsights,
     struggleSequences: findStruggleSequences(timeline),
+    skillInvocations,
   };
 }
 
@@ -490,6 +509,21 @@ function analyzeClaudeCode(parsed) {
     }
   }
 
+  // --- Skill Invocations (Skill tool or direct read of SKILL.md) ---
+  const skillInvocations = {};
+  for (const ev of events) {
+    if (ev.type === "assistant" && ev.contentType === "tool_use") {
+      if (ev.toolName === "Skill" && ev.toolInput?.skill) {
+        const skill = ev.toolInput.skill;
+        skillInvocations[skill] = (skillInvocations[skill] || 0) + 1;
+      } else if (ev.toolName === "Read" || ev.toolName === "mcp__filesystem__read_text_file" || ev.toolName === "mcp__filesystem__read_file") {
+        const path = ev.toolInput?.file_path || ev.toolInput?.path || "";
+        const skill = extractSkillFromPath(path);
+        if (skill) skillInvocations[skill] = (skillInvocations[skill] || 0) + 1;
+      }
+    }
+  }
+
   return {
     summary: { model: Object.keys(modelUsage)[0] || systemInfo?.model || "unknown",
       totalCostUsd: resultInfo?.totalCostUsd || 0, durationMs: resultInfo?.durationMs || 0,
@@ -510,6 +544,7 @@ function analyzeClaudeCode(parsed) {
     perMsgUsage: perMsgUsage || [], contentByType, totalCharsAll,
     timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate,
     struggleSequences: findStruggleSequences(timeline),
+    skillInvocations,
   };
 }
 
@@ -597,7 +632,7 @@ function Table({ columns, rows }) {
 
 function CodexReport({ parsed }) {
   const analysis = useMemo(() => analyzeCodex(parsed), [parsed]);
-  const { summary, breakdown, totalCharsAll, topItems, timeline, toolResultBreakdown, efficiencyInsights, struggleSequences } = analysis;
+  const { summary, breakdown, totalCharsAll, topItems, timeline, toolResultBreakdown, efficiencyInsights, struggleSequences, skillInvocations } = analysis;
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
@@ -638,6 +673,14 @@ function CodexReport({ parsed }) {
         { label: "Size", key: "chars", align: "right", render: r => `${(r.chars/1024).toFixed(1)} KB` },
         { label: "Est. Tokens", key: "estTokens", align: "right", render: r => formatTokens(r.estTokens) },
       ]} rows={topItems.map((c,i) => ({ rank: i+1, ...c }))} />
+
+      {Object.keys(skillInvocations).length > 0 && (<>
+        <SectionTitle>Skill Invocations</SectionTitle>
+        <Table columns={[
+          { label: "Skill", key: "skill" },
+          { label: "Calls", key: "count", align: "right" },
+        ]} rows={Object.entries(skillInvocations).sort((a,b) => b[1] - a[1]).map(([skill, count]) => ({ skill, count }))} />
+      </>)}
 
       {timeline.length > 0 && (<>
         <SectionTitle>Action Timeline</SectionTitle>
@@ -725,7 +768,7 @@ function CodexReport({ parsed }) {
 function ClaudeCodeReport({ parsed }) {
   const analysis = useMemo(() => analyzeClaudeCode(parsed), [parsed]);
   const { summary, turns, mcpStatus, perMsgUsage, contentByType, totalCharsAll,
-    timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate, struggleSequences } = analysis;
+    timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate, struggleSequences, skillInvocations } = analysis;
   const toolCalls = turns.flatMap(t => t.actions.filter(a => a.contentType === "tool_use").map(a => a.toolName)).filter(Boolean);
   const toolFreq = {};
   for (const t of toolCalls) toolFreq[t] = (toolFreq[t] || 0) + 1;
@@ -818,6 +861,14 @@ function ClaudeCodeReport({ parsed }) {
       <SectionTitle>Tool Usage</SectionTitle>
       <Table columns={[ { label: "Tool", key: "tool" }, { label: "Calls", key: "count", align: "right" } ]}
         rows={Object.entries(toolFreq).sort((a,b) => b[1] - a[1]).map(([tool, count]) => ({ tool, count }))} />
+
+      {Object.keys(skillInvocations).length > 0 && (<>
+        <SectionTitle>Skill Invocations</SectionTitle>
+        <Table columns={[
+          { label: "Skill", key: "skill" },
+          { label: "Calls", key: "count", align: "right" },
+        ]} rows={Object.entries(skillInvocations).sort((a,b) => b[1] - a[1]).map(([skill, count]) => ({ skill, count }))} />
+      </>)}
 
       {timeline.length > 0 && (<>
         <SectionTitle>Turn Timeline</SectionTitle>

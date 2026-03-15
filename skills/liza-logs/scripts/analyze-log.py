@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -93,6 +94,8 @@ class SessionReport:
     actions: list[TurnAction] = field(default_factory=list)
     # MCP server status (rich only)
     mcp_servers: list[dict[str, str]] = field(default_factory=list)
+    # Skill invocations (both formats)
+    skill_invocations: dict[str, int] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +115,22 @@ def detect_format(first_line: str) -> str:
     if event_type == "thread.started":
         return "sparse"
     return "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Skill detection helpers
+# ---------------------------------------------------------------------------
+
+_SKILL_PATH_RE = re.compile(r"skills/([a-z][a-z0-9_-]*)/SKILL\.md$")
+
+
+def _extract_skill_from_path(path: str) -> str:
+    """Extract skill name from a path like '.../skills/code-review/SKILL.md'.
+
+    Returns the skill name or empty string if not a skill path.
+    """
+    m = _SKILL_PATH_RE.search(path)
+    return m.group(1) if m else ""
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +181,8 @@ def _extract_tool_detail(name: str, input_data: dict) -> str:
         pat = input_data.get("pattern", "")
         path = input_data.get("path", "")
         return f"{pat} in {path}" if path else pat
+    if name == "Skill":
+        return input_data.get("skill", "")[:80]
     if name == "Task":
         return input_data.get("description", "")[:80]
     if name == "TaskCreate":
@@ -236,6 +257,17 @@ def parse_rich(lines: list[str]) -> SessionReport:
                 if block.get("type") == "tool_use":
                     name = block.get("name", "unknown")
                     report.tool_calls[name] = report.tool_calls.get(name, 0) + 1
+                    # Track skill invocations (Skill tool or direct file read)
+                    input_data = block.get("input", {})
+                    if name == "Skill":
+                        skill_name = input_data.get("skill", "")
+                        if skill_name:
+                            report.skill_invocations[skill_name] = report.skill_invocations.get(skill_name, 0) + 1
+                    elif name in ("Read", "mcp__filesystem__read_text_file", "mcp__filesystem__read_file"):
+                        path = input_data.get("file_path", "") or input_data.get("path", "")
+                        skill_name = _extract_skill_from_path(path)
+                        if skill_name:
+                            report.skill_invocations[skill_name] = report.skill_invocations.get(skill_name, 0) + 1
                     # Track for timeline correlation
                     tool_id = block.get("id", "")
                     if tool_id:
@@ -446,6 +478,12 @@ def parse_sparse(lines: list[str]) -> SessionReport:
                             if isinstance(v, str) and v:
                                 detail = v[:80]
                                 break
+                    # Detect skill file reads: read_text_file of skills/<name>/SKILL.md
+                    if tool in ("read_text_file", "read_file") and isinstance(args, dict):
+                        path = args.get("path", "")
+                        skill_name = _extract_skill_from_path(path)
+                        if skill_name:
+                            report.skill_invocations[skill_name] = report.skill_invocations.get(skill_name, 0) + 1
                     result = item.get("result", {})
                     result_text = json.dumps(result) if isinstance(result, dict) else str(result)
                     report.actions.append(
@@ -711,6 +749,29 @@ def render_tool_calls(report: SessionReport) -> str:
 
     lines.append(f"  {'-' * 40} {'-' * 6}")
     total = sum(report.tool_calls.values())
+    lines.append(f"  {'TOTAL':<40s} {total:>6d}")
+    return "\n".join(lines) + "\n"
+
+
+def render_skill_invocations(report: SessionReport) -> str:
+    """Skill invocation breakdown (rich format only)."""
+    if not report.skill_invocations:
+        return ""
+
+    lines = [
+        "",
+        "-" * 72,
+        "SKILL INVOCATIONS",
+        "-" * 72,
+        f"  {'Skill':<40s} {'Calls':>6s}",
+        f"  {'-' * 40} {'-' * 6}",
+    ]
+
+    for name, count in sorted(report.skill_invocations.items(), key=lambda x: -x[1]):
+        lines.append(f"  {name:<40s} {count:>6d}")
+
+    lines.append(f"  {'-' * 40} {'-' * 6}")
+    total = sum(report.skill_invocations.values())
     lines.append(f"  {'TOTAL':<40s} {total:>6d}")
     return "\n".join(lines) + "\n"
 
@@ -985,6 +1046,7 @@ def render_report(report: SessionReport) -> str:
         render_content_breakdown(report),
         render_top_items(report),
         render_tool_calls(report),
+        render_skill_invocations(report),
     ]
 
     if report.meta.format == "rich":

@@ -8,9 +8,10 @@ The prompt may filter more specifically, e.g. a specific role and/or time range.
 
 Start by running the analyzer:
 ```bash
-python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/*.txt        # all agents
+python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/coder-*.txt        # all coder agents
 python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/coder-1-*.txt # single agent
 ```
+By default, run the analyzer per role.
 
 Report sections: session header, token summary (fresh/cached/output, cache hit rate), content breakdown by type (chars, estimated tokens, share %), top 10 items by size, tool call frequency. Rich format adds per-turn context growth and cost breakdown.
 
