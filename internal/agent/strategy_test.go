@@ -33,6 +33,8 @@ pipeline:
       context-sections:
         - orchestrator-dashboard
         - wake-instructions
+        - mandatory-docs
+        - skills-affinity
     epic-planner:
       type: doer
       display-name: "Epic Planner"
@@ -44,6 +46,8 @@ pipeline:
         - worktree-rules
         - capability-scoping
         - implementation-phase
+        - mandatory-docs
+        - skills-affinity
     epic-plan-reviewer:
       type: reviewer
       display-name: "Epic Plan Reviewer"
@@ -57,6 +61,8 @@ pipeline:
         - review-instructions
         - rejection-format
         - verdict-submission
+        - mandatory-docs
+        - skills-affinity
     us-writer:
       type: doer
       display-name: "US Writer"
@@ -69,6 +75,8 @@ pipeline:
         - worktree-rules
         - capability-scoping
         - implementation-phase
+        - mandatory-docs
+        - skills-affinity
     us-reviewer:
       type: reviewer
       display-name: "US Reviewer"
@@ -83,6 +91,8 @@ pipeline:
         - review-instructions
         - rejection-format
         - verdict-submission
+        - mandatory-docs
+        - skills-affinity
     code-planner:
       type: doer
       display-name: "Code Planner"
@@ -95,6 +105,8 @@ pipeline:
         - worktree-rules
         - task-decomposition
         - implementation-phase
+        - mandatory-docs
+        - skills-affinity
     code-plan-reviewer:
       type: reviewer
       display-name: "Code Plan Reviewer"
@@ -109,6 +121,8 @@ pipeline:
         - review-instructions
         - rejection-format
         - verdict-submission
+        - mandatory-docs
+        - skills-affinity
     coder:
       type: doer
       display-name: "Coder"
@@ -126,6 +140,8 @@ pipeline:
         - commit-workflow
         - implementation-phase
         - submission-phase
+        - mandatory-docs
+        - skills-affinity
     code-reviewer:
       type: reviewer
       display-name: "Code Reviewer"
@@ -141,6 +157,8 @@ pipeline:
         - review-instructions
         - rejection-format
         - verdict-submission
+        - mandatory-docs
+        - skills-affinity
 
   role-pairs:
     coding-pair:

@@ -9,7 +9,9 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -328,6 +330,8 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 	}
 }
 
+// setupPipelineConfig writes the production embedded pipeline.yaml into a temp
+// directory's .liza/ folder and returns the temp dir as projectRoot.
 func setupPipelineConfig(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -335,108 +339,22 @@ func setupPipelineConfig(t *testing.T) string {
 	if err := os.MkdirAll(lizaDir, 0o755); err != nil {
 		t.Fatalf("mkdir .liza: %v", err)
 	}
-	yaml := `pipeline:
-  roles:
-    epic-planner:
-      type: doer
-      display-name: "Epic Planner"
-    epic-plan-reviewer:
-      type: reviewer
-      display-name: "Epic Plan Reviewer"
-    us-writer:
-      type: doer
-      display-name: "US Writer"
-    us-reviewer:
-      type: reviewer
-      display-name: "US Reviewer"
-    code-planner:
-      type: doer
-      display-name: "Code Planner"
-    code-plan-reviewer:
-      type: reviewer
-      display-name: "Code Plan Reviewer"
-    coder:
-      type: doer
-      display-name: "Coder"
-    code-reviewer:
-      type: reviewer
-      display-name: "Code Reviewer"
-  role-pairs:
-    epic-planning-pair:
-      doer: epic-planner
-      reviewer: epic-plan-reviewer
-      states:
-        initial: DRAFT_EPIC_PLAN
-        executing: EPIC_PLANNING
-        submitted: EPIC_PLAN_TO_REVIEW
-        reviewing: REVIEWING_EPIC_PLAN
-        approved: EPIC_PLAN_APPROVED
-        rejected: EPIC_PLAN_REJECTED
-    us-writing-pair:
-      doer: us-writer
-      reviewer: us-reviewer
-      states:
-        initial: DRAFT_US
-        executing: WRITING_US
-        submitted: US_READY_FOR_REVIEW
-        reviewing: REVIEWING_US
-        approved: US_APPROVED
-        rejected: US_REJECTED
-    code-planning-pair:
-      doer: code-planner
-      reviewer: code-plan-reviewer
-      states:
-        initial: DRAFT_CODING_PLAN
-        executing: CODE_PLANNING
-        submitted: CODING_PLAN_TO_REVIEW
-        reviewing: REVIEWING_CODING_PLAN
-        approved: CODING_PLAN_APPROVED
-        rejected: CODING_PLAN_REJECTED
-    coding-pair:
-      doer: coder
-      reviewer: code-reviewer
-      states:
-        initial: DRAFT_CODE
-        executing: IMPLEMENTING_CODE
-        submitted: CODE_READY_FOR_REVIEW
-        reviewing: REVIEWING_CODE
-        approved: CODE_APPROVED
-        rejected: CODE_REJECTED
-  sub-pipelines:
-    epic-spec-subpipeline:
-      steps:
-        - epic-planning-pair
-        - us-writing-pair
-      transitions:
-        - name: epic-to-us
-          from: epic-planning-pair.approved
-          to: us-writing-pair.initial
-          trigger: manual
-          cardinality: per-subtask
-    coding-subpipeline:
-      steps:
-        - code-planning-pair
-        - coding-pair
-      transitions:
-        - name: code-plan-to-coding
-          from: code-planning-pair.approved
-          to: coding-pair.initial
-          trigger: manual
-          cardinality: per-subtask
-  pipeline-transitions:
-    - name: us-to-coding
-      from: epic-spec-subpipeline.us-writing-pair.approved
-      to: coding-subpipeline.code-planning-pair.initial
-      trigger: manual
-      cardinality: one-to-one
-  entry-points:
-    general-objective: epic-spec-subpipeline.epic-planning-pair
-    detailed-spec: coding-subpipeline.code-planning-pair
-`
-	if err := os.WriteFile(filepath.Join(lizaDir, "pipeline.yaml"), []byte(yaml), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(lizaDir, "pipeline.yaml"), embedded.PipelineConfigContent(), 0o644); err != nil {
 		t.Fatalf("write pipeline.yaml: %v", err)
 	}
 	return dir
+}
+
+// testPipelineResolver returns a pipeline.Resolver built from the production
+// embedded pipeline YAML. Tests use this to load section names dynamically
+// rather than hardcoding them.
+func testPipelineResolver(t *testing.T) *pipeline.Resolver {
+	t.Helper()
+	cfg, err := pipeline.LoadFromBytes(embedded.PipelineConfigContent())
+	if err != nil {
+		t.Fatalf("testPipelineResolver: %v", err)
+	}
+	return pipeline.NewResolver(cfg)
 }
 
 func TestRenderOrchestratorDashboard_EntryPoints(t *testing.T) {
@@ -810,9 +728,9 @@ func TestBlockMandatoryDocs_Populated(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := tmpl.ExecuteTemplate(&buf, "mandatory_docs", &data)
+	err := tmpl.ExecuteTemplate(&buf, "mandatory-docs", &data)
 	if err != nil {
-		t.Fatalf("failed to execute mandatory_docs template: %v", err)
+		t.Fatalf("failed to execute mandatory-docs template: %v", err)
 	}
 
 	result := buf.String()
@@ -835,9 +753,9 @@ func TestBlockMandatoryDocs_Empty(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := tmpl.ExecuteTemplate(&buf, "mandatory_docs", &data)
+	err := tmpl.ExecuteTemplate(&buf, "mandatory-docs", &data)
 	if err != nil {
-		t.Fatalf("failed to execute mandatory_docs template: %v", err)
+		t.Fatalf("failed to execute mandatory-docs template: %v", err)
 	}
 
 	if buf.String() != "" {
@@ -853,9 +771,9 @@ func TestBlockMandatoryDocs_EmptySlice(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := tmpl.ExecuteTemplate(&buf, "mandatory_docs", &data)
+	err := tmpl.ExecuteTemplate(&buf, "mandatory-docs", &data)
 	if err != nil {
-		t.Fatalf("failed to execute mandatory_docs template: %v", err)
+		t.Fatalf("failed to execute mandatory-docs template: %v", err)
 	}
 
 	if buf.String() != "" {
@@ -875,9 +793,9 @@ func TestBlockSkillsAffinity_Populated(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := tmpl.ExecuteTemplate(&buf, "skills_affinity", &data)
+	err := tmpl.ExecuteTemplate(&buf, "skills-affinity", &data)
 	if err != nil {
-		t.Fatalf("failed to execute skills_affinity template: %v", err)
+		t.Fatalf("failed to execute skills-affinity template: %v", err)
 	}
 
 	result := buf.String()
@@ -900,9 +818,9 @@ func TestBlockSkillsAffinity_Empty(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := tmpl.ExecuteTemplate(&buf, "skills_affinity", &data)
+	err := tmpl.ExecuteTemplate(&buf, "skills-affinity", &data)
 	if err != nil {
-		t.Fatalf("failed to execute skills_affinity template: %v", err)
+		t.Fatalf("failed to execute skills-affinity template: %v", err)
 	}
 
 	if buf.String() != "" {
@@ -918,9 +836,9 @@ func TestBlockSkillsAffinity_EmptySlice(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := tmpl.ExecuteTemplate(&buf, "skills_affinity", &data)
+	err := tmpl.ExecuteTemplate(&buf, "skills-affinity", &data)
 	if err != nil {
-		t.Fatalf("failed to execute skills_affinity template: %v", err)
+		t.Fatalf("failed to execute skills-affinity template: %v", err)
 	}
 
 	if buf.String() != "" {
@@ -930,9 +848,12 @@ func TestBlockSkillsAffinity_EmptySlice(t *testing.T) {
 
 // TestBuildRoleContext_AllRoles verifies that BuildRoleContext produces expected key
 // content strings for each of the 9 standard roles using block templates.
+// Section lists are loaded from the embedded pipeline YAML via the resolver,
+// so adding or removing a section in the YAML automatically affects test coverage.
 func TestBuildRoleContext_AllRoles(t *testing.T) {
 	now := time.Now().UTC()
 	projectRoot := setupPipelineConfig(t)
+	resolver := testPipelineResolver(t)
 
 	makeDoerTask := func(id string) *models.Task {
 		task := testhelpers.BuildTaskByStatus(id, models.TaskStatusImplementing, now)
@@ -988,12 +909,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			TotalPlanTasks:    3, TaskOrdinal: 2,
 			ProjectRoot: projectRoot,
 		}
-		sections := []string{
-			"assigned-task", "collective-plan-scoping", "handoff-resume",
-			"integration-fix", "prior-rejection", "doer-state-transitions",
-			"doer-tools", "anomaly-logging", "blocking-protocol",
-			"worktree-rules", "commit-workflow", "implementation-phase",
-			"submission-phase",
+		sections, err := resolver.ContextSections("coder")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
 		}
 		output, err := BuildRoleContext("coder", sections, data)
 		if err != nil {
@@ -1037,11 +955,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
 		}
-		sections := []string{
-			"review-task", "collective-plan-scoping", "scope-extensions",
-			"prior-rejection", "reviewer-state-transitions", "reviewer-tools",
-			"anomaly-logging", "worktree-rules", "review-instructions",
-			"rejection-format", "verdict-submission",
+		sections, err := resolver.ContextSections("code-reviewer")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
 		}
 		output, err := BuildRoleContext("code-reviewer", sections, data)
 		if err != nil {
@@ -1087,7 +1003,10 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			WakeInstruction: wakeInstr,
 			ProjectRoot:     projectRoot,
 		}
-		sections := []string{"orchestrator-dashboard", "wake-instructions"}
+		sections, err := resolver.ContextSections("orchestrator")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
+		}
 		output, err := BuildRoleContext("orchestrator", sections, data)
 		if err != nil {
 			t.Fatalf("BuildRoleContext: %v", err)
@@ -1119,10 +1038,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
 		}
-		sections := []string{
-			"assigned-task", "collective-plan-scoping", "prior-rejection",
-			"doer-state-transitions", "doer-tools", "worktree-rules",
-			"task-decomposition", "implementation-phase",
+		sections, err := resolver.ContextSections("code-planner")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
 		}
 		output, err := BuildRoleContext("code-planner", sections, data)
 		if err != nil {
@@ -1159,11 +1077,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
 		}
-		sections := []string{
-			"review-task", "collective-plan-scoping", "prior-rejection",
-			"reviewer-state-transitions", "reviewer-tools", "anomaly-logging",
-			"worktree-rules", "review-instructions", "rejection-format",
-			"verdict-submission",
+		sections, err := resolver.ContextSections("code-plan-reviewer")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
 		}
 		output, err := BuildRoleContext("code-plan-reviewer", sections, data)
 		if err != nil {
@@ -1196,10 +1112,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			ProjectRoot: projectRoot,
 		}
-		sections := []string{
-			"assigned-task", "prior-rejection", "doer-state-transitions",
-			"doer-tools", "worktree-rules", "capability-scoping",
-			"implementation-phase",
+		sections, err := resolver.ContextSections("epic-planner")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
 		}
 		output, err := BuildRoleContext("epic-planner", sections, data)
 		if err != nil {
@@ -1234,10 +1149,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
 			ProjectRoot: projectRoot,
 		}
-		sections := []string{
-			"review-task", "prior-rejection", "reviewer-state-transitions",
-			"reviewer-tools", "anomaly-logging", "worktree-rules",
-			"review-instructions", "rejection-format", "verdict-submission",
+		sections, err := resolver.ContextSections("epic-plan-reviewer")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
 		}
 		output, err := BuildRoleContext("epic-plan-reviewer", sections, data)
 		if err != nil {
@@ -1273,10 +1187,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
 		}
-		sections := []string{
-			"assigned-task", "collective-plan-scoping", "prior-rejection",
-			"doer-state-transitions", "doer-tools", "worktree-rules",
-			"capability-scoping", "implementation-phase",
+		sections, err := resolver.ContextSections("us-writer")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
 		}
 		output, err := BuildRoleContext("us-writer", sections, data)
 		if err != nil {
@@ -1314,11 +1227,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
 		}
-		sections := []string{
-			"review-task", "collective-plan-scoping", "prior-rejection",
-			"reviewer-state-transitions", "reviewer-tools", "anomaly-logging",
-			"worktree-rules", "review-instructions", "rejection-format",
-			"verdict-submission",
+		sections, err := resolver.ContextSections("us-reviewer")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
 		}
 		output, err := BuildRoleContext("us-reviewer", sections, data)
 		if err != nil {
