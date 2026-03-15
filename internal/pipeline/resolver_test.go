@@ -3,6 +3,7 @@ package pipeline
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/models"
 )
@@ -175,6 +176,126 @@ func TestResolver_IsTransitionSourcePair_Phase2(t *testing.T) {
 	// coding-pair is a terminal pair, not a transition source
 	if r.IsTransitionSourcePair("coding-pair") {
 		t.Error("IsTransitionSourcePair(coding-pair) = true, want false")
+	}
+}
+
+func TestRoleType(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+
+	tests := []struct {
+		role     string
+		wantType string
+	}{
+		{"coder", "doer"},
+		{"code-reviewer", "reviewer"},
+		{"orchestrator", "orchestrator"},
+	}
+	for _, tt := range tests {
+		got, err := r.RoleType(tt.role)
+		if err != nil {
+			t.Errorf("RoleType(%q): unexpected error: %v", tt.role, err)
+			continue
+		}
+		if got != tt.wantType {
+			t.Errorf("RoleType(%q) = %q, want %q", tt.role, got, tt.wantType)
+		}
+	}
+
+	// Unknown role returns error.
+	_, err := r.RoleType("unknown-role")
+	if err == nil {
+		t.Error("RoleType(unknown-role): expected error, got nil")
+	}
+}
+
+func TestDoerRoleNames(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+	got := r.DoerRoleNames()
+	want := []string{"code-planner", "coder", "epic-planner", "us-writer"}
+	if len(got) != len(want) {
+		t.Fatalf("DoerRoleNames() = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("DoerRoleNames()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestReviewerRoleNames(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+	got := r.ReviewerRoleNames()
+	want := []string{"code-plan-reviewer", "code-reviewer", "epic-plan-reviewer", "us-reviewer"}
+	if len(got) != len(want) {
+		t.Fatalf("ReviewerRoleNames() = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("ReviewerRoleNames()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestAllRoleNames(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+	got := r.AllRoleNames()
+	want := []string{
+		"code-plan-reviewer", "code-planner", "code-reviewer", "coder",
+		"epic-plan-reviewer", "epic-planner", "orchestrator", "us-reviewer", "us-writer",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("AllRoleNames() = %v (len %d), want %v (len %d)", got, len(got), want, len(want))
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("AllRoleNames()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestAllowedOperations(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+	got, err := r.AllowedOperations("coder")
+	if err != nil {
+		t.Fatalf("AllowedOperations(coder): %v", err)
+	}
+	want := []string{"write-checkpoint", "submit-for-review", "mark-blocked", "handoff", "set-task-output"}
+	if len(got) != len(want) {
+		t.Fatalf("AllowedOperations(coder) = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("AllowedOperations(coder)[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	// Unknown role returns error.
+	_, err = r.AllowedOperations("unknown-role")
+	if err == nil {
+		t.Error("AllowedOperations(unknown-role): expected error, got nil")
+	}
+}
+
+func TestRoleTimeouts(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+	got, err := r.RoleTimeouts("coder")
+	if err != nil {
+		t.Fatalf("RoleTimeouts(coder): %v", err)
+	}
+	if got.Execution != 2*time.Hour {
+		t.Errorf("Execution = %v, want 2h", got.Execution)
+	}
+	if got.PollInterval != 30*time.Second {
+		t.Errorf("PollInterval = %v, want 30s", got.PollInterval)
+	}
+	if got.MaxWait != 30*time.Minute {
+		t.Errorf("MaxWait = %v, want 30m", got.MaxWait)
+	}
+
+	// Unknown role returns error.
+	_, err = r.RoleTimeouts("unknown-role")
+	if err == nil {
+		t.Error("RoleTimeouts(unknown-role): expected error, got nil")
 	}
 }
 

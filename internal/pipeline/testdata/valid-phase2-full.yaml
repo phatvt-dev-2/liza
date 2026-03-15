@@ -9,6 +9,67 @@ pipeline:
     coder: "Coder"
     code-reviewer: "Code Reviewer"
 
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+      description: "Implements code changes in isolated worktrees"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      description: "Reviews code changes, issues binding verdicts"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - submit-verdict
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+      description: "Decomposes goals, manages sprint lifecycle"
+      max-instances: 1
+      timeouts:
+        execution: 4h
+        poll-interval: 60s
+        max-wait: 30m
+      allowed-operations:
+        - add-tasks
+        - supersede-task
+        - sprint-checkpoint
+        - analyze
+        - delete-agent
+        - clear-stale-review-claims
+        - update-sprint-metrics
+    epic-planner:
+      type: doer
+      display-name: "Epic Planner"
+    epic-plan-reviewer:
+      type: reviewer
+      display-name: "Epic Plan Reviewer"
+    us-writer:
+      type: doer
+      display-name: "US Writer"
+    us-reviewer:
+      type: reviewer
+      display-name: "US Reviewer"
+    code-planner:
+      type: doer
+      display-name: "Code Planner"
+    code-plan-reviewer:
+      type: reviewer
+      display-name: "Code Plan Reviewer"
+
   role-pairs:
     epic-planning-pair:
       doer: epic-planner

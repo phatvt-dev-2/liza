@@ -3,6 +3,7 @@ package pipeline
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/liza-mas/liza/internal/models"
 )
@@ -78,6 +79,91 @@ func (r *Resolver) RejectedStatus(rolePair string) (models.TaskStatus, error) {
 		return "", err
 	}
 	return models.TaskStatus(s.Rejected), nil
+}
+
+// ResolvedTimeouts holds parsed timeout durations for a role.
+type ResolvedTimeouts struct {
+	Execution    time.Duration
+	PollInterval time.Duration
+	MaxWait      time.Duration
+}
+
+// RoleType returns the type (doer, reviewer, orchestrator) for the named role.
+func (r *Resolver) RoleType(name string) (string, error) {
+	role, ok := r.config.Pipeline.Roles[name]
+	if !ok {
+		return "", fmt.Errorf("unknown role %q", name)
+	}
+	return role.Type, nil
+}
+
+// DoerRoleNames returns the sorted names of all roles with type "doer".
+func (r *Resolver) DoerRoleNames() []string {
+	return r.roleNamesByType("doer")
+}
+
+// ReviewerRoleNames returns the sorted names of all roles with type "reviewer".
+func (r *Resolver) ReviewerRoleNames() []string {
+	return r.roleNamesByType("reviewer")
+}
+
+// AllRoleNames returns the sorted names of all declared roles.
+func (r *Resolver) AllRoleNames() []string {
+	names := make([]string, 0, len(r.config.Pipeline.Roles))
+	for name := range r.config.Pipeline.Roles {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+// AllowedOperations returns the allowed-operations list for the named role.
+func (r *Resolver) AllowedOperations(name string) ([]string, error) {
+	role, ok := r.config.Pipeline.Roles[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown role %q", name)
+	}
+	return role.AllowedOperations, nil
+}
+
+// RoleTimeouts returns the parsed timeout durations for the named role.
+func (r *Resolver) RoleTimeouts(name string) (*ResolvedTimeouts, error) {
+	role, ok := r.config.Pipeline.Roles[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown role %q", name)
+	}
+	if role.Timeouts == nil {
+		return nil, fmt.Errorf("role %q has no timeouts defined", name)
+	}
+	exec, err := time.ParseDuration(role.Timeouts.Execution)
+	if err != nil {
+		return nil, fmt.Errorf("role %q: parsing execution timeout: %w", name, err)
+	}
+	poll, err := time.ParseDuration(role.Timeouts.PollInterval)
+	if err != nil {
+		return nil, fmt.Errorf("role %q: parsing poll-interval: %w", name, err)
+	}
+	maxWait, err := time.ParseDuration(role.Timeouts.MaxWait)
+	if err != nil {
+		return nil, fmt.Errorf("role %q: parsing max-wait: %w", name, err)
+	}
+	return &ResolvedTimeouts{
+		Execution:    exec,
+		PollInterval: poll,
+		MaxWait:      maxWait,
+	}, nil
+}
+
+// roleNamesByType returns the sorted names of all roles matching the given type.
+func (r *Resolver) roleNamesByType(roleType string) []string {
+	var names []string
+	for name, role := range r.config.Pipeline.Roles {
+		if role.Type == roleType {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
 }
 
 // TransitionMap generates the intra-pair transition map for all role-pairs.
