@@ -1,0 +1,55 @@
+{{- define "doer-tools" -}}
+{{- if eq .Role "coder"}}
+
+CODER TOOLS:
+- liza_submit_for_review — Submit completed work for review
+  {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
+  Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+- liza_handoff — Context near exhaustion (~90%)
+  {"task_id": "{{.TaskID}}", "summary": "<what is done>", "next_action": "<exact next step>", "agent_id": "{{.AgentID}}"}
+- liza_mark_blocked — Cannot proceed (spec ambiguity, missing dependency)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+- liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
+  Optional: "assumptions", "risks", "tdd_not_required", "scope_extensions"
+  scope_extensions: [{"file": "<path>", "justification": "<why this out-of-scope file must change>"}]
+{{- else if eq .Role "code-planner"}}
+
+CODE PLANNER TOOLS:
+- liza_submit_for_review — Submit code plan for review
+  {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
+  Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+- liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
+- liza_set_task_output — Persist structured task definitions for downstream task creation
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "output": [
+    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "..."}
+  ]}
+- liza_mark_blocked — Cannot proceed
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+{{- else if eq .Role "epic-planner"}}
+
+EPIC PLANNER TOOLS:
+- liza_submit_for_review — Submit epic plan for review
+  {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
+  Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+- liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
+- liza_set_task_output — Persist one entry per capability for downstream US Writer tasks
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "output": [
+    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "..."}
+  ]}
+- liza_mark_blocked — Cannot proceed
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+{{- else if eq .Role "us-writer"}}
+
+US WRITER TOOLS:
+- liza_submit_for_review — Submit user stories for review
+  {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
+  Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+- liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
+- liza_mark_blocked — Cannot proceed
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+{{- end}}
+{{- end -}}

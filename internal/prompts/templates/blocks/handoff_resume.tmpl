@@ -1,0 +1,10 @@
+{{- define "handoff-resume" -}}
+{{- if .HandoffNote}}
+
+=== HANDOFF RESUME CONTEXT ===
+FROM: {{.HandoffNote.Agent}}
+SUMMARY: {{.HandoffNote.Summary}}
+NEXT ACTION: {{.HandoffNote.NextAction}}
+Resume from this point before starting any new approach.
+{{- end}}
+{{- end -}}

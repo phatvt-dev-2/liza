@@ -1,0 +1,20 @@
+{{- define "task-decomposition" -}}
+
+TASK DECOMPOSITION PRINCIPLE:
+Each coding task MUST have a single intent — one observable behavior change.
+Smell: if the task description contains conjunctions ("X and Y and Z"), it is composite.
+Smell: if done_when lists assertions across more than 2 packages or >4 conditions, the task is too broad.
+Atomic exceptions exist (e.g., "add model field and update serializer") — use judgment.
+When a spec step is too large for one task, split it. When two spec steps are small and
+tightly coupled, combining them is acceptable — but the intent must still be singular.
+Prefer more smaller tasks over fewer larger ones: each additional review cycle on a
+large task costs more than a review cycle on a small, focused task.
+Declare dependency order between tasks — no circular or missing dependencies.
+Verify the plan covers ALL spec requirements — gaps will be rejected.
+
+REFACTORING TASKS:
+When a task is pure structural refactoring (file split/move with no behavior change),
+done_when MUST distinguish behavioral test changes (not expected) from mechanical test
+updates (expected). Mechanical updates (file-path strings, import paths) that preserve
+the test's invariant are expected and in-scope — include affected test files in scope.
+{{- end -}}

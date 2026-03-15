@@ -1,0 +1,26 @@
+{{- define "collective-plan-scoping" -}}
+{{- if gt .TotalPlanTasks 1}}
+
+=== COLLECTIVE PLAN SCOPING ===
+This task is {{.TaskOrdinal}} of {{.TotalPlanTasks}} in the current sprint plan.
+Read the full goal spec ({{.GoalSpecRef}}) to understand {{- if eq .RoleType "reviewer"}} the complete picture.
+Verify {{- if eq .Role "us-reviewer"}} stories stay within scope — flag Scope Absorption into sibling territory.{{- else if eq .Role "code-plan-reviewer"}} the plan stays within scope — flag scope creep into sibling territory.{{- else}} the implementation stays within scope — flag scope creep as a blocker.{{- end}}
+{{- else}} how your work integrates.
+Your scope is LIMITED to what is described in SCOPE above.
+{{- if eq .Role "us-writer"}}
+Do NOT write stories that belong to a sibling task's scope — this is Scope Absorption.
+{{- else if eq .Role "code-planner"}}
+Do NOT plan work that belongs to a sibling task's scope.
+{{- else}}
+If you must modify a file outside your scope, declare it in scope_extensions with justification.
+Do NOT silently modify out-of-scope files — undeclared scope changes will be rejected.
+If you discover work needed outside your scope that you cannot handle, log it as a spec_gap anomaly.
+{{- end}}
+{{- end}}
+
+SIBLING TASKS (for {{- if eq .RoleType "reviewer"}} scope boundary awareness{{- else}} context only — do NOT implement{{- end}}):
+{{- range .SiblingTasks}}
+- {{.ID}}: {{.Description}} [{{.Status}}]
+{{- end}}
+{{- end}}
+{{- end -}}

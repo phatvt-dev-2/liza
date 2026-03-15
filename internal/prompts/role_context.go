@@ -23,6 +23,9 @@ type RoleContextData struct {
 	PriorRejection string // empty if no prior rejection
 
 	// Review (populated for reviewer roles)
+	BaseCommit      string // git diff base for reviewer
+	ReviewCommit    string // git diff target for reviewer
+	AssignedTo      string // code author being reviewed
 	ReviewCycles    int
 	ScopeExtensions []map[string]string
 
@@ -34,6 +37,7 @@ type RoleContextData struct {
 
 	// Coder-specific
 	IntegrationBranch string
+	IntegrationFix    bool // whether task is in integration fix mode
 	HandoffNote       *models.HandoffNote
 
 	// Orchestrator-specific (pre-rendered content strings)

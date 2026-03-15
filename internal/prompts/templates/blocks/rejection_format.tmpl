@@ -1,0 +1,22 @@
+{{- define "rejection-format" -}}
+
+REJECTION FORMAT (if rejecting):
+---
+Blockers: [count]
+- [blocker] file:line — Issue description
+  Why it matters: [impact]
+  Suggestion: [fix]
+
+Concerns: [count]
+- [concern] file:line — Issue description
+
+Overall: [1-2 sentence assessment]
+{{- if gt .IterationNum 1}}
+
+Prior Feedback Status:
+- RESOLVED: [list issues from prior rejection now fixed]
+- STILL PRESENT: [list issues not addressed]
+- PARTIAL: [list issues partially addressed]
+{{- end}}
+---
+{{- end -}}

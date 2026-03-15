@@ -1,0 +1,13 @@
+{{- define "prior-rejection" -}}
+{{- if ne .PriorRejection ""}}
+{{- if eq .RoleType "reviewer"}}
+
+=== PRIOR REJECTION (iteration {{sub .IterationNum 1}}) ===
+{{.PriorRejection}}
+{{- else}}
+
+=== PRIOR REJECTION FEEDBACK (MUST ADDRESS) ===
+{{.PriorRejection}}
+{{- end}}
+{{- end}}
+{{- end -}}

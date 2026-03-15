@@ -1,0 +1,38 @@
+{{- define "anomaly-logging" -}}
+{{- if eq .RoleType "reviewer"}}
+
+ANOMALY LOGGING:
+| Observation | Type | Required Fields |
+|-------------|------|-----------------|
+| Coder retry loop visible | retry_loop | count, error_pattern |
+| Implementation differs from spec | scope_deviation | — |
+| Workaround taken | workaround | — |
+| Technical debt introduced | debt_created | — |
+| Spec assumption contradicted | assumption_violated | assumption, reality |
+| Spec changed since task creation | spec_changed | — |
+| Own review stuck in command loop | reviewer_loop | count, command_pattern |
+Format: anomalies: [{id, type, task, reporter, timestamp (ISO 8601), details: {<fields>}}]
+{{- else if eq .RoleType "orchestrator"}}
+
+ANOMALY LOGGING:
+| Event | Type | Required Fields |
+|-------|------|-----------------|
+| Two coders failed same task | hypothesis_exhaustion | — |
+| Spec gap discovered | spec_gap | — |
+| Review stuck in cycles | review_deadlock | — |
+| Multiple reviewers failed | review_exhaustion | reviewers_failed, common_blocker |
+| Protocol ambiguity | system_ambiguity | protocol_section, question |
+Format: anomalies: [{id, type, task, reporter, timestamp (ISO 8601), details: {<fields>}}]
+{{- else}}
+
+ANOMALY LOGGING:
+| Event | Type | Required Fields |
+|-------|------|-----------------|
+| >2 iterations on same error | retry_loop | count, error_pattern |
+| Accepting suboptimal solution | trade_off | what, why, debt_created |
+| Spec doesn't cover case | spec_ambiguity | — |
+| External service blocking | external_blocker | blocker_service |
+| Spec assumption proven false | assumption_violated | assumption, reality |
+Format: anomalies: [{id, type, task, reporter, timestamp (ISO 8601), details: {<fields>}}]
+{{- end}}
+{{- end -}}

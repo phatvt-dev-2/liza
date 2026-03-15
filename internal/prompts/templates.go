@@ -10,6 +10,9 @@ import (
 //go:embed templates/*.tmpl
 var templatesFS embed.FS
 
+//go:embed templates/blocks/*.tmpl
+var blocksFS embed.FS
+
 var funcMap = template.FuncMap{
 	"deref": func(s *string) string {
 		if s == nil {
@@ -24,6 +27,10 @@ var funcMap = template.FuncMap{
 
 var tmpl = template.Must(
 	template.New("").Funcs(funcMap).ParseFS(templatesFS, "templates/*.tmpl"),
+)
+
+var blockTmpl = template.Must(
+	template.New("").Funcs(funcMap).ParseFS(blocksFS, "templates/blocks/*.tmpl"),
 )
 
 func executeTemplate(name string, data any) (string, error) {

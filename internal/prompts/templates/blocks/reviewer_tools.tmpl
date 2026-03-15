@@ -1,0 +1,22 @@
+{{- define "reviewer-tools" -}}
+{{- if eq .Role "code-reviewer"}}
+
+REVIEWER TOOL:
+- liza_submit_verdict — Submit review verdict (see VERDICT SUBMISSION below for params)
+{{- else}}
+
+{{- if eq .Role "code-plan-reviewer"}}
+CODE PLAN REVIEWER TOOLS:
+{{- else if eq .Role "epic-plan-reviewer"}}
+EPIC PLAN REVIEWER TOOLS:
+{{- else if eq .Role "us-reviewer"}}
+US REVIEWER TOOLS:
+{{- end}}
+- liza_get — Query task state to inspect output[] entries
+  {"query": "tasks/{{.TaskID}}"}
+- liza_submit_verdict — Submit review verdict (MCP tool call, NOT a CLI command)
+  ⚠️  Do NOT use `go run`, `liza submit-verdict`, or any shell command.
+  APPROVED: call tool liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "APPROVED", "agent_id": "{{.AgentID}}"}
+  REJECTED: call tool liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "REJECTED", "agent_id": "{{.AgentID}}", "reason": "<detailed rejection reason>"}
+{{- end}}
+{{- end -}}

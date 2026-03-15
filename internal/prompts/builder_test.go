@@ -2117,3 +2117,483 @@ func TestBlockSkillsAffinity_EmptySlice(t *testing.T) {
 		t.Errorf("expected empty output for empty Skills slice, got %q", buf.String())
 	}
 }
+
+// TestBuildRoleContext_Equivalence verifies that for all 9 roles, BuildRoleContext()
+// output contains the same key content strings as the existing Build*Context() output.
+func TestBuildRoleContext_Equivalence(t *testing.T) {
+	now := time.Now().UTC()
+	projectRoot := setupPipelineConfig(t)
+
+	makeDoerTask := func(id string) *models.Task {
+		task := testhelpers.BuildTaskByStatus(id, models.TaskStatusImplementing, now)
+		task.Description = "Implement feature X"
+		task.DoneWhen = "Feature X works correctly"
+		task.Scope = "internal/feature"
+		task.Iteration = 2
+		reason := "Missing error handling"
+		task.RejectionReason = &reason
+		worktree := ".worktrees/" + id
+		task.Worktree = &worktree
+		return &task
+	}
+
+	makeReviewerTask := func(id string) *models.Task {
+		task := testhelpers.BuildTaskByStatus(id, models.TaskStatusReadyForReview, now)
+		task.Description = "Implement feature X"
+		task.DoneWhen = "Feature X works correctly"
+		task.Scope = "internal/feature"
+		task.Iteration = 2
+		reason := "Missing error handling"
+		task.RejectionReason = &reason
+		worktree := ".worktrees/" + id
+		task.Worktree = &worktree
+		baseCommit := "abc1234"
+		task.BaseCommit = &baseCommit
+		reviewCommit := "def5678"
+		task.ReviewCommit = &reviewCommit
+		agent := "coder-1"
+		task.AssignedTo = &agent
+		return &task
+	}
+
+	siblings := []SiblingTaskSummary{
+		{ID: "task-0", Description: "Setup infrastructure", Status: "MERGED"},
+	}
+
+	assertKeyStrings := func(t *testing.T, legacyOutput, newOutput string, keyStrings []string) {
+		t.Helper()
+		for _, key := range keyStrings {
+			if !strings.Contains(legacyOutput, key) {
+				t.Errorf("legacy output missing key string %q (test setup issue)", key)
+			}
+			if !strings.Contains(newOutput, key) {
+				t.Errorf("BuildRoleContext output missing key string %q", key)
+			}
+		}
+	}
+
+	t.Run("coder", func(t *testing.T) {
+		task := makeDoerTask("task-coder")
+		config := CoderContextConfig{
+			ProjectRoot:       projectRoot,
+			AgentID:           "coder-1",
+			IntegrationBranch: "integration",
+			GoalSpecRef:       "specs/goal.md",
+			SiblingTasks:      siblings,
+			TotalPlanTasks:    3,
+			TaskOrdinal:       2,
+		}
+		legacyOutput, err := BuildCoderContext(task, config)
+		if err != nil {
+			t.Fatalf("legacy: %v", err)
+		}
+
+		data := &RoleContextData{
+			Role: "coder", AgentID: "coder-1", RoleType: "doer",
+			TaskID: task.ID, Description: task.Description,
+			DoneWhen: task.DoneWhen, Scope: task.Scope,
+			Worktree:          projectRoot + "/.worktrees/task-coder",
+			IterationNum:      task.Iteration,
+			PriorRejection:    "Missing error handling",
+			IntegrationBranch: "integration",
+			GoalSpecRef:       "specs/goal.md",
+			SiblingTasks:      siblings,
+			TotalPlanTasks:    3, TaskOrdinal: 2,
+			ProjectRoot: projectRoot,
+		}
+		sections := []string{
+			"assigned-task", "collective-plan-scoping", "handoff-resume",
+			"integration-fix", "prior-rejection", "doer-state-transitions",
+			"doer-tools", "anomaly-logging", "blocking-protocol",
+			"worktree-rules", "commit-workflow", "implementation-phase",
+			"submission-phase",
+		}
+		newOutput, err := BuildRoleContext("coder", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		assertKeyStrings(t, legacyOutput, newOutput, []string{
+			"=== ASSIGNED TASK ===",
+			"TASK ID: task-coder",
+			"CODER STATE TRANSITIONS:",
+			"IMPLEMENTING_CODE",
+			"CODER TOOLS:",
+			"liza_submit_for_review",
+			"liza_handoff",
+			"liza_mark_blocked",
+			"ANOMALY LOGGING:",
+			"BLOCKING PROTOCOL:",
+			"WORKTREE RULES:",
+			"COMMIT WORKFLOW:",
+			"IMPLEMENTATION PHASE",
+			"SUBMISSION (MANDATORY",
+			"COLLECTIVE PLAN SCOPING",
+			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
+			"Missing error handling",
+		})
+	})
+
+	t.Run("code-reviewer", func(t *testing.T) {
+		task := makeReviewerTask("task-reviewer")
+		config := ReviewerContextConfig{
+			ProjectRoot: projectRoot, AgentID: "code-reviewer-1",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2,
+		}
+		legacyOutput, err := BuildReviewerContext(task, config)
+		if err != nil {
+			t.Fatalf("legacy: %v", err)
+		}
+
+		data := &RoleContextData{
+			Role: "code-reviewer", AgentID: "code-reviewer-1", RoleType: "reviewer",
+			TaskID: task.ID, Description: task.Description,
+			DoneWhen: task.DoneWhen, Scope: task.Scope,
+			Worktree:     projectRoot + "/.worktrees/task-reviewer",
+			IterationNum: task.Iteration, PriorRejection: "Missing error handling",
+			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+		}
+		sections := []string{
+			"review-task", "collective-plan-scoping", "scope-extensions",
+			"prior-rejection", "reviewer-state-transitions", "reviewer-tools",
+			"anomaly-logging", "worktree-rules", "review-instructions",
+			"rejection-format", "verdict-submission",
+		}
+		newOutput, err := BuildRoleContext("code-reviewer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		assertKeyStrings(t, legacyOutput, newOutput, []string{
+			"=== REVIEW TASK ===",
+			"TASK ID: task-reviewer",
+			"BASE COMMIT: abc1234",
+			"REVIEW COMMIT: def5678",
+			"AUTHOR: coder-1",
+			"REVIEWER STATE TRANSITIONS:",
+			"REVIEWING_CODE",
+			"CODE_APPROVED",
+			"REVIEWER TOOL:",
+			"liza_submit_verdict",
+			"ANOMALY LOGGING:",
+			"WORKTREE GIT RULES:",
+			"REVIEW SCOPE:",
+			"REJECTION FORMAT",
+			"VERDICT SUBMISSION",
+			"COLLECTIVE PLAN SCOPING",
+			"PRIOR REJECTION (iteration 1)",
+		})
+	})
+
+	t.Run("orchestrator", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{}
+		config := OrchestratorContextConfig{ProjectRoot: projectRoot, AgentID: "orchestrator-1"}
+		legacyOutput, err := BuildOrchestratorContext(state, config)
+		if err != nil {
+			t.Fatalf("legacy: %v", err)
+		}
+
+		// Orchestrator blocks use pre-rendered strings.
+		// Split legacy output at "INSTRUCTIONS:" to populate both blocks.
+		parts := strings.SplitN(legacyOutput, "INSTRUCTIONS:", 2)
+		dashboard := parts[0]
+		wake := ""
+		if len(parts) > 1 {
+			wake = "INSTRUCTIONS:" + parts[1]
+		}
+
+		data := &RoleContextData{
+			Role: "orchestrator", AgentID: "orchestrator-1", RoleType: "orchestrator",
+			DashboardOutput: dashboard,
+			WakeInstruction: wake,
+			ProjectRoot:     projectRoot,
+		}
+		sections := []string{"orchestrator-dashboard", "wake-instructions"}
+		newOutput, err := BuildRoleContext("orchestrator", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		assertKeyStrings(t, legacyOutput, newOutput, []string{
+			"=== ORCHESTRATOR CONTEXT ===",
+			"WAKE TRIGGER:",
+			"SPRINT STATE:",
+			"ORCHESTRATOR COMMANDS:",
+			"liza_add_tasks",
+			"ANOMALY LOGGING:",
+			"INSTRUCTIONS:",
+		})
+	})
+
+	t.Run("code-planner", func(t *testing.T) {
+		task := makeDoerTask("task-planner")
+		config := CodePlannerContextConfig{
+			ProjectRoot: projectRoot, AgentID: "code-planner-1",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2,
+		}
+		legacyOutput, err := BuildCodePlannerContext(task, config)
+		if err != nil {
+			t.Fatalf("legacy: %v", err)
+		}
+
+		data := &RoleContextData{
+			Role: "code-planner", AgentID: "code-planner-1", RoleType: "doer",
+			TaskID: task.ID, Description: task.Description,
+			DoneWhen: task.DoneWhen, Scope: task.Scope,
+			Worktree:     projectRoot + "/.worktrees/task-planner",
+			IterationNum: task.Iteration, PriorRejection: "Missing error handling",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+		}
+		sections := []string{
+			"assigned-task", "collective-plan-scoping", "prior-rejection",
+			"doer-state-transitions", "doer-tools", "worktree-rules",
+			"task-decomposition", "implementation-phase",
+		}
+		newOutput, err := BuildRoleContext("code-planner", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		assertKeyStrings(t, legacyOutput, newOutput, []string{
+			"=== ASSIGNED CODE PLANNING TASK ===",
+			"TASK ID: task-planner",
+			"CODE PLANNER STATE TRANSITIONS:",
+			"CODE PLANNER TOOLS:",
+			"liza_set_task_output",
+			"WORKTREE RULES:",
+			"TASK DECOMPOSITION PRINCIPLE:",
+			"IMPLEMENTATION PHASE:",
+			"COLLECTIVE PLAN SCOPING",
+			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
+		})
+	})
+
+	t.Run("code-plan-reviewer", func(t *testing.T) {
+		task := makeReviewerTask("task-cpr")
+		config := CodePlanReviewerContextConfig{
+			ProjectRoot: projectRoot, AgentID: "code-plan-reviewer-1",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2,
+		}
+		legacyOutput, err := BuildCodePlanReviewerContext(task, config)
+		if err != nil {
+			t.Fatalf("legacy: %v", err)
+		}
+
+		data := &RoleContextData{
+			Role: "code-plan-reviewer", AgentID: "code-plan-reviewer-1", RoleType: "reviewer",
+			TaskID: task.ID, Description: task.Description,
+			DoneWhen: task.DoneWhen, Scope: task.Scope,
+			Worktree:     projectRoot + "/.worktrees/task-cpr",
+			IterationNum: task.Iteration, PriorRejection: "Missing error handling",
+			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+		}
+		sections := []string{
+			"review-task", "collective-plan-scoping", "prior-rejection",
+			"reviewer-state-transitions", "reviewer-tools", "anomaly-logging",
+			"worktree-rules", "review-instructions", "rejection-format",
+			"verdict-submission",
+		}
+		newOutput, err := BuildRoleContext("code-plan-reviewer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		assertKeyStrings(t, legacyOutput, newOutput, []string{
+			"=== ASSIGNED CODE PLAN REVIEW TASK ===",
+			"TASK ID: task-cpr",
+			"CODE PLAN REVIEWER STATE TRANSITIONS:",
+			"REVIEWING_CODING_PLAN",
+			"CODE PLAN REVIEWER TOOLS:",
+			"liza_submit_verdict",
+			"REVIEW CHECKLIST:",
+			"VERDICT SUBMISSION",
+		})
+	})
+
+	t.Run("epic-planner", func(t *testing.T) {
+		task := makeDoerTask("task-ep")
+		config := EpicPlannerContextConfig{
+			ProjectRoot: projectRoot, AgentID: "epic-planner-1",
+		}
+		legacyOutput, err := BuildEpicPlannerContext(task, config)
+		if err != nil {
+			t.Fatalf("legacy: %v", err)
+		}
+
+		data := &RoleContextData{
+			Role: "epic-planner", AgentID: "epic-planner-1", RoleType: "doer",
+			TaskID: task.ID, Description: task.Description,
+			DoneWhen: task.DoneWhen, Scope: task.Scope,
+			Worktree:     projectRoot + "/.worktrees/task-ep",
+			IterationNum: task.Iteration, PriorRejection: "Missing error handling",
+			ProjectRoot: projectRoot,
+		}
+		sections := []string{
+			"assigned-task", "prior-rejection", "doer-state-transitions",
+			"doer-tools", "worktree-rules", "capability-scoping",
+			"implementation-phase",
+		}
+		newOutput, err := BuildRoleContext("epic-planner", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		assertKeyStrings(t, legacyOutput, newOutput, []string{
+			"=== ASSIGNED EPIC PLANNING TASK ===",
+			"TASK ID: task-ep",
+			"EPIC PLANNER STATE TRANSITIONS:",
+			"EPIC PLANNER TOOLS:",
+			"liza_set_task_output",
+			"WORKTREE RULES:",
+			"EPIC-WRITING SKILL:",
+			"IMPLEMENTATION PHASE:",
+			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
+		})
+	})
+
+	t.Run("epic-plan-reviewer", func(t *testing.T) {
+		task := makeReviewerTask("task-epr")
+		config := EpicPlanReviewerContextConfig{
+			ProjectRoot: projectRoot, AgentID: "epic-plan-reviewer-1",
+		}
+		legacyOutput, err := BuildEpicPlanReviewerContext(task, config)
+		if err != nil {
+			t.Fatalf("legacy: %v", err)
+		}
+
+		data := &RoleContextData{
+			Role: "epic-plan-reviewer", AgentID: "epic-plan-reviewer-1", RoleType: "reviewer",
+			TaskID: task.ID, Description: task.Description,
+			DoneWhen: task.DoneWhen, Scope: task.Scope,
+			Worktree:     projectRoot + "/.worktrees/task-epr",
+			IterationNum: task.Iteration, PriorRejection: "Missing error handling",
+			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
+			ProjectRoot: projectRoot,
+		}
+		sections := []string{
+			"review-task", "prior-rejection", "reviewer-state-transitions",
+			"reviewer-tools", "anomaly-logging", "worktree-rules",
+			"review-instructions", "rejection-format", "verdict-submission",
+		}
+		newOutput, err := BuildRoleContext("epic-plan-reviewer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		assertKeyStrings(t, legacyOutput, newOutput, []string{
+			"=== ASSIGNED EPIC PLAN REVIEW TASK ===",
+			"TASK ID: task-epr",
+			"EPIC PLAN REVIEWER STATE TRANSITIONS:",
+			"REVIEWING_EPIC_PLAN",
+			"EPIC PLAN REVIEWER TOOLS:",
+			"liza_submit_verdict",
+			"EPIC-WRITING SKILL:",
+			"REVIEW CHECKLIST:",
+			"VERDICT SUBMISSION",
+		})
+	})
+
+	t.Run("us-writer", func(t *testing.T) {
+		task := makeDoerTask("task-usw")
+		config := USWriterContextConfig{
+			ProjectRoot: projectRoot, AgentID: "us-writer-1",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2,
+		}
+		legacyOutput, err := BuildUSWriterContext(task, config)
+		if err != nil {
+			t.Fatalf("legacy: %v", err)
+		}
+
+		data := &RoleContextData{
+			Role: "us-writer", AgentID: "us-writer-1", RoleType: "doer",
+			TaskID: task.ID, Description: task.Description,
+			DoneWhen: task.DoneWhen, Scope: task.Scope,
+			SpecRef:      "README.md",
+			Worktree:     projectRoot + "/.worktrees/task-usw",
+			IterationNum: task.Iteration, PriorRejection: "Missing error handling",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+		}
+		sections := []string{
+			"assigned-task", "collective-plan-scoping", "prior-rejection",
+			"doer-state-transitions", "doer-tools", "worktree-rules",
+			"capability-scoping", "implementation-phase",
+		}
+		newOutput, err := BuildRoleContext("us-writer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		assertKeyStrings(t, legacyOutput, newOutput, []string{
+			"=== ASSIGNED US WRITING TASK ===",
+			"TASK ID: task-usw",
+			"US WRITER STATE TRANSITIONS:",
+			"US WRITER TOOLS:",
+			"WORKTREE RULES:",
+			"USER-STORY-WRITING SKILL:",
+			"CAPABILITY SCOPING:",
+			"IMPLEMENTATION PHASE:",
+			"COLLECTIVE PLAN SCOPING",
+			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
+		})
+	})
+
+	t.Run("us-reviewer", func(t *testing.T) {
+		task := makeReviewerTask("task-usr")
+		config := USReviewerContextConfig{
+			ProjectRoot: projectRoot, AgentID: "us-reviewer-1",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2,
+		}
+		legacyOutput, err := BuildUSReviewerContext(task, config)
+		if err != nil {
+			t.Fatalf("legacy: %v", err)
+		}
+
+		data := &RoleContextData{
+			Role: "us-reviewer", AgentID: "us-reviewer-1", RoleType: "reviewer",
+			TaskID: task.ID, Description: task.Description,
+			DoneWhen: task.DoneWhen, Scope: task.Scope,
+			SpecRef:      "README.md",
+			Worktree:     projectRoot + "/.worktrees/task-usr",
+			IterationNum: task.Iteration, PriorRejection: "Missing error handling",
+			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
+			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
+			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+		}
+		sections := []string{
+			"review-task", "collective-plan-scoping", "prior-rejection",
+			"reviewer-state-transitions", "reviewer-tools", "anomaly-logging",
+			"worktree-rules", "review-instructions", "rejection-format",
+			"verdict-submission",
+		}
+		newOutput, err := BuildRoleContext("us-reviewer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		assertKeyStrings(t, legacyOutput, newOutput, []string{
+			"=== ASSIGNED US REVIEW TASK ===",
+			"TASK ID: task-usr",
+			"US REVIEWER STATE TRANSITIONS:",
+			"REVIEWING_US",
+			"US REVIEWER TOOLS:",
+			"liza_submit_verdict",
+			"SPEC-REVIEW SKILL:",
+			"USER-STORY ANTI-PATTERNS",
+			"QUALITY GATES:",
+			"CAPABILITY SCOPING:",
+			"VERDICT SUBMISSION",
+		})
+	})
+}

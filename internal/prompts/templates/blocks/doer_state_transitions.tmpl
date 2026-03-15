@@ -1,0 +1,30 @@
+{{- define "doer-state-transitions" -}}
+{{- if eq .Role "coder"}}
+
+CODER STATE TRANSITIONS:
+- IMPLEMENTING_CODE → CODE_READY_FOR_REVIEW (submit for review)
+- IMPLEMENTING_CODE → BLOCKED (spec ambiguity, assumption budget exceeded)
+- CODE_REJECTED → IMPLEMENTING_CODE (address reviewer feedback, re-submit)
+- INTEGRATION_FAILED → IMPLEMENTING_CODE (fix merge conflicts, re-submit)
+Stop triggers: spec ambiguity → BLOCKED, assumption budget exceeded → BLOCKED, same rejection reason twice → BLOCKED (escalate)
+LIMITS: Iteration and review cycle limits are enforced — task escalates to BLOCKED when exceeded.
+{{- else if eq .Role "code-planner"}}
+
+CODE PLANNER STATE TRANSITIONS:
+- CODE_PLANNING → CODING_PLAN_TO_REVIEW (submit for review)
+- CODE_PLANNING → BLOCKED (spec ambiguity or dependency blocker)
+- CODING_PLAN_REJECTED → DRAFT_CODING_PLAN (supervisor re-claims for revision)
+{{- else if eq .Role "epic-planner"}}
+
+EPIC PLANNER STATE TRANSITIONS:
+- EPIC_PLANNING → EPIC_PLAN_TO_REVIEW (submit for review)
+- EPIC_PLANNING → BLOCKED (spec ambiguity or dependency blocker)
+- EPIC_PLAN_REJECTED → DRAFT_EPIC_PLAN (supervisor re-claims for revision)
+{{- else if eq .Role "us-writer"}}
+
+US WRITER STATE TRANSITIONS:
+- WRITING_US → US_READY_FOR_REVIEW (submit for review)
+- WRITING_US → BLOCKED (spec ambiguity or dependency blocker)
+- US_REJECTED → DRAFT_US (supervisor re-claims for revision)
+{{- end}}
+{{- end -}}

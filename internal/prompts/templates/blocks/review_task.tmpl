@@ -1,0 +1,28 @@
+{{- define "review-task" -}}
+{{- if eq .Role "code-plan-reviewer"}}
+
+=== ASSIGNED CODE PLAN REVIEW TASK ===
+{{- else if eq .Role "epic-plan-reviewer"}}
+
+=== ASSIGNED EPIC PLAN REVIEW TASK ===
+{{- else if eq .Role "us-reviewer"}}
+
+=== ASSIGNED US REVIEW TASK ===
+{{- else}}
+
+=== REVIEW TASK ===
+{{- end}}
+
+TASK ID: {{.TaskID}}
+WORKTREE: {{.Worktree}}
+{{- if ne .BaseCommit ""}}
+BASE COMMIT: {{.BaseCommit}}
+{{- end}}
+REVIEW COMMIT: {{.ReviewCommit}}
+AUTHOR: {{.AssignedTo}}
+ITERATION: {{.IterationNum}}
+DESCRIPTION: {{.Description}}
+
+DONE WHEN:
+{{.DoneWhen}}
+{{- end -}}

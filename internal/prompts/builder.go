@@ -1,7 +1,9 @@
 package prompts
 
 import (
+	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -421,4 +423,24 @@ func countImmediateDiscoveries(discovered []models.Discovery) int {
 		}
 	}
 	return count
+}
+
+// BuildRoleContext assembles role-specific context by rendering the named template
+// blocks in order and concatenating their output. Each block is a modular .tmpl file
+// in templates/blocks/ that receives a unified RoleContextData.
+func BuildRoleContext(role string, sectionNames []string, data *RoleContextData) (string, error) {
+	var buf bytes.Buffer
+	for _, section := range sectionNames {
+		var sectionBuf bytes.Buffer
+		if err := blockTmpl.ExecuteTemplate(&sectionBuf, section, data); err != nil {
+			return "", fmt.Errorf("block template %q for role %q: %w", section, role, err)
+		}
+		rendered := sectionBuf.String()
+		// Skip empty blocks (conditional blocks that rendered nothing)
+		if strings.TrimSpace(rendered) == "" {
+			continue
+		}
+		buf.WriteString(rendered)
+	}
+	return buf.String(), nil
 }

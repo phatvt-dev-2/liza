@@ -1,0 +1,25 @@
+{{- define "assigned-task" -}}
+{{- if eq .Role "code-planner"}}
+
+=== ASSIGNED CODE PLANNING TASK ===
+{{- else if eq .Role "epic-planner"}}
+
+=== ASSIGNED EPIC PLANNING TASK ===
+{{- else if eq .Role "us-writer"}}
+
+=== ASSIGNED US WRITING TASK ===
+{{- else}}
+
+=== ASSIGNED TASK ===
+{{- end}}
+TASK ID: {{.TaskID}}
+WORKTREE: {{.Worktree}}
+ITERATION: {{.IterationNum}}
+DESCRIPTION: {{.Description}}
+
+DONE WHEN:
+{{.DoneWhen}}
+
+SCOPE:
+{{.Scope}}
+{{- end -}}

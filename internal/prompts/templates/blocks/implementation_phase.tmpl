@@ -1,0 +1,70 @@
+{{- define "implementation-phase" -}}
+{{- if eq .Role "coder"}}
+
+--- IMPLEMENTATION PHASE ---
+1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
+2. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
+3. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.
+   Tests must be discoverable via standard runners (e.g. pytest, go test) — not just runnable when explicitly named.
+4. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
+5. TDD waiver: For cosmetic-only changes (comment fixes, formatting), set tdd_not_required in checkpoint with justification
+6. Mechanical test updates: For structural refactoring (file split/move), updating test
+   file-path references or imports to reflect the new file layout is in-scope and does
+   not trigger the TDD requirement in item 3. The test's invariant (what it validates)
+   must be preserved.
+7. Use the clean-code skill at the end of the implementation
+8. Validate ALL done_when criteria are met
+9. If context exhaustion is near (~90%): run liza_handoff with summary + next_action, then exit with code 42
+{{- else if eq .Role "code-planner"}}
+
+IMPLEMENTATION PHASE:
+1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
+2. For EACH coding task in your plan, call liza_set_task_output with structured entries.
+   Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
+   Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source).
+3. Update worktree artifacts required by DONE WHEN.
+4. Validate done_when criteria with concrete checks.
+5. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza_submit_for_review until all pass):
+   a. Each output[] entry passes TASK DECOMPOSITION PRINCIPLE checks above.
+   b. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
+      ("tests pass" is vague; "TestFoo in pkg/bar passes asserting X" is falsifiable.)
+   c. Spec coverage: enumerate every requirement from the spec. Map each to at least one
+      output[] entry. Unmapped requirements = not ready to submit.
+   d. output[] completeness: one entry per planned coding task, each with all four fields
+      (desc, done_when, scope, spec_ref) populated.
+   e. output[] matches plan: compare each output[] entry's desc, done_when, scope, and
+      spec_ref against the plan file in the worktree — they must be identical, not
+      paraphrased or extended.
+   f. Cross-reference consistency: for every cross-reference in the plan ("owned by CPx",
+      "depends on CPx", "out of scope for CPx"), search the plan file you committed in the
+      worktree and confirm the referenced task explicitly states that responsibility,
+      dependency, or exclusion. If any reference points to a task that does not claim it,
+      fix the plan before submitting.
+6. Submit using liza_submit_for_review only after all checks in step 5 pass.
+{{- else if eq .Role "epic-planner"}}
+
+IMPLEMENTATION PHASE:
+1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
+2. Read the epic-writing skill FIRST: ~/.liza/skills/epic-writing/SKILL.md
+3. Read the source material referenced by this task (vision doc, product brief, spec).
+4. Follow the skill protocol: Size → Parse → Decompose → Write → Self-Review.
+5. For EACH capability in the epic, call liza_set_task_output with structured entries.
+   Each entry becomes a US Writer child task after merge. The Epic Plan Reviewer will verify these.
+   Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary),
+   spec_ref (path to the produced epic document — US Writers use this to locate the parent epic).
+6. Update worktree artifacts required by DONE WHEN.
+7. Validate done_when criteria with concrete checks.
+8. Submit using liza_submit_for_review when complete.
+{{- else if eq .Role "us-writer"}}
+
+IMPLEMENTATION PHASE:
+1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
+2. Read the user-story-writing skill FIRST: ~/.liza/skills/user-story-writing/SKILL.md
+3. Read the epic at {{.SpecRef}}. Locate your assigned capability by matching task SCOPE.
+   Read only Personas + General Information + that capability section.
+4. Follow the skill protocol: Parse → Write → Self-Review.
+5. Write user stories to the output file path specified by the task.
+6. Validate done_when criteria with concrete checks.
+7. Submit using liza_submit_for_review when complete.
+{{- end}}
+{{- end -}}
