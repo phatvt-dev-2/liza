@@ -131,60 +131,6 @@ func (e *RoleError) Error() string {
 	return fmt.Sprintf("requires one of %v roles (got %s from %s)", e.Expected, e.Got, e.AgentID)
 }
 
-// requireRole validates agent ID format and that it matches the expected runtime role.
-func requireRole(agentID, expectedRole string) error {
-	if err := identity.ValidateFormat(agentID); err != nil {
-		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
-	}
-	role, _ := identity.ExtractRole(agentID) // cannot fail after ValidateFormat
-	if role != expectedRole {
-		return &RoleError{Expected: []string{expectedRole}, Got: role, AgentID: agentID}
-	}
-	return nil
-}
-
-// requireDoerRole validates agent ID format and that it has a doer role.
-func requireDoerRole(agentID string) error {
-	if err := identity.ValidateFormat(agentID); err != nil {
-		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
-	}
-	role, _ := identity.ExtractRole(agentID)
-	if !roles.IsDoerRole(role) {
-		return &RoleError{Expected: roles.DoerRoles(), Got: role, AgentID: agentID}
-	}
-	return nil
-}
-
-// requireDoerOrOrchestratorRole validates agent ID format and that it has a doer or orchestrator role.
-// Used for operations like wt-delete that doers perform on their own tasks
-// but the orchestrator also performs for cleanup of superseded/blocked tasks.
-func requireDoerOrOrchestratorRole(agentID string) error {
-	if err := identity.ValidateFormat(agentID); err != nil {
-		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
-	}
-	role, _ := identity.ExtractRole(agentID)
-	if roles.IsDoerRole(role) || role == roles.RuntimeOrchestrator {
-		return nil
-	}
-	doers := roles.DoerRoles()
-	allowed := make([]string, len(doers)+1)
-	copy(allowed, doers)
-	allowed[len(doers)] = roles.RuntimeOrchestrator
-	return &RoleError{Expected: allowed, Got: role, AgentID: agentID}
-}
-
-// requireReviewerRole validates agent ID format and that it has a reviewer role.
-func requireReviewerRole(agentID string) error {
-	if err := identity.ValidateFormat(agentID); err != nil {
-		return fmt.Errorf("invalid agent ID %q: %w", agentID, err)
-	}
-	role, _ := identity.ExtractRole(agentID)
-	if !roles.IsReviewerRole(role) {
-		return &RoleError{Expected: roles.ReviewerRoles(), Got: role, AgentID: agentID}
-	}
-	return nil
-}
-
 // authorizeClaimRelease validates that the agent's runtime role is authorized
 // to release the requested claim type. Orchestrator can release any claim;
 // others can only release claims matching their own role category.

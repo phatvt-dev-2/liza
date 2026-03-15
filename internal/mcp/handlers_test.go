@@ -2244,49 +2244,49 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:     "claim_task rejects reviewer",
 			toolName: "liza_claim_task",
 			params:   map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
-			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
+			wantErr:  "requires one of [doer] roles",
 		},
 		{
 			name:     "submit_for_review rejects reviewer",
 			toolName: "liza_submit_for_review",
 			params:   map[string]any{"task_id": "task-1", "commit_sha": "abc123", "agent_id": "code-reviewer-1"},
-			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
+			wantErr:  "operation submit-for-review not allowed for role code-reviewer",
 		},
 		{
 			name:     "handoff rejects reviewer",
 			toolName: "liza_handoff",
 			params:   map[string]any{"task_id": "task-1", "summary": "s", "next_action": "n", "agent_id": "code-reviewer-1"},
-			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
+			wantErr:  "operation handoff not allowed for role code-reviewer",
 		},
 		{
 			name:     "submit_verdict rejects coder",
 			toolName: "liza_submit_verdict",
 			params:   map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "coder-1"},
-			wantErr:  "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
+			wantErr:  "operation submit-verdict not allowed for role coder",
 		},
 		{
 			name:     "wt_merge rejects coder",
 			toolName: "liza_wt_merge",
 			params:   map[string]any{"task_id": "task-1", "agent_id": "coder-1"},
-			wantErr:  "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
+			wantErr:  "requires one of [reviewer] roles",
 		},
 		{
 			name:     "add_tasks rejects coder",
 			toolName: "liza_add_tasks",
 			params:   map[string]any{"tasks": []any{map[string]any{"id": "t-new", "desc": "d", "spec": "specs/test-spec.md", "done": "d", "scope": "s"}}, "agent_id": "coder-1"},
-			wantErr:  "requires one of [orchestrator] roles",
+			wantErr:  "operation add-tasks not allowed for role coder",
 		},
 		{
 			name:     "supersede rejects coder",
 			toolName: "liza_supersede_task",
 			params:   map[string]any{"task_id": "task-1", "reason": "r", "agent_id": "coder-1"},
-			wantErr:  "requires one of [orchestrator] roles",
+			wantErr:  "operation supersede-task not allowed for role coder",
 		},
 		{
 			name:     "write_checkpoint rejects reviewer",
 			toolName: "liza_write_checkpoint",
 			params:   map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1", "intent": "i", "validation_plan": "v", "files_to_modify": []any{"f"}},
-			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
+			wantErr:  "operation write-checkpoint not allowed for role code-reviewer",
 		},
 		{
 			name:     "write_checkpoint accepts epic-planner (passes role check)",
@@ -2347,58 +2347,58 @@ func TestHandleRoleEnforcement(t *testing.T) {
 			name:     "submit_verdict rejects unknown role",
 			toolName: "liza_submit_verdict",
 			params:   map[string]any{"task_id": "task-1", "verdict": "APPROVED", "agent_id": "foobar-1"},
-			wantErr:  "requires one of [code-reviewer code-plan-reviewer epic-plan-reviewer us-reviewer] roles",
+			wantErr:  "operation submit-verdict not allowed for role foobar",
 		},
 		// --- Access control for newly protected handlers ---
-		// Admin ops: require orchestrator
+		// Admin ops: require orchestrator (via operationChecker)
 		{
 			name:     "analyze rejects coder",
 			toolName: "liza_analyze",
 			params:   map[string]any{"agent_id": "coder-1"},
-			wantErr:  "requires one of [orchestrator] roles",
+			wantErr:  "operation analyze not allowed for role coder",
 		},
 		{
 			name:     "sprint_checkpoint rejects coder",
 			toolName: "liza_sprint_checkpoint",
 			params:   map[string]any{"agent_id": "coder-1"},
-			wantErr:  "requires one of [orchestrator] roles",
+			wantErr:  "operation sprint-checkpoint not allowed for role coder",
 		},
 		{
 			name:     "update_sprint_metrics rejects coder",
 			toolName: "liza_update_sprint_metrics",
 			params:   map[string]any{"agent_id": "coder-1"},
-			wantErr:  "requires one of [orchestrator] roles",
+			wantErr:  "operation update-sprint-metrics not allowed for role coder",
 		},
 		{
 			name:     "clear_stale_reviews rejects coder",
 			toolName: "liza_clear_stale_review_claims",
 			params:   map[string]any{"agent_id": "coder-1"},
-			wantErr:  "requires one of [orchestrator] roles",
+			wantErr:  "operation clear-stale-review-claims not allowed for role coder",
 		},
 		{
 			name:     "delete_agent rejects coder caller",
 			toolName: "liza_delete_agent",
 			params:   map[string]any{"target_agent_id": "coder-1", "agent_id": "coder-2", "reason": "test"},
-			wantErr:  "requires one of [orchestrator] roles",
+			wantErr:  "operation delete-agent not allowed for role coder",
 		},
-		// Worktree ops: require doer role
+		// Worktree ops: require doer role (via typeChecker)
 		{
 			name:     "wt_create rejects orchestrator",
 			toolName: "liza_wt_create",
 			params:   map[string]any{"task_id": "task-1", "agent_id": "orchestrator-1"},
-			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
+			wantErr:  "requires one of [doer] roles",
 		},
 		{
 			name:     "wt_create rejects reviewer",
 			toolName: "liza_wt_create",
 			params:   map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
-			wantErr:  "requires one of [coder code-planner epic-planner us-writer] roles",
+			wantErr:  "requires one of [doer] roles",
 		},
 		{
 			name:     "wt_delete rejects reviewer",
 			toolName: "liza_wt_delete",
 			params:   map[string]any{"task_id": "task-1", "agent_id": "code-reviewer-1"},
-			wantErr:  "requires one of [coder code-planner epic-planner us-writer orchestrator] roles",
+			wantErr:  "requires one of [doer orchestrator] roles",
 		},
 	}
 

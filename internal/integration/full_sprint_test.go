@@ -28,6 +28,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -73,8 +74,19 @@ func (m *SmartMockCLIExecutor) Execute(ctx context.Context, cliName, agentID, pr
 		return 1, fmt.Errorf("load pipeline resolver: %w", prErr)
 	}
 
+	// Load full pipeline resolver for role-type queries.
+	pipeCfg, pipeErr := pipeline.LoadFrozen(projectRoot)
+	if pipeErr != nil {
+		return 1, fmt.Errorf("load pipeline config: %w", pipeErr)
+	}
+	pipeResolver := pipeline.NewResolver(pipeCfg)
+	roleType, rtErr := pipeResolver.RoleType(runtimeRole)
+	if rtErr != nil {
+		return 1, fmt.Errorf("resolve role type for %s: %w", runtimeRole, rtErr)
+	}
+
 	var taskID string
-	isReviewer := roles.IsReviewerRole(runtimeRole)
+	isReviewer := roleType == "reviewer"
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if isReviewer {
@@ -95,16 +107,16 @@ func (m *SmartMockCLIExecutor) Execute(ctx context.Context, cliName, agentID, pr
 		return 1, fmt.Errorf("no task assigned to %s (reviewer=%v)", agentID, isReviewer)
 	}
 
-	if roles.IsDoerRole(runtimeRole) {
+	if roleType == "doer" {
 		if err := m.executeDoer(ctx, projectRoot, agentID, taskID, runtimeRole); err != nil {
 			return 1, err
 		}
-	} else if roles.IsReviewerRole(runtimeRole) {
+	} else if roleType == "reviewer" {
 		if err := m.executeReviewer(projectRoot, agentID, taskID, runtimeRole); err != nil {
 			return 1, err
 		}
 	} else {
-		return 1, fmt.Errorf("unsupported role: %s", runtimeRole)
+		return 1, fmt.Errorf("unsupported role type: %s (role: %s)", roleType, runtimeRole)
 	}
 
 	return 0, nil

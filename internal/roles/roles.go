@@ -4,7 +4,6 @@ package roles
 
 import (
 	"fmt"
-	"slices"
 )
 
 // Runtime role names used in agent configuration, CLI, and supervisor.
@@ -108,26 +107,6 @@ func AllRuntime() []string {
 		RuntimeEpicPlanner, RuntimeEpicPlanReviewer,
 		RuntimeUSWriter, RuntimeUSReviewer,
 	}
-}
-
-// DoerRoles returns all runtime doer (task implementer) role names.
-func DoerRoles() []string {
-	return []string{RuntimeCoder, RuntimeCodePlanner, RuntimeEpicPlanner, RuntimeUSWriter}
-}
-
-// ReviewerRoles returns all runtime reviewer role names.
-func ReviewerRoles() []string {
-	return []string{RuntimeCodeReviewer, RuntimeCodePlanReviewer, RuntimeEpicPlanReviewer, RuntimeUSReviewer}
-}
-
-// IsDoerRole returns true if the runtime role is a doer (task implementer) role.
-func IsDoerRole(role string) bool {
-	return slices.Contains(DoerRoles(), role)
-}
-
-// IsReviewerRole returns true if the runtime role is a reviewer role.
-func IsReviewerRole(role string) bool {
-	return slices.Contains(ReviewerRoles(), role)
 }
 
 // AllWorkflow returns all valid workflow role names.

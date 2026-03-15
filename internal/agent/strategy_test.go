@@ -572,7 +572,7 @@ func TestWaitConfig(t *testing.T) {
 // TestDoerPreWork_IsNoOp verifies doer PreWork returns (false, nil).
 func TestDoerPreWork_IsNoOp(t *testing.T) {
 	resolver := testResolver(t)
-	for _, role := range roles.DoerRoles() {
+	for _, role := range resolver.DoerRoleNames() {
 		t.Run(role, func(t *testing.T) {
 			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {
@@ -624,7 +624,7 @@ func TestOrchestratorClaimTask_ReturnsEmpty(t *testing.T) {
 // TestReviewerPostExecution_IsNoOp verifies reviewer PostExecution returns nil.
 func TestReviewerPostExecution_IsNoOp(t *testing.T) {
 	resolver := testResolver(t)
-	for _, role := range roles.ReviewerRoles() {
+	for _, role := range resolver.ReviewerRoleNames() {
 		t.Run(role, func(t *testing.T) {
 			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {
@@ -640,7 +640,7 @@ func TestReviewerPostExecution_IsNoOp(t *testing.T) {
 // TestDoerPreExecution_IsNoOp verifies doer PreExecution returns nil.
 func TestDoerPreExecution_IsNoOp(t *testing.T) {
 	resolver := testResolver(t)
-	for _, role := range roles.DoerRoles() {
+	for _, role := range resolver.DoerRoleNames() {
 		t.Run(role, func(t *testing.T) {
 			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {
@@ -656,7 +656,7 @@ func TestDoerPreExecution_IsNoOp(t *testing.T) {
 // TestReviewerPreExecution_IsNoOp verifies reviewer PreExecution returns nil.
 func TestReviewerPreExecution_IsNoOp(t *testing.T) {
 	resolver := testResolver(t)
-	for _, role := range roles.ReviewerRoles() {
+	for _, role := range resolver.ReviewerRoleNames() {
 		t.Run(role, func(t *testing.T) {
 			s, err := NewRoleStrategy(role, resolver)
 			if err != nil {

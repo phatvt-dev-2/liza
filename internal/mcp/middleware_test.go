@@ -2,10 +2,13 @@ package mcp
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 func TestWithLogging(t *testing.T) {
@@ -122,6 +125,228 @@ func TestWithRole(t *testing.T) {
 		}
 		if called {
 			t.Error("inner handler should not be called when agent_id missing")
+		}
+	})
+}
+
+func TestMcpToolToOperation(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"liza_submit_for_review", "submit-for-review"},
+		{"liza_add_tasks", "add-tasks"},
+		{"liza_analyze", "analyze"},
+		{"liza_clear_stale_review_claims", "clear-stale-review-claims"},
+		{"liza_wt_create", "wt-create"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := mcpToolToOperation(tt.input)
+			if got != tt.want {
+				t.Errorf("mcpToolToOperation(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// testMiddlewarePipelineYAML is a minimal pipeline config for middleware tests.
+// It defines a coder doer role with submit-for-review in allowed-operations,
+// a code-reviewer reviewer role with submit-verdict, and an orchestrator with add-tasks.
+var testMiddlewarePipelineYAML = []byte(`
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+      allowed-operations:
+        - submit-for-review
+        - write-checkpoint
+        - handoff
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      allowed-operations:
+        - submit-verdict
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+      allowed-operations:
+        - add-tasks
+        - supersede-task
+        - analyze
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: READY
+        executing: CODING
+        submitted: CODE_SUBMITTED
+        reviewing: CODE_REVIEWING
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding:
+      steps:
+        - coding-pair
+      transitions: []
+  entry-points:
+    default: coding.coding-pair
+`)
+
+func testMiddlewareResolver(t *testing.T) *pipeline.Resolver {
+	t.Helper()
+	cfg, err := pipeline.LoadFromBytes(testMiddlewarePipelineYAML)
+	if err != nil {
+		t.Fatalf("testMiddlewareResolver: %v", err)
+	}
+	return pipeline.NewResolver(cfg)
+}
+
+func TestIsOperationAllowed(t *testing.T) {
+	resolver := testMiddlewareResolver(t)
+
+	t.Run("allows coder submit-for-review", func(t *testing.T) {
+		err := isOperationAllowed(resolver, "coder-1", "liza_submit_for_review")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects coder add-tasks", func(t *testing.T) {
+		err := isOperationAllowed(resolver, "coder-1", "liza_add_tasks")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		var opErr *OperationError
+		if !errors.As(err, &opErr) {
+			t.Fatalf("expected OperationError, got %T: %v", err, err)
+		}
+		if opErr.Operation != "add-tasks" {
+			t.Errorf("operation = %q, want %q", opErr.Operation, "add-tasks")
+		}
+		if opErr.Role != "coder" {
+			t.Errorf("role = %q, want %q", opErr.Role, "coder")
+		}
+	})
+
+	t.Run("allows orchestrator add-tasks", func(t *testing.T) {
+		err := isOperationAllowed(resolver, "orchestrator-1", "liza_add_tasks")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects reviewer submit-for-review", func(t *testing.T) {
+		err := isOperationAllowed(resolver, "code-reviewer-1", "liza_submit_for_review")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		var opErr *OperationError
+		if !errors.As(err, &opErr) {
+			t.Fatalf("expected OperationError, got %T: %v", err, err)
+		}
+	})
+
+	t.Run("rejects invalid agent ID", func(t *testing.T) {
+		err := isOperationAllowed(resolver, "invalid", "liza_submit_for_review")
+		if err == nil {
+			t.Fatal("expected error for invalid agent ID")
+		}
+		if !strings.Contains(err.Error(), "invalid agent ID") {
+			t.Errorf("expected 'invalid agent ID' error, got: %v", err)
+		}
+	})
+
+	t.Run("rejects nil resolver", func(t *testing.T) {
+		err := isOperationAllowed(nil, "coder-1", "liza_submit_for_review")
+		if err == nil {
+			t.Fatal("expected error for nil resolver")
+		}
+		if !strings.Contains(err.Error(), "pipeline resolver not loaded") {
+			t.Errorf("expected 'pipeline resolver not loaded' error, got: %v", err)
+		}
+	})
+}
+
+func TestOperationChecker(t *testing.T) {
+	resolver := testMiddlewareResolver(t)
+
+	t.Run("returns nil for allowed operation", func(t *testing.T) {
+		checker := operationChecker(resolver, "liza_submit_for_review")
+		err := checker("coder-1")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("returns OperationError for disallowed", func(t *testing.T) {
+		checker := operationChecker(resolver, "liza_add_tasks")
+		err := checker("coder-1")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		var opErr *OperationError
+		if !errors.As(err, &opErr) {
+			t.Fatalf("expected OperationError, got %T: %v", err, err)
+		}
+	})
+}
+
+func TestTypeChecker(t *testing.T) {
+	resolver := testMiddlewareResolver(t)
+
+	t.Run("allows matching role type", func(t *testing.T) {
+		checker := typeChecker(resolver, "doer")
+		err := checker("coder-1")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects non-matching role type", func(t *testing.T) {
+		checker := typeChecker(resolver, "doer")
+		err := checker("code-reviewer-1")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		var roleErr *RoleError
+		if !errors.As(err, &roleErr) {
+			t.Fatalf("expected RoleError, got %T: %v", err, err)
+		}
+		if roleErr.Got != "reviewer" {
+			t.Errorf("got = %q, want %q", roleErr.Got, "reviewer")
+		}
+	})
+
+	t.Run("allows multi-type match", func(t *testing.T) {
+		checker := typeChecker(resolver, "doer", "orchestrator")
+		err := checker("orchestrator-1")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects invalid agent ID", func(t *testing.T) {
+		checker := typeChecker(resolver, "doer")
+		err := checker("badid")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "invalid agent ID") {
+			t.Errorf("expected 'invalid agent ID' error, got: %v", err)
+		}
+	})
+
+	t.Run("rejects nil resolver", func(t *testing.T) {
+		checker := typeChecker(nil, "doer")
+		err := checker("coder-1")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "pipeline resolver not loaded") {
+			t.Errorf("expected 'pipeline resolver not loaded' error, got: %v", err)
 		}
 	})
 }

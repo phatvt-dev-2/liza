@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/mcp/protocol"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 // Server represents the MCP server
@@ -18,18 +19,33 @@ type Server struct {
 	logPath     string
 	logger      *slog.Logger
 	bb          *db.Blackboard
+	resolver    *pipeline.Resolver
 	tools       map[string]protocol.Tool
 	resources   map[string]protocol.Resource
 	handlers    map[string]ToolHandler
 }
 
-// NewServer creates a new MCP server
+// NewServer creates a new MCP server.
+// It loads the pipeline config from the project's .liza/pipeline.yaml to
+// derive per-role allowed-operations for MCP handler authorization.
 func NewServer(projectRoot, logPath string) *Server {
+	cfg, err := pipeline.LoadFrozen(projectRoot)
+	if err != nil {
+		// Log and continue with nil resolver — tools guarded by operationChecker
+		// will fail closed (reject all operations) when resolver is nil.
+		slog.Error("mcp: failed to load pipeline config for operation authorization", "error", err)
+	}
+	var resolver *pipeline.Resolver
+	if cfg != nil {
+		resolver = pipeline.NewResolver(cfg)
+	}
+
 	s := &Server{
 		projectRoot: projectRoot,
 		logPath:     logPath,
 		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		bb:          db.For(paths.New(projectRoot).StatePath()),
+		resolver:    resolver,
 		tools:       make(map[string]protocol.Tool),
 		resources:   make(map[string]protocol.Resource),
 		handlers:    make(map[string]ToolHandler),

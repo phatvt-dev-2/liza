@@ -5,7 +5,6 @@ import (
 
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // resolveOrchestratorID resolves the orchestrator agent ID from params or state.
@@ -36,7 +35,7 @@ func (s *Server) handleAddTasks(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
+	if err := isOperationAllowed(s.resolver, agentID, "liza_add_tasks"); err != nil {
 		return nil, err
 	}
 
@@ -258,10 +257,6 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 
 	agentID, err := s.resolveOrchestratorID(params)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
 		return nil, err
 	}
 
