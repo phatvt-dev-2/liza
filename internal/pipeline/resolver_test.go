@@ -341,6 +341,245 @@ func TestResolver_RoleDisplayName(t *testing.T) {
 	}
 }
 
+// resolverWithDeclarativeFields builds a minimal config with context-sections,
+// skills, and mandatory-docs populated for 3 representative roles.
+func resolverWithDeclarativeFields(t *testing.T) *Resolver {
+	t.Helper()
+	yamlData := []byte(`
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - handoff-resume
+        - integration-fix
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - anomaly-logging
+        - blocking-protocol
+        - worktree-rules
+        - commit-workflow
+        - implementation-phase
+        - submission-phase
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - debugging
+        - testing
+        - clean-code
+      mandatory-docs: []
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - scope-extensions
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - code-review
+        - systemic-thinking
+        - software-architecture-review
+      mandatory-docs: []
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+      max-instances: 1
+      context-sections:
+        - orchestrator-dashboard
+        - wake-instructions
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - systemic-thinking
+      mandatory-docs: []
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := LoadFromBytes(yamlData)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	return NewResolver(cfg)
+}
+
+func TestResolver_ContextSections(t *testing.T) {
+	r := resolverWithDeclarativeFields(t)
+
+	// Coder should have 15 context-sections.
+	got, err := r.ContextSections("coder")
+	if err != nil {
+		t.Fatalf("ContextSections(coder): %v", err)
+	}
+	want := []string{
+		"assigned-task", "collective-plan-scoping", "handoff-resume", "integration-fix",
+		"prior-rejection", "doer-state-transitions", "doer-tools", "anomaly-logging",
+		"blocking-protocol", "worktree-rules", "commit-workflow", "implementation-phase",
+		"submission-phase", "mandatory-docs", "skills-affinity",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("ContextSections(coder) len = %d, want %d\ngot:  %v\nwant: %v", len(got), len(want), got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("ContextSections(coder)[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	// Code-reviewer should have 13 context-sections.
+	got, err = r.ContextSections("code-reviewer")
+	if err != nil {
+		t.Fatalf("ContextSections(code-reviewer): %v", err)
+	}
+	if len(got) != 13 {
+		t.Fatalf("ContextSections(code-reviewer) len = %d, want 13\ngot: %v", len(got), got)
+	}
+	if got[0] != "review-task" {
+		t.Errorf("ContextSections(code-reviewer)[0] = %q, want %q", got[0], "review-task")
+	}
+	if got[len(got)-2] != "mandatory-docs" {
+		t.Errorf("ContextSections(code-reviewer)[-2] = %q, want %q", got[len(got)-2], "mandatory-docs")
+	}
+	if got[len(got)-1] != "skills-affinity" {
+		t.Errorf("ContextSections(code-reviewer)[-1] = %q, want %q", got[len(got)-1], "skills-affinity")
+	}
+
+	// Orchestrator should have 4 context-sections.
+	got, err = r.ContextSections("orchestrator")
+	if err != nil {
+		t.Fatalf("ContextSections(orchestrator): %v", err)
+	}
+	wantOrch := []string{"orchestrator-dashboard", "wake-instructions", "mandatory-docs", "skills-affinity"}
+	if len(got) != len(wantOrch) {
+		t.Fatalf("ContextSections(orchestrator) len = %d, want %d\ngot: %v", len(got), len(wantOrch), got)
+	}
+	for i := range got {
+		if got[i] != wantOrch[i] {
+			t.Errorf("ContextSections(orchestrator)[%d] = %q, want %q", i, got[i], wantOrch[i])
+		}
+	}
+
+	// Unknown role returns error.
+	_, err = r.ContextSections("unknown-role")
+	if err == nil {
+		t.Error("ContextSections(unknown-role): expected error, got nil")
+	}
+}
+
+func TestResolver_Skills(t *testing.T) {
+	r := resolverWithDeclarativeFields(t)
+
+	// Coder skills.
+	got, err := r.Skills("coder")
+	if err != nil {
+		t.Fatalf("Skills(coder): %v", err)
+	}
+	want := []string{"debugging", "testing", "clean-code"}
+	if len(got) != len(want) {
+		t.Fatalf("Skills(coder) = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("Skills(coder)[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	// Code-reviewer skills.
+	got, err = r.Skills("code-reviewer")
+	if err != nil {
+		t.Fatalf("Skills(code-reviewer): %v", err)
+	}
+	wantReviewer := []string{"code-review", "systemic-thinking", "software-architecture-review"}
+	if len(got) != len(wantReviewer) {
+		t.Fatalf("Skills(code-reviewer) = %v, want %v", got, wantReviewer)
+	}
+	for i := range got {
+		if got[i] != wantReviewer[i] {
+			t.Errorf("Skills(code-reviewer)[%d] = %q, want %q", i, got[i], wantReviewer[i])
+		}
+	}
+
+	// Orchestrator skills.
+	got, err = r.Skills("orchestrator")
+	if err != nil {
+		t.Fatalf("Skills(orchestrator): %v", err)
+	}
+	if len(got) != 1 || got[0] != "systemic-thinking" {
+		t.Errorf("Skills(orchestrator) = %v, want [systemic-thinking]", got)
+	}
+
+	// Unknown role returns error.
+	_, err = r.Skills("unknown-role")
+	if err == nil {
+		t.Error("Skills(unknown-role): expected error, got nil")
+	}
+}
+
+func TestResolver_MandatoryDocs(t *testing.T) {
+	r := resolverWithDeclarativeFields(t)
+
+	// Coder has empty mandatory-docs.
+	got, err := r.MandatoryDocs("coder")
+	if err != nil {
+		t.Fatalf("MandatoryDocs(coder): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("MandatoryDocs(coder) = %v, want []", got)
+	}
+
+	// Code-reviewer has empty mandatory-docs.
+	got, err = r.MandatoryDocs("code-reviewer")
+	if err != nil {
+		t.Fatalf("MandatoryDocs(code-reviewer): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("MandatoryDocs(code-reviewer) = %v, want []", got)
+	}
+
+	// Orchestrator has empty mandatory-docs.
+	got, err = r.MandatoryDocs("orchestrator")
+	if err != nil {
+		t.Fatalf("MandatoryDocs(orchestrator): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("MandatoryDocs(orchestrator) = %v, want []", got)
+	}
+
+	// Unknown role returns error.
+	_, err = r.MandatoryDocs("unknown-role")
+	if err == nil {
+		t.Error("MandatoryDocs(unknown-role): expected error, got nil")
+	}
+}
+
 // TestMaxInstances_OrchestratorCoercedToOne verifies the spec invariant that
 // orchestrator roles always return max-instances=1 regardless of YAML value.
 // Regression test for the misconfiguration case where YAML sets max-instances: 2.

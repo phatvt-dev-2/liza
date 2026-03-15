@@ -17,6 +17,11 @@ pipeline:
         - delete-agent
         - clear-stale-review-claims
         - update-sprint-metrics
+      context-sections:
+        - orchestrator-dashboard
+        - wake-instructions
+        - mandatory-docs
+        - skills-affinity
       skills:
         - systemic-thinking
       mandatory-docs: []
@@ -35,6 +40,16 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+      context-sections:
+        - assigned-task
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - worktree-rules
+        - capability-scoping
+        - implementation-phase
+        - mandatory-docs
+        - skills-affinity
       skills:
         - epic-writing
         - systemic-thinking
@@ -50,6 +65,18 @@ pipeline:
         max-wait: 30m
       allowed-operations:
         - submit-verdict
+      context-sections:
+        - review-task
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
       skills:
         - spec-review
         - systemic-thinking
@@ -69,6 +96,17 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - worktree-rules
+        - capability-scoping
+        - implementation-phase
+        - mandatory-docs
+        - skills-affinity
       skills:
         - user-story-writing
       mandatory-docs: []
@@ -83,6 +121,19 @@ pipeline:
         max-wait: 30m
       allowed-operations:
         - submit-verdict
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
       skills:
         - spec-review
       mandatory-docs: []
@@ -101,6 +152,17 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - worktree-rules
+        - task-decomposition
+        - implementation-phase
+        - mandatory-docs
+        - skills-affinity
       skills:
         - software-architecture-review
       mandatory-docs: []
@@ -115,6 +177,19 @@ pipeline:
         max-wait: 30m
       allowed-operations:
         - submit-verdict
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
       skills:
         - software-architecture-review
         - systemic-thinking
@@ -134,6 +209,22 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - handoff-resume
+        - integration-fix
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - anomaly-logging
+        - blocking-protocol
+        - worktree-rules
+        - commit-workflow
+        - implementation-phase
+        - submission-phase
+        - mandatory-docs
+        - skills-affinity
       skills:
         - debugging
         - testing
@@ -150,6 +241,20 @@ pipeline:
         max-wait: 30m
       allowed-operations:
         - submit-verdict
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - scope-extensions
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
       skills:
         - code-review
         - systemic-thinking

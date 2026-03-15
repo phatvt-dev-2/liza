@@ -190,6 +190,33 @@ func (r *Resolver) roleNamesByType(roleType string) []string {
 	return names
 }
 
+// ContextSections returns the context-sections list for the named role.
+func (r *Resolver) ContextSections(name string) ([]string, error) {
+	role, ok := r.config.Pipeline.Roles[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown role %q", name)
+	}
+	return role.ContextSections, nil
+}
+
+// Skills returns the skills list for the named role.
+func (r *Resolver) Skills(name string) ([]string, error) {
+	role, ok := r.config.Pipeline.Roles[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown role %q", name)
+	}
+	return role.Skills, nil
+}
+
+// MandatoryDocs returns the mandatory-docs list for the named role.
+func (r *Resolver) MandatoryDocs(name string) ([]string, error) {
+	role, ok := r.config.Pipeline.Roles[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown role %q", name)
+	}
+	return role.MandatoryDocs, nil
+}
+
 // TransitionMap generates the intra-pair transition map for all role-pairs.
 // The fixed intra-pair flow is: initial→executing→submitted→reviewing→approved|rejected,
 // with rejected→initial. Cross-cutting meta-states (BLOCKED, ABANDONED, etc.) are not included.
