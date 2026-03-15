@@ -2,12 +2,15 @@
 
 Spec: /home/tangi/Workspace/liza/todo-mas.md
 
-## Revision Notes (Iteration 2)
+## Revision Notes (Iteration 3)
 
-Addresses three rejection blockers:
-1. **CP2/CP8 overlap** — Merged old CP2 (worktree cleanup) and old CP8 (nil-resolver log) into new CP2. Both changes touch the same function in recover_agent.go and are tightly coupled (moving the resolver load earlier for the worktree check exposes the nil-resolver fallback path where the log belongs). Single intent: resolver-based recovery with proper nil-resolver handling.
-2. **CP7 missing test file** — Added `internal/mcp/server_test.go` to CP7 scope and changes.
-3. **CP8 scope/test mismatch** — Resolved by merge into CP2 (test file `recover_agent_test.go` already in scope).
+Addresses iteration 2 rejection blocker:
+- **CP4 fallback contradiction** — The change description said "fall back to existing behavior when resolver unavailable", but the done_when said the literal string must not appear. Analysis shows `loadPipelineBundle` already returns an error on failure (claim_reviewer_task.go:62-64), so there is no nil-resolver path inside this function. Removed the fallback clause entirely: move `loadPipelineBundle` before the inference, use `roles.ToWorkflow(role)` to convert extracted role to workflow form. No literal string, no fallback, no contradiction.
+
+Prior iteration fixes (still in effect):
+1. **CP2/CP8 overlap** — Merged old CP2 (worktree cleanup) and old CP8 (nil-resolver log) into new CP2.
+2. **CP7 missing test file** — Added `internal/mcp/server_test.go` to CP7 scope.
+3. **CP8 scope/test mismatch** — Resolved by merge into CP2.
 
 ---
 
@@ -62,17 +65,17 @@ Addresses three rejection blockers:
 
 ---
 
-### CP4: Replace hardcoded role=="code-plan-reviewer" in claim_reviewer_task.go workflow inference with resolver-based lookup
+### CP4: Replace hardcoded role=="code-plan-reviewer" in claim_reviewer_task.go workflow inference with roles.ToWorkflow conversion
 
-**Intent:** When workflowRole is empty, ClaimReviewerTask infers it from the agent ID by checking for "code-plan-reviewer". Custom reviewer roles fall through to the default "code-reviewer". Replace with resolver-based role-pair lookup.
+**Intent:** When workflowRole is empty, ClaimReviewerTask infers it from the agent ID by checking the literal string "code-plan-reviewer". Custom reviewer roles fall through to the default "code-reviewer". Replace the literal string check with `roles.ToWorkflow(role)` conversion, which delegates to the canonical runtime→workflow mapping in the roles package.
 
 **Changes:**
-- `internal/ops/claim_reviewer_task.go`: When workflowRole is empty, use the resolver to determine the workflow role. The resolver is already loaded as pb.pr below -- move it up. Use the resolver to look up the reviewer role from its role-pair configuration. If resolver is unavailable, fall back to existing behavior.
-- `internal/ops/claim_reviewer_task_test.go`: Add a test verifying that a custom reviewer role (e.g., security-reviewer) with a correctly configured role-pair can claim review tasks without explicitly passing workflowRole.
+- `internal/ops/claim_reviewer_task.go`: Move `loadPipelineBundle` before the workflowRole inference block (currently at line 61, move to before line 42). When workflowRole is empty, extract the role from agent ID, then use `roles.ToWorkflow(role)` to convert the runtime role to its workflow form. If conversion fails (unknown role), default to `models.RoleCodeReviewer`. No nil-resolver fallback needed: `loadPipelineBundle` already returns an error on failure (line 62-64), so the function exits before reaching this code if the resolver is unavailable.
+- `internal/ops/claim_reviewer_task_test.go`: Add a test verifying that a code-plan-reviewer agent (inferred from agent ID) claims the correct code-planning-pair task without explicitly passing workflowRole, confirming the `roles.ToWorkflow` path works. The existing tests already cover the default code-reviewer path.
 
 **Scope:** `internal/ops/claim_reviewer_task.go`, `internal/ops/claim_reviewer_task_test.go`
 
-**Done when:** The literal string "code-plan-reviewer" no longer appears in the workflow role inference logic. A test with a custom reviewer role verifies correct workflow role inference.
+**Done when:** The literal string "code-plan-reviewer" no longer appears in the workflow role inference logic in claim_reviewer_task.go. A test with a code-plan-reviewer agent (identified by agent ID, no explicit workflowRole) verifies correct workflow role inference via `roles.ToWorkflow`.
 
 **Spec ref:** todo-mas.md -- Phase 1, [concern] claim_reviewer_task.go:45
 
