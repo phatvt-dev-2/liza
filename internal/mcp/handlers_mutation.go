@@ -21,7 +21,7 @@ func (s *Server) resolveOrchestratorID(params map[string]any) (string, error) {
 		return agentID, nil
 	}
 	statePath := paths.New(s.projectRoot).StatePath()
-	resolved, err := ops.ResolveOrchestratorFromState(statePath)
+	resolved, err := ops.ResolveOrchestratorFromState(statePath, s.resolver)
 	if err != nil {
 		return "", fmt.Errorf("agent_id not provided and auto-resolution failed: %w", err)
 	}

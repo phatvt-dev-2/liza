@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/spf13/cobra"
 )
 
@@ -71,8 +72,16 @@ func resolveOrchestratorID(cmd *cobra.Command) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Load resolver for type-based orchestrator resolution.
+	// If loading fails, pass nil to fall back to literal role-name match.
+	var resolver *pipeline.Resolver
+	if cfg, loadErr := pipeline.LoadFrozen(projectRoot); loadErr == nil {
+		resolver = pipeline.NewResolver(cfg)
+	}
+
 	lp := paths.New(projectRoot)
-	resolved, err := ops.ResolveOrchestratorFromState(lp.StatePath())
+	resolved, err := ops.ResolveOrchestratorFromState(lp.StatePath(), resolver)
 	if err != nil {
 		return "", fmt.Errorf("--agent-id not provided and auto-resolution failed: %w", err)
 	}
