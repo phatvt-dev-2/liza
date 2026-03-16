@@ -13,6 +13,7 @@ CODER TOOLS:
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
   Optional: "assumptions", "risks", "tdd_not_required", "scope_extensions"
   scope_extensions: [{"file": "<path>", "justification": "<why this out-of-scope file must change>"}]
+  If you need to modify a file outside the task scope, declare it as a scope_extension — not as an assumption.
 {{- else if eq .Role "code-planner"}}
 
 CODE PLANNER TOOLS:
