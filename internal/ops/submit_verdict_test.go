@@ -589,10 +589,12 @@ func TestSubmitVerdictApprovals(t *testing.T) {
 		now := time.Now().UTC()
 		state := testhelpers.CreateValidState()
 		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
-		// Pre-populate approvals (simulating a partially-approved task re-entering review)
+		// Pre-populate approvals and derived ApprovedBy (simulating a partially-approved task re-entering review)
 		task.Approvals = []models.Approval{
 			{Agent: "code-reviewer-2", Provider: "codex", Timestamp: now.Add(-10 * time.Minute)},
 		}
+		priorApprover := "code-reviewer-2"
+		task.ApprovedBy = &priorApprover
 		state.Tasks = []models.Task{task}
 		state.Agents["code-reviewer-1"] = models.Agent{
 			Role:     "code-reviewer",
@@ -621,6 +623,9 @@ func TestSubmitVerdictApprovals(t *testing.T) {
 		}
 		if rejTask.Approvals != nil {
 			t.Errorf("Approvals = %v, want nil after rejection", rejTask.Approvals)
+		}
+		if rejTask.ApprovedBy != nil {
+			t.Errorf("ApprovedBy = %v, want nil after rejection (derived field must be cleared with approvals)", *rejTask.ApprovedBy)
 		}
 	})
 

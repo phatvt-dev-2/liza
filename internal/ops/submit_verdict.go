@@ -159,6 +159,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 
 			// Rejection at any stage clears all approvals (spec: both reviewers re-review)
 			task.ClearApprovals()
+			task.ApprovedBy = nil
 
 			task.RejectionReason = &reason
 			task.ReviewCyclesCurrent++
