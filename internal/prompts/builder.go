@@ -106,6 +106,8 @@ ORCHESTRATOR COMMANDS:
   Tool parameters: {"tasks": [{"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...]}], "agent_id": "%s"}
 - liza_supersede_task — Supersede task
   Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "%s"}
+- liza_assess_blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
+  Tool parameters: {"task_id": "...", "note": "...", "agent_id": "%s"}
 - liza_wt_delete — Delete worktree for abandoned/superseded/blocked tasks
   Tool parameters: {"task_id": "...", "agent_id": "%s"}
 - liza_sprint_checkpoint — Create sprint checkpoint for human review (pauses all agents)
@@ -144,7 +146,7 @@ On MCP tool errors, diagnose the root cause before retrying. Read the error mess
 
 MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
 Work unit = all planned state changes executed. Do NOT exit until all tools have been called.
-`, agentID, agentID, agentID, agentID, agentID))
+`, agentID, agentID, agentID, agentID, agentID, agentID))
 
 	// Wake instruction is rendered separately by the wake-instructions block
 	wakeInstr := fmt.Sprintf("INSTRUCTIONS:\n%s", wakeInstructions)

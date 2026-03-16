@@ -291,10 +291,6 @@ func (s *Server) handleAssessBlocked(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
-		return nil, err
-	}
-
 	note, _ := params["note"].(string)
 
 	result, err := ops.AssessBlocked(s.projectRoot, taskID, note, agentID)

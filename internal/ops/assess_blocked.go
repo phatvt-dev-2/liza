@@ -28,10 +28,12 @@ func AssessBlocked(projectRoot, taskID, note, agentID string) (*AssessBlockedRes
 	if agentID == "" {
 		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
-	if err := identity.ValidateRole(agentID, roles.RuntimeOrchestrator); err != nil {
+	// Defense-in-depth: orchestrator_assessment history entries suppress future wakes,
+	// so this must be restricted to orchestrator agents even though the MCP handler
+	// also gates via resolveOrchestratorID.
+	if err := identity.ValidateRole(agentID, roles.WorkflowOrchestrator); err != nil {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}
 	}
-
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
