@@ -299,6 +299,38 @@ func TestBidirectionalMapping(t *testing.T) {
 	}
 }
 
+func TestNormalizeRoleName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"coder unchanged", "coder", "coder"},
+		{"code_reviewer to code-reviewer", "code_reviewer", "code-reviewer"},
+		{"orchestrator unchanged", "orchestrator", "orchestrator"},
+		{"code_planner to code-planner", "code_planner", "code-planner"},
+		{"code_plan_reviewer to code-plan-reviewer", "code_plan_reviewer", "code-plan-reviewer"},
+		{"epic_planner to epic-planner", "epic_planner", "epic-planner"},
+		{"epic_plan_reviewer to epic-plan-reviewer", "epic_plan_reviewer", "epic-plan-reviewer"},
+		{"us_writer to us-writer", "us_writer", "us-writer"},
+		{"us_reviewer to us-reviewer", "us_reviewer", "us-reviewer"},
+		{"already hyphenated passes through", "code-reviewer", "code-reviewer"},
+		{"unknown name passes through", "custom_role", "custom_role"},
+		{"empty string passes through", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeRoleName(tt.input)
+			if got != tt.want {
+				t.Errorf("NormalizeRoleName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestCrossBoundaryResolution verifies the core requirement:
 // agent runtime roles can be resolved to workflow roles for task operations.
 func TestCrossBoundaryResolution(t *testing.T) {

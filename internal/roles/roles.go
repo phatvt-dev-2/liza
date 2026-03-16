@@ -88,3 +88,12 @@ func AllWorkflow() []string {
 		WorkflowUSWriter, WorkflowUSReviewer,
 	}
 }
+
+// NormalizeRoleName converts a known underscore-form role name to its
+// canonical hyphenated form. Unknown names are returned unchanged.
+func NormalizeRoleName(name string) string {
+	if runtime, ok := workflowToRuntime[name]; ok {
+		return runtime
+	}
+	return name
+}

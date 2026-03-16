@@ -137,6 +137,36 @@ Returns detailed error messages if validation fails.`,
 	},
 }
 
+var migrateCmd = &cobra.Command{
+	Use:   "migrate [state-file]",
+	Short: "Normalize role names in state.yaml",
+	Long: `Migrate state.yaml by normalizing underscore-form role names to
+their canonical hyphenated form (e.g. code_reviewer → code-reviewer).
+
+If no state-file argument is provided, defaults to .liza/state.yaml.
+Reports whether any changes were made.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		statePath := ""
+		if len(args) > 0 {
+			statePath = args[0]
+		} else {
+			statePath = filepath.Join(paths.LizaDirName, paths.StateFileName)
+		}
+
+		changed, err := commands.MigrateCommand(statePath)
+		if err != nil {
+			return err
+		}
+		if changed {
+			fmt.Println("Migration complete: role names normalized.")
+		} else {
+			fmt.Println("No changes needed: state already uses canonical role names.")
+		}
+		return nil
+	},
+}
+
 // agentFlagNames is the canonical list of supported agent flag names.
 var agentFlagNames = []string{"claude", "codex", "gemini", "mistral"}
 
@@ -156,6 +186,7 @@ func init() {
 	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(validateCmd)
+	rootCmd.AddCommand(migrateCmd)
 
 	// Setup command flags
 	setupCmd.Flags().Bool("force", false, "overwrite existing global config")
