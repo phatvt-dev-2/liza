@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -185,6 +186,13 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr mod
 		return err
 	}
 
+	// Load the concrete resolver once for quorum and diversity lookups.
+	cfg, cfgErr := pipeline.LoadFrozen(projectRoot)
+	if cfgErr != nil {
+		return fmt.Errorf("failed to load pipeline config: %w", cfgErr)
+	}
+	resolver := pipeline.NewResolver(cfg)
+
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if models.IsApprovedForMerge(task, pr) &&
@@ -193,7 +201,7 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr mod
 
 			// Resolve effective impact and quorum for merge gate
 			effectiveImpact := ops.ResolveEffectiveImpact(task.History)
-			effectiveQuorum, qErr := ops.LoadEffectiveQuorum(projectRoot, task.RolePair, effectiveImpact)
+			effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, effectiveImpact)
 			if qErr != nil {
 				logger.Warn("Failed to resolve quorum, skipping merge",
 					"task_id", task.ID, "error", qErr)
@@ -201,7 +209,7 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr mod
 			}
 
 			// Get provider diversity config for this impact level
-			diversity, dErr := ops.LoadReviewPolicyDiversity(projectRoot, task.RolePair, effectiveImpact)
+			diversity, dErr := resolver.ProviderDiversity(task.RolePair, effectiveImpact)
 			if dErr != nil {
 				logger.Warn("Failed to resolve diversity policy, skipping merge",
 					"task_id", task.ID, "error", dErr)

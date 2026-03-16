@@ -279,6 +279,30 @@ func (r *Resolver) EffectiveQuorum(rolePair, impact string) (int, error) {
 	return rp.ReviewPolicy.Quorum, nil
 }
 
+// ProviderDiversity returns the provider-diversity setting for the given
+// role-pair at the specified impact level.
+// Returns "" when no diversity is configured for that impact level.
+func (r *Resolver) ProviderDiversity(rolePair, impact string) (string, error) {
+	rp, ok := r.config.Pipeline.RolePairs[rolePair]
+	if !ok {
+		return "", fmt.Errorf("unknown role-pair %q", rolePair)
+	}
+	if rp.ReviewPolicy == nil {
+		return "", nil
+	}
+	switch impact {
+	case "significant":
+		if rp.ReviewPolicy.SignificantChange != nil {
+			return rp.ReviewPolicy.SignificantChange.ProviderDiversity, nil
+		}
+	case "architecture":
+		if rp.ReviewPolicy.ArchitectureImpact != nil {
+			return rp.ReviewPolicy.ArchitectureImpact.ProviderDiversity, nil
+		}
+	}
+	return "", nil
+}
+
 // TransitionMap generates the intra-pair transition map for all role-pairs.
 // The fixed intra-pair flow is: initial→executing→submitted→reviewing→approved|rejected,
 // with rejected→initial. When quorum states are declared, reviewing also transitions to
