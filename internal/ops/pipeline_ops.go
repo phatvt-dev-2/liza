@@ -82,6 +82,14 @@ func BuildPipelineTransitions(r *pipeline.Resolver) map[models.TaskStatus][]mode
 		tm[ls.reviewing] = append(tm[ls.reviewing], ls.submitted)
 		tm[ls.rejected] = append(tm[ls.rejected], ls.executing, models.TaskStatusBlocked, models.TaskStatusSuperseded, models.TaskStatusAbandoned)
 		tm[ls.approved] = append(tm[ls.approved], models.TaskStatusMerged, models.TaskStatusIntegrationFailed)
+
+		// Quorum state cross-cutting transitions.
+		partiallyApproved, paErr := r.PartiallyApprovedStatus(rpName)
+		reviewing2, r2Err := r.Reviewing2Status(rpName)
+		if paErr == nil && r2Err == nil {
+			tm[reviewing2] = append(tm[reviewing2], partiallyApproved) // stale revert
+			tm[partiallyApproved] = append(tm[partiallyApproved], models.TaskStatusAbandoned, models.TaskStatusSuperseded)
+		}
 	}
 
 	// Meta-state transitions

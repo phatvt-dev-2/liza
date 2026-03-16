@@ -425,6 +425,88 @@ func validOutputTask(taskID string) models.Task {
 	return task
 }
 
+func TestValidateTaskInvariants_Reviewing2RequiresReviewMetadata(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+
+	// A task in REVIEWING_CODE_2 without review metadata must be rejected.
+	cases := []struct {
+		name    string
+		task    func() models.Task
+		wantErr string
+	}{
+		{
+			name: "reviewing-2 requires reviewing_by",
+			task: func() models.Task {
+				return models.Task{
+					ID:          "task-1",
+					Type:        models.TaskTypeCoding,
+					Description: "Test task",
+					Status:      "REVIEWING_CODE_2",
+					Priority:    1,
+					Created:     time.Now().UTC(),
+					SpecRef:     "README.md",
+					DoneWhen:    "Task is complete",
+					Scope:       "Test scope",
+					RolePair:    "coding-pair",
+					History:     []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr: "REVIEWING_CODE_2 task without reviewing_by",
+		},
+		{
+			name: "reviewing-2 requires review_lease_expires",
+			task: func() models.Task {
+				return models.Task{
+					ID:           "task-1",
+					Type:         models.TaskTypeCoding,
+					Description:  "Test task",
+					Status:       "REVIEWING_CODE_2",
+					Priority:     1,
+					Created:      time.Now().UTC(),
+					SpecRef:      "README.md",
+					DoneWhen:     "Task is complete",
+					Scope:        "Test scope",
+					RolePair:     "coding-pair",
+					ReviewingBy:  testhelpers.StringPtr("code-reviewer-1"),
+					ReviewCommit: testhelpers.StringPtr("review123"),
+					History:      []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr: "REVIEWING_CODE_2 task without review_lease_expires",
+		},
+		{
+			name: "reviewing-2 requires review_commit",
+			task: func() models.Task {
+				reviewLeaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				return models.Task{
+					ID:                 "task-1",
+					Type:               models.TaskTypeCoding,
+					Description:        "Test task",
+					Status:             "REVIEWING_CODE_2",
+					Priority:           1,
+					Created:            time.Now().UTC(),
+					SpecRef:            "README.md",
+					DoneWhen:           "Task is complete",
+					Scope:              "Test scope",
+					RolePair:           "coding-pair",
+					ReviewingBy:        testhelpers.StringPtr("code-reviewer-2"),
+					ReviewLeaseExpires: &reviewLeaseExpires,
+					History:            []models.TaskHistoryEntry{},
+				}
+			},
+			wantErr: "REVIEWING_CODE_2 task without review_commit",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
+			assertErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
 func stateWithTasks(tasks ...models.Task) *models.State {
 	state := testhelpers.CreateValidState()
 	state.Tasks = tasks

@@ -778,27 +778,32 @@ func TestResolver_TransitionMap(t *testing.T) {
 	assertTransitions(t, tm, "CODING_PLAN_REJECTED", []string{"DRAFT_CODING_PLAN"})
 	assertTransitions(t, tm, "CODING_PLAN_APPROVED", []string{})
 
-	// Check coding-pair transitions.
+	// Check coding-pair transitions (base + quorum states).
 	assertTransitions(t, tm, "DRAFT_CODE", []string{"IMPLEMENTING_CODE"})
 	assertTransitions(t, tm, "IMPLEMENTING_CODE", []string{"CODE_READY_FOR_REVIEW"})
 	assertTransitions(t, tm, "CODE_READY_FOR_REVIEW", []string{"REVIEWING_CODE"})
-	assertTransitions(t, tm, "REVIEWING_CODE", []string{"CODE_APPROVED", "CODE_REJECTED"})
+	assertTransitions(t, tm, "REVIEWING_CODE", []string{"CODE_APPROVED", "CODE_PARTIALLY_APPROVED", "CODE_REJECTED"})
 	assertTransitions(t, tm, "CODE_REJECTED", []string{"DRAFT_CODE"})
 	assertTransitions(t, tm, "CODE_APPROVED", []string{})
+
+	// Quorum state transitions.
+	assertTransitions(t, tm, "CODE_PARTIALLY_APPROVED", []string{"REVIEWING_CODE_2"})
+	assertTransitions(t, tm, "REVIEWING_CODE_2", []string{"CODE_APPROVED", "CODE_REJECTED"})
 }
 
 func TestResolver_AllDeclaredStates(t *testing.T) {
 	r := NewResolver(loadTestConfig(t))
 	states := r.AllDeclaredStates()
-	// 2 role-pairs * 6 states = 12.
-	if len(states) != 12 {
-		t.Errorf("expected 12 declared states, got %d", len(states))
+	// 2 role-pairs: code-planning-pair (6 states) + coding-pair (6 + 2 quorum states) = 14.
+	if len(states) != 14 {
+		t.Errorf("expected 14 declared states, got %d", len(states))
 	}
 	expected := []models.TaskStatus{
 		"DRAFT_CODING_PLAN", "CODE_PLANNING", "CODING_PLAN_TO_REVIEW",
 		"REVIEWING_CODING_PLAN", "CODING_PLAN_APPROVED", "CODING_PLAN_REJECTED",
 		"DRAFT_CODE", "IMPLEMENTING_CODE", "CODE_READY_FOR_REVIEW",
 		"REVIEWING_CODE", "CODE_APPROVED", "CODE_REJECTED",
+		"CODE_PARTIALLY_APPROVED", "REVIEWING_CODE_2",
 	}
 	for _, e := range expected {
 		if !slices.Contains(states, e) {
@@ -930,7 +935,12 @@ func TestResolver_IsDeclaredState(t *testing.T) {
 
 func TestReviewPolicyValidation(t *testing.T) {
 	// Minimal valid base for review-policy tests.
-	base := func(reviewPolicy string) string {
+	// extraStates allows adding optional quorum states to the states block.
+	base := func(reviewPolicy string, extraStates ...string) string {
+		statesExtra := ""
+		for _, s := range extraStates {
+			statesExtra += "\n" + s
+		}
 		return `
 pipeline:
   roles:
@@ -951,13 +961,18 @@ pipeline:
         submitted: SUBMITTED
         reviewing: REVIEWING
         approved: APPROVED
-        rejected: REJECTED
+        rejected: REJECTED` + statesExtra + `
   sub-pipelines:
     sp:
       steps: [coding-pair]
   entry-points:
     default: sp.coding-pair
 `
+	}
+
+	quorumStates := []string{
+		"        partially-approved: PARTIALLY_APPROVED",
+		"        reviewing-2: REVIEWING_2",
 	}
 
 	t.Run("valid_quorum_1", func(t *testing.T) {
@@ -978,7 +993,7 @@ pipeline:
           provider-diversity: preferred
         architecture-impact:
           quorum: 2
-          provider-diversity: preferred`)
+          provider-diversity: preferred`, quorumStates...)
 		cfg := writeTemp(t, yaml)
 		_, err := Load(cfg)
 		if err != nil {
@@ -1042,7 +1057,7 @@ pipeline:
         quorum: 1
         architecture-impact:
           quorum: 2
-          provider-diversity: preferred`)
+          provider-diversity: preferred`, quorumStates...)
 		cfg := writeTemp(t, yaml)
 		_, err := Load(cfg)
 		if err != nil {
@@ -1785,6 +1800,161 @@ func assertContains(t *testing.T, got, want string) {
 	t.Helper()
 	if !strings.Contains(got, want) {
 		t.Errorf("error %q does not contain %q", got, want)
+	}
+}
+
+func TestResolver_PartiallyApprovedStatus(t *testing.T) {
+	r := NewResolver(loadTestConfig(t))
+
+	status, err := r.PartiallyApprovedStatus("coding-pair")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "CODE_PARTIALLY_APPROVED" {
+		t.Errorf("PartiallyApprovedStatus = %q, want %q", status, "CODE_PARTIALLY_APPROVED")
+	}
+
+	// code-planning-pair has no quorum states.
+	_, err = r.PartiallyApprovedStatus("code-planning-pair")
+	if err == nil {
+		t.Fatal("expected error for code-planning-pair (no partially-approved state)")
+	}
+}
+
+func TestResolver_Reviewing2Status(t *testing.T) {
+	r := NewResolver(loadTestConfig(t))
+
+	status, err := r.Reviewing2Status("coding-pair")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != "REVIEWING_CODE_2" {
+		t.Errorf("Reviewing2Status = %q, want %q", status, "REVIEWING_CODE_2")
+	}
+
+	// code-planning-pair has no quorum states.
+	_, err = r.Reviewing2Status("code-planning-pair")
+	if err == nil {
+		t.Fatal("expected error for code-planning-pair (no reviewing-2 state)")
+	}
+}
+
+func TestQuorumStatesRequiredForOverrides(t *testing.T) {
+	// Base quorum 1, override quorum 2, missing quorum states → rejected.
+	yaml := `
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: reviewer
+      review-policy:
+        quorum: 1
+        significant-change:
+          quorum: 2
+      states:
+        initial: DRAFT
+        executing: EXECUTING
+        submitted: SUBMITTED
+        reviewing: REVIEWING
+        approved: APPROVED
+        rejected: REJECTED
+  sub-pipelines:
+    main:
+      steps:
+        - coding-pair
+  entry-points:
+    default: main.coding-pair
+`
+	_, err := LoadFromBytes([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected validation error for missing quorum states when override quorum > 1")
+	}
+	if !strings.Contains(err.Error(), "quorum states") {
+		t.Errorf("error = %q, want substring 'quorum states'", err.Error())
+	}
+}
+
+func TestQuorumStatesNotRequiredWhenQuorumIs1(t *testing.T) {
+	// Base quorum 1, no overrides → quorum states optional.
+	yaml := `
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: reviewer
+      review-policy:
+        quorum: 1
+      states:
+        initial: DRAFT
+        executing: EXECUTING
+        submitted: SUBMITTED
+        reviewing: REVIEWING
+        approved: APPROVED
+        rejected: REJECTED
+  sub-pipelines:
+    main:
+      steps:
+        - coding-pair
+  entry-points:
+    default: main.coding-pair
+`
+	_, err := LoadFromBytes([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestQuorumStatesRequiredForBaseQuorum(t *testing.T) {
+	// Base quorum 2, missing quorum states → rejected.
+	yaml := `
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: reviewer
+      review-policy:
+        quorum: 2
+      states:
+        initial: DRAFT
+        executing: EXECUTING
+        submitted: SUBMITTED
+        reviewing: REVIEWING
+        approved: APPROVED
+        rejected: REJECTED
+  sub-pipelines:
+    main:
+      steps:
+        - coding-pair
+  entry-points:
+    default: main.coding-pair
+`
+	_, err := LoadFromBytes([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected validation error for missing quorum states when base quorum > 1")
+	}
+	if !strings.Contains(err.Error(), "quorum states") {
+		t.Errorf("error = %q, want substring 'quorum states'", err.Error())
 	}
 }
 

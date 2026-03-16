@@ -110,6 +110,10 @@ func newStatusClassifier(resolver *pipeline.Resolver, cfg *pipeline.PipelineConf
 		if s, err := resolver.ReviewingStatus(rpName); err == nil {
 			sc.reviewing = append(sc.reviewing, s)
 		}
+		// reviewing-2 reuses the review lease mechanism — classify as reviewing.
+		if s, err := resolver.Reviewing2Status(rpName); err == nil {
+			sc.reviewing = append(sc.reviewing, s)
+		}
 		if s, err := resolver.ApprovedStatus(rpName); err == nil {
 			sc.approved = append(sc.approved, s)
 		}

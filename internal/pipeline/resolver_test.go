@@ -521,6 +521,8 @@ pipeline:
         reviewing: REVIEWING_CODE
         approved: CODE_APPROVED
         rejected: CODE_REJECTED
+        partially-approved: CODE_PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_CODE_2
   sub-pipelines:
     coding-subpipeline:
       steps:
@@ -592,6 +594,8 @@ pipeline:
         reviewing: REVIEWING_CODE
         approved: CODE_APPROVED
         rejected: CODE_REJECTED
+        partially-approved: CODE_PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_CODE_2
   sub-pipelines:
     coding-subpipeline:
       steps:

@@ -186,6 +186,9 @@ func validate(cfg *PipelineConfig) error {
 		if err := validateReviewPolicy(name, rp.ReviewPolicy); err != nil {
 			return err
 		}
+		if err := validateQuorumStates(name, rp); err != nil {
+			return err
+		}
 	}
 
 	stateOwner := make(map[string]string) // state name → role-pair name
@@ -200,6 +203,19 @@ func validate(cfg *PipelineConfig) error {
 			{"reviewing", rp.States.Reviewing},
 			{"approved", rp.States.Approved},
 			{"rejected", rp.States.Rejected},
+		}
+		// Include optional quorum states in duplicate checking.
+		if rp.States.PartiallyApproved != "" {
+			states = append(states, struct {
+				phase string
+				value string
+			}{"partially-approved", rp.States.PartiallyApproved})
+		}
+		if rp.States.Reviewing2 != "" {
+			states = append(states, struct {
+				phase string
+				value string
+			}{"reviewing-2", rp.States.Reviewing2})
 		}
 		for _, s := range states {
 			if s.value == "" {
@@ -290,6 +306,31 @@ func validateReviewPolicyOverride(rpName, overrideName string, override *ReviewP
 	return nil
 }
 
+// validateQuorumStates checks that a role-pair declares quorum states
+// (partially-approved and reviewing-2) when the effective quorum can exceed 1.
+// This includes both the base quorum and any override quorums.
+func validateQuorumStates(rpName string, rp RolePairDef) error {
+	if rp.ReviewPolicy == nil {
+		return nil
+	}
+	maxQuorum := rp.ReviewPolicy.Quorum
+	if rp.ReviewPolicy.SignificantChange != nil && rp.ReviewPolicy.SignificantChange.Quorum > maxQuorum {
+		maxQuorum = rp.ReviewPolicy.SignificantChange.Quorum
+	}
+	if rp.ReviewPolicy.ArchitectureImpact != nil && rp.ReviewPolicy.ArchitectureImpact.Quorum > maxQuorum {
+		maxQuorum = rp.ReviewPolicy.ArchitectureImpact.Quorum
+	}
+	if maxQuorum > 1 {
+		if rp.States.PartiallyApproved == "" {
+			return fmt.Errorf("role-pair %q: quorum states (partially-approved, reviewing-2) required when effective quorum can exceed 1", rpName)
+		}
+		if rp.States.Reviewing2 == "" {
+			return fmt.Errorf("role-pair %q: quorum states (partially-approved, reviewing-2) required when effective quorum can exceed 1", rpName)
+		}
+	}
+	return nil
+}
+
 // parseRef splits a dotted reference like "role-pair.phase" into its components.
 func parseRef(ref string) (string, string, error) {
 	parts := strings.SplitN(ref, ".", 2)
@@ -313,6 +354,7 @@ func parse3PartRef(ref string) (subPipeline, rolePair, phase string, err error) 
 var validPhases = map[string]bool{
 	"initial": true, "executing": true, "submitted": true,
 	"reviewing": true, "approved": true, "rejected": true,
+	"partially-approved": true, "reviewing-2": true,
 }
 
 // validateTransitionHeader checks the common fields shared by all transition types:

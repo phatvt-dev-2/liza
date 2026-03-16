@@ -28,6 +28,8 @@ pipeline:
     coding-pair:
       doer: coder
       reviewer: code-reviewer
+      review-policy:
+        quorum: 1
       states:
         initial: DRAFT_CODE
         executing: IMPLEMENTING_CODE
@@ -35,6 +37,8 @@ pipeline:
         reviewing: REVIEWING_CODE
         approved: CODE_APPROVED
         rejected: CODE_REJECTED
+        partially-approved: CODE_PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_CODE_2
 
   sub-pipelines:
     coding-subpipeline:

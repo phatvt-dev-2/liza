@@ -281,7 +281,9 @@ func (r *Resolver) EffectiveQuorum(rolePair, impact string) (int, error) {
 
 // TransitionMap generates the intra-pair transition map for all role-pairs.
 // The fixed intra-pair flow is: initial→executing→submitted→reviewing→approved|rejected,
-// with rejected→initial. Cross-cutting meta-states (BLOCKED, ABANDONED, etc.) are not included.
+// with rejected→initial. When quorum states are declared, reviewing also transitions to
+// partially-approved, partially-approved→reviewing-2, and reviewing-2→approved|rejected.
+// Cross-cutting meta-states (BLOCKED, ABANDONED, etc.) are not included.
 func (r *Resolver) TransitionMap() map[models.TaskStatus][]models.TaskStatus {
 	tm := make(map[models.TaskStatus][]models.TaskStatus)
 	for _, rp := range r.config.Pipeline.RolePairs {
@@ -299,6 +301,16 @@ func (r *Resolver) TransitionMap() map[models.TaskStatus][]models.TaskStatus {
 		tm[reviewing] = []models.TaskStatus{approved, rejected}
 		tm[rejected] = []models.TaskStatus{initial}
 		tm[approved] = []models.TaskStatus{} // terminal within the pair
+
+		// Quorum state transitions when partially-approved and reviewing-2 are declared.
+		if s.PartiallyApproved != "" && s.Reviewing2 != "" {
+			partiallyApproved := models.TaskStatus(s.PartiallyApproved)
+			reviewing2 := models.TaskStatus(s.Reviewing2)
+
+			tm[reviewing] = append(tm[reviewing], partiallyApproved)
+			tm[partiallyApproved] = []models.TaskStatus{reviewing2}
+			tm[reviewing2] = []models.TaskStatus{approved, rejected}
+		}
 	}
 	return tm
 }
@@ -316,6 +328,12 @@ func (r *Resolver) AllDeclaredStates() []models.TaskStatus {
 			models.TaskStatus(s.Approved),
 			models.TaskStatus(s.Rejected),
 		)
+		if s.PartiallyApproved != "" {
+			states = append(states, models.TaskStatus(s.PartiallyApproved))
+		}
+		if s.Reviewing2 != "" {
+			states = append(states, models.TaskStatus(s.Reviewing2))
+		}
 	}
 	return states
 }
