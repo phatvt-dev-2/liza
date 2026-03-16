@@ -119,8 +119,9 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit SHA %s does not match worktree HEAD %s", commitSHA, preRebaseCommit)}
 	}
 
-	// TDD enforcement: code tasks must include test files (coder role only).
-	if runtimeRole == "coder" && task.EffectiveType() == models.TaskTypeCoding && task.BaseCommit != nil {
+	// TDD enforcement: code tasks must include test files (doer roles only).
+	roleType, _ := resolver.RoleType(runtimeRole)
+	if roleType == "doer" && task.EffectiveType() == models.TaskTypeCoding && task.BaseCommit != nil {
 		hasTests, err := HasTestFiles(g, taskID, *task.BaseCommit)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check test files: %w", err)

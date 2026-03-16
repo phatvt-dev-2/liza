@@ -313,3 +313,113 @@ func TestSubmitForReview_RebaseConflict_TransitionsToIntegrationFailed(t *testin
 		t.Errorf("expected ReviewCommit nil, got %v", *task.ReviewCommit)
 	}
 }
+
+// TestSubmitForReview_TDDEnforcement_CustomDoerRole verifies that TDD enforcement
+// applies to any doer role (not just the literal "coder" role) by using a custom
+// pipeline config with a custom doer role name.
+func TestSubmitForReview_TDDEnforcement_CustomDoerRole(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Overwrite the default pipeline config with one that defines a custom doer role.
+	customPipeline := `pipeline:
+  roles:
+    custom-doer:
+      type: doer
+      display-name: "Custom Doer"
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+    custom-reviewer:
+      type: reviewer
+      display-name: "Custom Reviewer"
+      allowed-operations:
+        - submit-verdict
+  role-pairs:
+    custom-pair:
+      doer: custom-doer
+      reviewer: custom-reviewer
+      states:
+        initial: CUSTOM_READY
+        executing: CUSTOM_EXECUTING
+        submitted: CUSTOM_SUBMITTED
+        reviewing: CUSTOM_REVIEWING
+        approved: CUSTOM_APPROVED
+        rejected: CUSTOM_REJECTED
+  sub-pipelines: {}
+  pipeline-transitions: []
+  entry-points: {}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".liza", "pipeline.yaml"), []byte(customPipeline), 0644); err != nil {
+		t.Fatalf("Failed to write custom pipeline config: %v", err)
+	}
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+
+	g := git.New(tmpDir)
+	taskID := "task-custom-doer-tdd"
+	baseCommit, err := g.CreateWorktree(taskID, "integration")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+	wtPath := g.GetWorktreePath(taskID)
+
+	// Add a non-test file only (no test files — should trigger TDD enforcement).
+	if err := os.WriteFile(filepath.Join(wtPath, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "main.go")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Non-test commit")
+	wtCommit := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
+
+	agentID := "custom-doer-1"
+	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+	worktree := g.GetWorktreeRelPath(taskID)
+	initialState := &models.State{
+		Config: models.Config{
+			IntegrationBranch: "integration",
+			LeaseDuration:     1800,
+		},
+		Tasks: []models.Task{
+			{
+				ID:           taskID,
+				Type:         models.TaskTypeCoding,
+				Description:  "Custom doer TDD enforcement test",
+				Status:       "CUSTOM_EXECUTING",
+				RolePair:     "custom-pair",
+				AssignedTo:   &agentID,
+				LeaseExpires: &leaseExpires,
+				Worktree:     &worktree,
+				BaseCommit:   &baseCommit,
+				Iteration:    1,
+				Created:      time.Now().UTC(),
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: models.TaskEventPreExecutionCheckpoint,
+						Agent: &agentID,
+						Extra: map[string]any{
+							"intent":          "test custom doer TDD",
+							"validation_plan": "verify TDD enforcement",
+							"files_to_modify": []string{"main.go"},
+						},
+					},
+				},
+			},
+		},
+		Agents: map[string]models.Agent{
+			agentID: {Role: "custom-doer", Status: models.AgentStatusWorking, CurrentTask: &taskID},
+		},
+	}
+
+	testhelpers.WriteInitialState(t, statePath, initialState)
+
+	_, err = SubmitForReview(tmpDir, taskID, wtCommit, agentID)
+	if err == nil {
+		t.Fatal("Expected TDD enforcement error for custom doer role, got nil")
+	}
+	testhelpers.RequireErrorContains(t, err, "code tasks must include test files")
+}
