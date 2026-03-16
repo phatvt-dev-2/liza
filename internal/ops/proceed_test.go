@@ -1568,3 +1568,203 @@ func TestProceed_AddsChildrenToSprintScope(t *testing.T) {
 		}
 	}
 }
+
+// --- DependsOn tests ---
+
+func TestProceed_DependsOnResolvesToChildTaskIDs(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-deps-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with dependencies",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "deps test",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Setup DB", DoneWhen: "DB ready", Scope: "db", SpecRef: "specs/db.md"},
+			{Desc: "Build API", DoneWhen: "API works", Scope: "api", SpecRef: "specs/api.md", DependsOn: []string{"0"}},
+			{Desc: "Build UI", DoneWhen: "UI works", Scope: "ui", SpecRef: "specs/ui.md", DependsOn: []string{"0", "1"}},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	if len(result.ChildTaskIDs) != 3 {
+		t.Fatalf("ChildTaskIDs count = %d, want 3", len(result.ChildTaskIDs))
+	}
+
+	// Verify persisted child tasks have correct DependsOn
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child0ID := parentID + "-code-plan-to-coding-0"
+	child1ID := parentID + "-code-plan-to-coding-1"
+	child2ID := parentID + "-code-plan-to-coding-2"
+
+	child0 := readState.FindTask(child0ID)
+	child1 := readState.FindTask(child1ID)
+	child2 := readState.FindTask(child2ID)
+
+	if child0 == nil || child1 == nil || child2 == nil {
+		t.Fatal("One or more child tasks not found")
+	}
+
+	// Child 0: no dependencies
+	if len(child0.DependsOn) != 0 {
+		t.Errorf("child0.DependsOn = %v, want empty", child0.DependsOn)
+	}
+
+	// Child 1: depends on child 0
+	if len(child1.DependsOn) != 1 || child1.DependsOn[0] != child0ID {
+		t.Errorf("child1.DependsOn = %v, want [%s]", child1.DependsOn, child0ID)
+	}
+
+	// Child 2: depends on child 0 and child 1
+	if len(child2.DependsOn) != 2 || child2.DependsOn[0] != child0ID || child2.DependsOn[1] != child1ID {
+		t.Errorf("child2.DependsOn = %v, want [%s, %s]", child2.DependsOn, child0ID, child1ID)
+	}
+}
+
+func TestProceed_DependsOnInvalidIndex(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-bad-dep"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with bad dep",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "bad dep test",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Task A", DoneWhen: "Done", Scope: "s", SpecRef: "specs/a.md"},
+			{Desc: "Task B", DoneWhen: "Done", Scope: "s", SpecRef: "specs/b.md", DependsOn: []string{"5"}},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for out-of-range DependsOn index")
+	}
+	if !strings.Contains(err.Error(), "out of range") {
+		t.Errorf("Error = %q, want to contain 'out of range'", err.Error())
+	}
+}
+
+func TestProceed_DependsOnNonNumeric(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-nan-dep"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with non-numeric dep",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "nan dep test",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Task A", DoneWhen: "Done", Scope: "s", SpecRef: "specs/a.md", DependsOn: []string{"abc"}},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for non-numeric DependsOn")
+	}
+	if !strings.Contains(err.Error(), "non-numeric") {
+		t.Errorf("Error = %q, want to contain 'non-numeric'", err.Error())
+	}
+}
+
+func TestProceed_DependsOnSelfReference(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-self-dep"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with self dep",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "self dep test",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Task A", DoneWhen: "Done", Scope: "s", SpecRef: "specs/a.md", DependsOn: []string{"0"}},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Expected error for self-referencing DependsOn")
+	}
+	if !strings.Contains(err.Error(), "references itself") {
+		t.Errorf("Error = %q, want to contain 'references itself'", err.Error())
+	}
+}

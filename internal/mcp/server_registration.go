@@ -675,7 +675,7 @@ func (s *Server) registerComplexOperations() {
 						},
 						"output": {
 							Type:        "array",
-							Description: "Array of output entries, each with: desc (string), done_when (string), scope (string), spec_ref (string, optional)",
+							Description: "Array of output entries, each with: desc (string), done_when (string), scope (string), spec_ref (string, optional), depends_on (array of index strings referencing other entries, optional)",
 						},
 					},
 					Required: []string{"task_id", "agent_id", "output"},

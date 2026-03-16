@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/liza-mas/liza/internal/roles"
@@ -204,10 +205,30 @@ type Task struct {
 // OutputEntry represents a structured subtask definition produced by a doer role.
 // When a task completes with output[], each entry defines a downstream child task.
 type OutputEntry struct {
-	Desc     string `yaml:"desc"`
-	DoneWhen string `yaml:"done_when"`
-	Scope    string `yaml:"scope"`
-	SpecRef  string `yaml:"spec_ref"`
+	Desc      string   `yaml:"desc"`
+	DoneWhen  string   `yaml:"done_when"`
+	Scope     string   `yaml:"scope"`
+	SpecRef   string   `yaml:"spec_ref"`
+	DependsOn []string `yaml:"depends_on,omitempty"`
+}
+
+// ValidateDependsOn checks that DependsOn indices are valid references within
+// [0, totalEntries), are numeric, and don't self-reference. Returns a plain error
+// suitable for wrapping by callers into their preferred error type.
+func ValidateDependsOn(deps []string, entryIndex, totalEntries int) error {
+	for _, ref := range deps {
+		idx, err := strconv.Atoi(ref)
+		if err != nil {
+			return fmt.Errorf("output[%d] depends_on contains non-numeric reference %q", entryIndex, ref)
+		}
+		if idx < 0 || idx >= totalEntries {
+			return fmt.Errorf("output[%d] depends_on reference %q out of range [0, %d)", entryIndex, ref, totalEntries)
+		}
+		if idx == entryIndex {
+			return fmt.Errorf("output[%d] depends_on references itself", entryIndex)
+		}
+	}
+	return nil
 }
 
 // PipelineResolver provides pipeline state resolution for tasks with role-pairs.

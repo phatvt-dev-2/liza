@@ -244,6 +244,104 @@ func TestSetTaskOutput_NormalizesWorktreeSpecRef(t *testing.T) {
 	}
 }
 
+func TestSetTaskOutput_DependsOnRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	output := []models.OutputEntry{
+		{Desc: "Setup", DoneWhen: "ready", Scope: "db", SpecRef: "specs/db.md"},
+		{Desc: "Build", DoneWhen: "works", Scope: "api", SpecRef: "specs/api.md", DependsOn: []string{"0"}},
+		{Desc: "Test", DoneWhen: "green", Scope: "test", SpecRef: "specs/test.md", DependsOn: []string{"0", "1"}},
+	}
+
+	err := SetTaskOutput(tmpDir, &SetTaskOutputInput{
+		TaskID:  "task-1",
+		AgentID: "coder-1",
+		Output:  output,
+	})
+	if err != nil {
+		t.Fatalf("SetTaskOutput() unexpected error: %v", err)
+	}
+
+	bb := db.For(stateFile)
+	stateAfter, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := stateAfter.FindTask("task-1")
+	if task == nil {
+		t.Fatal("task-1 not found after SetTaskOutput")
+	}
+	if len(task.Output) != 3 {
+		t.Fatalf("Expected 3 output entries, got %d", len(task.Output))
+	}
+	if len(task.Output[0].DependsOn) != 0 {
+		t.Errorf("Output[0].DependsOn = %v, want empty", task.Output[0].DependsOn)
+	}
+	if len(task.Output[1].DependsOn) != 1 || task.Output[1].DependsOn[0] != "0" {
+		t.Errorf("Output[1].DependsOn = %v, want [\"0\"]", task.Output[1].DependsOn)
+	}
+	if len(task.Output[2].DependsOn) != 2 || task.Output[2].DependsOn[0] != "0" || task.Output[2].DependsOn[1] != "1" {
+		t.Errorf("Output[2].DependsOn = %v, want [\"0\", \"1\"]", task.Output[2].DependsOn)
+	}
+}
+
+func TestSetTaskOutput_DependsOnValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		output      []models.OutputEntry
+		errContains string
+	}{
+		{
+			name: "non-numeric reference",
+			output: []models.OutputEntry{
+				{Desc: "d", DoneWhen: "dw", Scope: "s", DependsOn: []string{"abc"}},
+			},
+			errContains: "non-numeric",
+		},
+		{
+			name: "out of range",
+			output: []models.OutputEntry{
+				{Desc: "d", DoneWhen: "dw", Scope: "s", DependsOn: []string{"5"}},
+			},
+			errContains: "out of range",
+		},
+		{
+			name: "self reference",
+			output: []models.OutputEntry{
+				{Desc: "d", DoneWhen: "dw", Scope: "s", DependsOn: []string{"0"}},
+			},
+			errContains: "references itself",
+		},
+		{
+			name: "negative index",
+			output: []models.OutputEntry{
+				{Desc: "d", DoneWhen: "dw", Scope: "s", DependsOn: []string{"-1"}},
+			},
+			errContains: "out of range",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := SetTaskOutput("/nonexistent", &SetTaskOutputInput{
+				TaskID:  "t1",
+				AgentID: "coder-1",
+				Output:  tt.output,
+			})
+			testhelpers.RequireErrorContains(t, err, tt.errContains)
+		})
+	}
+}
+
 func TestSetTaskOutput_CodePlanningStatus(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

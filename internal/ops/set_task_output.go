@@ -39,6 +39,9 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 		if entry.Scope == "" {
 			return &PreconditionError{Reason: fmt.Sprintf("output[%d].scope is required", i)}
 		}
+		if err := models.ValidateDependsOn(entry.DependsOn, i, len(input.Output)); err != nil {
+			return &PreconditionError{Reason: err.Error()}
+		}
 	}
 
 	// Normalize spec_ref on each output entry to strip worktree prefixes.

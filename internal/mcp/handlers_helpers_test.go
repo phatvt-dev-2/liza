@@ -7,6 +7,77 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 )
 
+// --- extractOutputEntries tests ---
+
+func TestExtractOutputEntries_WithDependsOn(t *testing.T) {
+	raw := []any{
+		map[string]any{
+			"desc":       "Setup DB",
+			"done_when":  "DB ready",
+			"scope":      "db",
+			"spec_ref":   "specs/db.md",
+			"depends_on": []any{},
+		},
+		map[string]any{
+			"desc":       "Build API",
+			"done_when":  "API works",
+			"scope":      "api",
+			"spec_ref":   "specs/api.md",
+			"depends_on": []any{"0"},
+		},
+		map[string]any{
+			"desc":       "Build UI",
+			"done_when":  "UI works",
+			"scope":      "ui",
+			"spec_ref":   "specs/ui.md",
+			"depends_on": []any{"0", "1"},
+		},
+	}
+
+	entries, err := extractOutputEntries(raw)
+	if err != nil {
+		t.Fatalf("extractOutputEntries() error: %v", err)
+	}
+
+	if len(entries) != 3 {
+		t.Fatalf("len(entries) = %d, want 3", len(entries))
+	}
+
+	// Entry 0: empty depends_on
+	if len(entries[0].DependsOn) != 0 {
+		t.Errorf("entries[0].DependsOn = %v, want empty", entries[0].DependsOn)
+	}
+
+	// Entry 1: depends on "0"
+	if len(entries[1].DependsOn) != 1 || entries[1].DependsOn[0] != "0" {
+		t.Errorf("entries[1].DependsOn = %v, want [\"0\"]", entries[1].DependsOn)
+	}
+
+	// Entry 2: depends on "0" and "1"
+	if len(entries[2].DependsOn) != 2 || entries[2].DependsOn[0] != "0" || entries[2].DependsOn[1] != "1" {
+		t.Errorf("entries[2].DependsOn = %v, want [\"0\", \"1\"]", entries[2].DependsOn)
+	}
+}
+
+func TestExtractOutputEntries_NoDependsOn(t *testing.T) {
+	raw := []any{
+		map[string]any{
+			"desc":      "Task",
+			"done_when": "Done",
+			"scope":     "s",
+		},
+	}
+
+	entries, err := extractOutputEntries(raw)
+	if err != nil {
+		t.Fatalf("extractOutputEntries() error: %v", err)
+	}
+
+	if len(entries[0].DependsOn) != 0 {
+		t.Errorf("entries[0].DependsOn = %v, want nil/empty", entries[0].DependsOn)
+	}
+}
+
 // testHelpersPipelineYAML defines a minimal pipeline with both standard and
 // custom roles to verify resolver-based authorization in authorizeClaimRelease.
 var testHelpersPipelineYAML = []byte(`

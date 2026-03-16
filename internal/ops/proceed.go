@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,7 +120,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 			return fmt.Errorf("task %q has no output[] entries for per-subtask transition %q", taskID, transitionName)
 		}
 		for i, entry := range task.Output {
-			if err := validateOutputEntry(entry, i); err != nil {
+			if err := validateOutputEntry(entry, i, len(task.Output)); err != nil {
 				return err
 			}
 		}
@@ -137,13 +138,18 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	}
 	task.TransitionsExecuted[transitionName] = true
 
+	// Pre-compute sibling IDs for DependsOn resolution in per-subtask transitions.
+	siblingIDs := make([]string, len(task.Output))
+	for i := range task.Output {
+		siblingIDs[i] = fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
+	}
+
 	switch tDef.cardinality {
 	case "per-subtask":
 		for i, entry := range task.Output {
-			childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
-			child := buildChildTask(childID, taskID, entry, tDef.targetStatus, tDef.targetRolePair, now)
+			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, siblingIDs, now)
 			s.Tasks = append(s.Tasks, child)
-			result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[i])
 		}
 	case "one-to-one":
 		childID := fmt.Sprintf("%s-%s", taskID, transitionName)
@@ -170,10 +176,14 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transitionName string, tDef transitionDef, now time.Time, result *ProceedResult) error {
 	switch tDef.cardinality {
 	case "per-subtask":
+		// Pre-compute sibling IDs for DependsOn resolution.
+		siblingIDs := make([]string, len(task.Output))
+		for i := range task.Output {
+			siblingIDs[i] = fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
+		}
 		var missingChildren []int
 		for i := range task.Output {
-			childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
-			if s.FindTask(childID) == nil {
+			if s.FindTask(siblingIDs[i]) == nil {
 				missingChildren = append(missingChildren, i)
 			}
 		}
@@ -181,10 +191,9 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
 		}
 		for _, idx := range missingChildren {
-			childID := fmt.Sprintf("%s-%s-%d", taskID, transitionName, idx)
-			child := buildChildTask(childID, taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, now)
+			child := buildChildTask(siblingIDs[idx], taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, siblingIDs, now)
 			s.Tasks = append(s.Tasks, child)
-			result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[idx])
 		}
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
@@ -354,7 +363,15 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 }
 
 // buildChildTask creates a child task from an output entry.
-func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, now time.Time) models.Task {
+// siblingIDs maps output entry indices to their generated task IDs,
+// used to resolve DependsOn index references to actual task IDs.
+func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, siblingIDs []string, now time.Time) models.Task {
+	var deps []string
+	for _, ref := range entry.DependsOn {
+		idx, _ := strconv.Atoi(ref) // validated upstream in validateOutputEntry
+		deps = append(deps, siblingIDs[idx])
+	}
+
 	return models.Task{
 		ID:          childID,
 		Type:        models.TaskTypeCoding,
@@ -366,6 +383,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 		SpecRef:     paths.NormalizeSpecRef(entry.SpecRef),
 		DoneWhen:    entry.DoneWhen,
 		Scope:       entry.Scope,
+		DependsOn:   deps,
 		Created:     now,
 		History:     []models.TaskHistoryEntry{},
 	}
@@ -396,8 +414,9 @@ func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef tran
 	}
 }
 
-// validateOutputEntry checks that an output entry has all required fields.
-func validateOutputEntry(entry models.OutputEntry, index int) error {
+// validateOutputEntry checks that an output entry has all required fields
+// and that DependsOn indices are valid references within [0, totalEntries).
+func validateOutputEntry(entry models.OutputEntry, index, totalEntries int) error {
 	if entry.Desc == "" {
 		return fmt.Errorf("output[%d] missing desc", index)
 	}
@@ -410,7 +429,7 @@ func validateOutputEntry(entry models.OutputEntry, index int) error {
 	if entry.SpecRef == "" {
 		return fmt.Errorf("output[%d] missing spec_ref", index)
 	}
-	return nil
+	return models.ValidateDependsOn(entry.DependsOn, index, totalEntries)
 }
 
 // AvailableTransitions returns the available manual transitions for a task.

@@ -256,10 +256,11 @@ func extractOutputEntries(raw []any) ([]models.OutputEntry, error) {
 			return nil, fmt.Errorf("output[%d] must be an object, got %T", i, v)
 		}
 		entry := models.OutputEntry{
-			Desc:     stringFromMap(m, "desc"),
-			DoneWhen: stringFromMap(m, "done_when"),
-			Scope:    stringFromMap(m, "scope"),
-			SpecRef:  stringFromMap(m, "spec_ref"),
+			Desc:      stringFromMap(m, "desc"),
+			DoneWhen:  stringFromMap(m, "done_when"),
+			Scope:     stringFromMap(m, "scope"),
+			SpecRef:   stringFromMap(m, "spec_ref"),
+			DependsOn: extractStringSlice(m, "depends_on"),
 		}
 		out = append(out, entry)
 	}

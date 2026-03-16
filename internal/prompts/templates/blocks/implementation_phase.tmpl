@@ -29,7 +29,8 @@ IMPLEMENTATION PHASE:
    (Include a "## Spec Compliance Matrix" section — see step 6c.)
 3. For EACH coding task in your plan, call liza_set_task_output with structured entries.
    Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
-   Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source).
+   Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source),
+   depends_on (optional array of sibling index strings, e.g. ["0", "2"] — resolved to child task IDs at transition).
    Extract each field verbatim from the plan file — do not compose from memory or paraphrase.
 4. Update worktree artifacts required by DONE WHEN.
 5. Validate done_when criteria with concrete checks.
@@ -54,11 +55,12 @@ IMPLEMENTATION PHASE:
       - Any GAP row = not ready to submit. Resolve by adding tasks or clarifying scope.
       - Task IDs must match the plan's task headings and correspond to output[] entry order (Task 1 = output[0], etc.).
       - Spec "Out of Scope" items do not need rows.
-   d. output[] completeness: one entry per planned coding task, each with all four fields
-      (desc, done_when, scope, spec_ref) populated.
+   d. output[] completeness: one entry per planned coding task, each with required fields
+      (desc, done_when, scope, spec_ref) populated. depends_on set where tasks have ordering constraints.
    e. output[] parity: re-read the plan file at the path chosen in step 2 and verify each output[]
       entry's desc, done_when, scope, and spec_ref is character-identical to the plan.
       If any field was paraphrased, replace it with the verbatim text before submitting.
+      Verify depends_on indices match the dependency order described in the plan.
    f. Cross-reference consistency: for every cross-reference in the plan ("owned by CPx",
       "depends on CPx", "out of scope for CPx"), search the plan file at the path chosen in step 2
       and confirm the referenced task explicitly states that responsibility,
@@ -75,7 +77,8 @@ IMPLEMENTATION PHASE:
 5. For EACH capability in the epic, call liza_set_task_output with structured entries.
    Each entry becomes a US Writer child task after merge. The Epic Plan Reviewer will verify these.
    Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary),
-   spec_ref (path to the produced epic document — US Writers use this to locate the parent epic).
+   spec_ref (path to the produced epic document — US Writers use this to locate the parent epic),
+   depends_on (optional array of sibling index strings for capability ordering).
    desc: extract verbatim from the capability's one-sentence description in the epic.
    done_when: derive a falsifiable condition from the capability description and story documents.
    scope: derive from the capability's story documents table and out-of-scope section.
