@@ -143,6 +143,14 @@ func (ts TaskStatus) IsPipelineSprintTerminal(terminalStates []TaskStatus) bool 
 	return ts.IsTerminal() || slices.Contains(terminalStates, ts)
 }
 
+// Approval records a single review approval with provider metadata.
+// Used by review quorum to track who approved and from which provider.
+type Approval struct {
+	Agent     string    `yaml:"agent"`
+	Provider  string    `yaml:"provider"`
+	Timestamp time.Time `yaml:"timestamp"`
+}
+
 // Task represents a single task in the Liza system
 type Task struct {
 	ID                  string             `yaml:"id"`
@@ -165,6 +173,7 @@ type Task struct {
 	ReviewingBy         *string            `yaml:"reviewing_by,omitempty"`
 	ReviewLeaseExpires  *time.Time         `yaml:"review_lease_expires,omitempty"`
 	ApprovedBy          *string            `yaml:"approved_by,omitempty"`
+	Approvals           []Approval         `yaml:"approvals,omitempty"`
 	MergeCommit         *string            `yaml:"merge_commit,omitempty"`
 	LeaseExpires        *time.Time         `yaml:"lease_expires,omitempty"`
 	SpecRef             string             `yaml:"spec_ref"`
@@ -215,6 +224,40 @@ func (t *Task) EffectiveType() TaskType {
 		return TaskTypeCoding
 	}
 	return t.Type
+}
+
+// ApprovalCount returns the number of approvals recorded on this task.
+func (t *Task) ApprovalCount() int {
+	return len(t.Approvals)
+}
+
+// HasProviderDiversity returns true if approvals come from at least 2 distinct providers.
+func (t *Task) HasProviderDiversity() bool {
+	if len(t.Approvals) < 2 {
+		return false
+	}
+	first := t.Approvals[0].Provider
+	for _, a := range t.Approvals[1:] {
+		if a.Provider != first {
+			return true
+		}
+	}
+	return false
+}
+
+// ClearApprovals removes all recorded approvals.
+// Used when a rejection at any review stage requires fresh re-review.
+func (t *Task) ClearApprovals() {
+	t.Approvals = nil
+}
+
+// LastApprover returns the agent ID of the most recent approval,
+// or empty string if no approvals exist.
+func (t *Task) LastApprover() string {
+	if len(t.Approvals) == 0 {
+		return ""
+	}
+	return t.Approvals[len(t.Approvals)-1].Agent
 }
 
 // TransitionWith validates and applies a status transition using a transition map
