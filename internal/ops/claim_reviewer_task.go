@@ -200,6 +200,8 @@ func selectBestCandidate(
 // pickWithApprovalDiversity selects from partially_approved tasks, preferring
 // tasks where the claimer's provider differs from existing approvals.
 func pickWithApprovalDiversity(tasks []*models.Task, claimerProvider string) *models.Task {
+	// No diversity preference possible: single candidate, or claimer has no
+	// provider configured (falls back to random selection).
 	if claimerProvider == "" || len(tasks) <= 1 {
 		return pickRandom(tasks)
 	}
@@ -241,6 +243,8 @@ func pickWithFreshDiversity(
 	pr models.PipelineResolver,
 	state *models.State,
 ) *models.Task {
+	// No diversity preference possible: single candidate, or claimer has no
+	// provider configured (falls back to random selection).
 	if claimerProvider == "" || len(tasks) <= 1 {
 		return pickRandom(tasks)
 	}
