@@ -96,26 +96,44 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 	return cleared, nil
 }
 
-// detectReviewingState checks whether a task is in a reviewing state.
+// detectReviewingState checks whether a task is in a reviewing state
+// (either reviewing or reviewing_2).
 // Returns (nil, nil) if the task is not in a reviewing state.
 // Returns a non-nil error if the task IS in a reviewing state but the
-// submitted status cannot be resolved — callers should surface this rather than
+// revert status cannot be resolved — callers should surface this rather than
 // silently skipping, as it would leave the task stuck.
 func detectReviewingState(task *models.Task, pb *pipelineBundle) (*reviewMatch, error) {
 	if task.RolePair == "" {
 		return nil, nil
 	}
+
+	// Check reviewing (first review) → reverts to submitted.
 	reviewing, err := pb.pr.ReviewingStatus(task.RolePair)
 	if err != nil {
 		return nil, nil // unknown role-pair, not a reviewing state
 	}
-	if task.Status != reviewing {
-		return nil, nil
+	if task.Status == reviewing {
+		submitted, err := pb.pr.SubmittedStatus(task.RolePair)
+		if err != nil {
+			return nil, fmt.Errorf("task %s is in reviewing state %s but submitted status resolution failed for role-pair %q: %w",
+				task.ID, task.Status, task.RolePair, err)
+		}
+		return &reviewMatch{revertStatus: submitted}, nil
 	}
-	submitted, err := pb.pr.SubmittedStatus(task.RolePair)
+
+	// Check reviewing_2 (second review) → reverts to partially_approved.
+	reviewing2, err := pb.pr.Reviewing2Status(task.RolePair)
 	if err != nil {
-		return nil, fmt.Errorf("task %s is in reviewing state %s but submitted status resolution failed for role-pair %q: %w",
-			task.ID, task.Status, task.RolePair, err)
+		return nil, nil // no reviewing-2 state configured, not applicable
 	}
-	return &reviewMatch{revertStatus: submitted}, nil
+	if task.Status == reviewing2 {
+		partiallyApproved, err := pb.pr.PartiallyApprovedStatus(task.RolePair)
+		if err != nil {
+			return nil, fmt.Errorf("task %s is in reviewing-2 state %s but partially-approved status resolution failed for role-pair %q: %w",
+				task.ID, task.Status, task.RolePair, err)
+		}
+		return &reviewMatch{revertStatus: partiallyApproved}, nil
+	}
+
+	return nil, nil
 }

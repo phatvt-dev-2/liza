@@ -186,6 +186,132 @@ func TestClearStaleReviewClaims_MultipleStale(t *testing.T) {
 	}
 }
 
+func TestClearStaleReviewingTwo(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	setupLogFile(t, tmpDir)
+
+	now := time.Now().UTC()
+
+	t.Run("expired reviewing_2 reverts to partially_approved", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		expiredLease := now.Add(-5 * time.Minute)
+		reviewer := "code-reviewer-2"
+		coder := "coder-1"
+		state.Tasks = []models.Task{
+			{
+				ID: "t1", Description: "Second review stale", Status: "REVIEWING_CODE_2",
+				Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+				RolePair:   "coding-pair",
+				AssignedTo: &coder, ReviewingBy: &reviewer, ReviewLeaseExpires: &expiredLease,
+				History: []models.TaskHistoryEntry{},
+			},
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		cleared, err := ClearStaleReviewClaims(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+		}
+		if cleared != 1 {
+			t.Errorf("cleared = %d, want 1", cleared)
+		}
+
+		readState := readStateForTest(t, stateFile)
+		task := readState.FindTask("t1")
+		if task == nil {
+			t.Fatal("Task not found")
+		}
+		if task.Status != "CODE_PARTIALLY_APPROVED" {
+			t.Errorf("Status = %v, want CODE_PARTIALLY_APPROVED", task.Status)
+		}
+		if task.ReviewingBy != nil {
+			t.Errorf("ReviewingBy should be nil, got %v", *task.ReviewingBy)
+		}
+		if task.ReviewLeaseExpires != nil {
+			t.Error("ReviewLeaseExpires should be nil")
+		}
+	})
+
+	t.Run("expired reviewing still reverts to submitted", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		expiredLease := now.Add(-5 * time.Minute)
+		reviewer := "code-reviewer-1"
+		coder := "coder-1"
+		state.Tasks = []models.Task{
+			{
+				ID: "t1", Description: "First review stale", Status: models.TaskStatusReviewing,
+				Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+				RolePair:   "coding-pair",
+				AssignedTo: &coder, ReviewingBy: &reviewer, ReviewLeaseExpires: &expiredLease,
+				History: []models.TaskHistoryEntry{},
+			},
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		cleared, err := ClearStaleReviewClaims(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+		}
+		if cleared != 1 {
+			t.Errorf("cleared = %d, want 1", cleared)
+		}
+
+		readState := readStateForTest(t, stateFile)
+		task := readState.FindTask("t1")
+		if task == nil {
+			t.Fatal("Task not found")
+		}
+		if task.Status != models.TaskStatusReadyForReview {
+			t.Errorf("Status = %v, want CODE_READY_FOR_REVIEW", task.Status)
+		}
+	})
+
+	t.Run("mixed reviewing and reviewing_2 both cleared", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		expiredLease := now.Add(-5 * time.Minute)
+		reviewer1 := "code-reviewer-1"
+		reviewer2 := "code-reviewer-2"
+		coder := "coder-1"
+		state.Tasks = []models.Task{
+			{
+				ID: "t1", Description: "First review stale", Status: models.TaskStatusReviewing,
+				Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+				RolePair:   "coding-pair",
+				AssignedTo: &coder, ReviewingBy: &reviewer1, ReviewLeaseExpires: &expiredLease,
+				History: []models.TaskHistoryEntry{},
+			},
+			{
+				ID: "t2", Description: "Second review stale", Status: "REVIEWING_CODE_2",
+				Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+				RolePair:   "coding-pair",
+				AssignedTo: &coder, ReviewingBy: &reviewer2, ReviewLeaseExpires: &expiredLease,
+				History: []models.TaskHistoryEntry{},
+			},
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		cleared, err := ClearStaleReviewClaims(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+		}
+		if cleared != 2 {
+			t.Errorf("cleared = %d, want 2", cleared)
+		}
+
+		readState := readStateForTest(t, stateFile)
+		t1 := readState.FindTask("t1")
+		if t1.Status != models.TaskStatusReadyForReview {
+			t.Errorf("t1 Status = %v, want CODE_READY_FOR_REVIEW", t1.Status)
+		}
+		t2 := readState.FindTask("t2")
+		if t2.Status != "CODE_PARTIALLY_APPROVED" {
+			t.Errorf("t2 Status = %v, want CODE_PARTIALLY_APPROVED", t2.Status)
+		}
+	})
+}
+
 // setupLogFile creates the log.yaml file that ClearStaleReviewClaims needs.
 func setupLogFile(t *testing.T, tmpDir string) {
 	t.Helper()
