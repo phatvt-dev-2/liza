@@ -60,11 +60,31 @@ var validRoleTypes = map[string]bool{
 	"orchestrator": true,
 }
 
+// ReviewPolicyOverrideDef defines quorum overrides for a specific impact level.
+type ReviewPolicyOverrideDef struct {
+	Quorum            int    `yaml:"quorum"`
+	ProviderDiversity string `yaml:"provider-diversity,omitempty"`
+}
+
+// ReviewPolicyDef defines the review quorum policy for a role-pair.
+type ReviewPolicyDef struct {
+	Quorum             int                      `yaml:"quorum"`
+	SignificantChange  *ReviewPolicyOverrideDef `yaml:"significant-change,omitempty"`
+	ArchitectureImpact *ReviewPolicyOverrideDef `yaml:"architecture-impact,omitempty"`
+}
+
+// validProviderDiversity lists the allowed values for provider-diversity.
+var validProviderDiversity = map[string]bool{
+	"":          true, // omitted / not configured
+	"preferred": true,
+}
+
 // RolePairDef defines a doer-reviewer pair and its state names.
 type RolePairDef struct {
-	Doer     string         `yaml:"doer"`
-	Reviewer string         `yaml:"reviewer"`
-	States   RolePairStates `yaml:"states"`
+	Doer         string           `yaml:"doer"`
+	Reviewer     string           `yaml:"reviewer"`
+	ReviewPolicy *ReviewPolicyDef `yaml:"review-policy,omitempty"`
+	States       RolePairStates   `yaml:"states"`
 }
 
 // RolePairStates holds the six state names for a role-pair's lifecycle.
@@ -161,6 +181,9 @@ func validate(cfg *PipelineConfig) error {
 		if _, ok := p.Roles[rp.Reviewer]; !ok {
 			return fmt.Errorf("role-pair %q: reviewer %q not found in roles", name, rp.Reviewer)
 		}
+		if err := validateReviewPolicy(name, rp.ReviewPolicy); err != nil {
+			return err
+		}
 	}
 
 	stateOwner := make(map[string]string) // state name → role-pair name
@@ -231,6 +254,37 @@ func validate(cfg *PipelineConfig) error {
 		}
 	}
 
+	return nil
+}
+
+// validateReviewPolicy validates a role-pair's review-policy if present.
+func validateReviewPolicy(rpName string, rp *ReviewPolicyDef) error {
+	if rp == nil {
+		return nil
+	}
+	if rp.Quorum < 1 {
+		return fmt.Errorf("role-pair %q: review-policy quorum must be >= 1, got %d", rpName, rp.Quorum)
+	}
+	if err := validateReviewPolicyOverride(rpName, "significant-change", rp.SignificantChange); err != nil {
+		return err
+	}
+	if err := validateReviewPolicyOverride(rpName, "architecture-impact", rp.ArchitectureImpact); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateReviewPolicyOverride validates a single review-policy override.
+func validateReviewPolicyOverride(rpName, overrideName string, override *ReviewPolicyOverrideDef) error {
+	if override == nil {
+		return nil
+	}
+	if override.Quorum < 1 {
+		return fmt.Errorf("role-pair %q: review-policy %s quorum must be >= 1, got %d", rpName, overrideName, override.Quorum)
+	}
+	if !validProviderDiversity[override.ProviderDiversity] {
+		return fmt.Errorf("role-pair %q: review-policy %s provider-diversity %q is invalid (must be \"preferred\" or omitted)", rpName, overrideName, override.ProviderDiversity)
+	}
 	return nil
 }
 

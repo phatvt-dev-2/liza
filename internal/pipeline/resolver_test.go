@@ -491,6 +491,201 @@ func TestResolver_MandatoryDocs(t *testing.T) {
 	}
 }
 
+func TestEffectiveQuorum(t *testing.T) {
+	// Build a config with review-policy including overrides.
+	yamlData := []byte(`
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      review-policy:
+        quorum: 1
+        significant-change:
+          quorum: 2
+          provider-diversity: preferred
+        architecture-impact:
+          quorum: 2
+          provider-diversity: preferred
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := LoadFromBytes(yamlData)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	r := NewResolver(cfg)
+
+	tests := []struct {
+		name       string
+		rolePair   string
+		impact     string
+		wantQuorum int
+	}{
+		{"empty_impact_returns_base", "coding-pair", "", 1},
+		{"standard_returns_base", "coding-pair", "standard", 1},
+		{"significant_returns_override", "coding-pair", "significant", 2},
+		{"architecture_returns_override", "coding-pair", "architecture", 2},
+		{"unknown_impact_returns_base", "coding-pair", "unknown", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := r.EffectiveQuorum(tt.rolePair, tt.impact)
+			if err != nil {
+				t.Fatalf("EffectiveQuorum(%q, %q): %v", tt.rolePair, tt.impact, err)
+			}
+			if got != tt.wantQuorum {
+				t.Errorf("EffectiveQuorum(%q, %q) = %d, want %d", tt.rolePair, tt.impact, got, tt.wantQuorum)
+			}
+		})
+	}
+
+	// Unknown role-pair returns error.
+	_, err = r.EffectiveQuorum("nonexistent", "standard")
+	if err == nil {
+		t.Error("EffectiveQuorum(nonexistent, standard): expected error, got nil")
+	}
+}
+
+func TestReviewPolicy(t *testing.T) {
+	// Config with review-policy.
+	yamlData := []byte(`
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      review-policy:
+        quorum: 1
+        significant-change:
+          quorum: 2
+          provider-diversity: preferred
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := LoadFromBytes(yamlData)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	r := NewResolver(cfg)
+
+	rp, err := r.ReviewPolicy("coding-pair")
+	if err != nil {
+		t.Fatalf("ReviewPolicy(coding-pair): %v", err)
+	}
+	if rp == nil {
+		t.Fatal("ReviewPolicy returned nil")
+	}
+	if rp.Quorum != 1 {
+		t.Errorf("Quorum = %d, want 1", rp.Quorum)
+	}
+	if rp.SignificantChange == nil {
+		t.Fatal("SignificantChange is nil")
+	}
+	if rp.SignificantChange.Quorum != 2 {
+		t.Errorf("SignificantChange.Quorum = %d, want 2", rp.SignificantChange.Quorum)
+	}
+	if rp.SignificantChange.ProviderDiversity != "preferred" {
+		t.Errorf("SignificantChange.ProviderDiversity = %q, want %q", rp.SignificantChange.ProviderDiversity, "preferred")
+	}
+	if rp.ArchitectureImpact != nil {
+		t.Errorf("ArchitectureImpact should be nil, got %+v", rp.ArchitectureImpact)
+	}
+
+	// Role-pair without review-policy returns nil, no error.
+	yamlNoPolicy := []byte(`
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg2, err := LoadFromBytes(yamlNoPolicy)
+	if err != nil {
+		t.Fatalf("LoadFromBytes (no policy): %v", err)
+	}
+	r2 := NewResolver(cfg2)
+
+	rp2, err := r2.ReviewPolicy("coding-pair")
+	if err != nil {
+		t.Fatalf("ReviewPolicy(coding-pair, no policy): %v", err)
+	}
+	if rp2 != nil {
+		t.Errorf("expected nil ReviewPolicy when not configured, got %+v", rp2)
+	}
+
+	// EffectiveQuorum with no policy defaults to 1.
+	q, err := r2.EffectiveQuorum("coding-pair", "architecture")
+	if err != nil {
+		t.Fatalf("EffectiveQuorum with no policy: %v", err)
+	}
+	if q != 1 {
+		t.Errorf("EffectiveQuorum with no policy = %d, want 1", q)
+	}
+
+	// Unknown role-pair returns error.
+	_, err = r2.ReviewPolicy("nonexistent")
+	if err == nil {
+		t.Error("ReviewPolicy(nonexistent): expected error, got nil")
+	}
+}
+
 // TestMaxInstances_OrchestratorCoercedToOne verifies the spec invariant that
 // orchestrator roles always return max-instances=1 regardless of YAML value.
 // Regression test for the misconfiguration case where YAML sets max-instances: 2.

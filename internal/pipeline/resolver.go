@@ -217,6 +217,42 @@ func (r *Resolver) MandatoryDocs(name string) ([]string, error) {
 	return role.MandatoryDocs, nil
 }
 
+// ReviewPolicy returns the review-policy for the named role-pair.
+// Returns nil (no error) if the role-pair has no review-policy configured.
+func (r *Resolver) ReviewPolicy(rolePair string) (*ReviewPolicyDef, error) {
+	rp, ok := r.config.Pipeline.RolePairs[rolePair]
+	if !ok {
+		return nil, fmt.Errorf("unknown role-pair %q", rolePair)
+	}
+	return rp.ReviewPolicy, nil
+}
+
+// EffectiveQuorum returns the effective quorum for the given role-pair and impact level.
+// Impact values: "standard" (or empty) uses the base quorum, "significant" uses the
+// significant-change override, "architecture" uses the architecture-impact override.
+// Falls back to the base quorum when no matching override exists.
+// Returns 1 when no review-policy is configured.
+func (r *Resolver) EffectiveQuorum(rolePair, impact string) (int, error) {
+	rp, ok := r.config.Pipeline.RolePairs[rolePair]
+	if !ok {
+		return 0, fmt.Errorf("unknown role-pair %q", rolePair)
+	}
+	if rp.ReviewPolicy == nil {
+		return 1, nil
+	}
+	switch impact {
+	case "significant":
+		if rp.ReviewPolicy.SignificantChange != nil {
+			return rp.ReviewPolicy.SignificantChange.Quorum, nil
+		}
+	case "architecture":
+		if rp.ReviewPolicy.ArchitectureImpact != nil {
+			return rp.ReviewPolicy.ArchitectureImpact.Quorum, nil
+		}
+	}
+	return rp.ReviewPolicy.Quorum, nil
+}
+
 // TransitionMap generates the intra-pair transition map for all role-pairs.
 // The fixed intra-pair flow is: initial→executing→submitted→reviewing→approved|rejected,
 // with rejected→initial. Cross-cutting meta-states (BLOCKED, ABANDONED, etc.) are not included.

@@ -236,6 +236,8 @@ pipeline:
     coding-pair:
       doer: coder
       reviewer: code-reviewer
+      review-policy:
+        quorum: 1
       states:
         initial: DRAFT_CODE
         executing: IMPLEMENTING_CODE

@@ -926,6 +926,141 @@ func TestResolver_IsDeclaredState(t *testing.T) {
 	}
 }
 
+// --- Phase 3: review-policy validation tests ---
+
+func TestReviewPolicyValidation(t *testing.T) {
+	// Minimal valid base for review-policy tests.
+	base := func(reviewPolicy string) string {
+		return `
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: reviewer
+` + reviewPolicy + `
+      states:
+        initial: DRAFT
+        executing: IMPL
+        submitted: SUBMITTED
+        reviewing: REVIEWING
+        approved: APPROVED
+        rejected: REJECTED
+  sub-pipelines:
+    sp:
+      steps: [coding-pair]
+  entry-points:
+    default: sp.coding-pair
+`
+	}
+
+	t.Run("valid_quorum_1", func(t *testing.T) {
+		yaml := base(`      review-policy:
+        quorum: 1`)
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid_quorum_2_with_overrides", func(t *testing.T) {
+		yaml := base(`      review-policy:
+        quorum: 2
+        significant-change:
+          quorum: 2
+          provider-diversity: preferred
+        architecture-impact:
+          quorum: 2
+          provider-diversity: preferred`)
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects_quorum_zero", func(t *testing.T) {
+		yaml := base(`      review-policy:
+        quorum: 0`)
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err == nil {
+			t.Fatal("expected error for quorum < 1")
+		}
+		assertContains(t, err.Error(), "quorum")
+	})
+
+	t.Run("rejects_negative_quorum", func(t *testing.T) {
+		yaml := base(`      review-policy:
+        quorum: -1`)
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err == nil {
+			t.Fatal("expected error for negative quorum")
+		}
+		assertContains(t, err.Error(), "quorum")
+	})
+
+	t.Run("rejects_override_quorum_zero", func(t *testing.T) {
+		yaml := base(`      review-policy:
+        quorum: 1
+        significant-change:
+          quorum: 0`)
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err == nil {
+			t.Fatal("expected error for override quorum < 1")
+		}
+		assertContains(t, err.Error(), "quorum")
+		assertContains(t, err.Error(), "significant-change")
+	})
+
+	t.Run("rejects_invalid_provider_diversity", func(t *testing.T) {
+		yaml := base(`      review-policy:
+        quorum: 1
+        significant-change:
+          quorum: 2
+          provider-diversity: required`)
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err == nil {
+			t.Fatal("expected error for invalid provider-diversity")
+		}
+		assertContains(t, err.Error(), "provider-diversity")
+		assertContains(t, err.Error(), "required")
+	})
+
+	t.Run("valid_provider_diversity_preferred", func(t *testing.T) {
+		yaml := base(`      review-policy:
+        quorum: 1
+        architecture-impact:
+          quorum: 2
+          provider-diversity: preferred`)
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid_no_review_policy", func(t *testing.T) {
+		// review-policy is optional — omitting it is valid.
+		yaml := base("")
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 // --- Phase 2: pipeline-transitions tests ---
 
 func TestLoad_Phase2ValidConfig(t *testing.T) {
