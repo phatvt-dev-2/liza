@@ -209,19 +209,6 @@ func validate(cfg *PipelineConfig) error {
 			{"partially-approved", rp.States.PartiallyApproved, false},
 			{"reviewing-2", rp.States.Reviewing2, false},
 		}
-		// Include optional quorum states in duplicate checking.
-		if rp.States.PartiallyApproved != "" {
-			states = append(states, struct {
-				phase string
-				value string
-			}{"partially-approved", rp.States.PartiallyApproved})
-		}
-		if rp.States.Reviewing2 != "" {
-			states = append(states, struct {
-				phase string
-				value string
-			}{"reviewing-2", rp.States.Reviewing2})
-		}
 		for _, s := range states {
 			if s.required && s.value == "" {
 				return fmt.Errorf("role-pair %q: %s state is empty", name, s.phase)
