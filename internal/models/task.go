@@ -295,6 +295,8 @@ func (t *Task) IsClaimable(role string, allTasks []Task, pr PipelineResolver) bo
 }
 
 // isClaimablePipeline checks claimability using pipeline-resolved states.
+// The role parameter uses the unified hyphenated form, matching what the
+// pipeline resolver returns from DoerRole/ReviewerRole.
 func (t *Task) isClaimablePipeline(role string, pr PipelineResolver) bool {
 	doerRole, err := pr.DoerRole(t.RolePair)
 	if err != nil {

@@ -7,7 +7,6 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // testResolver returns a pipeline.Resolver built from a minimal but complete
@@ -287,24 +286,23 @@ func applyResolverTimeouts(t *testing.T, s RoleStrategy, r *pipeline.Resolver, r
 }
 
 // TestNewRoleStrategy verifies the factory creates the correct strategy type
-// with correct role and workflowRole for all 9 runtime roles.
+// with correct role for all 9 runtime roles.
 func TestNewRoleStrategy(t *testing.T) {
 	resolver := testResolver(t)
 
 	tests := []struct {
-		role         string
-		wantType     string // "doer", "reviewer", "orchestrator"
-		wantWorkflow string
+		role     string
+		wantType string // "doer", "reviewer", "orchestrator"
 	}{
-		{"coder", "doer", roles.Coder},
-		{"code-planner", "doer", roles.CodePlanner},
-		{"epic-planner", "doer", roles.EpicPlanner},
-		{"us-writer", "doer", roles.USWriter},
-		{"code-reviewer", "reviewer", roles.CodeReviewer},
-		{"code-plan-reviewer", "reviewer", roles.CodePlanReviewer},
-		{"epic-plan-reviewer", "reviewer", roles.EpicPlanReviewer},
-		{"us-reviewer", "reviewer", roles.USReviewer},
-		{"orchestrator", "orchestrator", ""},
+		{"coder", "doer"},
+		{"code-planner", "doer"},
+		{"epic-planner", "doer"},
+		{"us-writer", "doer"},
+		{"code-reviewer", "reviewer"},
+		{"code-plan-reviewer", "reviewer"},
+		{"epic-plan-reviewer", "reviewer"},
+		{"us-reviewer", "reviewer"},
+		{"orchestrator", "orchestrator"},
 	}
 
 	for _, tt := range tests {
@@ -323,9 +321,6 @@ func TestNewRoleStrategy(t *testing.T) {
 				if ds.role != tt.role {
 					t.Errorf("role = %q, want %q", ds.role, tt.role)
 				}
-				if ds.workflowRole != tt.wantWorkflow {
-					t.Errorf("workflowRole = %q, want %q", ds.workflowRole, tt.wantWorkflow)
-				}
 				if ds.resolver == nil {
 					t.Error("resolver should not be nil")
 				}
@@ -336,9 +331,6 @@ func TestNewRoleStrategy(t *testing.T) {
 				}
 				if rs.role != tt.role {
 					t.Errorf("role = %q, want %q", rs.role, tt.role)
-				}
-				if rs.workflowRole != tt.wantWorkflow {
-					t.Errorf("workflowRole = %q, want %q", rs.workflowRole, tt.wantWorkflow)
 				}
 				if rs.resolver == nil {
 					t.Error("resolver should not be nil")
@@ -431,10 +423,6 @@ pipeline:
 	}
 	if ds.role != "data-engineer" {
 		t.Errorf("role = %q, want %q", ds.role, "data-engineer")
-	}
-	// Custom role uses its own name as workflowRole (unified naming)
-	if ds.workflowRole != "data-engineer" {
-		t.Errorf("workflowRole = %q, want %q", ds.workflowRole, "data-engineer")
 	}
 	// Custom role gets the shared resolver (not nil)
 	if ds.resolver == nil {

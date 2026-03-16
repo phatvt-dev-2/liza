@@ -51,14 +51,11 @@ func NewRoleStrategy(role string, resolver *pipeline.Resolver) (RoleStrategy, er
 		return nil, fmt.Errorf("unknown role %q: %w", role, err)
 	}
 
-	// After dual-name elimination, workflowRole == role (single canonical form).
-	workflowRole := role
-
 	switch roleType {
 	case "doer":
-		return &doerStrategy{role: role, workflowRole: workflowRole, resolver: resolver}, nil
+		return &doerStrategy{role: role, resolver: resolver}, nil
 	case "reviewer":
-		return &reviewerStrategy{role: role, workflowRole: workflowRole, resolver: resolver}, nil
+		return &reviewerStrategy{role: role, resolver: resolver}, nil
 	case "orchestrator":
 		return &orchestratorStrategy{resolver: resolver}, nil
 	default:
