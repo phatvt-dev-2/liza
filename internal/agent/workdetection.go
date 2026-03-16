@@ -118,20 +118,22 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 func countActionableBlockedTasks(state *models.State) int {
 	count := 0
 	for i := range state.Tasks {
-		if state.Tasks[i].Status == models.TaskStatusBlocked && isBlockedTaskActionable(&state.Tasks[i], state) {
+		if state.Tasks[i].Status == models.TaskStatusBlocked && isTaskActionableSinceAssessment(&state.Tasks[i], state) {
 			count++
 		}
 	}
 	return count
 }
 
-// isBlockedTaskActionable determines whether a blocked task should trigger an
+// isTaskActionableSinceAssessment determines whether a task should trigger an
 // orchestrator wake. Returns true if:
-//   - No orchestrator_assessment history entry exists (new block, needs triage)
+//   - No orchestrator_assessment history entry exists (never triaged)
 //   - The task itself has a non-assessment history entry after the last assessment
 //   - Any dependency has a non-assessment history entry after the last assessment
 //   - A human note targets this task (by ID or "all") after the last assessment
-func isBlockedTaskActionable(task *models.Task, state *models.State) bool {
+//
+// Used by both BLOCKED and HYPOTHESIS_EXHAUSTED wake triggers.
+func isTaskActionableSinceAssessment(task *models.Task, state *models.State) bool {
 	// Find the last orchestrator_assessment (reverse scan).
 	var lastAssessment *models.TaskHistoryEntry
 	for i := len(task.History) - 1; i >= 0; i-- {
@@ -185,8 +187,9 @@ func isBlockedTaskActionable(task *models.Task, state *models.State) bool {
 
 func countHypothesisExhaustedTasks(state *models.State) int {
 	count := 0
-	for _, task := range state.Tasks {
-		if len(task.FailedBy) >= 2 && !task.Status.IsTerminal() {
+	for i := range state.Tasks {
+		if len(state.Tasks[i].FailedBy) >= 2 && !state.Tasks[i].Status.IsTerminal() &&
+			isTaskActionableSinceAssessment(&state.Tasks[i], state) {
 			count++
 		}
 	}

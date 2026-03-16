@@ -494,12 +494,103 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			wantCount:   1,
 		},
 		{
-			name: "hypothesis exhaustion trigger",
+			name: "hypothesis exhaustion trigger (no prior assessment = actionable)",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 				task.FailedBy = []string{"coder-1", "coder-2"}
 				state.Tasks = []models.Task{task}
+				return state
+			}(),
+			wantTrigger: WakeTriggerHypothesisExhausted,
+			wantCount:   1,
+		},
+		{
+			name: "hypothesis exhausted assessed no new activity - no wake",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+				task.FailedBy = []string{"coder-1", "coder-2"}
+				agent := "orchestrator-1"
+				task.History = append(task.History, models.TaskHistoryEntry{
+					Time:  now.Add(-10 * time.Minute),
+					Event: models.TaskEventOrchestratorAssessment,
+					Agent: &agent,
+				})
+				state.Tasks = []models.Task{task}
+				return state
+			}(),
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
+		},
+		{
+			name: "hypothesis exhausted assessed new rejection activity - wake",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+				task.FailedBy = []string{"coder-1", "coder-2", "coder-3"}
+				agent := "orchestrator-1"
+				coder := "coder-3"
+				task.History = append(task.History,
+					models.TaskHistoryEntry{
+						Time:  now.Add(-10 * time.Minute),
+						Event: models.TaskEventOrchestratorAssessment,
+						Agent: &agent,
+					},
+					models.TaskHistoryEntry{
+						Time:  now.Add(-5 * time.Minute),
+						Event: models.TaskEventRejected,
+						Agent: &coder,
+					},
+				)
+				state.Tasks = []models.Task{task}
+				return state
+			}(),
+			wantTrigger: WakeTriggerHypothesisExhausted,
+			wantCount:   1,
+		},
+		{
+			name: "hypothesis exhausted assessed human note - wake",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+				task.FailedBy = []string{"coder-1", "coder-2"}
+				agent := "orchestrator-1"
+				task.History = append(task.History, models.TaskHistoryEntry{
+					Time:  now.Add(-10 * time.Minute),
+					Event: models.TaskEventOrchestratorAssessment,
+					Agent: &agent,
+				})
+				state.Tasks = []models.Task{task}
+				state.HumanNotes = []models.HumanNote{
+					{
+						Timestamp: now.Add(-5 * time.Minute),
+						Message:   "Try a different approach",
+						For:       "task-1",
+					},
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerHypothesisExhausted,
+			wantCount:   1,
+		},
+		{
+			name: "mixed hypothesis exhausted - some actionable some not",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				// task-1: assessed, no new activity → not actionable
+				task1 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
+				task1.FailedBy = []string{"coder-1", "coder-2"}
+				agent := "orchestrator-1"
+				task1.History = append(task1.History, models.TaskHistoryEntry{
+					Time:  now.Add(-10 * time.Minute),
+					Event: models.TaskEventOrchestratorAssessment,
+					Agent: &agent,
+				})
+				// task-2: never assessed → actionable
+				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now)
+				task2.FailedBy = []string{"coder-1", "coder-2"}
+				state.Tasks = []models.Task{task1, task2}
 				return state
 			}(),
 			wantTrigger: WakeTriggerHypothesisExhausted,

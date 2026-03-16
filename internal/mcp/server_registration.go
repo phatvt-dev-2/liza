@@ -380,6 +380,33 @@ func (s *Server) registerMutationTools() {
 			handler: s.handleAssessBlocked,
 		},
 
+		// liza_assess_hypothesis_exhausted tool
+		{
+			tool: protocol.Tool{
+				Name:        "liza_assess_hypothesis_exhausted",
+				Description: "Record that the orchestrator has assessed a hypothesis-exhausted task (2+ coders failed). Prevents re-wake loops by marking the task as triaged. Requires orchestrator role.",
+				InputSchema: protocol.InputSchema{
+					Type: "object",
+					Properties: map[string]protocol.Property{
+						"task_id": {
+							Type:        "string",
+							Description: "Task ID to assess",
+						},
+						"agent_id": {
+							Type:        "string",
+							Description: "Agent ID performing the action",
+						},
+						"note": {
+							Type:        "string",
+							Description: "Optional note about the assessment outcome",
+						},
+					},
+					Required: []string{"task_id"},
+				},
+			},
+			handler: s.handleAssessHypothesisExhausted,
+		},
+
 		// liza_supersede_task tool
 		{
 			tool: protocol.Tool{

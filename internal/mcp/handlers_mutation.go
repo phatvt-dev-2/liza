@@ -302,6 +302,29 @@ func (s *Server) handleAssessBlocked(params map[string]any) (any, error) {
 	return textResult(fmt.Sprintf("Task %s assessed by orchestrator", result.TaskID))
 }
 
+// handleAssessHypothesisExhausted implements the liza_assess_hypothesis_exhausted tool
+// Maps to: liza assess-hypothesis-exhausted
+func (s *Server) handleAssessHypothesisExhausted(params map[string]any) (any, error) {
+	taskID, err := requireString(params, "task_id")
+	if err != nil {
+		return nil, err
+	}
+
+	agentID, err := s.resolveOrchestratorID(params)
+	if err != nil {
+		return nil, err
+	}
+
+	note, _ := params["note"].(string)
+
+	result, err := ops.AssessHypothesisExhausted(s.projectRoot, taskID, note, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("assess hypothesis-exhausted failed: %w", err)
+	}
+
+	return textResult(fmt.Sprintf("Task %s assessed by orchestrator (hypothesis-exhausted)", result.TaskID))
+}
+
 // handleDeleteAgent implements the liza_delete_agent tool
 // Maps to: liza delete agent
 func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {

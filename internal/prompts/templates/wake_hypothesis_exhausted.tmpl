@@ -11,7 +11,12 @@ Multiple coders failed on same task. Re-evaluate and act NOW:
    - Spec is wrong → fix spec first (update NOW)
 3. Execute changes: update task and reassign, or supersede with new approach
 4. If breaking into smaller tasks — create them all in this session
-5. All state modifications must be executed before you exit.
+5. After analyzing each hypothesis-exhausted task:
+   - If you resolved it (superseded, updated guidance, fixed spec): no further action needed for that task
+   - If you CANNOT resolve it now: call liza_assess_hypothesis_exhausted to record your assessment
+     Execute tool: liza_assess_hypothesis_exhausted with {"task_id": "<task-id>", "note": "<why it cannot be resolved now>"}
+     This prevents re-waking for the same exhausted task. The task will trigger again only when new information arrives (new failures, human notes).
+6. All state modifications must be executed before you exit.
 
-Do NOT call liza_sprint_checkpoint. You must either supersede the task or update its guidance. If neither is possible, exit and log an anomaly.
+Do NOT call liza_sprint_checkpoint. You must either supersede the task, update its guidance, or assess it. Do NOT defer.
 {{- end -}}
