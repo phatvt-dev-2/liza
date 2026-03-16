@@ -58,7 +58,9 @@ multiple approvals with provider diversity constraints before merge eligibility.
 
 **Desc:** Add Approval struct and approvals field to Task model
 
-**Done When:** Approval struct with Agent, Provider, Timestamp fields exists in internal/models/task.go. Task has Approvals []Approval field (yaml: approvals,omitempty) and Impact string field (yaml: impact,omitempty). Helper methods ApprovalCount(), HasProviderDiversity(), ClearApprovals(), LastApprover() exist on *Task. ApprovedBy *string field retained for backward compat. TestApprovalHelpers passes covering all helpers including edge cases (empty list, single approval, diverse providers).
+**Done When:** Approval struct with Agent, Provider, Timestamp fields exists in internal/models/task.go. Task has Approvals []Approval field (yaml: approvals,omitempty). Helper methods ApprovalCount(), HasProviderDiversity(), ClearApprovals(), LastApprover() exist on *Task. ApprovedBy *string field retained for backward compat. TestApprovalHelpers passes covering all helpers including edge cases (empty list, single approval, diverse providers).
+
+**Note:** Impact is NOT a Task-level field. Per spec "New Blackboard Fields" table, impact lives in task checkpoint history (Extra maps on checkpoint and verdict history entries). See "Impact Resolution Design" section below.
 
 **Scope:** internal/models/task.go, internal/models/task_test.go
 
@@ -100,7 +102,7 @@ multiple approvals with provider diversity constraints before merge eligibility.
 
 **Desc:** Implement quorum evaluation and impact upgrade in SubmitVerdict
 
-**Done When:** SubmitVerdict accepts optional impact parameter. Impact escalation enforced (new >= current, ordered: standard < significant < architecture). Resolved impact stored on task.Impact. On APPROVED: EffectiveQuorum evaluated; if len(approvals) < quorum, task transitions to partially_approved instead of approved. On second approval (reviewing_2 state), transitions to approved when quorum met. MCP handler and CLI pass impact. MCP tool description updated. TestQuorumEvaluation passes with scenarios: quorum-1 standard path, quorum-2 both reviewers approve, impact upgrade triggers partial approval, rejection clears and restarts.
+**Done When:** SubmitVerdict accepts optional impact parameter. Impact stored in verdict history entry Extra map (extra["impact"]). ResolveEffectiveImpact(history) helper exists: scans checkpoint and verdict history entries since last rejection, returns maximum impact (ordering: standard < significant < architecture; default: "standard"). Escalation enforced: verdict impact must be >= resolved effective impact (never downgrade). On APPROVED: EffectiveQuorum evaluated using resolved impact; if len(approvals) < quorum, task transitions to partially_approved instead of approved. On second approval (reviewing_2 state), transitions to approved when quorum met. MCP handler and CLI pass impact. MCP tool description updated. TestQuorumEvaluation passes with scenarios: quorum-1 standard path, quorum-2 both reviewers approve, impact upgrade triggers partial approval, rejection clears and restarts. TestResolveEffectiveImpact passes with scenarios: no impact declared returns "standard", checkpoint-only impact, verdict upgrades checkpoint impact, rejection resets cycle (post-rejection checkpoint starts fresh).
 
 **Scope:** internal/ops/submit_verdict.go, internal/mcp/handlers_mutation.go, internal/mcp/server_registration.go, internal/commands/submit_verdict.go, cmd/liza/cmd_review.go, tests
 
@@ -156,15 +158,45 @@ multiple approvals with provider diversity constraints before merge eligibility.
 
 **Desc:** Implement best-effort provider-diversity merge gate
 
-**Done When:** handleApprovedMerges loads review-policy for the task's role-pair via EffectiveQuorum. Defense-in-depth: if task.ApprovalCount() < effective quorum, logs anomaly and skips merge. When provider-diversity is 'preferred': if task.HasProviderDiversity() is true, merge proceeds and merge history Extra includes diversity_achieved: true. If task.HasProviderDiversity() is false, checks all registered reviewer agents' providers for the role-pair — if all share one provider, merge proceeds and merge history Extra includes diversity_not_achievable: true with reason (e.g. 'all reviewers use provider X'). If different providers exist but diversity was not achieved, merge proceeds and merge history Extra includes diversity_not_met: true. When provider-diversity is not configured, merge proceeds without diversity fields. TestMergeGateDiversityAchieved, TestMergeGateDiversityNotAchievable, TestMergeGateQuorumDefenseInDepth, TestMergeGateDiversityNotConfigured pass.
+**Done When:** handleApprovedMerges resolves effective impact via ResolveEffectiveImpact(task.History) (from CP3-6), then loads review-policy for the task's role-pair via EffectiveQuorum(resolvedImpact). Defense-in-depth: if task.ApprovalCount() < effective quorum, logs anomaly and skips merge. When provider-diversity is 'preferred': if task.HasProviderDiversity() is true, merge proceeds and merge history Extra includes diversity_achieved: true. If task.HasProviderDiversity() is false, checks all registered reviewer agents' providers for the role-pair — if all share one provider, merge proceeds and merge history Extra includes diversity_not_achievable: true with reason (e.g. 'all reviewers use provider X'). If different providers exist but diversity was not achieved, merge proceeds and merge history Extra includes diversity_not_met: true. When provider-diversity is not configured, merge proceeds without diversity fields. TestMergeGateDiversityAchieved, TestMergeGateDiversityNotAchievable, TestMergeGateQuorumDefenseInDepth, TestMergeGateDiversityNotConfigured pass.
 
 **Scope:** internal/agent/claiming.go, internal/ops/wt_merge.go (merge history Extra parameter), tests
 
 **Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Modify reviewer PreWork merge gate to check quorum and provider diversity (best-effort)', lines 300-306
 
-**Depends on:** CP3-1, CP3-3, CP3-5
+**Depends on:** CP3-1, CP3-3, CP3-5, CP3-6
 
 ---
+
+## Impact Resolution Design
+
+Per the spec's "New Blackboard Fields" table, `impact` lives in "Task checkpoint history" —
+not as a top-level task YAML field. This means impact is stored exclusively in history
+entry Extra maps:
+
+- **Checkpoint entries** (`pre_execution_checkpoint`): `extra["impact"] = "significant"` — set by coder via write-checkpoint (CP3-4)
+- **Verdict entries** (`approved`): `extra["impact"] = "architecture"` — set by reviewer via submit-verdict (CP3-6)
+
+**Resolution mechanism** (`ResolveEffectiveImpact`):
+
+`SubmitVerdict` resolves the effective impact by calling `ResolveEffectiveImpact(history)`:
+1. Iterates task history in reverse
+2. Stops at the last rejection event (rejection clears approvals and resets the review cycle)
+3. Among all checkpoint and verdict entries since that boundary, extracts `extra["impact"]`
+4. Returns the maximum impact found (ordering: `standard` < `significant` < `architecture`)
+5. Returns `"standard"` if no impact was declared in any entry
+
+This follows the existing pattern used by `GetTDDWaiver`, `GetCheckpointImpact`,
+and `GetLatestScopeExtensions` — all of which scan history entries' Extra maps.
+
+**Escalation enforcement**: When a verdict includes an impact value, it must be >=
+the current resolved effective impact. The resolved impact is then used to call
+`EffectiveQuorum(resolvedImpact)` on the pipeline resolver to determine whether
+the task needs additional approvals.
+
+**No Task.Impact field**: The task model does NOT gain an `impact` field. All impact
+reads go through `ResolveEffectiveImpact(task.History)`. This keeps the blackboard
+shape consistent with the spec and avoids schema divergence.
 
 ## Dependency Graph
 
@@ -188,13 +220,13 @@ CP3-4         CP3-5         │       │
   │              v          │       │
   └──────────►CP3-6◄───────┘───────┘
                  │
-              CP3-10◄──CP3-1, CP3-3, CP3-5
+              CP3-10◄──CP3-1, CP3-3, CP3-5, CP3-6
 ```
 
 **Critical path:** CP3-1 → CP3-2 → CP3-7 → CP3-9 (state machine + claiming)
 **Parallel paths:** CP3-3 and CP3-4 can start independently alongside CP3-1
 **Integration:** CP3-6 requires all of CP3-1, CP3-2, CP3-4, CP3-5
-**Merge gate:** CP3-10 requires CP3-1, CP3-3, CP3-5
+**Merge gate:** CP3-10 requires CP3-1, CP3-3, CP3-5, CP3-6 (uses ResolveEffectiveImpact from CP3-6)
 
 ## Spec Coverage Verification
 
@@ -215,6 +247,7 @@ CP3-4         CP3-5         │       │
 | Provider diversity preference in claims (fresh submissions: vs reviewer pool) | CP3-7 |
 | Impact upgrade triggers quorum recalculation | CP3-6 |
 | Stale lease handling for reviewing_2 | CP3-8 |
+| Impact persisted in task checkpoint history (not task-level field) | CP3-4 (checkpoint Extra), CP3-6 (verdict Extra + ResolveEffectiveImpact) |
 | Provider metadata (already exists on Agent) | — (no change needed) |
 
 ## Risks and Assumptions
