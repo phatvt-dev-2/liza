@@ -163,16 +163,20 @@ When `liza watch` triggers the circuit breaker, it also sets `sprint.status` to 
 | Status | Claimable | Reviewable | Terminal |
 |--------|-----------|------------|----------|
 | DRAFT | No | No | No |
-| READY | Yes | No | No |
-| IMPLEMENTING | No | No | No |
-| READY_FOR_REVIEW | No | Yes | No |
-| REJECTED | Yes | No | No |
-| APPROVED | No | No | No |
+| DRAFT_CODE | Yes | No | No |
+| IMPLEMENTING_CODE | No | No | No |
+| CODE_READY_FOR_REVIEW | No | Yes | No |
+| CODE_REJECTED | Yes | No | No |
+| CODE_APPROVED | No | No | No |
 | MERGED | No | No | **Yes** |
 | BLOCKED | No | No | No |
 | ABANDONED | No | No | **Yes** |
 | SUPERSEDED | No | No | **Yes** |
 | INTEGRATION_FAILED | Yes | No | No |
+
+> **Note:** Status names are pipeline-specific. The table above shows the `coding-pair` states.
+> Other role-pairs use their own names (e.g. `DRAFT_EPIC_PLAN`, `DRAFT_US`).
+> See `pipeline.yaml` for the full list.
 
 ## Supported CLIs
 

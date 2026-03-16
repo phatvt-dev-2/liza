@@ -162,7 +162,7 @@ This is normal — the three-phase claim pattern detected a race condition and w
 
 ### Task status invariant violation
 
-**Error:** `INVALID: IMPLEMENTING task without assigned_to: task-1`
+**Error:** `INVALID: IMPLEMENTING_CODE task without assigned_to: task-1`
 
 **Fix the invariant** (edit `.liza/state.yaml` directly):
 ```yaml
@@ -170,9 +170,11 @@ This is normal — the three-phase claim pattern detected a race condition and w
 # Find the task entry and set:
 assigned_to: coder-1
 
-# Option 2: Reset to READY
-# Find the task entry and set:
-status: READY
+# Option 2: Reset to pipeline initial status
+# Find the task entry and set its status to the initial state
+# for its role-pair (e.g. DRAFT_CODE for coding-pair).
+# See pipeline.yaml for the full list of initial states.
+status: DRAFT_CODE   # adjust per role-pair
 ```
 
 ### Circular dependency detected
@@ -214,7 +216,9 @@ mkdir -p specs && vi specs/vision.md
 **Or reset task** (if work was lost — edit `.liza/state.yaml` directly):
 ```yaml
 # Find the <task-id> entry and set:
-status: READY
+# Reset to the pipeline initial status for the task's role-pair
+# (e.g. DRAFT_CODE for coding-pair). See pipeline.yaml for all initial states.
+status: DRAFT_CODE   # adjust per role-pair
 assigned_to: null
 worktree: null
 ```

@@ -48,10 +48,10 @@ liza resume
 When a reviewer rejects a task:
 
 ```bash
-# Task status changes: READY_FOR_REVIEW -> REJECTED
+# Task status changes: CODE_READY_FOR_REVIEW -> CODE_REJECTED
 # rejection_reason is set, review_cycles incremented
 
-# With running agents: coder automatically reclaims REJECTED tasks
+# With running agents: coder automatically reclaims CODE_REJECTED tasks
 # The coder prompt includes the rejection feedback
 
 # Manual flow:
@@ -219,7 +219,7 @@ liza status                           # Full dashboard
 
 ```bash
 MODE=$(liza get config.mode)
-READY=$(liza get tasks --format json | jq '[.[] | select(.status=="READY")] | length')
+READY=$(liza get tasks --format json | jq '[.[] | select(.status=="DRAFT_CODE")] | length')
 DONE=$(liza get sprint.metrics.tasks_done)
 ```
 
