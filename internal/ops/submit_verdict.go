@@ -32,12 +32,14 @@ var impactOrder = map[string]int{
 	"architecture": 2,
 }
 
-// validImpacts is the set of accepted impact values for verdicts.
-var validImpacts = map[string]bool{
-	"":             true, // empty = not specified
-	"standard":     true,
-	"significant":  true,
-	"architecture": true,
+// IsValidImpact returns whether v is a recognized impact classification.
+// Empty string is valid (means "not specified").
+func IsValidImpact(v string) bool {
+	if v == "" {
+		return true
+	}
+	_, ok := impactOrder[v]
+	return ok
 }
 
 // ResolveEffectiveImpact scans checkpoint and verdict history entries since the
@@ -96,7 +98,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 		return nil, &PreconditionError{Reason: "rejection reason is required for REJECTED verdict"}
 	}
 
-	if !validImpacts[impact] {
+	if !IsValidImpact(impact) {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("invalid impact value: %s (must be standard, significant, or architecture)", impact)}
 	}
 

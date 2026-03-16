@@ -16,14 +16,6 @@ type ScopeExtensionEntry struct {
 	Justification string
 }
 
-// validImpactValues defines the accepted impact classification values.
-var validImpactValues = map[string]bool{
-	"":             true,
-	"standard":     true,
-	"significant":  true,
-	"architecture": true,
-}
-
 // WriteCheckpointInput contains the parameters for writing a pre-execution checkpoint.
 type WriteCheckpointInput struct {
 	TaskID          string
@@ -56,7 +48,7 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 	if len(input.FilesToModify) == 0 {
 		return &PreconditionError{Reason: "files_to_modify is required (at least one file)"}
 	}
-	if !validImpactValues[input.Impact] {
+	if !IsValidImpact(input.Impact) {
 		return &PreconditionError{Reason: fmt.Sprintf("invalid impact value %q: must be empty, standard, significant, or architecture", input.Impact)}
 	}
 
