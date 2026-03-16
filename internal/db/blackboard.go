@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/roles"
 	"gopkg.in/yaml.v3"
 )
 
@@ -350,8 +350,9 @@ func (bb *Blackboard) GetStatePath() string {
 // form in-memory. Does not write back to disk — normalization is read-path only.
 func normalizeAgentRoles(state *models.State) {
 	for id, agent := range state.Agents {
-		if strings.Contains(agent.Role, "_") {
-			agent.Role = strings.ReplaceAll(agent.Role, "_", "-")
+		normalized := roles.NormalizeRoleName(agent.Role)
+		if normalized != agent.Role {
+			agent.Role = normalized
 			state.Agents[id] = agent
 		}
 	}
