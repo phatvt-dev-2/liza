@@ -12,10 +12,10 @@ import (
 	"github.com/liza-mas/liza/internal/roles"
 )
 
-func claimDoerTask(projectRoot, agentID, workflowRole string, bb *db.Blackboard) (taskID, worktree string, err error) {
+func claimDoerTask(projectRoot, agentID, role string, bb *db.Blackboard) (taskID, worktree string, err error) {
 	logger := GetLogger()
 
-	if workflowRole == models.RoleCoder || workflowRole == models.RoleCodePlanner {
+	if role == models.RoleCoder || role == models.RoleCodePlanner {
 		handoffResult, err := ops.ResumeHandoff(ops.ResumeHandoffInput{
 			ProjectRoot: projectRoot,
 			AgentID:     agentID,
@@ -38,7 +38,7 @@ func claimDoerTask(projectRoot, agentID, workflowRole string, bb *db.Blackboard)
 
 	var candidates []*models.Task
 	for i := range state.Tasks {
-		if state.Tasks[i].IsClaimable(workflowRole, state.Tasks, pr) {
+		if state.Tasks[i].IsClaimable(role, state.Tasks, pr) {
 			candidates = append(candidates, &state.Tasks[i])
 		}
 	}
@@ -80,13 +80,13 @@ func shuffledByPriorityTier(candidates []*models.Task) []*models.Task {
 	return tier
 }
 
-func claimReviewerTaskForRole(projectRoot, agentID, workflowRole string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
+func claimReviewerTaskForRole(projectRoot, agentID, role string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
 	logger := GetLogger()
 
 	result, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
 		ProjectRoot:   projectRoot,
 		AgentID:       agentID,
-		WorkflowRole:  workflowRole,
+		WorkflowRole:  role,
 		LeaseDuration: leaseDuration,
 	})
 	if err != nil {

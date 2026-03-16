@@ -17,8 +17,7 @@ const defaultMaxMergeRetries = 3
 // reviewerStrategy handles review roles: code-reviewer, code-plan-reviewer,
 // epic-plan-reviewer, us-reviewer.
 type reviewerStrategy struct {
-	role             string             // runtime role
-	workflowRole     string             // workflow role
+	role             string             // role name in hyphenated form
 	resolver         *pipeline.Resolver // pipeline resolver for context sections
 	mergeRetries     int                // current retry counter (mutable per-loop state)
 	maxRetries       int                // max merge retries before proceeding (0 = use default)
@@ -100,7 +99,7 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 	pr := loadResolver(config.ProjectRoot)
 	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pollInterval, maxWait,
 		func(state *models.State) (bool, string) {
-			count := models.CountReviewableTasks(state, s.workflowRole, pr)
+			count := models.CountReviewableTasks(state, s.role, pr)
 			if count > 0 {
 				return true, fmt.Sprintf("Found %d %s-reviewable task(s)", count, s.role)
 			}
@@ -116,7 +115,7 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard) (string, string, error) {
 	logger := GetLogger()
 
-	taskID, _, reviewCommit, err := claimReviewerTaskForRole(config.ProjectRoot, config.AgentID, s.workflowRole, 1800, bb)
+	taskID, _, reviewCommit, err := claimReviewerTaskForRole(config.ProjectRoot, config.AgentID, s.role, 1800, bb)
 	if err != nil {
 		return "", "", err
 	}

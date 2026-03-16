@@ -13,8 +13,7 @@ import (
 
 // doerStrategy handles task-implementing roles: coder, code-planner, epic-planner, us-writer.
 type doerStrategy struct {
-	role             string             // runtime role (e.g. "coder")
-	workflowRole     string             // workflow role (e.g. "coder")
+	role             string             // role name in hyphenated form (e.g. "coder")
 	resolver         *pipeline.Resolver // pipeline resolver for context sections
 	executionTimeout time.Duration      // from YAML; 0 = use type default
 	yamlPollSec      int                // from YAML; 0 = use type default
@@ -67,7 +66,7 @@ func (s *doerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, confi
 	pr := loadResolver(config.ProjectRoot)
 	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pollInterval, maxWait,
 		func(state *models.State) (bool, string) {
-			claimable := models.CountClaimableTasks(state, s.workflowRole, pr)
+			claimable := models.CountClaimableTasks(state, s.role, pr)
 			resumableHandoffs := countResumableHandoffTasks(state, config.AgentID, pr)
 
 			logMsg := fmt.Sprintf("%s: %d claimable, %d resumable handoffs", s.role, claimable, resumableHandoffs)
@@ -90,7 +89,7 @@ func (s *doerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, confi
 }
 
 func (s *doerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard) (string, string, error) {
-	taskID, _, err := claimDoerTask(config.ProjectRoot, config.AgentID, s.workflowRole, bb)
+	taskID, _, err := claimDoerTask(config.ProjectRoot, config.AgentID, s.role, bb)
 	if err != nil {
 		return "", "", err
 	}
