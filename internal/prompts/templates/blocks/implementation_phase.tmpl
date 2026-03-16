@@ -22,6 +22,7 @@ IMPLEMENTATION PHASE:
 2. For EACH coding task in your plan, call liza_set_task_output with structured entries.
    Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
    Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source).
+   Extract each field verbatim from the plan file — do not compose from memory or paraphrase.
 3. Update worktree artifacts required by DONE WHEN.
 4. Validate done_when criteria with concrete checks.
 5. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza_submit_for_review until all pass):
@@ -32,9 +33,9 @@ IMPLEMENTATION PHASE:
       output[] entry. Unmapped requirements = not ready to submit.
    d. output[] completeness: one entry per planned coding task, each with all four fields
       (desc, done_when, scope, spec_ref) populated.
-   e. output[] matches plan: compare each output[] entry's desc, done_when, scope, and
-      spec_ref against the plan file in the worktree — they must be identical, not
-      paraphrased or extended.
+   e. output[] parity: re-read the plan file in the worktree and verify each output[]
+      entry's desc, done_when, scope, and spec_ref is character-identical to the plan.
+      If any field was paraphrased, replace it with the verbatim text before submitting.
    f. Cross-reference consistency: for every cross-reference in the plan ("owned by CPx",
       "depends on CPx", "out of scope for CPx"), search the plan file you committed in the
       worktree and confirm the referenced task explicitly states that responsibility,
@@ -52,9 +53,22 @@ IMPLEMENTATION PHASE:
    Each entry becomes a US Writer child task after merge. The Epic Plan Reviewer will verify these.
    Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary),
    spec_ref (path to the produced epic document — US Writers use this to locate the parent epic).
+   desc: extract verbatim from the capability's one-sentence description in the epic.
+   done_when: derive a falsifiable condition from the capability description and story documents.
+   scope: derive from the capability's story documents table and out-of-scope section.
+   spec_ref: the repo-relative path of the produced epic document (same for all entries).
 6. Update worktree artifacts required by DONE WHEN.
 7. Validate done_when criteria with concrete checks.
-8. Submit using liza_submit_for_review when complete.
+8. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza_submit_for_review until all pass):
+   a. output[] completeness: one entry per capability in the epic, each with all four fields
+      (desc, done_when, scope, spec_ref) populated.
+   b. output[] parity: re-read the epic document in the worktree and verify:
+      - desc is character-identical to the capability's one-sentence description.
+      - done_when is consistent with the capability description and story documents.
+      - scope is consistent with the capability's story documents and out-of-scope section.
+      - spec_ref equals the repo-relative path of the produced epic document.
+   c. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
+9. Submit using liza_submit_for_review only after all checks in step 8 pass.
 {{- else if eq .Role "us-writer"}}
 
 IMPLEMENTATION PHASE:
