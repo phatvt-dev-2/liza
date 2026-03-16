@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -632,97 +633,223 @@ func TestClaimReviewerTask_DiversityWithApprovals(t *testing.T) {
 }
 
 func TestClaimReviewerTask_DiversityFreshSubmissions(t *testing.T) {
-	// Tests diversity preference for fresh submitted tasks (no existing approvals).
-	// Diversity is satisfiable when at least one other registered reviewer for the
-	// role-pair has a provider different from the claiming reviewer's provider.
+	// Tests fresh-submission diversity preference through selectBestCandidate.
 	//
-	// Since all coding-pair tasks share the same reviewer pool, diversity produces
-	// the same result for all candidates. We validate the code paths by verifying:
-	// (a) claims succeed with diverse reviewer pools (code path exercises pickWithFreshDiversity)
-	// (b) claims succeed with homogeneous pools (falls through to random)
-	// (c-d) multi-reviewer pools also work correctly
-	tests := []struct {
-		name        string
-		extraAgents map[string]models.Agent
-		wantSuccess bool // All subcases should succeed
-	}{
-		{
-			name: "single alternate reviewer different provider",
-			extraAgents: map[string]models.Agent{
-				"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "anthropic"},
+	// Architecture note: in production, all candidates for a single claiming agent
+	// share one role-pair (and thus one reviewer pool), so isDiversitySatisfiable
+	// returns the same value for all candidates. To test the preference *logic*,
+	// we call selectBestCandidate directly with a mock resolver that maps different
+	// role-pairs to different reviewer roles, creating tasks with distinct
+	// diversity-satisfiability.
+	//
+	// Subcases from done_when:
+	// (a) single alternate reviewer with different provider — preferred
+	// (b) single alternate reviewer with same provider — no preference
+	// (c) multiple alternate reviewers all sharing one different provider — preferred
+	// (d) multiple alternate reviewers with mixed providers — preferred
+
+	t.Run("diversity-satisfiable preferred over non-satisfiable", func(t *testing.T) {
+		// Two equal-priority submitted tasks. One in role-pair "pair-diverse"
+		// (has alternate reviewer with different provider), one in "pair-uniform"
+		// (all reviewers share the claimer's provider). Verifies diverse task is chosen.
+		pr := &diversityTestResolver{
+			pairs: map[string]diversityPairDef{
+				"pair-diverse": {reviewer: "rv-diverse", submitted: "SUBMITTED_D"},
+				"pair-uniform": {reviewer: "rv-uniform", submitted: "SUBMITTED_U"},
 			},
-			wantSuccess: true,
-		},
-		{
-			name: "single alternate reviewer same provider",
-			extraAgents: map[string]models.Agent{
-				"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "google"},
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"rv-diverse-2": {Role: "rv-diverse", Provider: "anthropic"}, // different from claimer
+				"rv-uniform-2": {Role: "rv-uniform", Provider: "google"},    // same as claimer
 			},
-			wantSuccess: true,
-		},
-		{
-			name: "multiple alternate reviewers one different provider",
-			extraAgents: map[string]models.Agent{
-				"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "google"},
-				"code-reviewer-3": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "anthropic"},
+		}
+		taskDiverse := &models.Task{
+			ID: "task-diverse", RolePair: "pair-diverse", Priority: 1,
+			Status: "SUBMITTED_D",
+		}
+		taskUniform := &models.Task{
+			ID: "task-uniform", RolePair: "pair-uniform", Priority: 1,
+			Status: "SUBMITTED_U",
+		}
+
+		// Run multiple times to confirm deterministic preference, not random luck.
+		for i := 0; i < 10; i++ {
+			result := selectBestCandidate(
+				[]*models.Task{taskDiverse, taskUniform},
+				pr, "google", "claimer-1", state,
+			)
+			if result == nil {
+				t.Fatal("selectBestCandidate returned nil")
+			}
+			if result.ID != "task-diverse" {
+				t.Errorf("iteration %d: got %q, want %q (diversity-satisfiable preferred)",
+					i, result.ID, "task-diverse")
+			}
+		}
+	})
+
+	t.Run("a: single alternate reviewer different provider", func(t *testing.T) {
+		pr := &diversityTestResolver{
+			pairs: map[string]diversityPairDef{
+				"pair-a": {reviewer: "rv-a", submitted: "SUBMITTED_A"},
+				"pair-b": {reviewer: "rv-b", submitted: "SUBMITTED_B"},
 			},
-			wantSuccess: true,
-		},
-		{
-			name: "multiple alternate reviewers mixed providers",
-			extraAgents: map[string]models.Agent{
-				"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "anthropic"},
-				"code-reviewer-3": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "openai"},
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"rv-a-other": {Role: "rv-a", Provider: "anthropic"}, // diverse
+				// No rv-b agent → not satisfiable
 			},
-			wantSuccess: true,
-		},
+		}
+		taskA := &models.Task{ID: "task-a", RolePair: "pair-a", Priority: 1, Status: "SUBMITTED_A"}
+		taskB := &models.Task{ID: "task-b", RolePair: "pair-b", Priority: 1, Status: "SUBMITTED_B"}
+
+		for i := 0; i < 10; i++ {
+			result := selectBestCandidate(
+				[]*models.Task{taskA, taskB}, pr, "google", "claimer-1", state,
+			)
+			if result == nil || result.ID != "task-a" {
+				t.Errorf("iteration %d: got %v, want task-a (single diverse reviewer preferred)", i, result)
+			}
+		}
+	})
+
+	t.Run("b: single alternate reviewer same provider - no preference", func(t *testing.T) {
+		pr := &diversityTestResolver{
+			pairs: map[string]diversityPairDef{
+				"pair-a": {reviewer: "rv-a", submitted: "SUBMITTED_A"},
+				"pair-b": {reviewer: "rv-b", submitted: "SUBMITTED_B"},
+			},
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"rv-a-other": {Role: "rv-a", Provider: "google"}, // same provider
+				"rv-b-other": {Role: "rv-b", Provider: "google"}, // same provider
+			},
+		}
+		taskA := &models.Task{ID: "task-a", RolePair: "pair-a", Priority: 1, Status: "SUBMITTED_A"}
+		taskB := &models.Task{ID: "task-b", RolePair: "pair-b", Priority: 1, Status: "SUBMITTED_B"}
+
+		// Neither is diversity-satisfiable → both go to "rest" → random selection.
+		// Just verify it returns one of them without panic.
+		result := selectBestCandidate(
+			[]*models.Task{taskA, taskB}, pr, "google", "claimer-1", state,
+		)
+		if result == nil {
+			t.Fatal("selectBestCandidate returned nil")
+		}
+		valid := result.ID == "task-a" || result.ID == "task-b"
+		if !valid {
+			t.Errorf("got %q, want task-a or task-b", result.ID)
+		}
+	})
+
+	t.Run("c: multiple alternate reviewers all one different provider", func(t *testing.T) {
+		pr := &diversityTestResolver{
+			pairs: map[string]diversityPairDef{
+				"pair-a": {reviewer: "rv-a", submitted: "SUBMITTED_A"},
+				"pair-b": {reviewer: "rv-b", submitted: "SUBMITTED_B"},
+			},
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"rv-a-2": {Role: "rv-a", Provider: "google"},    // same
+				"rv-a-3": {Role: "rv-a", Provider: "anthropic"}, // different → pair-a diverse
+				"rv-b-2": {Role: "rv-b", Provider: "google"},    // same only
+			},
+		}
+		taskA := &models.Task{ID: "task-a", RolePair: "pair-a", Priority: 1, Status: "SUBMITTED_A"}
+		taskB := &models.Task{ID: "task-b", RolePair: "pair-b", Priority: 1, Status: "SUBMITTED_B"}
+
+		for i := 0; i < 10; i++ {
+			result := selectBestCandidate(
+				[]*models.Task{taskA, taskB}, pr, "google", "claimer-1", state,
+			)
+			if result == nil || result.ID != "task-a" {
+				t.Errorf("iteration %d: got %v, want task-a (diversity satisfiable via mixed pool)", i, result)
+			}
+		}
+	})
+
+	t.Run("d: multiple alternate reviewers mixed providers", func(t *testing.T) {
+		pr := &diversityTestResolver{
+			pairs: map[string]diversityPairDef{
+				"pair-a": {reviewer: "rv-a", submitted: "SUBMITTED_A"},
+				"pair-b": {reviewer: "rv-b", submitted: "SUBMITTED_B"},
+			},
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"rv-a-2": {Role: "rv-a", Provider: "anthropic"}, // different → diverse
+				"rv-a-3": {Role: "rv-a", Provider: "openai"},    // different → diverse
+				"rv-b-2": {Role: "rv-b", Provider: "google"},    // same only
+			},
+		}
+		taskA := &models.Task{ID: "task-a", RolePair: "pair-a", Priority: 1, Status: "SUBMITTED_A"}
+		taskB := &models.Task{ID: "task-b", RolePair: "pair-b", Priority: 1, Status: "SUBMITTED_B"}
+
+		for i := 0; i < 10; i++ {
+			result := selectBestCandidate(
+				[]*models.Task{taskA, taskB}, pr, "google", "claimer-1", state,
+			)
+			if result == nil || result.ID != "task-a" {
+				t.Errorf("iteration %d: got %v, want task-a (diversity always satisfiable)", i, result)
+			}
+		}
+	})
+}
+
+// diversityPairDef defines a minimal role-pair for diversity testing.
+type diversityPairDef struct {
+	reviewer  string
+	submitted models.TaskStatus
+}
+
+// diversityTestResolver is a minimal PipelineResolver mock for testing
+// fresh-submission diversity preference. It maps role-pairs to distinct
+// reviewer roles, enabling isDiversitySatisfiable to differentiate tasks.
+type diversityTestResolver struct {
+	pairs map[string]diversityPairDef
+}
+
+func (r *diversityTestResolver) ReviewerRole(rp string) (string, error) {
+	p, ok := r.pairs[rp]
+	if !ok {
+		return "", fmt.Errorf("unknown role-pair %q", rp)
 	}
+	return p.reviewer, nil
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			testhelpers.SetupTestGitRepo(t, tmpDir)
-			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-			now := time.Now().UTC()
-			state := testhelpers.CreateValidState()
-			wt1 := ".worktrees/task-1"
-			rc1 := "abc123"
-			state.Tasks = []models.Task{
-				{
-					ID:           "task-1",
-					Status:       models.TaskStatusReadyForReview,
-					RolePair:     "coding-pair",
-					Priority:     1,
-					Worktree:     &wt1,
-					ReviewCommit: &rc1,
-					History:      []models.TaskHistoryEntry{},
-					Created:      now,
-				},
-			}
-			state.Agents["code-reviewer-1"] = models.Agent{
-				Role:     "code-reviewer",
-				Status:   models.AgentStatusIdle,
-				Provider: "google",
-			}
-			for id, agent := range tt.extraAgents {
-				state.Agents[id] = agent
-			}
-			testhelpers.WriteInitialState(t, stateFile, state)
-
-			result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
-				ProjectRoot:   tmpDir,
-				AgentID:       "code-reviewer-1",
-				LeaseDuration: 1800,
-			})
-			if tt.wantSuccess {
-				if err != nil {
-					t.Fatalf("ClaimReviewerTask() error: %v", err)
-				}
-				if result.TaskID != "task-1" {
-					t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
-				}
-			}
-		})
+func (r *diversityTestResolver) SubmittedStatus(rp string) (models.TaskStatus, error) {
+	p, ok := r.pairs[rp]
+	if !ok {
+		return "", fmt.Errorf("unknown role-pair %q", rp)
 	}
+	return p.submitted, nil
+}
+
+func (r *diversityTestResolver) PartiallyApprovedStatus(string) (models.TaskStatus, error) {
+	return "", fmt.Errorf("not configured")
+}
+
+// Unused interface methods — return errors.
+func (r *diversityTestResolver) DoerRole(string) (string, error) { return "", fmt.Errorf("unused") }
+func (r *diversityTestResolver) InitialStatus(string) (models.TaskStatus, error) {
+	return "", fmt.Errorf("unused")
+}
+func (r *diversityTestResolver) RejectedStatus(string) (models.TaskStatus, error) {
+	return "", fmt.Errorf("unused")
+}
+func (r *diversityTestResolver) ReviewingStatus(string) (models.TaskStatus, error) {
+	return "", fmt.Errorf("unused")
+}
+func (r *diversityTestResolver) ExecutingStatus(string) (models.TaskStatus, error) {
+	return "", fmt.Errorf("unused")
+}
+func (r *diversityTestResolver) ApprovedStatus(string) (models.TaskStatus, error) {
+	return "", fmt.Errorf("unused")
+}
+func (r *diversityTestResolver) Reviewing2Status(string) (models.TaskStatus, error) {
+	return "", fmt.Errorf("unused")
 }
