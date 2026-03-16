@@ -231,8 +231,11 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 				return fmt.Errorf("failed to resolve quorum: %w", qErr)
 			}
 
-			if task.ApprovalCount() < effectiveQuorum && partiallyApprovedStatus != "" {
-				// Quorum not met — transition to partially_approved
+			if task.ApprovalCount() < effectiveQuorum {
+				// Quorum not met — need partially_approved state to continue
+				if partiallyApprovedStatus == "" {
+					return fmt.Errorf("quorum %d requires partially-approved state but none declared for %q", effectiveQuorum, task.RolePair)
+				}
 				if err := transitionTask(partiallyApprovedStatus); err != nil {
 					return err
 				}
