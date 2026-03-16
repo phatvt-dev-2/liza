@@ -12,6 +12,12 @@ import (
 	"github.com/liza-mas/liza/internal/roles"
 )
 
+// defaultReviewClaimCooldown is the duration after a review claim release
+// during which the same agent cannot re-claim the same task. This prevents
+// claim-release spin loops caused by repeated failures (worktree errors,
+// CLI exits, supervisor restarts).
+const defaultReviewClaimCooldown = 60 * time.Second
+
 // ClaimReviewerTaskInput contains the parameters for claiming a reviewer task.
 type ClaimReviewerTaskInput struct {
 	ProjectRoot   string
@@ -81,6 +87,16 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 			}
 		}
 
+		if len(candidates) == 0 {
+			return &PreconditionError{Reason: "no reviewable tasks found"}
+		}
+
+		// Filter out candidates in claim cooldown to prevent claim-release spin.
+		candidates = filterReviewClaimCooldown(candidates, input.AgentID, defaultReviewClaimCooldown, now)
+		if len(candidates) == 0 {
+			return &PreconditionError{Reason: "all reviewable tasks in claim cooldown"}
+		}
+
 		// Look up claiming reviewer's provider from agent state.
 		claimerProvider := ""
 		if agent, ok := state.Agents[input.AgentID]; ok {
@@ -88,10 +104,6 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		}
 
 		task := selectBestCandidate(candidates, pr, claimerProvider, input.AgentID, state)
-
-		if task == nil {
-			return &PreconditionError{Reason: "no reviewable tasks found"}
-		}
 
 		// Invariant: task must have review_commit before it can be claimed for review
 		if task.ReviewCommit == nil {
@@ -289,6 +301,37 @@ func isDiversitySatisfiable(
 			continue
 		}
 		if agent.Provider != claimerProvider {
+			return true
+		}
+	}
+	return false
+}
+
+// filterReviewClaimCooldown removes candidates where the claiming agent has a
+// recent claim_released or review_claim_released history event within the
+// cooldown window. This prevents claim-release spin loops.
+func filterReviewClaimCooldown(candidates []*models.Task, agentID string, cooldown time.Duration, now time.Time) []*models.Task {
+	cutoff := now.Add(-cooldown)
+	var filtered []*models.Task
+	for _, t := range candidates {
+		if isInReviewClaimCooldown(t, agentID, cutoff) {
+			continue
+		}
+		filtered = append(filtered, t)
+	}
+	return filtered
+}
+
+// isInReviewClaimCooldown checks if the task has a recent claim release event
+// from the specified agent within the cutoff time.
+func isInReviewClaimCooldown(task *models.Task, agentID string, cutoff time.Time) bool {
+	for i := len(task.History) - 1; i >= 0; i-- {
+		h := task.History[i]
+		if h.Time.Before(cutoff) {
+			break
+		}
+		if h.Agent != nil && *h.Agent == agentID &&
+			(h.Event == models.TaskEventClaimReleased || h.Event == models.TaskEventReviewClaimReleased) {
 			return true
 		}
 	}

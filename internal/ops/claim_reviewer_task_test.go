@@ -853,3 +853,311 @@ func (r *diversityTestResolver) ApprovedStatus(string) (models.TaskStatus, error
 func (r *diversityTestResolver) Reviewing2Status(string) (models.TaskStatus, error) {
 	return "", fmt.Errorf("unused")
 }
+
+func TestClaimReviewerTask_ReviewClaimCooldown(t *testing.T) {
+	t.Run("recent review_claim_released from same agent filters candidate", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		worktree := ".worktrees/task-1"
+		reviewCommit := "abc123"
+		state.Tasks = []models.Task{
+			{
+				ID:           "task-1",
+				Status:       models.TaskStatusReadyForReview,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Worktree:     &worktree,
+				ReviewCommit: &reviewCommit,
+				Created:      now,
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  now.Add(-10 * time.Second),
+						Event: models.TaskEventReviewClaimReleased,
+						Agent: testhelpers.StringPtr("code-reviewer-1"),
+					},
+				},
+			},
+		}
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:   models.RoleCodeReviewer,
+			Status: models.AgentStatusIdle,
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		_, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+			ProjectRoot:   tmpDir,
+			AgentID:       "code-reviewer-1",
+			LeaseDuration: 1800,
+		})
+		if err == nil {
+			t.Fatal("Expected PreconditionError due to cooldown, got nil")
+		}
+		if !strings.Contains(err.Error(), "claim cooldown") {
+			t.Errorf("Error = %q, want to contain 'claim cooldown'", err.Error())
+		}
+	})
+
+	t.Run("recent claim_released from same agent filters candidate", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		worktree := ".worktrees/task-1"
+		reviewCommit := "abc123"
+		state.Tasks = []models.Task{
+			{
+				ID:           "task-1",
+				Status:       models.TaskStatusReadyForReview,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Worktree:     &worktree,
+				ReviewCommit: &reviewCommit,
+				Created:      now,
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  now.Add(-30 * time.Second),
+						Event: models.TaskEventClaimReleased,
+						Agent: testhelpers.StringPtr("code-reviewer-1"),
+					},
+				},
+			},
+		}
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:   models.RoleCodeReviewer,
+			Status: models.AgentStatusIdle,
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		_, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+			ProjectRoot:   tmpDir,
+			AgentID:       "code-reviewer-1",
+			LeaseDuration: 1800,
+		})
+		if err == nil {
+			t.Fatal("Expected PreconditionError due to cooldown, got nil")
+		}
+		if !strings.Contains(err.Error(), "claim cooldown") {
+			t.Errorf("Error = %q, want to contain 'claim cooldown'", err.Error())
+		}
+	})
+
+	t.Run("recent review_claim_released from different agent does not filter", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		worktree := ".worktrees/task-1"
+		reviewCommit := "abc123"
+		state.Tasks = []models.Task{
+			{
+				ID:           "task-1",
+				Status:       models.TaskStatusReadyForReview,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Worktree:     &worktree,
+				ReviewCommit: &reviewCommit,
+				Created:      now,
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  now.Add(-10 * time.Second),
+						Event: models.TaskEventReviewClaimReleased,
+						Agent: testhelpers.StringPtr("code-reviewer-OTHER"),
+					},
+				},
+			},
+		}
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:   models.RoleCodeReviewer,
+			Status: models.AgentStatusIdle,
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+			ProjectRoot:   tmpDir,
+			AgentID:       "code-reviewer-1",
+			LeaseDuration: 1800,
+		})
+		if err != nil {
+			t.Fatalf("ClaimReviewerTask() error: %v", err)
+		}
+		if result.TaskID != "task-1" {
+			t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+		}
+	})
+
+	t.Run("old review_claim_released beyond cooldown does not filter", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		worktree := ".worktrees/task-1"
+		reviewCommit := "abc123"
+		state.Tasks = []models.Task{
+			{
+				ID:           "task-1",
+				Status:       models.TaskStatusReadyForReview,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Worktree:     &worktree,
+				ReviewCommit: &reviewCommit,
+				Created:      now,
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  now.Add(-120 * time.Second),
+						Event: models.TaskEventReviewClaimReleased,
+						Agent: testhelpers.StringPtr("code-reviewer-1"),
+					},
+				},
+			},
+		}
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:   models.RoleCodeReviewer,
+			Status: models.AgentStatusIdle,
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+			ProjectRoot:   tmpDir,
+			AgentID:       "code-reviewer-1",
+			LeaseDuration: 1800,
+		})
+		if err != nil {
+			t.Fatalf("ClaimReviewerTask() error: %v", err)
+		}
+		if result.TaskID != "task-1" {
+			t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+		}
+	})
+
+	t.Run("all candidates in cooldown returns PreconditionError", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		wt1 := ".worktrees/task-1"
+		wt2 := ".worktrees/task-2"
+		rc1 := "abc123"
+		rc2 := "def456"
+		state.Tasks = []models.Task{
+			{
+				ID:           "task-1",
+				Status:       models.TaskStatusReadyForReview,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Worktree:     &wt1,
+				ReviewCommit: &rc1,
+				Created:      now,
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  now.Add(-5 * time.Second),
+						Event: models.TaskEventReviewClaimReleased,
+						Agent: testhelpers.StringPtr("code-reviewer-1"),
+					},
+				},
+			},
+			{
+				ID:           "task-2",
+				Status:       models.TaskStatusReadyForReview,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Worktree:     &wt2,
+				ReviewCommit: &rc2,
+				Created:      now,
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  now.Add(-15 * time.Second),
+						Event: models.TaskEventClaimReleased,
+						Agent: testhelpers.StringPtr("code-reviewer-1"),
+					},
+				},
+			},
+		}
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:   models.RoleCodeReviewer,
+			Status: models.AgentStatusIdle,
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		_, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+			ProjectRoot:   tmpDir,
+			AgentID:       "code-reviewer-1",
+			LeaseDuration: 1800,
+		})
+		if err == nil {
+			t.Fatal("Expected PreconditionError when all candidates in cooldown, got nil")
+		}
+		if !strings.Contains(err.Error(), "claim cooldown") {
+			t.Errorf("Error = %q, want to contain 'claim cooldown'", err.Error())
+		}
+	})
+
+	t.Run("mixed cooldown selects non-cooldown candidate", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		wt1 := ".worktrees/task-cooldown"
+		wt2 := ".worktrees/task-available"
+		rc1 := "abc123"
+		rc2 := "def456"
+		state.Tasks = []models.Task{
+			{
+				ID:           "task-cooldown",
+				Status:       models.TaskStatusReadyForReview,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Worktree:     &wt1,
+				ReviewCommit: &rc1,
+				Created:      now,
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  now.Add(-10 * time.Second),
+						Event: models.TaskEventReviewClaimReleased,
+						Agent: testhelpers.StringPtr("code-reviewer-1"),
+					},
+				},
+			},
+			{
+				ID:           "task-available",
+				Status:       models.TaskStatusReadyForReview,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Worktree:     &wt2,
+				ReviewCommit: &rc2,
+				Created:      now,
+				History:      []models.TaskHistoryEntry{},
+			},
+		}
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:   models.RoleCodeReviewer,
+			Status: models.AgentStatusIdle,
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+			ProjectRoot:   tmpDir,
+			AgentID:       "code-reviewer-1",
+			LeaseDuration: 1800,
+		})
+		if err != nil {
+			t.Fatalf("ClaimReviewerTask() error: %v", err)
+		}
+		if result.TaskID != "task-available" {
+			t.Errorf("TaskID = %q, want %q (non-cooldown candidate)", result.TaskID, "task-available")
+		}
+	})
+}
