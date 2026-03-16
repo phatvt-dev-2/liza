@@ -13,6 +13,7 @@ multiple approvals with provider diversity constraints before merge eligibility.
 3. Impact classification on checkpoints and verdicts
 4. Migration from `approved_by` (scalar) to `approvals[]` (list)
 5. Multi-reviewer state machine and claim priority logic
+6. Best-effort provider-diversity merge gate
 
 ## Current State
 
@@ -27,25 +28,13 @@ multiple approvals with provider diversity constraints before merge eligibility.
 
 ### CP3-1: Add review-policy schema to pipeline role-pair config
 
-**Intent:** Define the review-policy schema that controls quorum requirements.
+**Desc:** Add review-policy schema to pipeline role-pair config
 
-**Changes:**
-- Add `ReviewPolicyDef` struct: `Quorum int`, `SignificantChange *ReviewPolicyOverrideDef`,
-  `ArchitectureImpact *ReviewPolicyOverrideDef`
-- Add `ReviewPolicyOverrideDef` struct: `Quorum int`, `ProviderDiversity string`
-- Add `ReviewPolicy *ReviewPolicyDef` field to `RolePairDef`
-- Validation: quorum >= 1 (0 treated as 1), `provider-diversity` must be `"preferred"` or empty
-- Add resolver method: `ReviewPolicy(rolePair string) (*ReviewPolicyDef, error)`
-- Add resolver method: `EffectiveQuorum(rolePair string, impact string) (quorum int, diversity string, err error)`
-  — resolves quorum + diversity for a given impact level against the review-policy hierarchy
-- Update `internal/embedded/pipeline.yaml`: add `review-policy` to coding-pair with default quorum 1
+**Done When:** ReviewPolicyDef and ReviewPolicyOverrideDef structs exist in internal/pipeline/config.go. RolePairDef has ReviewPolicy field. Validation rejects quorum < 1 and invalid provider-diversity values. Resolver methods ReviewPolicy() and EffectiveQuorum() return correct values. pipeline.yaml coding-pair has review-policy with quorum: 1. TestReviewPolicyValidation and TestEffectiveQuorum pass.
 
-**Scope:**
-- `internal/pipeline/config.go` — structs, validation
-- `internal/pipeline/resolver.go` — new methods
-- `internal/embedded/pipeline.yaml` — default config
-- `internal/pipeline/config_test.go` — validation tests
-- `internal/pipeline/resolver_test.go` — resolver tests
+**Scope:** internal/pipeline/config.go, internal/pipeline/resolver.go, internal/embedded/pipeline.yaml, config tests, resolver tests
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Add review-policy to role-pair schema'
 
 **Depends on:** nothing
 
@@ -53,39 +42,13 @@ multiple approvals with provider diversity constraints before merge eligibility.
 
 ### CP3-2: Add quorum states to role-pair schema and transition map
 
-**Intent:** Extend the state machine to support partially-approved and reviewing-2 states.
+**Desc:** Add quorum states to role-pair schema and transition map
 
-**Changes:**
-- Add `PartiallyApproved string` and `Reviewing2 string` optional fields to `RolePairStates`
-  (yaml: `partially-approved` and `reviewing-2`, `omitempty`)
-- Add `"partially-approved"` and `"reviewing-2"` to `validPhases` map
-- Add resolver methods: `PartiallyApprovedStatus(rolePair)`, `Reviewing2Status(rolePair)`
-  — return empty TaskStatus (not error) when state is not declared (optional states)
-- Add to `PipelineResolver` interface in `internal/models/task.go`:
-  `PartiallyApprovedStatus(rolePair string) (TaskStatus, error)` and
-  `Reviewing2Status(rolePair string) (TaskStatus, error)`
-- Update mock `PipelineResolver` in test files to implement new methods
-- Extend `AllDeclaredStates()` to include these when non-empty
-- Validation: if any review-policy override has quorum > 1 on a role-pair, both
-  `partially-approved` and `reviewing-2` states MUST be declared on that role-pair
-- Extend `TransitionMap()` — when states are declared:
-  - `reviewing → partially-approved` (added alongside existing `reviewing → approved`)
-  - `partially-approved → reviewing-2`
-  - `reviewing-2 → approved | rejected`
-- Extend `BuildPipelineTransitions()` — cross-cutting for new states:
-  - `reviewing-2 → partially-approved` (stale claim revert)
-  - `partially-approved → abandoned | superseded`
-  - `reviewing-2 → rejected` flows to same rejected state as reviewing-1
-- Update `internal/embedded/pipeline.yaml`: add `partially-approved` and `reviewing-2`
-  states on coding-pair (e.g., `CODE_PARTIALLY_APPROVED`, `REVIEWING_CODE_2`)
+**Done When:** RolePairStates has PartiallyApproved and Reviewing2 optional string fields. validPhases includes partially-approved and reviewing-2. Resolver methods PartiallyApprovedStatus() and Reviewing2Status() exist. PipelineResolver interface in models/task.go includes both methods. Validation rejects role-pairs where quorum > 1 but quorum states are missing. TransitionMap() includes reviewing → partially-approved, partially-approved → reviewing-2, reviewing-2 → approved|rejected when states declared. BuildPipelineTransitions includes reviewing-2 → partially-approved (stale revert) and partially-approved → abandoned|superseded. pipeline.yaml coding-pair declares CODE_PARTIALLY_APPROVED and REVIEWING_CODE_2. All existing tests pass plus new tests for quorum state transitions.
 
-**Scope:**
-- `internal/pipeline/config.go` — RolePairStates fields, validPhases, validation
-- `internal/pipeline/resolver.go` — new methods, TransitionMap extension
-- `internal/ops/pipeline_ops.go` — BuildPipelineTransitions extension
-- `internal/models/task.go` — PipelineResolver interface extension
-- `internal/embedded/pipeline.yaml` — quorum states
-- Tests in all affected packages (including mock updates)
+**Scope:** internal/pipeline/config.go, internal/pipeline/resolver.go, internal/ops/pipeline_ops.go, internal/models/task.go (interface only), internal/embedded/pipeline.yaml, tests in all affected packages
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Add partially-approved and reviewing-2 states to role-pair schema'
 
 **Depends on:** CP3-1
 
@@ -93,25 +56,13 @@ multiple approvals with provider diversity constraints before merge eligibility.
 
 ### CP3-3: Add Approval struct and approvals field to Task model
 
-**Intent:** Establish the canonical data model for tracking multiple reviewer approvals.
+**Desc:** Add Approval struct and approvals field to Task model
 
-**Changes:**
-- Add `Approval` struct: `Agent string`, `Provider string`, `Timestamp time.Time`
-  (yaml: `agent`, `provider`, `timestamp`)
-- Add `Approvals []Approval` to `Task` (yaml: `approvals,omitempty`)
-- Add `Impact string` to `Task` (yaml: `impact,omitempty`) — current impact classification
-- Keep `ApprovedBy *string` field on Task (set as derived from last approval, removed later
-  in Phase 4 or after migration stabilizes)
-- Helper methods on `*Task`:
-  - `ApprovalCount() int`
-  - `HasProviderDiversity() bool` — true if approvals contain ≥2 distinct providers
-  - `ClearApprovals()` — sets Approvals to nil
-  - `LastApprover() string` — returns agent ID of last approval, empty if none
-- Model-level tests for Approval struct and helpers
+**Done When:** Approval struct with Agent, Provider, Timestamp fields exists in internal/models/task.go. Task has Approvals []Approval field (yaml: approvals,omitempty) and Impact string field (yaml: impact,omitempty). Helper methods ApprovalCount(), HasProviderDiversity(), ClearApprovals(), LastApprover() exist on *Task. ApprovedBy *string field retained for backward compat. TestApprovalHelpers passes covering all helpers including edge cases (empty list, single approval, diverse providers).
 
-**Scope:**
-- `internal/models/task.go` — Approval struct, field, helpers
-- `internal/models/task_test.go` — tests
+**Scope:** internal/models/task.go, internal/models/task_test.go
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Migrate approved_by to approvals[] as canonical representation', New Blackboard Fields
 
 **Depends on:** nothing
 
@@ -119,59 +70,27 @@ multiple approvals with provider diversity constraints before merge eligibility.
 
 ### CP3-4: Add impact field to write-checkpoint operation
 
-**Intent:** Allow coders to declare change impact classification in checkpoints.
+**Desc:** Add impact field to write-checkpoint operation
 
-**Changes:**
-- Add `Impact string` to `WriteCheckpointInput`
-- Validate impact: must be empty (defaults to "standard"), "standard", "significant",
-  or "architecture"
-- Store impact in checkpoint history `Extra` map (`"impact": value`)
-- Add helper: `GetCheckpointImpact(history []TaskHistoryEntry, agentID string) string`
-  — returns impact from the latest checkpoint by the given agent
-- Update MCP handler `handleWriteCheckpoint` to extract `impact` from params
-- Update MCP tool description in `server_registration.go` to document impact parameter
-- Update CLI if `write-checkpoint` has a CLI surface (verify — currently no CLI command
-  for write-checkpoint, only MCP)
+**Done When:** WriteCheckpointInput has Impact string field. Validation accepts empty, standard, significant, architecture and rejects other values. Impact stored in checkpoint history Extra map. GetCheckpointImpact helper returns impact from latest checkpoint. MCP handler extracts impact param. MCP tool description includes impact parameter. TestWriteCheckpointImpact passes for valid and invalid values.
 
-**Scope:**
-- `internal/ops/write_checkpoint.go` — input, validation, storage, helper
-- `internal/mcp/handlers_complex.go` — extract param
-- `internal/mcp/server_registration.go` — tool description
-- Tests for write_checkpoint, MCP handler
+**Scope:** internal/ops/write_checkpoint.go, internal/mcp/handlers_complex.go, internal/mcp/server_registration.go, write_checkpoint tests, MCP handler tests
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Add impact field to checkpoint and verdict tools'
 
 **Depends on:** nothing
 
 ---
 
-### CP3-5: Migrate SubmitVerdict and merge gate from approved_by to approvals[]
+### CP3-5: Migrate SubmitVerdict and merge identity check from approved_by to approvals[]
 
-**Intent:** Switch approval tracking from single-value approved_by to approvals[] list,
-maintaining backward compatibility and updating all read sites.
+**Desc:** Migrate SubmitVerdict and merge identity check from approved_by to approvals[]
 
-**Changes:**
-- In `SubmitVerdict` on APPROVED:
-  - Look up reviewer's provider from agent registry in state
-  - Build `Approval{Agent: agentID, Provider: provider, Timestamp: now}`
-  - Append to `task.Approvals`
-  - Set `task.ApprovedBy = &agentID` (backward compat, derived)
-- In `SubmitVerdict` on REJECTED:
-  - Set `task.Approvals = nil` (clear all approvals — spec: both reviewers re-review)
-- In `handleApprovedMerges` (`internal/agent/claiming.go`):
-  - Replace `task.ApprovedBy != nil && *task.ApprovedBy == agentID`
-    with `task.LastApprover() == agentID`
-- In `hasPendingMerges` (`internal/agent/claiming.go`):
-  - Same condition update
-- On merge: log provider diversity status in history entry Extra
-  (e.g., `"provider_diversity": true/false, "providers": ["claude", "codex"]`)
-- Update `VerdictResult` to include approval metadata
-- Update CLI `printVerdictResult` and MCP response for approval info
+**Done When:** SubmitVerdict on APPROVED builds Approval with agent, provider (from state.Agents), timestamp and appends to task.Approvals. Sets task.ApprovedBy as derived. SubmitVerdict on REJECTED clears task.Approvals to nil. handleApprovedMerges uses task.LastApprover() == agentID instead of task.ApprovedBy check. hasPendingMerges uses same condition. TestSubmitVerdictApprovals and TestMergeIdentityCheck pass.
 
-**Scope:**
-- `internal/ops/submit_verdict.go` — core migration
-- `internal/agent/claiming.go` — merge gate condition
-- `internal/commands/submit_verdict.go` — CLI output
-- `internal/mcp/handlers_mutation.go` — MCP response (if needed)
-- Tests in all affected packages
+**Scope:** internal/ops/submit_verdict.go, internal/agent/claiming.go, tests
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Migrate approved_by to approvals[]', 'Rejection at any stage clears approvals[]'
 
 **Depends on:** CP3-3
 
@@ -179,71 +98,27 @@ maintaining backward compatibility and updating all read sites.
 
 ### CP3-6: Implement quorum evaluation and impact upgrade in SubmitVerdict
 
-**Intent:** When a verdict is approved, evaluate quorum from review-policy to decide
-whether the task transitions to approved or partially_approved. Support impact upgrade
-by reviewers.
+**Desc:** Implement quorum evaluation and impact upgrade in SubmitVerdict
 
-**Changes:**
-- Add `impact string` parameter to `SubmitVerdict` function signature
-- In the MCP handler `handleSubmitVerdict`: extract optional `impact` from params, pass
-  to `SubmitVerdict`
-- In CLI `submitVerdictCmd`: add optional `--impact` flag, pass to command
-- In `commands.SubmitVerdictCommand`: accept and pass impact
-- In `SubmitVerdict` on APPROVED:
-  1. Determine base impact: max of checkpoint impact (via `GetCheckpointImpact`),
-     current `task.Impact`, and verdict impact parameter
-  2. Validate: impact can only escalate (new >= current). Values ordered:
-     standard < significant < architecture
-  3. Store resolved impact on `task.Impact`
-  4. Load review-policy via resolver: `EffectiveQuorum(task.RolePair, resolvedImpact)`
-  5. If `len(task.Approvals) >= quorum`: transition to approved (existing path)
-  6. If `len(task.Approvals) < quorum`: transition to `partially_approved`
-     (new path — uses `PartiallyApprovedStatus` from resolver)
-- In `SubmitVerdict` when task is in `reviewing_2` state (second review):
-  - Validate task is in `reviewing_2` status (in addition to `reviewing`)
-  - On APPROVED: append approval, check quorum → should now be met → transition to approved
-  - On REJECTED: clear approvals, transition to rejected
-- Update `VerdictResult` with quorum-related info (partially_approved flag, quorum progress)
-- Update MCP tool description for submit-verdict to document impact parameter
+**Done When:** SubmitVerdict accepts optional impact parameter. Impact escalation enforced (new >= current, ordered: standard < significant < architecture). Resolved impact stored on task.Impact. On APPROVED: EffectiveQuorum evaluated; if len(approvals) < quorum, task transitions to partially_approved instead of approved. On second approval (reviewing_2 state), transitions to approved when quorum met. MCP handler and CLI pass impact. MCP tool description updated. TestQuorumEvaluation passes with scenarios: quorum-1 standard path, quorum-2 both reviewers approve, impact upgrade triggers partial approval, rejection clears and restarts.
 
-**Scope:**
-- `internal/ops/submit_verdict.go` — quorum evaluation, impact handling
-- `internal/mcp/handlers_mutation.go` — extract impact param
-- `internal/mcp/server_registration.go` — tool description
-- `internal/commands/submit_verdict.go` — accept impact
-- `cmd/liza/cmd_review.go` — --impact flag
-- Tests: comprehensive quorum scenarios
+**Scope:** internal/ops/submit_verdict.go, internal/mcp/handlers_mutation.go, internal/mcp/server_registration.go, internal/commands/submit_verdict.go, cmd/liza/cmd_review.go, tests
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Add impact field to checkpoint and verdict tools', 'Implement PARTIALLY_APPROVED → REVIEWING_2 → APPROVED/REJECTED', 'Impact upgrade triggers quorum recalculation mid-review'
 
 **Depends on:** CP3-1, CP3-2, CP3-4, CP3-5
 
 ---
 
-### CP3-7: Extend ClaimReviewerTask for partially-approved tasks
+### CP3-7: Extend ClaimReviewerTask for partially-approved tasks with priority and diversity
 
-**Intent:** Allow reviewers to claim partially-approved tasks, with priority over fresh
-submissions and provider diversity preference.
+**Desc:** Extend ClaimReviewerTask for partially-approved tasks with priority and diversity
 
-**Changes:**
-- In `isClaimablePipeline` (reviewer case): add `partially_approved` as claimable status
-  alongside `submitted`
-- In `ClaimReviewerTask`:
-  - When claiming from `partially_approved` state: transition to `reviewing_2`
-    (not `reviewing`)
-  - Detect task state to choose correct target status
-- Claim priority (in candidate selection):
-  - Partition candidates into two tiers: `PARTIALLY_APPROVED` and `SUBMITTED`
-  - Select from `PARTIALLY_APPROVED` first (completing quorum > starting new review)
-  - Within each tier, maintain existing priority-based selection
-- Provider diversity preference:
-  - Among candidates at same priority, prefer tasks where the claiming reviewer's
-    provider differs from existing approvals' providers
-  - This is a soft preference — if no diversity-satisfying task exists, claim any
-  - Requires reading `Agent.Provider` from state for the claiming agent
+**Done When:** isClaimablePipeline returns true for reviewer role when task status is partially_approved. ClaimReviewerTask transitions partially_approved → reviewing_2. Claim priority: partially_approved candidates selected before submitted candidates at same priority level. Provider diversity: among equal-priority candidates, tasks where claiming reviewer's provider differs from existing approvals are preferred (soft preference). TestClaimPartiallyApproved, TestClaimPriority, TestClaimDiversity pass.
 
-**Scope:**
-- `internal/ops/claim_reviewer_task.go` — claim logic, priority, diversity
-- `internal/models/task.go` — IsClaimable extension
-- Tests for all claim scenarios (partially-approved, diversity, priority)
+**Scope:** internal/ops/claim_reviewer_task.go, internal/models/task.go, tests
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Extend reviewing_by / review_lease_expires to work for second review claim', 'Implement reviewer claim priority: PARTIALLY_APPROVED first, then diversity-satisfying tasks'
 
 **Depends on:** CP3-2, CP3-3
 
@@ -251,20 +126,13 @@ submissions and provider diversity preference.
 
 ### CP3-8: Extend stale review claim clearing for reviewing_2 state
 
-**Intent:** Handle expired reviewer leases on tasks in reviewing_2 by reverting to
-partially_approved (not submitted).
+**Desc:** Extend stale review claim clearing for reviewing_2 state
 
-**Changes:**
-- In `ClearStaleReviewClaims`: detect tasks in `reviewing_2` state with expired
-  `ReviewLeaseExpires`
-- Revert `reviewing_2` → `partially_approved` (preserve existing approvals)
-- Revert `reviewing` → `submitted` (existing behavior, unchanged)
-- The distinction requires knowing which reviewing state the task is in and using
-  the correct revert target
+**Done When:** ClearStaleReviewClaims detects tasks in reviewing_2 status with expired ReviewLeaseExpires. Expired reviewing_2 tasks revert to partially_approved (not submitted). Expired reviewing tasks still revert to submitted (unchanged). TestClearStaleReviewingTwo passes.
 
-**Scope:**
-- `internal/ops/clear_stale_review_claims.go` — extended clearing logic
-- Tests for stale clearing of reviewing_2
+**Scope:** internal/ops/clear_stale_review_claims.go, tests
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Extend reviewing_by / review_lease_expires to work for second review claim' (stale lease handling implied)
 
 **Depends on:** CP3-2
 
@@ -272,22 +140,29 @@ partially_approved (not submitted).
 
 ### CP3-9: Update diagnostics for quorum states
 
-**Intent:** Ensure reviewer work detection and diagnostics account for quorum states.
+**Desc:** Update diagnostics for quorum states
 
-**Changes:**
-- `CountReviewableTasks`: include `partially_approved` tasks as claimable
-  (this follows automatically from IsClaimable changes in CP3-7, but verify)
-- `GetReviewerWorkDiagnostics`: report `partially_approved` and `reviewing_2` states
-  in diagnostic output — add categories for "partially approved (awaiting 2nd review)"
-  and "in second review"
-- Ensure `liza status` output correctly displays the new states when present
+**Done When:** CountReviewableTasks counts partially_approved tasks (follows from IsClaimable change in CP3-7). GetReviewerWorkDiagnostics reports partially_approved tasks as 'awaiting second review' and reviewing_2 tasks as 'in second review' in diagnostic output. TestDiagnosticsQuorumStates passes.
 
-**Scope:**
-- `internal/models/diagnostics.go` — diagnostic functions
-- `internal/ops/status.go` — status display (if quorum states need special formatting)
-- Tests for diagnostics with quorum states
+**Scope:** internal/models/diagnostics.go, internal/ops/status.go (if needed), diagnostics tests
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: state machine extension (diagnostics correctness for new states)
 
 **Depends on:** CP3-2, CP3-7
+
+---
+
+### CP3-10: Implement best-effort provider-diversity merge gate
+
+**Desc:** Implement best-effort provider-diversity merge gate
+
+**Done When:** handleApprovedMerges loads review-policy for the task's role-pair via EffectiveQuorum. Defense-in-depth: if task.ApprovalCount() < effective quorum, logs anomaly and skips merge. When provider-diversity is 'preferred': if task.HasProviderDiversity() is true, merge proceeds and merge history Extra includes diversity_achieved: true. If task.HasProviderDiversity() is false, checks all registered reviewer agents' providers for the role-pair — if all share one provider, merge proceeds and merge history Extra includes diversity_not_achievable: true with reason (e.g. 'all reviewers use provider X'). If different providers exist but diversity was not achieved, merge proceeds and merge history Extra includes diversity_not_met: true. When provider-diversity is not configured, merge proceeds without diversity fields. TestMergeGateDiversityAchieved, TestMergeGateDiversityNotAchievable, TestMergeGateQuorumDefenseInDepth, TestMergeGateDiversityNotConfigured pass.
+
+**Scope:** internal/agent/claiming.go, internal/ops/wt_merge.go (merge history Extra parameter), tests
+
+**Spec Ref:** specs/build/3 - Declarative Role Definitions.md — Phase 3: 'Modify reviewer PreWork merge gate to check quorum and provider diversity (best-effort)', lines 300-306
+
+**Depends on:** CP3-1, CP3-3, CP3-5
 
 ---
 
@@ -312,11 +187,14 @@ CP3-4         CP3-5         │       │
   │              │          │       │
   │              v          │       │
   └──────────►CP3-6◄───────┘───────┘
+                 │
+              CP3-10◄──CP3-1, CP3-3, CP3-5
 ```
 
 **Critical path:** CP3-1 → CP3-2 → CP3-7 → CP3-9 (state machine + claiming)
 **Parallel paths:** CP3-3 and CP3-4 can start independently alongside CP3-1
 **Integration:** CP3-6 requires all of CP3-1, CP3-2, CP3-4, CP3-5
+**Merge gate:** CP3-10 requires CP3-1, CP3-3, CP3-5
 
 ## Spec Coverage Verification
 
@@ -330,7 +208,8 @@ CP3-4         CP3-5         │       │
 | `PARTIALLY_APPROVED → REVIEWING_2 → APPROVED/REJECTED` transitions | CP3-2 (map), CP3-6 (verdict), CP3-7 (claim) |
 | Extend `reviewing_by`/`review_lease_expires` for second claim | CP3-7 |
 | Rejection clears `approvals[]` | CP3-5 |
-| Merge gate checks quorum + provider diversity | CP3-5 (condition), CP3-6 (quorum) |
+| Modify reviewer PreWork merge gate: quorum + provider diversity (best-effort) | CP3-10 |
+| 'All reviewers share one provider' fallback logic | CP3-10 |
 | Reviewer claim priority: `PARTIALLY_APPROVED` first | CP3-7 |
 | Provider diversity preference in claims | CP3-7 |
 | Impact upgrade triggers quorum recalculation | CP3-6 |
