@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -121,6 +122,7 @@ func (bb *Blackboard) Read() (*models.State, error) {
 		return nil, err
 	}
 
+	normalizeAgentRoles(&state)
 	return &state, nil
 }
 
@@ -180,6 +182,7 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 		return nil, fmt.Errorf("failed to parse state.yaml: %w", err)
 	}
 
+	normalizeAgentRoles(&state)
 	return &state, nil
 }
 
@@ -266,6 +269,8 @@ func (bb *Blackboard) Modify(fn func(*models.State) error) error {
 			return fmt.Errorf("failed to parse state: %w", err)
 		}
 
+		normalizeAgentRoles(&state)
+
 		if err := fn(&state); err != nil {
 			return fmt.Errorf("modification function failed: %w", err)
 		}
@@ -339,4 +344,15 @@ func (bb *Blackboard) UpdateAgent(agentID string, fn func(*models.Agent) error) 
 // GetStatePath returns the path to the state file.
 func (bb *Blackboard) GetStatePath() string {
 	return bb.statePath
+}
+
+// normalizeAgentRoles converts legacy underscore-form role names to hyphenated
+// form in-memory. Does not write back to disk — normalization is read-path only.
+func normalizeAgentRoles(state *models.State) {
+	for id, agent := range state.Agents {
+		if strings.Contains(agent.Role, "_") {
+			agent.Role = strings.ReplaceAll(agent.Role, "_", "-")
+			state.Agents[id] = agent
+		}
+	}
 }

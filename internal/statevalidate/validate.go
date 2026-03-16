@@ -42,6 +42,7 @@ func ValidateStateFile(statePath string, skipSpecFileCheck bool, warnWriter io.W
 	}
 
 	validators := []func(*models.State, string, bool) error{
+		validateRoleNames,
 		validateRequiredFields,
 		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 			return validateTaskStates(state, projectRoot, skipSpecFileCheck, resolver)

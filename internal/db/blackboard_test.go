@@ -1735,3 +1735,179 @@ sprint:
 		t.Errorf("Unknown field lost during Read+Write round-trip:\n%s", string(data))
 	}
 }
+
+// TestBlackboardReadNormalizesUnderscoreRoles verifies that Read returns
+// hyphenated Agent.Role even when state.yaml contains underscore-form roles.
+func TestBlackboardReadNormalizesUnderscoreRoles(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	// Write raw YAML with underscore-form role
+	rawYAML := `version: 1
+goal:
+    id: goal-1
+    description: Test
+    spec_ref: spec.md
+    created: 2025-01-17T14:00:00Z
+    status: IN_PROGRESS
+tasks: []
+agents:
+    reviewer-1:
+        role: code_reviewer
+        status: IDLE
+        heartbeat: 2025-01-17T14:00:00Z
+        iterations_total: 0
+        context_percent: 0
+    planner-1:
+        role: epic_plan_reviewer
+        status: IDLE
+        heartbeat: 2025-01-17T14:00:00Z
+        iterations_total: 0
+        context_percent: 0
+    coder-1:
+        role: coder
+        status: IDLE
+        heartbeat: 2025-01-17T14:00:00Z
+        iterations_total: 0
+        context_percent: 0
+config:
+    max_coder_iterations: 5
+    max_review_cycles: 3
+    heartbeat_interval: 30
+    lease_duration: 300
+    coder_poll_interval: 10
+    coder_max_wait: 600
+    integration_branch: main
+`
+	if err := os.WriteFile(statePath, []byte(rawYAML), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+
+	// Read should normalize underscore roles to hyphenated
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+
+	tests := []struct {
+		agentID  string
+		wantRole string
+	}{
+		{"reviewer-1", "code-reviewer"},
+		{"planner-1", "epic-plan-reviewer"},
+		{"coder-1", "coder"}, // single-word, unchanged
+	}
+
+	for _, tt := range tests {
+		agent, ok := state.Agents[tt.agentID]
+		if !ok {
+			t.Fatalf("agent %s not found", tt.agentID)
+		}
+		if agent.Role != tt.wantRole {
+			t.Errorf("agent %s: got role %q, want %q", tt.agentID, agent.Role, tt.wantRole)
+		}
+	}
+}
+
+// TestBlackboardReadCachedNormalizesUnderscoreRoles verifies that ReadCached
+// also normalizes underscore-form roles.
+func TestBlackboardReadCachedNormalizesUnderscoreRoles(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	rawYAML := `version: 1
+goal:
+    id: goal-1
+    description: Test
+    spec_ref: spec.md
+    created: 2025-01-17T14:00:00Z
+    status: IN_PROGRESS
+tasks: []
+agents:
+    reviewer-1:
+        role: us_reviewer
+        status: IDLE
+        heartbeat: 2025-01-17T14:00:00Z
+        iterations_total: 0
+        context_percent: 0
+config:
+    max_coder_iterations: 5
+    max_review_cycles: 3
+    heartbeat_interval: 30
+    lease_duration: 300
+    coder_poll_interval: 10
+    coder_max_wait: 600
+    integration_branch: main
+`
+	if err := os.WriteFile(statePath, []byte(rawYAML), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+
+	state, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("ReadCached failed: %v", err)
+	}
+
+	agent, ok := state.Agents["reviewer-1"]
+	if !ok {
+		t.Fatal("agent reviewer-1 not found")
+	}
+	if agent.Role != "us-reviewer" {
+		t.Errorf("ReadCached: got role %q, want %q", agent.Role, "us-reviewer")
+	}
+}
+
+// TestBlackboardModifyNormalizesUnderscoreRoles verifies that Modify also
+// normalizes underscore-form roles before passing the state to the callback.
+func TestBlackboardModifyNormalizesUnderscoreRoles(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	rawYAML := `version: 1
+goal:
+    id: goal-1
+    description: Test
+    spec_ref: spec.md
+    created: 2025-01-17T14:00:00Z
+    status: IN_PROGRESS
+tasks: []
+agents:
+    reviewer-1:
+        role: code_plan_reviewer
+        status: IDLE
+        heartbeat: 2025-01-17T14:00:00Z
+        iterations_total: 0
+        context_percent: 0
+config:
+    max_coder_iterations: 5
+    max_review_cycles: 3
+    heartbeat_interval: 30
+    lease_duration: 300
+    coder_poll_interval: 10
+    coder_max_wait: 600
+    integration_branch: main
+`
+	if err := os.WriteFile(statePath, []byte(rawYAML), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+
+	var observedRole string
+	err := bb.Modify(func(state *models.State) error {
+		agent := state.Agents["reviewer-1"]
+		observedRole = agent.Role
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Modify failed: %v", err)
+	}
+
+	if observedRole != "code-plan-reviewer" {
+		t.Errorf("Modify callback: got role %q, want %q", observedRole, "code-plan-reviewer")
+	}
+}
