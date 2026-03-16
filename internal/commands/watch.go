@@ -16,7 +16,6 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 const (
@@ -623,16 +622,13 @@ func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache ma
 			continue
 		}
 
-		// Check doer: skip early if role is registered, then convert to workflow
-		// form for IsClaimable (which does dependency resolution).
-		doerWorkflow, err := roles.ToWorkflow(doerRuntime)
-		if err == nil && !registeredRoles[doerRuntime] && task.IsClaimable(doerWorkflow, state.Tasks, pr) {
+		// Check doer: skip if role is registered, use role directly for IsClaimable.
+		if !registeredRoles[doerRuntime] && task.IsClaimable(doerRuntime, state.Tasks, pr) {
 			missingRoleTasks[doerRuntime] = append(missingRoleTasks[doerRuntime], task.ID)
 		}
 
 		// Check reviewer: same pattern.
-		reviewerWorkflow, err := roles.ToWorkflow(reviewerRuntime)
-		if err == nil && !registeredRoles[reviewerRuntime] && task.IsClaimable(reviewerWorkflow, state.Tasks, pr) {
+		if !registeredRoles[reviewerRuntime] && task.IsClaimable(reviewerRuntime, state.Tasks, pr) {
 			missingRoleTasks[reviewerRuntime] = append(missingRoleTasks[reviewerRuntime], task.ID)
 		}
 	}

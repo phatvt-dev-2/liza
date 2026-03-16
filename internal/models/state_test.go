@@ -333,8 +333,8 @@ func TestRoleConstants(t *testing.T) {
 	if RoleCoder != "coder" {
 		t.Errorf("RoleCoder = %q, want %q", RoleCoder, "coder")
 	}
-	if RoleCodeReviewer != "code_reviewer" {
-		t.Errorf("RoleCodeReviewer = %q, want %q", RoleCodeReviewer, "code_reviewer")
+	if RoleCodeReviewer != "code-reviewer" {
+		t.Errorf("RoleCodeReviewer = %q, want %q", RoleCodeReviewer, "code-reviewer")
 	}
 	if RoleOrchestrator != "orchestrator" {
 		t.Errorf("RoleOrchestrator = %q, want %q", RoleOrchestrator, "orchestrator")
@@ -1253,11 +1253,11 @@ func TestRolePairFieldOmittedWhenEmpty(t *testing.T) {
 }
 
 func TestRoleConstants_CodePlanning(t *testing.T) {
-	if RoleCodePlanner != "code_planner" {
-		t.Errorf("RoleCodePlanner = %q, want %q", RoleCodePlanner, "code_planner")
+	if RoleCodePlanner != "code-planner" {
+		t.Errorf("RoleCodePlanner = %q, want %q", RoleCodePlanner, "code-planner")
 	}
-	if RoleCodePlanReviewer != "code_plan_reviewer" {
-		t.Errorf("RoleCodePlanReviewer = %q, want %q", RoleCodePlanReviewer, "code_plan_reviewer")
+	if RoleCodePlanReviewer != "code-plan-reviewer" {
+		t.Errorf("RoleCodePlanReviewer = %q, want %q", RoleCodePlanReviewer, "code-plan-reviewer")
 	}
 }
 

@@ -296,14 +296,14 @@ func TestNewRoleStrategy(t *testing.T) {
 		wantType     string // "doer", "reviewer", "orchestrator"
 		wantWorkflow string
 	}{
-		{"coder", "doer", roles.WorkflowCoder},
-		{"code-planner", "doer", roles.WorkflowCodePlanner},
-		{"epic-planner", "doer", roles.WorkflowEpicPlanner},
-		{"us-writer", "doer", roles.WorkflowUSWriter},
-		{"code-reviewer", "reviewer", roles.WorkflowCodeReviewer},
-		{"code-plan-reviewer", "reviewer", roles.WorkflowCodePlanReviewer},
-		{"epic-plan-reviewer", "reviewer", roles.WorkflowEpicPlanReviewer},
-		{"us-reviewer", "reviewer", roles.WorkflowUSReviewer},
+		{"coder", "doer", roles.Coder},
+		{"code-planner", "doer", roles.CodePlanner},
+		{"epic-planner", "doer", roles.EpicPlanner},
+		{"us-writer", "doer", roles.USWriter},
+		{"code-reviewer", "reviewer", roles.CodeReviewer},
+		{"code-plan-reviewer", "reviewer", roles.CodePlanReviewer},
+		{"epic-plan-reviewer", "reviewer", roles.EpicPlanReviewer},
+		{"us-reviewer", "reviewer", roles.USReviewer},
 		{"orchestrator", "orchestrator", ""},
 	}
 
@@ -432,7 +432,7 @@ pipeline:
 	if ds.role != "data-engineer" {
 		t.Errorf("role = %q, want %q", ds.role, "data-engineer")
 	}
-	// Custom role uses its own name as workflowRole (no entry in roles.ToWorkflow)
+	// Custom role uses its own name as workflowRole (unified naming)
 	if ds.workflowRole != "data-engineer" {
 		t.Errorf("workflowRole = %q, want %q", ds.workflowRole, "data-engineer")
 	}

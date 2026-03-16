@@ -1,10 +1,6 @@
-// Package roles provides role name constants and mapping between runtime
-// role names (used in agent config/CLI) and workflow role names (used in task definitions).
+// Package roles provides unified role name constants used throughout the system.
+// All roles use the hyphenated form (e.g. "code-reviewer") as the single canonical name.
 package roles
-
-import (
-	"fmt"
-)
 
 // Claim-type selectors used by ReleaseClaim to indicate which claim slot to release.
 // These are NOT role names — a code-planner releases its claim with ClaimDoer,
@@ -15,85 +11,66 @@ const (
 	ClaimBoth     = "both"
 )
 
-// Workflow role names used in task workflow definitions.
-// These are the underscore forms stored in models.
+// Unified role name constants. Single hyphenated form used everywhere.
 const (
-	WorkflowCoder            = "coder"
-	WorkflowCodeReviewer     = "code_reviewer"
-	WorkflowOrchestrator     = "orchestrator"
-	WorkflowCodePlanner      = "code_planner"
-	WorkflowCodePlanReviewer = "code_plan_reviewer"
-	WorkflowEpicPlanner      = "epic_planner"
-	WorkflowEpicPlanReviewer = "epic_plan_reviewer"
-	WorkflowUSWriter         = "us_writer"
-	WorkflowUSReviewer       = "us_reviewer"
+	Coder            = "coder"
+	CodeReviewer     = "code-reviewer"
+	Orchestrator     = "orchestrator"
+	CodePlanner      = "code-planner"
+	CodePlanReviewer = "code-plan-reviewer"
+	EpicPlanner      = "epic-planner"
+	EpicPlanReviewer = "epic-plan-reviewer"
+	USWriter         = "us-writer"
+	USReviewer       = "us-reviewer"
 )
 
-// runtimeToWorkflow maps runtime role names to workflow role names.
-var runtimeToWorkflow = map[string]string{
-	"coder":              WorkflowCoder,
-	"code-reviewer":      WorkflowCodeReviewer,
-	"orchestrator":       WorkflowOrchestrator,
-	"code-planner":       WorkflowCodePlanner,
-	"code-plan-reviewer": WorkflowCodePlanReviewer,
-	"epic-planner":       WorkflowEpicPlanner,
-	"epic-plan-reviewer": WorkflowEpicPlanReviewer,
-	"us-writer":          WorkflowUSWriter,
-	"us-reviewer":        WorkflowUSReviewer,
+// validRoles is the set of all valid role names.
+var validRoles = map[string]bool{
+	Coder:            true,
+	CodeReviewer:     true,
+	Orchestrator:     true,
+	CodePlanner:      true,
+	CodePlanReviewer: true,
+	EpicPlanner:      true,
+	EpicPlanReviewer: true,
+	USWriter:         true,
+	USReviewer:       true,
 }
 
-// workflowToRuntime maps workflow role names to runtime role names.
-var workflowToRuntime = map[string]string{
-	WorkflowCoder:            "coder",
-	WorkflowCodeReviewer:     "code-reviewer",
-	WorkflowOrchestrator:     "orchestrator",
-	WorkflowCodePlanner:      "code-planner",
-	WorkflowCodePlanReviewer: "code-plan-reviewer",
-	WorkflowEpicPlanner:      "epic-planner",
-	WorkflowEpicPlanReviewer: "epic-plan-reviewer",
-	WorkflowUSWriter:         "us-writer",
-	WorkflowUSReviewer:       "us-reviewer",
+// IsValid checks if the given role is a valid role name.
+func IsValid(role string) bool {
+	return validRoles[role]
 }
 
-// ToWorkflow converts a runtime role name to its workflow equivalent.
-// Returns error if the role is not recognized.
-func ToWorkflow(runtimeRole string) (string, error) {
-	if workflow, ok := runtimeToWorkflow[runtimeRole]; ok {
-		return workflow, nil
-	}
-	return "", fmt.Errorf("unknown runtime role: %s", runtimeRole)
-}
-
-// ToRuntime converts a workflow role name to its runtime equivalent.
-// Returns error if the role is not recognized.
-func ToRuntime(workflowRole string) (string, error) {
-	if runtime, ok := workflowToRuntime[workflowRole]; ok {
-		return runtime, nil
-	}
-	return "", fmt.Errorf("unknown workflow role: %s", workflowRole)
-}
-
-// IsValidWorkflow checks if the given role is a valid workflow role.
-func IsValidWorkflow(role string) bool {
-	_, ok := workflowToRuntime[role]
-	return ok
-}
-
-// AllWorkflow returns all valid workflow role names.
-func AllWorkflow() []string {
+// All returns all valid role names.
+func All() []string {
 	return []string{
-		WorkflowCoder, WorkflowCodeReviewer, WorkflowOrchestrator,
-		WorkflowCodePlanner, WorkflowCodePlanReviewer,
-		WorkflowEpicPlanner, WorkflowEpicPlanReviewer,
-		WorkflowUSWriter, WorkflowUSReviewer,
+		Coder, CodeReviewer, Orchestrator,
+		CodePlanner, CodePlanReviewer,
+		EpicPlanner, EpicPlanReviewer,
+		USWriter, USReviewer,
 	}
+}
+
+// underscoreToHyphenated maps deprecated underscore-form role names to their
+// canonical hyphenated form. Used only for migration/normalization.
+var underscoreToHyphenated = map[string]string{
+	"coder":              Coder,
+	"code_reviewer":      CodeReviewer,
+	"orchestrator":       Orchestrator,
+	"code_planner":       CodePlanner,
+	"code_plan_reviewer": CodePlanReviewer,
+	"epic_planner":       EpicPlanner,
+	"epic_plan_reviewer": EpicPlanReviewer,
+	"us_writer":          USWriter,
+	"us_reviewer":        USReviewer,
 }
 
 // NormalizeRoleName converts a known underscore-form role name to its
 // canonical hyphenated form. Unknown names are returned unchanged.
 func NormalizeRoleName(name string) string {
-	if runtime, ok := workflowToRuntime[name]; ok {
-		return runtime
+	if normalized, ok := underscoreToHyphenated[name]; ok {
+		return normalized
 	}
 	return name
 }

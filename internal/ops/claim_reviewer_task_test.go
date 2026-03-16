@@ -324,7 +324,7 @@ func TestClaimReviewerTask_MissingReviewCommit(t *testing.T) {
 
 func TestClaimReviewerTask_CodePlanReviewerInference(t *testing.T) {
 	// Verifies that a code-plan-reviewer agent (identified by agent ID only,
-	// no explicit WorkflowRole) gets correct workflow role inference via roles.ToWorkflow.
+	// no explicit WorkflowRole) gets correct role inference from agent ID.
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -351,7 +351,7 @@ func TestClaimReviewerTask_CodePlanReviewerInference(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	// No explicit WorkflowRole — inference from agent ID must use roles.ToWorkflow
+	// No explicit WorkflowRole — inference from agent ID
 	result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
 		ProjectRoot:   tmpDir,
 		AgentID:       "code-plan-reviewer-1",

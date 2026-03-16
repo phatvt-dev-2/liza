@@ -51,12 +51,10 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 
 	workflowRole := input.WorkflowRole
 	if workflowRole == "" {
-		// Infer workflow role from agent ID via roles.ToWorkflow; default to code reviewer.
+		// Infer role from agent ID; default to code reviewer.
 		role, err := identity.ExtractRole(input.AgentID)
-		if err == nil {
-			if wf, convErr := roles.ToWorkflow(role); convErr == nil {
-				workflowRole = wf
-			}
+		if err == nil && roles.IsValid(role) {
+			workflowRole = role
 		}
 		if workflowRole == "" {
 			workflowRole = models.RoleCodeReviewer

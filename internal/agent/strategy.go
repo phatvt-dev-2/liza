@@ -8,7 +8,6 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // RoleStrategy encapsulates all role-specific behavior in the supervisor loop.
@@ -52,13 +51,8 @@ func NewRoleStrategy(role string, resolver *pipeline.Resolver) (RoleStrategy, er
 		return nil, fmt.Errorf("unknown role %q: %w", role, err)
 	}
 
-	// Derive workflowRole for backward compatibility (Phase 4 removes this).
-	// For known roles, use the canonical mapping; for custom roles, use the
-	// role name itself as the workflow name.
-	workflowRole, wfErr := roles.ToWorkflow(role)
-	if wfErr != nil {
-		workflowRole = role
-	}
+	// After dual-name elimination, workflowRole == role (single canonical form).
+	workflowRole := role
 
 	switch roleType {
 	case "doer":

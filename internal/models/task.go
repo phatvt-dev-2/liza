@@ -15,18 +15,18 @@ const (
 	TaskTypeCoding TaskType = "coding"
 )
 
-// Role name constants used in task workflow definitions.
+// Role name constants used in task definitions.
 // These are aliases for the canonical definitions in the roles package.
 const (
-	RoleCoder            = roles.WorkflowCoder
-	RoleCodeReviewer     = roles.WorkflowCodeReviewer
-	RoleOrchestrator     = roles.WorkflowOrchestrator
-	RoleCodePlanner      = roles.WorkflowCodePlanner
-	RoleCodePlanReviewer = roles.WorkflowCodePlanReviewer
-	RoleEpicPlanner      = roles.WorkflowEpicPlanner
-	RoleEpicPlanReviewer = roles.WorkflowEpicPlanReviewer
-	RoleUSWriter         = roles.WorkflowUSWriter
-	RoleUSReviewer       = roles.WorkflowUSReviewer
+	RoleCoder            = roles.Coder
+	RoleCodeReviewer     = roles.CodeReviewer
+	RoleOrchestrator     = roles.Orchestrator
+	RoleCodePlanner      = roles.CodePlanner
+	RoleCodePlanReviewer = roles.CodePlanReviewer
+	RoleEpicPlanner      = roles.EpicPlanner
+	RoleEpicPlanReviewer = roles.EpicPlanReviewer
+	RoleUSWriter         = roles.USWriter
+	RoleUSReviewer       = roles.USReviewer
 )
 
 // taskWorkflows maps each TaskType to its ordered role sequence.
@@ -283,7 +283,7 @@ func (t *Task) TransitionWith(to TaskStatus, transitions map[TaskStatus][]TaskSt
 
 // IsClaimable checks if a task is claimable by the given role based on its
 // pipeline-defined states, type, and dependencies.
-// The role parameter uses workflow form (e.g. "code_reviewer").
+// The role parameter uses the unified hyphenated form (e.g. "code-reviewer").
 func (t *Task) IsClaimable(role string, allTasks []Task, pr PipelineResolver) bool {
 	if t.RolePair == "" || pr == nil {
 		return false
@@ -296,12 +296,6 @@ func (t *Task) IsClaimable(role string, allTasks []Task, pr PipelineResolver) bo
 
 // isClaimablePipeline checks claimability using pipeline-resolved states.
 func (t *Task) isClaimablePipeline(role string, pr PipelineResolver) bool {
-	// Convert workflow role to runtime form for comparison with pipeline roles.
-	runtimeRole, err := roles.ToRuntime(role)
-	if err != nil {
-		return false
-	}
-
 	doerRole, err := pr.DoerRole(t.RolePair)
 	if err != nil {
 		return false
@@ -311,7 +305,7 @@ func (t *Task) isClaimablePipeline(role string, pr PipelineResolver) bool {
 		return false
 	}
 
-	switch runtimeRole {
+	switch role {
 	case doerRole:
 		initial, err := pr.InitialStatus(t.RolePair)
 		if err != nil {

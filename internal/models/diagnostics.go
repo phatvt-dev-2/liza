@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // CountClaimableTasks counts tasks claimable by the given role.
@@ -160,9 +158,7 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 			if err != nil {
 				continue
 			}
-			// Convert to workflow form for comparison with the caller's role.
-			wfRole, err := roles.ToWorkflow(reviewerRole)
-			if err != nil || wfRole != RoleCodeReviewer {
+			if reviewerRole != RoleCodeReviewer {
 				continue
 			}
 
