@@ -1,221 +1,337 @@
-# Implementation Plan: Declarative Roles Fixes
+# Implementation Plan: Dual Name Elimination (Phase 4)
 
-Spec: /home/tangi/Workspace/liza/todo-mas.md
+Spec: specs/build/3 - Declarative Role Definitions.md#phase-4-dual-name-elimination
 
-## Revision Notes (Iteration 4)
+## Context
 
-Addresses iteration 3 rejection blocker:
-- **CP9 scope too broad** — CP9 broadened the `config.Role == "coder"` gate to `roleType == "doer"` for all doer roles. The spec item is narrowly about `task.IntegrationFix` not being copied into `RoleContextData` for the coder prompt path. The production pipeline only includes `integration-fix` in coder context-sections (`pipeline.yaml:212-217`), and the existing gate is coder-specific (`prompt.go:149-156`). Narrowed CP9 to add the missing `data.IntegrationFix` assignment inside the existing coder block without changing the gate condition.
+Today, roles have two name forms:
+- **Runtime** (hyphenated): `code-reviewer`, `code-planner`, `epic-plan-reviewer`
+- **Workflow** (underscore): `code_reviewer`, `code_planner`, `epic_plan_reviewer`
 
-Prior iteration fixes (still in effect):
-1. **CP4 fallback contradiction** — Removed the fallback clause; uses `roles.ToWorkflow(role)` only.
-2. **CP2/CP8 overlap** — Merged old CP2 (worktree cleanup) and old CP8 (nil-resolver log) into new CP2.
-3. **CP7 missing test file** — Added `internal/mcp/server_test.go` to CP7 scope.
-4. **CP8 scope/test mismatch** — Resolved by merge into CP2.
+The workflow form exists because task definitions originally used underscore names while
+the CLI used hyphenated names. With declarative roles (Phases 1-3), the canonical name
+is the YAML key (hyphenated). Phase 4 eliminates the workflow form entirely.
 
----
+### Current dual-name machinery
 
-## Phase 1 -- Hardcoded role names and resolver-based classification
+| Location | What | Purpose |
+|----------|------|---------|
+| `internal/roles/roles.go:20-30` | `Workflow*` constants (9) | Underscore-form role names |
+| `internal/roles/roles.go:33-56` | `runtimeToWorkflow` / `workflowToRuntime` maps | Bidirectional mapping |
+| `internal/roles/roles.go:60-74` | `ToWorkflow()` / `ToRuntime()` | Conversion functions |
+| `internal/roles/roles.go:77-90` | `IsValidWorkflow()` / `AllWorkflow()` | Validation/enumeration |
+| `internal/models/task.go:20-29` | `Role*` constants aliased to `roles.Workflow*` | Task-model role names |
+| `internal/agent/strategy.go:55-61` | `workflowRole` derivation via `ToWorkflow` | Strategy creation |
+| `internal/agent/strategy_doer.go:17` | `workflowRole` field | Doer strategy state |
+| `internal/agent/strategy_reviewer.go:21` | `workflowRole` field | Reviewer strategy state |
+| `internal/agent/claiming.go:15,83` | `workflowRole` parameters | Doer/reviewer claiming |
+| `internal/ops/claim_reviewer_task.go:25,52-63` | `WorkflowRole` field + `ToWorkflow` call | Reviewer task claiming |
+| `internal/models/task.go:298-303` | `roles.ToRuntime()` call in `isClaimablePipeline` | Converts workflow->runtime for pipeline comparison |
+| `internal/models/diagnostics.go:164` | `roles.ToWorkflow()` call | Converts runtime->workflow for role filtering |
+| `internal/commands/watch.go:628-635` | `roles.ToWorkflow()` calls (2) | Converts runtime->workflow for `IsClaimable` |
+| `internal/ops/assess_blocked.go:34` | `roles.WorkflowOrchestrator` reference | Role validation |
+| `internal/ops/assess_hypothesis_exhausted.go:34` | `roles.WorkflowOrchestrator` reference | Role validation |
 
-### CP1: Replace hardcoded role lists in authorizeClaimRelease with resolver-based classification
+### Key insight: workflow names are never persisted to state.yaml
 
-**Intent:** authorizeClaimRelease currently enumerates role names by hand. A custom YAML-defined doer role hits the default branch and is rejected. Replace the switch with resolver.RoleType() classification.
+All workflow-form role names are in-memory only:
+- `Agent.Role` stores runtime (hyphenated) form — set from CLI agent IDs
+- `Task.RolePair` stores hyphenated form (e.g., "coding-pair")
+- No other task/agent field stores role name strings
 
-**Changes:**
-- `internal/mcp/handlers_helpers.go`: Change authorizeClaimRelease signature to accept a *pipeline.Resolver. Replace the role-name switch with resolver.RoleType(agentRole) calls: orchestrator allows all, doer allows only doer claims, reviewer allows only reviewer claims, unknown errors. When resolver is nil, fail closed (reject).
-- `internal/mcp/handlers_mutation.go`: Update handleReleaseClaim to pass s.resolver to authorizeClaimRelease.
-- `internal/mcp/handlers_helpers_test.go`: Update existing authorizeClaimRelease tests to pass a resolver, and add a test case for a custom doer role (e.g., data-engineer) that verifies it is accepted.
-
-**Scope:** `internal/mcp/handlers_helpers.go`, `internal/mcp/handlers_mutation.go`, `internal/mcp/handlers_helpers_test.go`
-
-**Done when:** authorizeClaimRelease no longer contains any hardcoded role name strings. A test with a custom YAML-defined doer role (e.g., data-engineer-1) passes the authorization check for doer claim release. A test with a custom reviewer role passes for reviewer claim release. Nil resolver rejects all.
-
-**Spec ref:** todo-mas.md -- Phase 1, [concern] internal/mcp/handlers_helpers.go:142-155
-
----
-
-### CP2: Make recover_agent.go fully resolver-based with nil-resolver warning
-
-**Intent:** RecoverAgent has two resolver gaps: (1) worktree removal checks role == "coder" literally — custom doer roles skip cleanup on crash; (2) when the resolver is nil, roleType silently falls through to empty string and no claim release happens, with no log. Fix both: replace the literal string check with resolver-based type classification, and add a warning log when resolver is nil.
-
-**Changes:**
-- `internal/ops/recover_agent.go`: At the worktree removal check (currently if role == "coder"), use the resolver to check resolver.RoleType(role) == "doer" instead. In the bb.Modify closure, when resolver is nil, add a slog.Warn indicating claim release was skipped due to missing resolver.
-- `internal/ops/recover_agent_test.go`: Add a test case verifying that a custom doer role worktree is cleaned up during recovery. Add a test case verifying the warning log is emitted when resolver is nil during recovery.
-
-**Scope:** `internal/ops/recover_agent.go`, `internal/ops/recover_agent_test.go`
-
-**Done when:** The string "coder" no longer appears in the worktree-removal condition in recover_agent.go. A test with a custom doer role (e.g., data-engineer) verifies worktree removal occurs during recovery. When resolver is nil during agent recovery, a warning log line is emitted indicating claim release was skipped due to missing resolver, verified by test.
-
-**Spec ref:** todo-mas.md -- Phase 1, [concern] internal/ops/recover_agent.go:72 and [suggestion] internal/ops/recover_agent.go:102-106
+The strategy -> claiming -> IsClaimable call chain passes workflow names, but they
+don't reach state.yaml. Migration tooling is a safety net for edge cases (manual
+edits, older scripts) — not for correcting production data.
 
 ---
 
-### CP3: Replace hardcoded runtimeRole=="coder" in TDD enforcement with resolver-based doer type check
+## Tasks
 
-**Intent:** submit_review.go TDD enforcement only applies to literal "coder" role. Custom doer roles skip TDD checks. Replace with resolver-based classification.
+### CP1: Unify role constant values to single hyphenated form
+
+**Intent:** Change all `Workflow*` constant values from underscore form (e.g., `"code_reviewer"`)
+to hyphenated form (e.g., `"code-reviewer"`). After this change, `ToWorkflow`/`ToRuntime` become
+identity functions — all in-memory role comparisons use the unified hyphenated form.
 
 **Changes:**
-- `internal/ops/submit_review.go`: The resolver is already loaded above the check. Replace runtimeRole == "coder" with a check against the resolver: roleType, _ := resolver.RoleType(runtimeRole); roleType == "doer". This ensures all doer roles (including custom ones) are subject to TDD enforcement for coding tasks.
-- `internal/ops/submit_review_test.go`: Add a test verifying TDD enforcement triggers for a custom doer role submitting a coding task.
+- `internal/roles/roles.go`: Change `WorkflowCodeReviewer` value from `"code_reviewer"` to `"code-reviewer"`,
+  and similarly for all 6 multi-word Workflow* constants. Update both mapping maps to become identity
+  (same key and value). Single-word constants (`WorkflowCoder`, `WorkflowOrchestrator`) are already
+  identical in both forms — no value change needed.
+- `internal/roles/roles_test.go`: Update `TestWorkflowConstants` expected values from underscore to
+  hyphenated. Update `TestToWorkflow` and `TestToRuntime` expected mappings (now identity). Update
+  `TestIsValidWorkflow` test cases (underscore inputs become invalid, hyphenated inputs become valid).
+  Update `TestAllWorkflow` expected values.
+- `internal/models/state_test.go`: Update hardcoded assertions: `RoleCodeReviewer != "code_reviewer"`
+  -> `"code-reviewer"`, `RoleCodePlanner != "code_planner"` -> `"code-planner"`,
+  `RoleCodePlanReviewer != "code_plan_reviewer"` -> `"code-plan-reviewer"`.
+  Update test name strings (e.g., `"code_reviewer can claim"` -> `"code-reviewer can claim"`).
+- `internal/ops/claim_reviewer_task_test.go`: Update comment at line 309 from
+  `"code_reviewer"` to `"code-reviewer"`.
 
-**Scope:** `internal/ops/submit_review.go`, `internal/ops/submit_review_test.go`
+**Scope:** `internal/roles/roles.go`, `internal/roles/roles_test.go`, `internal/models/state_test.go`,
+`internal/ops/claim_reviewer_task_test.go`
 
-**Done when:** The string "coder" no longer appears in the TDD enforcement condition in submit_review.go. A test with a custom doer role verifies TDD enforcement applies.
+**Done when:** All `Workflow*` constants in `internal/roles/roles.go` have hyphenated values.
+`TestWorkflowConstants` in `roles_test.go` asserts `WorkflowCodeReviewer == "code-reviewer"` (and
+similarly for all multi-word roles). `go test ./internal/roles/ ./internal/models/ ./internal/ops/
+./internal/agent/ ./internal/commands/ ./cmd/liza/` passes. No test uses hardcoded underscore role
+strings for assertion comparison.
 
-**Spec ref:** todo-mas.md -- Phase 1, [concern] submit_review.go:123
+**Spec ref:** specs/build/3 - Declarative Role Definitions.md#phase-4-dual-name-elimination
 
 ---
 
-### CP4: Replace hardcoded role=="code-plan-reviewer" in claim_reviewer_task.go workflow inference with roles.ToWorkflow conversion
+### CP2: Remove workflowRole from agent strategy layer
 
-**Intent:** When workflowRole is empty, ClaimReviewerTask infers it from the agent ID by checking the literal string "code-plan-reviewer". Custom reviewer roles fall through to the default "code-reviewer". Replace the literal string check with `roles.ToWorkflow(role)` conversion, which delegates to the canonical runtime→workflow mapping in the roles package.
+**Intent:** Eliminate the `workflowRole` field from `doerStrategy` and `reviewerStrategy` and the
+`ToWorkflow` call in `NewRoleStrategy`. All callers use the runtime `role` directly (which now
+equals the unified constant values after CP1).
 
 **Changes:**
-- `internal/ops/claim_reviewer_task.go`: Move `loadPipelineBundle` before the workflowRole inference block (currently at line 61, move to before line 42). When workflowRole is empty, extract the role from agent ID, then use `roles.ToWorkflow(role)` to convert the runtime role to its workflow form. If conversion fails (unknown role), default to `models.RoleCodeReviewer`. No nil-resolver fallback needed: `loadPipelineBundle` already returns an error on failure (line 62-64), so the function exits before reaching this code if the resolver is unavailable.
-- `internal/ops/claim_reviewer_task_test.go`: Add a test verifying that a code-plan-reviewer agent (inferred from agent ID) claims the correct code-planning-pair task without explicitly passing workflowRole, confirming the `roles.ToWorkflow` path works. The existing tests already cover the default code-reviewer path.
+- `internal/agent/strategy.go`: Remove lines 55-61 (`workflowRole` derivation via `roles.ToWorkflow`).
+  Pass `role` directly where `workflowRole` was passed to strategy constructors.
+- `internal/agent/strategy_doer.go`: Remove `workflowRole` field (line 17). Replace all `s.workflowRole`
+  references with `s.role`.
+- `internal/agent/strategy_reviewer.go`: Remove `workflowRole` field (line 21). Replace all
+  `s.workflowRole` references with `s.role`.
+- `internal/agent/claiming.go`: Rename parameter `workflowRole` to `role` in `claimDoerTask` (line 15)
+  and `claimReviewerTaskForRole` (line 83). No behavioral change — parameter values are identical
+  after CP1. Update `mergeGateInput.reviewerRole` doc comment (line 122) if it says "workflow role".
+- `internal/agent/strategy_test.go`: Remove `wantWorkflow` field from test table (line 292-306).
+  Remove assertions on `workflowRole` field (lines 326-327, 340-341). Update custom-role test
+  (line 435-437) to not check workflowRole.
 
-**Scope:** `internal/ops/claim_reviewer_task.go`, `internal/ops/claim_reviewer_task_test.go`
+**Scope:** `internal/agent/strategy.go`, `internal/agent/strategy_doer.go`,
+`internal/agent/strategy_reviewer.go`, `internal/agent/claiming.go`,
+`internal/agent/strategy_test.go`
 
-**Done when:** The literal string "code-plan-reviewer" no longer appears in the workflow role inference logic in claim_reviewer_task.go. A test with a code-plan-reviewer agent (identified by agent ID, no explicit workflowRole) verifies correct workflow role inference via `roles.ToWorkflow`.
+**Done when:** The string `workflowRole` does not appear as a struct field in `strategy_doer.go` or
+`strategy_reviewer.go`. `NewRoleStrategy` does not call `roles.ToWorkflow`. `go test ./internal/agent/`
+passes.
 
-**Spec ref:** todo-mas.md -- Phase 1, [concern] claim_reviewer_task.go:45
+**Depends on:** CP1
+
+**Spec ref:** specs/build/3 - Declarative Role Definitions.md#phase-4-dual-name-elimination
 
 ---
 
-### CP5: Enforce orchestrator singularity by resolved type, not role key
+### CP3: Remove ToRuntime conversion from isClaimablePipeline
 
-**Intent:** registration.go counts live agents by exact role name match (agent.Role == role). Two different orchestrator role keys can register concurrently (one instance each), violating the spec type-based singularity requirement.
+**Intent:** `isClaimablePipeline` calls `roles.ToRuntime(role)` to convert workflow-form role names
+to runtime form for pipeline comparison. After CP1, the role parameter is already in runtime
+(hyphenated) form — the conversion is an identity no-op. Remove it.
 
 **Changes:**
-- `internal/agent/registration.go`: In the singularity check within registerAgent, when the registering role resolves to type: orchestrator, count all live agents whose resolved type is "orchestrator" (not just agent.Role == role). Keep the existing per-role-key max-instances check for non-orchestrator roles.
-- `internal/agent/registration_test.go`: Add a test that attempts to register two agents with different orchestrator role keys (e.g., orchestrator-1 and lead-orchestrator-1) and verifies the second registration is rejected.
+- `internal/models/task.go`: In `isClaimablePipeline` (line 298), remove the `roles.ToRuntime(role)`
+  call and the associated error check (lines 300-303). Use the `role` parameter directly in the
+  `switch` statement (line 314). Update the doc comment on `IsClaimable` (line 286) to say
+  "The role parameter uses runtime form (e.g. `"code-reviewer"`)" instead of workflow form.
+  Remove `"github.com/liza-mas/liza/internal/roles"` import if no longer needed.
 
-**Scope:** `internal/agent/registration.go`, `internal/agent/registration_test.go`
+**Scope:** `internal/models/task.go`
 
-**Done when:** Registering a second agent with a different role key but type: orchestrator is rejected. Existing per-role-key max-instances enforcement for non-orchestrator roles is unaffected.
+**Done when:** `isClaimablePipeline` does not call `roles.ToRuntime`. The `IsClaimable` doc comment
+references runtime form. `go test ./internal/models/` passes.
 
-**Spec ref:** todo-mas.md -- Phase 1, [blocker] registration.go:69
+**Depends on:** CP1
+
+**Spec ref:** specs/build/3 - Declarative Role Definitions.md#phase-4-dual-name-elimination
 
 ---
 
-### CP6: Resolve orchestrator from state by type, not literal role name
+### CP4: Remove WorkflowRole from ClaimReviewerTaskInput
 
-**Intent:** FindOrchestratorID() in state.go matches agent.Role == "orchestrator" literally. A custom orchestrator role key (e.g., lead-orchestrator) is not found, breaking auto-resolution for liza_add_tasks / liza_supersede_task.
+**Intent:** `ClaimReviewerTaskInput.WorkflowRole` and the `roles.ToWorkflow` call in
+`ClaimReviewerTask`'s inference code are obsolete — the runtime role extracted from agent ID
+is now the canonical name form. Remove the field and use runtime role directly.
 
 **Changes:**
-- `internal/ops/resolve_orchestrator.go`: Update ResolveOrchestratorFromState to accept an optional *pipeline.Resolver. When provided, iterate agents checking resolver.RoleType(agent.Role) == "orchestrator". When nil, fall back to state.FindOrchestratorID() (existing literal match).
-- `internal/mcp/handlers_mutation.go`: Update resolveOrchestratorID to pass s.resolver to ResolveOrchestratorFromState.
-- `cmd/liza/main.go`: Update the call site to pass the resolver if available, or nil.
-- `internal/ops/resolve_orchestrator_test.go`: Add a test with a custom orchestrator role key that verifies type-based resolution succeeds.
+- `internal/ops/claim_reviewer_task.go`: Rename `WorkflowRole` field to `Role` in
+  `ClaimReviewerTaskInput` (line 25). Rename the local variable `workflowRole` to `role`. In the
+  inference block (lines 52-64), when inferring from agent ID, use the extracted role directly
+  (no `roles.ToWorkflow` call). Default to `models.RoleCodeReviewer` if extraction fails.
+  Pass `role` to `IsClaimable` (line 85).
+  Remove `"github.com/liza-mas/liza/internal/roles"` import if no longer needed.
+- `internal/ops/claim_reviewer_task_test.go`: Update any test that sets `WorkflowRole` field to use
+  `Role` instead. Update comments referencing workflow form.
+- `internal/agent/claiming.go`: Update `ClaimReviewerTaskInput` construction at line 89 to use `Role`
+  field instead of `WorkflowRole`.
 
-**Scope:** `internal/ops/resolve_orchestrator.go`, `internal/ops/resolve_orchestrator_test.go`, `internal/mcp/handlers_mutation.go`, `cmd/liza/main.go`
+**Scope:** `internal/ops/claim_reviewer_task.go`, `internal/ops/claim_reviewer_task_test.go`,
+`internal/agent/claiming.go`
 
-**Done when:** An agent registered with a custom role key whose resolved type is "orchestrator" is found by ResolveOrchestratorFromState. The literal string "orchestrator" is no longer the sole matching criterion. Existing tests still pass for the standard "orchestrator" role key.
+**Done when:** `ClaimReviewerTaskInput` has a `Role` field (not `WorkflowRole`). No `roles.ToWorkflow`
+call exists in `claim_reviewer_task.go`. `go test ./internal/ops/ ./internal/agent/` passes.
 
-**Spec ref:** todo-mas.md -- Phase 1, [blocker] state.go:57 and handlers_mutation.go:14
+**Depends on:** CP1, CP2
+
+**Spec ref:** specs/build/3 - Declarative Role Definitions.md#phase-4-dual-name-elimination
 
 ---
 
-### CP7: Surface pipeline load error in nil-resolver error path
+### CP5: Remove ToWorkflow calls from diagnostics and watch
 
-**Intent:** When pipeline config fails to load, the MCP server stores a nil resolver. All operationChecker-guarded tools fail with a generic message that does not include why. The spec suggests surfacing the original load error.
+**Intent:** `diagnostics.go` and `watch.go` call `roles.ToWorkflow()` to convert pipeline-returned
+runtime role names to workflow form for comparison/IsClaimable. After CP1, the workflow form equals
+the runtime form — remove the conversions and use runtime names directly.
 
 **Changes:**
-- `internal/mcp/server.go`: Store the pipeline load error on the Server struct (e.g., resolverLoadErr error). In isOperationAllowed (or wherever the nil-resolver error is surfaced), include the stored error in the message.
-- `internal/mcp/server_test.go`: Add a test that creates a server with an invalid pipeline config and verifies the error message from an operation-checked tool includes the original load error text.
+- `internal/models/diagnostics.go`: At line 164, replace `roles.ToWorkflow(reviewerRole)` + comparison
+  with `RoleCodeReviewer` -> compare `reviewerRole` directly with `RoleCodeReviewer` (both now
+  hyphenated). Remove the `err` check since no conversion is needed. Remove
+  `"github.com/liza-mas/liza/internal/roles"` import if no longer needed.
+- `internal/commands/watch.go`: At lines 628-635, remove both `roles.ToWorkflow()` calls.
+  Pass `doerRuntime` and `reviewerRuntime` directly to `task.IsClaimable()` (they are already
+  in the correct hyphenated form). Remove `roles` import if no longer needed.
 
-**Scope:** `internal/mcp/server.go`, `internal/mcp/server_test.go`
+**Scope:** `internal/models/diagnostics.go`, `internal/commands/watch.go`
 
-**Done when:** When the pipeline config fails to load, MCP tool error messages include the original load error text (not just "pipeline resolver not loaded"). Verified by a test that creates a server with an invalid pipeline config and checks the error message from an operation-checked tool.
+**Done when:** Neither `diagnostics.go` nor `watch.go` calls `roles.ToWorkflow`. `go test
+./internal/models/ ./internal/commands/` passes.
 
-**Spec ref:** todo-mas.md -- Phase 1, [suggestion] internal/mcp/server.go:26-33
+**Depends on:** CP1, CP3
+
+**Spec ref:** specs/build/3 - Declarative Role Definitions.md#phase-4-dual-name-elimination
 
 ---
 
-## Phase 2 -- Template naming, IntegrationFix propagation, test-YAML parity
+### CP6: Remove deprecated dual-name machinery from roles package
 
-### CP8: Rename template defines from underscores to hyphens to match YAML section names
-
-**Intent:** Templates define themselves as mandatory_docs and skills_affinity, but the YAML references mandatory-docs and skills-affinity. BuildRoleContext passes YAML section names to ExecuteTemplate with no normalization, causing runtime failures.
+**Intent:** All callers of `ToWorkflow`, `ToRuntime`, `IsValidWorkflow`, `AllWorkflow` have been
+updated (CP2-CP5). Remove the mapping functions, maps, and `Workflow*` constants from the roles
+package. Rename remaining exports for clarity.
 
 **Changes:**
-- `internal/prompts/templates/blocks/mandatory_docs.tmpl`: Change define "mandatory_docs" to define "mandatory-docs".
-- `internal/prompts/templates/blocks/skills_affinity.tmpl`: Change define "skills_affinity" to define "skills-affinity".
-- `internal/prompts/builder_test.go`: Update block-level tests (TestBlockMandatoryDocs_*, TestBlockSkillsAffinity_*) to use hyphen names when executing templates.
+- `internal/roles/roles.go`:
+  - Remove `Workflow*` constants (lines 20-30). Replace with unified constants:
+    `Coder = "coder"`, `CodeReviewer = "code-reviewer"`, `Orchestrator = "orchestrator"`,
+    `CodePlanner = "code-planner"`, `CodePlanReviewer = "code-plan-reviewer"`,
+    `EpicPlanner = "epic-planner"`, `EpicPlanReviewer = "epic-plan-reviewer"`,
+    `USWriter = "us-writer"`, `USReviewer = "us-reviewer"`.
+  - Remove `runtimeToWorkflow` and `workflowToRuntime` maps.
+  - Remove `ToWorkflow()`, `ToRuntime()`, `IsValidWorkflow()`, `AllWorkflow()` functions.
+  - Add `IsValid(role string) bool` — checks against a set of known role names.
+  - Add `All() []string` — returns all known role names.
+- `internal/roles/roles_test.go`: Rewrite tests: remove TestToWorkflow, TestToRuntime,
+  TestIsValidWorkflow, TestAllWorkflow, TestRoundTrip, TestExtractAndConvert. Add tests
+  for new constants, `IsValid()`, and `All()`. Update constant tests to use new names.
+- `internal/models/task.go`: Update aliases from `roles.WorkflowCoder` -> `roles.Coder`,
+  `roles.WorkflowCodeReviewer` -> `roles.CodeReviewer`, etc.
+- `internal/ops/assess_blocked.go`: Replace `roles.WorkflowOrchestrator` -> `roles.Orchestrator`.
+- `internal/ops/assess_hypothesis_exhausted.go`: Same.
 
-**Scope:** `internal/prompts/templates/blocks/mandatory_docs.tmpl`, `internal/prompts/templates/blocks/skills_affinity.tmpl`, `internal/prompts/builder_test.go`
+**Scope:** `internal/roles/roles.go`, `internal/roles/roles_test.go`, `internal/models/task.go`,
+`internal/ops/assess_blocked.go`, `internal/ops/assess_hypothesis_exhausted.go`
 
-**Done when:** Template define names match the YAML section keys exactly (mandatory-docs, skills-affinity). Block-level tests pass with hyphen names. BuildRoleContext with these section names does not error.
+**Done when:** `roles.go` exports unified constants (`Coder`, `CodeReviewer`, etc.) with no
+`Workflow*` prefix. `ToWorkflow`, `ToRuntime`, `runtimeToWorkflow`, `workflowToRuntime` do not
+exist. `IsValid` and `All` functions work. `go test ./internal/roles/ ./internal/models/
+./internal/ops/` passes.
 
-**Spec ref:** todo-mas.md -- Phase 2, [blocker] builder.go:190 / templates
+**Depends on:** CP2, CP3, CP4, CP5
+
+**Spec ref:** specs/build/3 - Declarative Role Definitions.md#phase-4-dual-name-elimination
 
 ---
 
-### CP9: Propagate task.IntegrationFix into RoleContextData in buildTaskRoleContextData
+### CP7: Add liza migrate CLI command for state normalization
 
-**Intent:** RoleContextData.IntegrationFix exists and the integration-fix template block depends on it, but buildTaskRoleContextData() never copies task.IntegrationFix into the data object. Coder prompts silently lose integration-fix workflow instructions for conflicted tasks.
+**Intent:** Provide `liza migrate` CLI command that normalizes any underscore-form role names in
+state.yaml to hyphenated form. This is a safety net for manually-edited state files or edge cases —
+current production code does not persist underscore role names.
 
 **Changes:**
-- `internal/agent/prompt.go`: Inside the existing coder-specific doer block (gated by `roleType == "doer" && config.Role == "coder"`, line 150), add `data.IntegrationFix = task.IntegrationFix`. The gate condition is unchanged — the production pipeline only includes `integration-fix` in coder context-sections (`pipeline.yaml:212-217`).
-- `internal/agent/prompt_test.go`: Add a test verifying that when a coder task has IntegrationFix: true, the resulting RoleContextData.IntegrationFix is true.
+- `internal/commands/migrate.go` (new file): Implement `MigrateCommand(statePath string) error`.
+  Read state.yaml, walk `Agent.Role` fields, apply `NormalizeRoleName(name string) string`
+  (converts known underscore patterns to hyphenated: `code_reviewer` -> `code-reviewer`, etc.).
+  If any changes were made, write back and report. If no changes needed, report "already migrated".
+- `internal/roles/roles.go`: Add `NormalizeRoleName(name string) string` — canonical normalization
+  function. Replaces underscores with hyphens for known multi-word role names. Returns input
+  unchanged for unknown names (no silent mutation of arbitrary strings).
+- `cmd/liza/cmd_init.go`: Register `migrateCmd` with `rootCmd.AddCommand(migrateCmd)`. Command
+  takes optional state-file path argument (defaults to `.liza/state.yaml`).
+- `internal/commands/migrate_test.go` (new file): Test migration with underscore Agent.Role values.
+  Test idempotency (running twice produces no changes). Test unknown role names pass through unchanged.
+- `internal/roles/roles_test.go`: Add `TestNormalizeRoleName` with cases for all 9 roles.
 
-**Scope:** `internal/agent/prompt.go`, `internal/agent/prompt_test.go`
+**Scope:** `internal/commands/migrate.go`, `internal/commands/migrate_test.go`,
+`internal/roles/roles.go`, `internal/roles/roles_test.go`, `cmd/liza/cmd_init.go`
 
-**Done when:** buildTaskRoleContextData sets data.IntegrationFix = task.IntegrationFix inside the existing coder-specific doer block (gate unchanged). A test with a coder task having IntegrationFix = true verifies the field is propagated.
+**Done when:** `liza migrate` command exists and is registered. Running it on a state.yaml with
+`Agent.Role: "code_reviewer"` normalizes to `"code-reviewer"`. Running on an already-migrated
+state reports no changes. `TestNormalizeRoleName` in `roles_test.go` passes for all 9 roles.
+`go test ./internal/commands/ ./internal/roles/ ./cmd/liza/` passes.
 
-**Spec ref:** todo-mas.md -- Phase 2, [blocker] prompt.go:149 / role_context.go:38
+**Depends on:** CP6
+
+**Spec ref:** specs/build/3 - Declarative Role Definitions.md#phase-4-dual-name-elimination
 
 ---
 
-### CP10: Drive TestBuildRoleContext_AllRoles section lists from production pipeline YAML
+### CP8: Add unmigrated state detection to liza validate and read-path normalization
 
-**Intent:** Test section lists are hardcoded subsets of the YAML context-sections, masking drift. The mandatory-docs and skills-affinity blockers went undetected because tests skip them. Drive tests from resolver.ContextSections(role) or the embedded pipeline.
+**Intent:** `liza validate` should detect underscore-form role names in state.yaml and surface a
+guided fix pointing to `liza migrate`. Read paths should normalize underscore names in-memory
+(no implicit writes) as a safety net.
 
 **Changes:**
-- `internal/prompts/builder_test.go`: In TestBuildRoleContext_AllRoles, replace hardcoded section lists with sections loaded from the production pipeline YAML (via embedded.PipelineConfig() and pipeline.LoadFromBytes() and resolver.ContextSections(role)). This ensures tests exercise the exact sections defined in the YAML.
-- `internal/agent/strategy_test.go`: Update testPipelineYAML to include mandatory-docs and skills-affinity in all roles context-sections, matching the production pipeline.
+- `internal/statevalidate/validate_roles.go` (new file): Implement
+  `validateRoleNames(state *models.State, projectRoot string, skipSpecFileCheck bool) error`.
+  Walk `state.Agents` checking `Agent.Role` for underscore-form names using
+  `roles.NormalizeRoleName`. If normalized differs from original, return error:
+  `"agent %s has unmigrated role name %q — run 'liza migrate' to fix"`.
+- `internal/statevalidate/validate.go`: Add `validateRoleNames` to the validators slice.
+- `internal/statevalidate/validate_roles_test.go` (new file): Test detection of underscore role
+  names. Test that hyphenated names pass validation.
+- `internal/db/blackboard.go` (or equivalent read path): After deserializing state, apply
+  `roles.NormalizeRoleName` to each `Agent.Role` value in-memory. This ensures runtime code
+  works correctly even if state.yaml has unmigrated names. No write-back — normalization is
+  in-memory only.
+- `internal/db/blackboard_test.go`: Add test verifying read-path normalization: write a state
+  with underscore role, read it back, verify Agent.Role is hyphenated in the returned struct.
 
-**Scope:** `internal/prompts/builder_test.go`, `internal/agent/strategy_test.go`
+**Scope:** `internal/statevalidate/validate_roles.go`, `internal/statevalidate/validate_roles_test.go`,
+`internal/statevalidate/validate.go`, `internal/db/blackboard.go`, `internal/db/blackboard_test.go`
 
-**Done when:** TestBuildRoleContext_AllRoles loads section names from the embedded pipeline YAML rather than hardcoding them. strategy_test.go test fixture includes mandatory-docs and skills-affinity for all roles. Adding or removing a section in the YAML automatically affects test coverage.
+**Done when:** `liza validate` on a state.yaml with `Agent.Role: "code_reviewer"` returns an error
+mentioning `liza migrate`. `liza validate` on a state.yaml with `Agent.Role: "code-reviewer"` passes
+(no role-name error). Reading state.yaml with underscore Agent.Role returns a struct with hyphenated
+Agent.Role. `go test ./internal/statevalidate/ ./internal/db/` passes.
 
-**Spec ref:** todo-mas.md -- Phase 2, [concern] builder_test.go:989-995 and [concern] strategy_test.go:27
+**Depends on:** CP7
+
+**Spec ref:** specs/build/3 - Declarative Role Definitions.md#phase-4-dual-name-elimination
 
 ---
 
 ## Dependency Graph
 
 ```
-CP1  (authorizeClaimRelease)     -- no dependencies
-CP2  (recover_agent resolver)    -- no dependencies
-CP3  (TDD enforcement)           -- no dependencies
-CP4  (claim_reviewer workflow)   -- no dependencies
-CP5  (orchestrator singularity)  -- no dependencies
-CP6  (orchestrator resolution)   -- no dependencies
-CP7  (pipeline error surface)    -- no dependencies
-CP8  (template naming)           -- no dependencies
-CP9  (IntegrationFix propagation) -- no dependencies
-CP10 (test-YAML parity)          -- depends on CP8
+CP1  (unify constants)           -- no dependencies
+CP2  (strategy workflowRole)     -- depends on CP1
+CP3  (isClaimablePipeline)       -- depends on CP1
+CP4  (ClaimReviewerTaskInput)    -- depends on CP1, CP2
+CP5  (diagnostics/watch)         -- depends on CP1, CP3
+CP6  (remove machinery)          -- depends on CP2, CP3, CP4, CP5
+CP7  (liza migrate)              -- depends on CP6
+CP8  (validate + normalize)      -- depends on CP7
 ```
 
-All Phase 1 tasks (CP1-CP7) are independent.
-All Phase 2 tasks (CP8-CP10) are independent except CP10 depends on CP8 (template names must match before tests can load real sections).
+CP2, CP3 can run in parallel after CP1.
+CP4 depends on CP2 (both modify claiming.go).
+CP5 depends on CP3 (IsClaimable signature change).
+CP6 is the convergence point — all caller updates must be done.
+CP7 and CP8 are serial (CP8 uses CP7's NormalizeRoleName).
 
 ## Spec Coverage Mapping
 
-| Spec Item | Task |
-|-----------|------|
-| Phase 1: [concern] handlers_helpers.go:142-155 -- hardcoded role names in authorizeClaimRelease | CP1 |
-| Phase 1: [concern] recover_agent.go:72 -- role == "coder" for worktree removal | CP2 |
-| Phase 1: [suggestion] recover_agent.go:102-106 -- nil-resolver fallback log | CP2 |
-| Phase 1: [concern] submit_review.go:123 -- runtimeRole == "coder" for TDD enforcement | CP3 |
-| Phase 1: [concern] claim_reviewer_task.go:45 -- role == "code-plan-reviewer" for workflow inference | CP4 |
-| Phase 1: [blocker] registration.go:69 -- singularity per role key, not type | CP5 |
-| Phase 1: [blocker] state.go:57 / handlers_mutation.go:14 -- hardcoded orchestrator literal | CP6 |
-| Phase 1: [suggestion] server.go:26-33 -- pipeline load error surfacing | CP7 |
-| Phase 1: [concern] handlers_helpers.go:137 / recover_agent.go:71 -- custom doer/reviewer claim release | CP1 + CP2 (covered) |
-| Phase 2: [blocker] builder.go:190 / pipeline.yaml / templates -- template define vs YAML name mismatch | CP8 |
-| Phase 2: [blocker] templates mandatory_docs/skills_affinity -- underscore vs hyphen | CP8 (same fix) |
-| Phase 2: [blocker] prompt.go:149 / role_context.go:38 -- IntegrationFix not propagated (coder path) | CP9 |
-| Phase 2: [concern] builder_test.go:989-995 -- hardcoded test section lists | CP10 |
-| Phase 2: [concern] strategy_test.go:27 -- test fixture omits sections | CP10 |
+| Spec Requirement | Task(s) |
+|-----------------|---------|
+| Migrate all internal code to single name form (runtime/hyphenated) | CP1, CP2, CP3, CP4, CP5 |
+| Update task model to use runtime names | CP1 (constants), CP3 (IsClaimable doc), CP6 (model aliases) |
+| Remove ToWorkflow()/ToRuntime() and associated constants | CP6 |
+| liza migrate CLI command for explicit conversion | CP7 |
+| Read paths normalize in-memory only (no implicit writes) | CP8 |
+| liza validate detects unmigrated state | CP8 |
+| liza validate surfaces guided fix pointing to liza migrate | CP8 |
