@@ -38,7 +38,7 @@ REVIEW CHECKLIST:
 | Falsifiable done_when | done_when is vague or untestable |
 | Scope smell | done_when spans >2 packages or >4 conditions — verify the task has a single intent; reject with split suggestion if composite |
 | Dependency order | Tasks have circular or missing dependencies |
-| Spec coverage | Plan does not cover all spec requirements |
+| Spec compliance matrix | Plan has no "## Spec Compliance Matrix" section, or matrix has GAP rows, or matrix omits spec requirements, or matrix task mappings are inaccurate |
 | output[] populated | Task has no output[] entries (planner must call liza_set_task_output) |
 | Plan file location | Plan artifact not in diff at specs/plans/{{.TaskID}}[-v<N>].md |
 | output[] matches plan | For each output[] entry, compare desc, done_when, scope, and spec_ref against the plan artifact in the worktree — they must be identical, not paraphrased or extended |
@@ -56,11 +56,18 @@ Include this assessment in your rejection reason if rejecting.
 REVIEW PHASE:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 2. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
-3. Validate done_when criteria are satisfied.
-4. Verify output[] entries: run liza_get with {"query": "tasks/{{.TaskID}}"} and confirm
+3. Validate spec compliance matrix: read the spec, then the plan's
+   "## Spec Compliance Matrix" section. Verify:
+   a. Matrix exists in the plan file.
+   b. No GAP rows remain.
+   c. Requirements accurately extracted from spec (no fabrication, no omission).
+   d. Task mappings correct (listed task(s) actually address the requirement).
+   Do NOT trust the matrix at face value — independently verify against the spec.
+4. Validate done_when criteria are satisfied.
+5. Verify output[] entries: run liza_get with {"query": "tasks/{{.TaskID}}"} and confirm
    output[] has one entry per planned coding task with valid desc, done_when, scope, spec_ref.
-5. Verify each proposed coding task passes the review checklist above.
-6. Submit verdict with liza_submit_verdict.
+6. Verify each proposed coding task passes the review checklist above.
+7. Submit verdict with liza_submit_verdict.
 {{- else if eq .Role "epic-plan-reviewer"}}
 
 EPIC-WRITING SKILL:

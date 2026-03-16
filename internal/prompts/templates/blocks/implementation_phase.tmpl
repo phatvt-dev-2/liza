@@ -26,6 +26,7 @@ IMPLEMENTATION PHASE:
    version: {{.Worktree}}/specs/plans/{{.TaskID}}-v2.md, then -v3.md, etc.
    Accepted file names (under specs/plans/): {{.TaskID}}.md or {{.TaskID}}-v<N>.md (nothing else).
    All later references to "the plan file" mean the exact path chosen here.
+   (Include a "## Spec Compliance Matrix" section — see step 6c.)
 3. For EACH coding task in your plan, call liza_set_task_output with structured entries.
    Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
    Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source).
@@ -36,8 +37,23 @@ IMPLEMENTATION PHASE:
    a. Each output[] entry passes TASK DECOMPOSITION PRINCIPLE checks above.
    b. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
       ("tests pass" is vague; "TestFoo in pkg/bar passes asserting X" is falsifiable.)
-   c. Spec coverage: enumerate every requirement from the spec. Map each to at least one
-      output[] entry. Unmapped requirements = not ready to submit.
+   c. Spec compliance matrix: the plan file MUST contain a "## Spec Compliance Matrix"
+      section with a markdown table mapping every spec requirement to planned task(s):
+
+      | # | Requirement | Source | Task(s) | Status |
+      |---|-------------|--------|---------|--------|
+      | 1 | <requirement summary> | <spec section/line> | <task ID(s)> | Covered |
+      | 2 | <requirement summary> | <spec section/line> | — | GAP |
+
+      Rules:
+      - Extract requirements by re-reading the spec — do not work from memory.
+      - Every functional requirement, constraint, and acceptance criterion gets a row.
+      - Source must identify the spec location (section heading, step number, or line).
+      - Task(s) column references your plan's task IDs (e.g., "Task 1", "CP3").
+      - Status is "Covered" (mapped to ≥1 task) or "GAP" (unmapped).
+      - Any GAP row = not ready to submit. Resolve by adding tasks or clarifying scope.
+      - Task IDs must match the plan's task headings and correspond to output[] entry order (Task 1 = output[0], etc.).
+      - Spec "Out of Scope" items do not need rows.
    d. output[] completeness: one entry per planned coding task, each with all four fields
       (desc, done_when, scope, spec_ref) populated.
    e. output[] parity: re-read the plan file at the path chosen in step 2 and verify each output[]
