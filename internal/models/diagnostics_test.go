@@ -47,7 +47,7 @@ func TestCountClaimableTasks(t *testing.T) {
 					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
-			role: RoleCodeReviewer,
+			role: "code-reviewer",
 			want: 0,
 		},
 		{
@@ -71,7 +71,7 @@ func TestCountClaimableTasks(t *testing.T) {
 					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
-			role: RoleCodeReviewer,
+			role: "code-reviewer",
 			want: 2,
 		},
 		{
@@ -129,7 +129,7 @@ func TestCountReviewableTasks(t *testing.T) {
 		{
 			name:  "empty state",
 			state: &State{},
-			role:  RoleCodeReviewer,
+			role:  "code-reviewer",
 			want:  0,
 		},
 		{
@@ -139,7 +139,7 @@ func TestCountReviewableTasks(t *testing.T) {
 					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
-			role: RoleCodeReviewer,
+			role: "code-reviewer",
 			want: 1,
 		},
 		{
@@ -149,7 +149,7 @@ func TestCountReviewableTasks(t *testing.T) {
 					{ID: "t1", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
-			role: RoleCodeReviewer,
+			role: "code-reviewer",
 			want: 0,
 		},
 		{
@@ -171,7 +171,7 @@ func TestCountReviewableTasks(t *testing.T) {
 					{ID: "t3", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
-			role: RoleCodeReviewer,
+			role: "code-reviewer",
 			want: 2,
 		},
 	}
@@ -377,7 +377,7 @@ func TestDiagnosticsQuorumStates(t *testing.T) {
 				{ID: "t3", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair"},
 			},
 		}
-		got := CountReviewableTasks(state, RoleCodeReviewer, pr)
+		got := CountReviewableTasks(state, "code-reviewer", pr)
 		if got != 2 { // submitted + partially_approved
 			t.Errorf("CountReviewableTasks() = %d, want 2 (submitted + partially_approved)", got)
 		}
@@ -389,7 +389,7 @@ func TestDiagnosticsQuorumStates(t *testing.T) {
 				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},
 			},
 		}
-		got := CountReviewableTasks(state, RoleCodeReviewer, pr)
+		got := CountReviewableTasks(state, "code-reviewer", pr)
 		if got != 1 {
 			t.Errorf("CountReviewableTasks() = %d, want 1", got)
 		}

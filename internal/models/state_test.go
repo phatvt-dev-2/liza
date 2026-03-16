@@ -435,19 +435,19 @@ func TestIsClaimableWithRole(t *testing.T) {
 		{
 			name:      "code_reviewer can claim READY_FOR_REVIEW coding task",
 			task:      Task{Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
-			role:      RoleCodeReviewer,
+			role:      "code-reviewer", // runtime form — matches pipeline resolver
 			claimable: true,
 		},
 		{
 			name:      "code_reviewer cannot claim READY task",
 			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
-			role:      RoleCodeReviewer,
+			role:      "code-reviewer", // runtime form
 			claimable: false,
 		},
 		{
 			name:      "orchestrator cannot claim any task",
 			task:      Task{Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
-			role:      RoleOrchestrator,
+			role:      "orchestrator", // runtime form
 			claimable: false,
 		},
 		{
@@ -1282,43 +1282,43 @@ func TestIsClaimable_CodePlanningRoles(t *testing.T) {
 		{
 			name:      "code_planner can claim DRAFT_CODING_PLAN",
 			task:      Task{Status: TaskStatusDraftCodingPlan, RolePair: "code-planning-pair"},
-			role:      RoleCodePlanner,
+			role:      "code-planner", // runtime form — matches pipeline resolver
 			claimable: true,
 		},
 		{
 			name:      "code_planner can claim CODING_PLAN_REJECTED",
 			task:      Task{Status: TaskStatusCodingPlanRejected, RolePair: "code-planning-pair"},
-			role:      RoleCodePlanner,
+			role:      "code-planner", // runtime form
 			claimable: true,
 		},
 		{
 			name:      "code_plan_reviewer can claim CODING_PLAN_TO_REVIEW",
 			task:      Task{Status: TaskStatusCodingPlanToReview, RolePair: "code-planning-pair"},
-			role:      RoleCodePlanReviewer,
+			role:      "code-plan-reviewer", // runtime form
 			claimable: true,
 		},
 		{
 			name:      "code_plan_reviewer cannot claim DRAFT_CODING_PLAN",
 			task:      Task{Status: TaskStatusDraftCodingPlan, RolePair: "code-planning-pair"},
-			role:      RoleCodePlanReviewer,
+			role:      "code-plan-reviewer", // runtime form
 			claimable: false,
 		},
 		{
 			name:      "code_planner cannot claim CODING_PLAN_TO_REVIEW",
 			task:      Task{Status: TaskStatusCodingPlanToReview, RolePair: "code-planning-pair"},
-			role:      RoleCodePlanner,
+			role:      "code-planner", // runtime form
 			claimable: false,
 		},
 		{
 			name:      "coder cannot claim DRAFT_CODING_PLAN",
 			task:      Task{Status: TaskStatusDraftCodingPlan, RolePair: "code-planning-pair"},
-			role:      RoleCoder,
+			role:      "coder", // runtime form
 			claimable: false,
 		},
 		{
 			name:      "code_reviewer cannot claim CODING_PLAN_TO_REVIEW",
 			task:      Task{Status: TaskStatusCodingPlanToReview, RolePair: "code-planning-pair"},
-			role:      RoleCodeReviewer,
+			role:      "code-reviewer", // runtime form
 			claimable: false,
 		},
 	}
@@ -1382,49 +1382,49 @@ func TestIsClaimable_Pipeline(t *testing.T) {
 	tests := []struct {
 		name      string
 		task      Task
-		role      string // workflow form
+		role      string // runtime form (hyphenated)
 		claimable bool
 	}{
 		{
 			name:      "coder can claim pipeline initial status",
 			task:      Task{Status: "DRAFT_CODE", RolePair: "coding-pair"},
-			role:      RoleCoder,
+			role:      "coder",
 			claimable: true,
 		},
 		{
 			name:      "coder can claim pipeline rejected status",
 			task:      Task{Status: "CODE_REJECTED", RolePair: "coding-pair"},
-			role:      RoleCoder,
+			role:      "coder",
 			claimable: true,
 		},
 		{
 			name:      "coder can claim INTEGRATION_FAILED pipeline task",
 			task:      Task{Status: TaskStatusIntegrationFailed, RolePair: "coding-pair"},
-			role:      RoleCoder,
+			role:      "coder",
 			claimable: true,
 		},
 		{
 			name:      "coder cannot claim pipeline submitted status",
 			task:      Task{Status: "CODE_READY_FOR_REVIEW", RolePair: "coding-pair"},
-			role:      RoleCoder,
+			role:      "coder",
 			claimable: false,
 		},
 		{
 			name:      "reviewer can claim pipeline submitted status",
 			task:      Task{Status: "CODE_READY_FOR_REVIEW", RolePair: "coding-pair"},
-			role:      RoleCodeReviewer,
+			role:      "code-reviewer",
 			claimable: true,
 		},
 		{
 			name:      "reviewer cannot claim pipeline initial status",
 			task:      Task{Status: "DRAFT_CODE", RolePair: "coding-pair"},
-			role:      RoleCodeReviewer,
+			role:      "code-reviewer",
 			claimable: false,
 		},
 		{
 			name:      "orchestrator cannot claim pipeline task",
 			task:      Task{Status: "DRAFT_CODE", RolePair: "coding-pair"},
-			role:      RoleOrchestrator,
+			role:      "orchestrator",
 			claimable: false,
 		},
 	}
