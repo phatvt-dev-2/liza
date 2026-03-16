@@ -362,7 +362,8 @@ func inferRolePair(status models.TaskStatus) string {
 		models.TaskStatusReadyForReview, models.TaskStatusReviewing,
 		models.TaskStatusRejected, models.TaskStatusApproved,
 		models.TaskStatusIntegrationFailed, models.TaskStatusMerged,
-		models.TaskStatusBlocked:
+		models.TaskStatusBlocked,
+		models.TaskStatusPartiallyApproved, models.TaskStatusReviewingCode2:
 		return "coding-pair"
 	case models.TaskStatusDraftCodingPlan, models.TaskStatusCodePlanning,
 		models.TaskStatusCodingPlanToReview, models.TaskStatusReviewingCodingPlan,

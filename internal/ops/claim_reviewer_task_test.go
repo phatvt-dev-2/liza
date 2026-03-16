@@ -433,3 +433,296 @@ func TestClaimReviewerTask_SkipsAlreadyReviewing(t *testing.T) {
 		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-available")
 	}
 }
+
+func TestClaimReviewerTask_PartiallyApproved(t *testing.T) {
+	// Verifies that a partially_approved task can be claimed and transitions to reviewing_2.
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	worktree := ".worktrees/task-pa"
+	reviewCommit := "abc123"
+	state.Tasks = []models.Task{
+		{
+			ID:           "task-pa",
+			Status:       models.TaskStatusPartiallyApproved,
+			RolePair:     "coding-pair",
+			Priority:     1,
+			Worktree:     &worktree,
+			ReviewCommit: &reviewCommit,
+			History:      []models.TaskHistoryEntry{},
+			Created:      now,
+			Approvals: []models.Approval{
+				{Agent: "code-reviewer-2", Provider: "anthropic", Timestamp: now},
+			},
+		},
+	}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusIdle,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+		ProjectRoot:   tmpDir,
+		AgentID:       "code-reviewer-1",
+		LeaseDuration: 1800,
+	})
+	if err != nil {
+		t.Fatalf("ClaimReviewerTask() error: %v", err)
+	}
+
+	if result.TaskID != "task-pa" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-pa")
+	}
+
+	// Verify state was updated to REVIEWING_CODE_2
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-pa")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusReviewingCode2 {
+		t.Errorf("Task status = %v, want REVIEWING_CODE_2", task.Status)
+	}
+	if task.ReviewingBy == nil || *task.ReviewingBy != "code-reviewer-1" {
+		t.Error("Task ReviewingBy should be code-reviewer-1")
+	}
+}
+
+func TestClaimReviewerTask_ClaimPriority_PartiallyApprovedOverSubmitted(t *testing.T) {
+	// Verifies that partially_approved tasks are selected before submitted tasks
+	// at the same priority level.
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	wt1 := ".worktrees/task-submitted"
+	wt2 := ".worktrees/task-pa"
+	rc1 := "abc123"
+	rc2 := "def456"
+	state.Tasks = []models.Task{
+		{
+			ID:           "task-submitted",
+			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
+			Priority:     1, // Same priority
+			Worktree:     &wt1,
+			ReviewCommit: &rc1,
+			History:      []models.TaskHistoryEntry{},
+			Created:      now.Add(-1 * time.Minute),
+		},
+		{
+			ID:           "task-pa",
+			Status:       models.TaskStatusPartiallyApproved,
+			RolePair:     "coding-pair",
+			Priority:     1, // Same priority
+			Worktree:     &wt2,
+			ReviewCommit: &rc2,
+			History:      []models.TaskHistoryEntry{},
+			Created:      now,
+			Approvals: []models.Approval{
+				{Agent: "code-reviewer-2", Provider: "anthropic", Timestamp: now},
+			},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+		ProjectRoot:   tmpDir,
+		AgentID:       "code-reviewer-1",
+		LeaseDuration: 1800,
+	})
+	if err != nil {
+		t.Fatalf("ClaimReviewerTask() error: %v", err)
+	}
+
+	// Partially_approved should be claimed first
+	if result.TaskID != "task-pa" {
+		t.Errorf("TaskID = %q, want %q (partially_approved preferred)", result.TaskID, "task-pa")
+	}
+}
+
+func TestClaimReviewerTask_DiversityWithApprovals(t *testing.T) {
+	// Verifies that for partially_approved tasks, the one whose existing
+	// approval provider differs from the claimer's provider is preferred.
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	wt1 := ".worktrees/task-same"
+	wt2 := ".worktrees/task-diverse"
+	rc1 := "abc123"
+	rc2 := "def456"
+	state.Tasks = []models.Task{
+		{
+			ID:           "task-same",
+			Status:       models.TaskStatusPartiallyApproved,
+			RolePair:     "coding-pair",
+			Priority:     1,
+			Worktree:     &wt1,
+			ReviewCommit: &rc1,
+			History:      []models.TaskHistoryEntry{},
+			Created:      now,
+			Approvals: []models.Approval{
+				{Agent: "code-reviewer-3", Provider: "google", Timestamp: now},
+			},
+		},
+		{
+			ID:           "task-diverse",
+			Status:       models.TaskStatusPartiallyApproved,
+			RolePair:     "coding-pair",
+			Priority:     1,
+			Worktree:     &wt2,
+			ReviewCommit: &rc2,
+			History:      []models.TaskHistoryEntry{},
+			Created:      now,
+			Approvals: []models.Approval{
+				{Agent: "code-reviewer-2", Provider: "anthropic", Timestamp: now},
+			},
+		},
+	}
+	// Claimer is google provider — should prefer task-diverse (approved by anthropic)
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:     "code-reviewer",
+		Status:   models.AgentStatusIdle,
+		Provider: "google",
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Run multiple times to verify diversity preference is deterministic
+	for i := 0; i < 5; i++ {
+		result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+			ProjectRoot:   tmpDir,
+			AgentID:       "code-reviewer-1",
+			LeaseDuration: 1800,
+		})
+		if err != nil {
+			t.Fatalf("ClaimReviewerTask() iteration %d error: %v", i, err)
+		}
+		if result.TaskID != "task-diverse" {
+			t.Errorf("iteration %d: TaskID = %q, want %q (diverse provider preferred)", i, result.TaskID, "task-diverse")
+		}
+
+		// Reset state for next iteration
+		state.Tasks[0].Status = models.TaskStatusPartiallyApproved
+		state.Tasks[0].ReviewingBy = nil
+		state.Tasks[0].ReviewLeaseExpires = nil
+		state.Tasks[1].Status = models.TaskStatusPartiallyApproved
+		state.Tasks[1].ReviewingBy = nil
+		state.Tasks[1].ReviewLeaseExpires = nil
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:     "code-reviewer",
+			Status:   models.AgentStatusIdle,
+			Provider: "google",
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+	}
+}
+
+func TestClaimReviewerTask_DiversityFreshSubmissions(t *testing.T) {
+	// Tests diversity preference for fresh submitted tasks (no existing approvals).
+	// Diversity is satisfiable when at least one other registered reviewer for the
+	// role-pair has a provider different from the claiming reviewer's provider.
+	//
+	// Since all coding-pair tasks share the same reviewer pool, diversity produces
+	// the same result for all candidates. We validate the code paths by verifying:
+	// (a) claims succeed with diverse reviewer pools (code path exercises pickWithFreshDiversity)
+	// (b) claims succeed with homogeneous pools (falls through to random)
+	// (c-d) multi-reviewer pools also work correctly
+	tests := []struct {
+		name        string
+		extraAgents map[string]models.Agent
+		wantSuccess bool // All subcases should succeed
+	}{
+		{
+			name: "single alternate reviewer different provider",
+			extraAgents: map[string]models.Agent{
+				"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "anthropic"},
+			},
+			wantSuccess: true,
+		},
+		{
+			name: "single alternate reviewer same provider",
+			extraAgents: map[string]models.Agent{
+				"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "google"},
+			},
+			wantSuccess: true,
+		},
+		{
+			name: "multiple alternate reviewers one different provider",
+			extraAgents: map[string]models.Agent{
+				"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "google"},
+				"code-reviewer-3": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "anthropic"},
+			},
+			wantSuccess: true,
+		},
+		{
+			name: "multiple alternate reviewers mixed providers",
+			extraAgents: map[string]models.Agent{
+				"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "anthropic"},
+				"code-reviewer-3": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "openai"},
+			},
+			wantSuccess: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, tmpDir)
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			now := time.Now().UTC()
+			state := testhelpers.CreateValidState()
+			wt1 := ".worktrees/task-1"
+			rc1 := "abc123"
+			state.Tasks = []models.Task{
+				{
+					ID:           "task-1",
+					Status:       models.TaskStatusReadyForReview,
+					RolePair:     "coding-pair",
+					Priority:     1,
+					Worktree:     &wt1,
+					ReviewCommit: &rc1,
+					History:      []models.TaskHistoryEntry{},
+					Created:      now,
+				},
+			}
+			state.Agents["code-reviewer-1"] = models.Agent{
+				Role:     "code-reviewer",
+				Status:   models.AgentStatusIdle,
+				Provider: "google",
+			}
+			for id, agent := range tt.extraAgents {
+				state.Agents[id] = agent
+			}
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+				ProjectRoot:   tmpDir,
+				AgentID:       "code-reviewer-1",
+				LeaseDuration: 1800,
+			})
+			if tt.wantSuccess {
+				if err != nil {
+					t.Fatalf("ClaimReviewerTask() error: %v", err)
+				}
+				if result.TaskID != "task-1" {
+					t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+				}
+			}
+		})
+	}
+}

@@ -225,7 +225,7 @@ func TestSubmitVerdict_WrongStatus(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
-	testhelpers.RequireErrorContains(t, err, "not REVIEWING")
+	testhelpers.RequireErrorContains(t, err, "not in a reviewing state")
 }
 
 func TestSubmitVerdict_AgentReleased(t *testing.T) {
@@ -668,6 +668,130 @@ func TestSubmitVerdictApprovals(t *testing.T) {
 			t.Errorf("Approval.Provider = %q, want empty string", task.Approvals[0].Provider)
 		}
 	})
+}
+
+func TestSubmitVerdict_ApprovedFromReviewing2(t *testing.T) {
+	// Verifies that a verdict can be submitted from REVIEWING_CODE_2 state
+	// (second review in quorum flow). The task should transition to APPROVED.
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	reviewCommit := "review123"
+	worktree := ".worktrees/task-1"
+	reviewingBy := "code-reviewer-2"
+	reviewLease := now.Add(30 * time.Minute)
+	state.Tasks = []models.Task{
+		{
+			ID:                 "task-1",
+			Status:             models.TaskStatusReviewingCode2,
+			RolePair:           "coding-pair",
+			Priority:           1,
+			ReviewCommit:       &reviewCommit,
+			Worktree:           &worktree,
+			ReviewingBy:        &reviewingBy,
+			ReviewLeaseExpires: &reviewLease,
+			History:            []models.TaskHistoryEntry{},
+			Created:            now,
+			Approvals: []models.Approval{
+				{Agent: "code-reviewer-1", Provider: "anthropic", Timestamp: now},
+			},
+		},
+	}
+	state.Agents["code-reviewer-2"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusReviewing,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-2")
+	if err != nil {
+		t.Fatalf("SubmitVerdict() error: %v", err)
+	}
+	if result.Verdict != "APPROVED" {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusApproved {
+		t.Errorf("Status = %v, want CODE_APPROVED", task.Status)
+	}
+	if task.ApprovedBy == nil || *task.ApprovedBy != "code-reviewer-2" {
+		t.Error("ApprovedBy should be code-reviewer-2")
+	}
+	if task.ReviewingBy != nil {
+		t.Error("ReviewingBy should be cleared")
+	}
+}
+
+func TestSubmitVerdict_RejectedFromReviewing2(t *testing.T) {
+	// Verifies that a rejection can be submitted from REVIEWING_CODE_2 state.
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	reviewCommit := "review123"
+	worktree := ".worktrees/task-1"
+	reviewingBy := "code-reviewer-2"
+	reviewLease := now.Add(30 * time.Minute)
+	state.Tasks = []models.Task{
+		{
+			ID:                 "task-1",
+			Status:             models.TaskStatusReviewingCode2,
+			RolePair:           "coding-pair",
+			Priority:           1,
+			ReviewCommit:       &reviewCommit,
+			Worktree:           &worktree,
+			ReviewingBy:        &reviewingBy,
+			ReviewLeaseExpires: &reviewLease,
+			History:            []models.TaskHistoryEntry{},
+			Created:            now,
+			Approvals: []models.Approval{
+				{Agent: "code-reviewer-1", Provider: "anthropic", Timestamp: now},
+			},
+		},
+	}
+	state.Agents["code-reviewer-2"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusReviewing,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Needs improvement", "code-reviewer-2")
+	if err != nil {
+		t.Fatalf("SubmitVerdict() error: %v", err)
+	}
+	if result.Verdict != "REJECTED" {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, "REJECTED")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusRejected {
+		t.Errorf("Status = %v, want CODE_REJECTED", task.Status)
+	}
+	if task.RejectionReason == nil || *task.RejectionReason != "Needs improvement" {
+		t.Error("RejectionReason not set correctly")
+	}
 }
 
 func assertReleasedAgent(t *testing.T, state *models.State, agentID string) {

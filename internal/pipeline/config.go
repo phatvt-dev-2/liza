@@ -87,7 +87,9 @@ type RolePairDef struct {
 	States       RolePairStates   `yaml:"states"`
 }
 
-// RolePairStates holds the six state names for a role-pair's lifecycle.
+// RolePairStates holds the state names for a role-pair's lifecycle.
+// The six base states are required. PartiallyApproved and Reviewing2 are
+// optional — only needed when the effective quorum can exceed 1.
 type RolePairStates struct {
 	Initial           string `yaml:"initial"`
 	Executing         string `yaml:"executing"`
@@ -194,15 +196,18 @@ func validate(cfg *PipelineConfig) error {
 	stateOwner := make(map[string]string) // state name → role-pair name
 	for name, rp := range p.RolePairs {
 		states := []struct {
-			phase string
-			value string
+			phase    string
+			value    string
+			required bool
 		}{
-			{"initial", rp.States.Initial},
-			{"executing", rp.States.Executing},
-			{"submitted", rp.States.Submitted},
-			{"reviewing", rp.States.Reviewing},
-			{"approved", rp.States.Approved},
-			{"rejected", rp.States.Rejected},
+			{"initial", rp.States.Initial, true},
+			{"executing", rp.States.Executing, true},
+			{"submitted", rp.States.Submitted, true},
+			{"reviewing", rp.States.Reviewing, true},
+			{"approved", rp.States.Approved, true},
+			{"rejected", rp.States.Rejected, true},
+			{"partially-approved", rp.States.PartiallyApproved, false},
+			{"reviewing-2", rp.States.Reviewing2, false},
 		}
 		// Include optional quorum states in duplicate checking.
 		if rp.States.PartiallyApproved != "" {
@@ -218,8 +223,11 @@ func validate(cfg *PipelineConfig) error {
 			}{"reviewing-2", rp.States.Reviewing2})
 		}
 		for _, s := range states {
-			if s.value == "" {
+			if s.required && s.value == "" {
 				return fmt.Errorf("role-pair %q: %s state is empty", name, s.phase)
+			}
+			if s.value == "" {
+				continue // optional state not declared
 			}
 			if owner, exists := stateOwner[s.value]; exists {
 				return fmt.Errorf("duplicate state name %q: used by role-pairs %q and %q", s.value, owner, name)

@@ -72,6 +72,8 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	if err != nil {
 		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
 	}
+	// Also accept reviewing_2 (second review in quorum flow).
+	expectedReviewing2Status, _ := resolver.Reviewing2Status(task.RolePair)
 	approvedStatus, err := resolver.ApprovedStatus(task.RolePair)
 	if err != nil {
 		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
@@ -83,8 +85,10 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	pipelineTransitions := BuildPipelineTransitions(resolver)
 
 	// Fast-fail before git operations; re-checked authoritatively inside Modify.
-	if task.Status != expectedReviewingStatus {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedReviewingStatus, task.Status)}
+	isReviewing := task.Status == expectedReviewingStatus ||
+		(expectedReviewing2Status != "" && task.Status == expectedReviewing2Status)
+	if !isReviewing {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not in a reviewing state (current status: %s)", taskID, task.Status)}
 	}
 
 	// Phase 2: Validate ReviewCommit exists and matches worktree HEAD
@@ -119,8 +123,10 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
-		if task.Status != expectedReviewingStatus {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedReviewingStatus, task.Status)}
+		isReviewingAuth := task.Status == expectedReviewingStatus ||
+			(expectedReviewing2Status != "" && task.Status == expectedReviewing2Status)
+		if !isReviewingAuth {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not in a reviewing state (current status: %s)", taskID, task.Status)}
 		}
 
 		transitionTask := func(to models.TaskStatus) error {

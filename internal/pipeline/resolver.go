@@ -81,37 +81,37 @@ func (r *Resolver) RejectedStatus(rolePair string) (models.TaskStatus, error) {
 	return models.TaskStatus(s.Rejected), nil
 }
 
-// ResolvedTimeouts holds parsed timeout durations for a role.
-type ResolvedTimeouts struct {
-	Execution    time.Duration
-	PollInterval time.Duration
-	MaxWait      time.Duration
-}
-
 // PartiallyApprovedStatus returns the partially-approved state for the given role-pair.
-// Returns an error if the state is not configured (quorum <= 1).
+// Returns an error if the role-pair does not declare a partially-approved state.
 func (r *Resolver) PartiallyApprovedStatus(rolePair string) (models.TaskStatus, error) {
 	s, err := r.lookupStates(rolePair)
 	if err != nil {
 		return "", err
 	}
 	if s.PartiallyApproved == "" {
-		return "", fmt.Errorf("role-pair %q has no partially-approved state", rolePair)
+		return "", fmt.Errorf("role-pair %q has no partially-approved state declared", rolePair)
 	}
 	return models.TaskStatus(s.PartiallyApproved), nil
 }
 
 // Reviewing2Status returns the reviewing-2 state for the given role-pair.
-// Returns an error if the state is not configured (quorum <= 1).
+// Returns an error if the role-pair does not declare a reviewing-2 state.
 func (r *Resolver) Reviewing2Status(rolePair string) (models.TaskStatus, error) {
 	s, err := r.lookupStates(rolePair)
 	if err != nil {
 		return "", err
 	}
 	if s.Reviewing2 == "" {
-		return "", fmt.Errorf("role-pair %q has no reviewing-2 state", rolePair)
+		return "", fmt.Errorf("role-pair %q has no reviewing-2 state declared", rolePair)
 	}
 	return models.TaskStatus(s.Reviewing2), nil
+}
+
+// ResolvedTimeouts holds parsed timeout durations for a role.
+type ResolvedTimeouts struct {
+	Execution    time.Duration
+	PollInterval time.Duration
+	MaxWait      time.Duration
 }
 
 // RoleType returns the type (doer, reviewer, orchestrator) for the named role.
@@ -489,6 +489,10 @@ func (r *Resolver) resolvePhase(rolePair, phase string) models.TaskStatus {
 		return models.TaskStatus(rp.States.Approved)
 	case "rejected":
 		return models.TaskStatus(rp.States.Rejected)
+	case "partially-approved":
+		return models.TaskStatus(rp.States.PartiallyApproved)
+	case "reviewing-2":
+		return models.TaskStatus(rp.States.Reviewing2)
 	default:
 		return ""
 	}

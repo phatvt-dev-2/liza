@@ -92,6 +92,10 @@ const (
 	TaskStatusReviewingCodingPlan TaskStatus = "REVIEWING_CODING_PLAN"
 	TaskStatusCodingPlanApproved  TaskStatus = "CODING_PLAN_APPROVED"
 	TaskStatusCodingPlanRejected  TaskStatus = "CODING_PLAN_REJECTED"
+
+	// Quorum review states (coding-pair)
+	TaskStatusPartiallyApproved TaskStatus = "CODE_PARTIALLY_APPROVED"
+	TaskStatusReviewingCode2    TaskStatus = "REVIEWING_CODE_2"
 )
 
 // IsValid checks if the task status is valid
@@ -103,7 +107,8 @@ func (ts TaskStatus) IsValid() bool {
 		TaskStatusAbandoned, TaskStatusSuperseded, TaskStatusIntegrationFailed,
 		TaskStatusDraftCodingPlan, TaskStatusCodePlanning,
 		TaskStatusCodingPlanToReview, TaskStatusReviewingCodingPlan,
-		TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected:
+		TaskStatusCodingPlanApproved, TaskStatusCodingPlanRejected,
+		TaskStatusPartiallyApproved, TaskStatusReviewingCode2:
 		return true
 	}
 	return false

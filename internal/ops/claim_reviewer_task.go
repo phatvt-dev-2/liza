@@ -29,8 +29,12 @@ type ClaimReviewerTaskResult struct {
 }
 
 // ClaimReviewerTask finds and claims a reviewable task for a code-reviewer agent.
-// It atomically transitions the task to REVIEWING, assigns the reviewer, and updates
-// the agent status. This operation is reachable from both MCP and CLI consumers.
+// It atomically transitions the task to REVIEWING (or REVIEWING_2 for partially-
+// approved tasks), assigns the reviewer, and updates the agent status.
+//
+// Claim priority: partially_approved candidates are selected before submitted
+// candidates at the same priority level. Within each status tier, provider
+// diversity is used as a soft preference for candidate selection.
 func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, error) {
 	if input.AgentID == "" {
 		return nil, &PreconditionError{Reason: "agent ID is required"}
@@ -70,15 +74,20 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 
 	err = bb.Modify(func(state *models.State) error {
 		// Find reviewable task with highest priority
-		// READY_FOR_REVIEW tasks are available for claiming (stale REVIEWING leases
-		// are reverted to READY_FOR_REVIEW by ops.ClearStaleReviewClaims)
 		var candidates []*models.Task
 		for i := range state.Tasks {
 			if state.Tasks[i].IsClaimable(workflowRole, state.Tasks, pr) {
 				candidates = append(candidates, &state.Tasks[i])
 			}
 		}
-		task := pickRandomFromTopTier(candidates)
+
+		// Look up claiming reviewer's provider from agent state.
+		claimerProvider := ""
+		if agent, ok := state.Agents[input.AgentID]; ok {
+			claimerProvider = agent.Provider
+		}
+
+		task := selectBestCandidate(candidates, pr, claimerProvider, input.AgentID, state)
 
 		if task == nil {
 			return &PreconditionError{Reason: "no reviewable tasks found"}
@@ -92,11 +101,13 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		if task.RolePair == "" {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", task.ID)}
 		}
-		reviewing, err := pr.ReviewingStatus(task.RolePair)
+
+		// Determine target reviewing status based on task's current state.
+		targetStatus, err := resolveReviewingTarget(task, pr)
 		if err != nil {
-			return fmt.Errorf("failed to resolve reviewing status for role-pair %q: %w", task.RolePair, err)
+			return err
 		}
-		if err := task.TransitionWith(reviewing, pb.transitions); err != nil {
+		if err := task.TransitionWith(targetStatus, pb.transitions); err != nil {
 			return err
 		}
 		task.ReviewingBy = &input.AgentID
@@ -129,13 +140,161 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 	return &result, nil
 }
 
-// pickRandomFromTopTier selects a random task from the highest-priority tier.
-// This prevents multiple reviewers from deterministically converging on the
-// same task. Returns nil if candidates is empty.
-func pickRandomFromTopTier(candidates []*models.Task) *models.Task {
+// resolveReviewingTarget returns the appropriate reviewing status for the task:
+// - submitted → reviewing (first review)
+// - partially_approved → reviewing_2 (second review)
+func resolveReviewingTarget(task *models.Task, pr models.PipelineResolver) (models.TaskStatus, error) {
+	partiallyApproved, paErr := pr.PartiallyApprovedStatus(task.RolePair)
+	if paErr == nil && task.Status == partiallyApproved {
+		reviewing2, err := pr.Reviewing2Status(task.RolePair)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve reviewing-2 status for role-pair %q: %w", task.RolePair, err)
+		}
+		return reviewing2, nil
+	}
+	reviewing, err := pr.ReviewingStatus(task.RolePair)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve reviewing status for role-pair %q: %w", task.RolePair, err)
+	}
+	return reviewing, nil
+}
+
+// selectBestCandidate picks the best candidate from a list of claimable tasks.
+// Selection order:
+// 1. Top priority tier (lowest priority number)
+// 2. Partially_approved tasks preferred over submitted tasks (claim priority)
+// 3. Provider diversity as soft preference within each status group
+// 4. Random selection among remaining equally-preferred candidates
+func selectBestCandidate(
+	candidates []*models.Task,
+	pr models.PipelineResolver,
+	claimerProvider string,
+	claimerAgentID string,
+	state *models.State,
+) *models.Task {
 	tier := models.TopPriorityTier(candidates)
 	if len(tier) == 0 {
 		return nil
 	}
-	return tier[rand.IntN(len(tier))]
+
+	// Split into partially_approved and submitted groups.
+	var partiallyApprovedTasks, submittedTasks []*models.Task
+	for _, t := range tier {
+		pa, err := pr.PartiallyApprovedStatus(t.RolePair)
+		if err == nil && t.Status == pa {
+			partiallyApprovedTasks = append(partiallyApprovedTasks, t)
+		} else {
+			submittedTasks = append(submittedTasks, t)
+		}
+	}
+
+	// Prefer partially_approved tasks (claim priority).
+	if len(partiallyApprovedTasks) > 0 {
+		return pickWithApprovalDiversity(partiallyApprovedTasks, claimerProvider)
+	}
+
+	// Fall back to submitted tasks with fresh-submission diversity.
+	return pickWithFreshDiversity(submittedTasks, claimerProvider, claimerAgentID, pr, state)
+}
+
+// pickWithApprovalDiversity selects from partially_approved tasks, preferring
+// tasks where the claimer's provider differs from existing approvals.
+func pickWithApprovalDiversity(tasks []*models.Task, claimerProvider string) *models.Task {
+	if claimerProvider == "" || len(tasks) <= 1 {
+		return pickRandom(tasks)
+	}
+
+	var diverse, same []*models.Task
+	for _, t := range tasks {
+		if hasDifferentProvider(t.Approvals, claimerProvider) {
+			diverse = append(diverse, t)
+		} else {
+			same = append(same, t)
+		}
+	}
+
+	if len(diverse) > 0 {
+		return pickRandom(diverse)
+	}
+	return pickRandom(same)
+}
+
+// hasDifferentProvider returns true if any existing approval on the task was
+// made by a provider different from the claiming reviewer's provider.
+func hasDifferentProvider(approvals []models.Approval, claimerProvider string) bool {
+	for _, a := range approvals {
+		if a.Provider != claimerProvider {
+			return true
+		}
+	}
+	return false
+}
+
+// pickWithFreshDiversity selects from submitted tasks (no existing approvals),
+// preferring tasks where provider diversity is satisfiable from the reviewer pool.
+// Diversity is satisfiable when at least one other registered reviewer for the
+// role-pair has a provider different from the claiming reviewer's provider.
+func pickWithFreshDiversity(
+	tasks []*models.Task,
+	claimerProvider string,
+	claimerAgentID string,
+	pr models.PipelineResolver,
+	state *models.State,
+) *models.Task {
+	if claimerProvider == "" || len(tasks) <= 1 {
+		return pickRandom(tasks)
+	}
+
+	var preferred, rest []*models.Task
+	for _, t := range tasks {
+		if isDiversitySatisfiable(t, claimerProvider, claimerAgentID, pr, state) {
+			preferred = append(preferred, t)
+		} else {
+			rest = append(rest, t)
+		}
+	}
+
+	if len(preferred) > 0 {
+		return pickRandom(preferred)
+	}
+	return pickRandom(rest)
+}
+
+// isDiversitySatisfiable checks if at least one other registered reviewer for
+// the task's role-pair has a provider different from the claiming reviewer's provider.
+func isDiversitySatisfiable(
+	task *models.Task,
+	claimerProvider string,
+	claimerAgentID string,
+	pr models.PipelineResolver,
+	state *models.State,
+) bool {
+	reviewerRole, err := pr.ReviewerRole(task.RolePair)
+	if err != nil {
+		return false
+	}
+
+	for agentID, agent := range state.Agents {
+		if agentID == claimerAgentID {
+			continue
+		}
+		// Check if this agent is a reviewer for the same role-pair.
+		// agent.Role stores the runtime role name (e.g., "code-reviewer"),
+		// which matches the format returned by pr.ReviewerRole().
+		if agent.Role != reviewerRole {
+			continue
+		}
+		if agent.Provider != claimerProvider {
+			return true
+		}
+	}
+	return false
+}
+
+// pickRandom selects a random task from the slice. Returns nil if empty.
+func pickRandom(tasks []*models.Task) *models.Task {
+	if len(tasks) == 0 {
+		return nil
+	}
+	return tasks[rand.IntN(len(tasks))]
 }

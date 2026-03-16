@@ -265,7 +265,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			reason:     "",
 			agentID:    "code-reviewer-1",
 			wantErr:    true,
-			wantErrMsg: "task t1 is not REVIEWING",
+			wantErrMsg: "task t1 is not in a reviewing state",
 			setupState: func(s *models.State) {
 				s.Tasks = []models.Task{
 					{

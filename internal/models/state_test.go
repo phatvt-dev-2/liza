@@ -1355,17 +1355,15 @@ func (m *mockPipelineResolver) SubmittedStatus(string) (TaskStatus, error) { ret
 func (m *mockPipelineResolver) ReviewingStatus(string) (TaskStatus, error) { return m.reviewing, nil }
 func (m *mockPipelineResolver) ExecutingStatus(string) (TaskStatus, error) { return m.executing, nil }
 func (m *mockPipelineResolver) ApprovedStatus(string) (TaskStatus, error)  { return m.approved, nil }
-
 func (m *mockPipelineResolver) PartiallyApprovedStatus(string) (TaskStatus, error) {
 	if m.partiallyApproved == "" {
-		return "", fmt.Errorf("no partially-approved state configured")
+		return "", fmt.Errorf("no partially-approved state declared")
 	}
 	return m.partiallyApproved, nil
 }
-
 func (m *mockPipelineResolver) Reviewing2Status(string) (TaskStatus, error) {
 	if m.reviewing2 == "" {
-		return "", fmt.Errorf("no reviewing-2 state configured")
+		return "", fmt.Errorf("no reviewing-2 state declared")
 	}
 	return m.reviewing2, nil
 }
