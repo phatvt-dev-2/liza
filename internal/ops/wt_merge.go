@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -237,7 +238,7 @@ func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string)
 // Returns IntegrationFailedError if merge conflicts or integration tests fail.
 //
 // No terminal I/O — integration test output is captured and returned in the result or error.
-func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
+func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string]any) (*MergeResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -441,13 +442,17 @@ func MergeWorktree(projectRoot, taskID, agentID string) (*MergeResult, error) {
 			s.ReleaseAgent(*t.AssignedTo)
 		}
 
-		// Add history entry
+		// Add history entry with merge-gate extra fields
+		extra := map[string]any{"tests_ran": testsRan}
+		if len(mergeExtra) > 0 && mergeExtra[0] != nil {
+			maps.Copy(extra, mergeExtra[0])
+		}
 		historyEntry := models.TaskHistoryEntry{
 			Time:   time.Now(),
 			Event:  models.TaskEventMerged,
 			Agent:  &agentID,
 			Commit: &mergeCommit,
-			Extra:  map[string]any{"tests_ran": testsRan},
+			Extra:  extra,
 		}
 		t.History = append(t.History, historyEntry)
 
