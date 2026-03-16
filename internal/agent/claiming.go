@@ -86,7 +86,7 @@ func claimReviewerTaskForRole(projectRoot, agentID, role string, leaseDuration i
 	result, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
 		ProjectRoot:   projectRoot,
 		AgentID:       agentID,
-		WorkflowRole:  role,
+		Role:          role,
 		LeaseDuration: leaseDuration,
 	})
 	if err != nil {

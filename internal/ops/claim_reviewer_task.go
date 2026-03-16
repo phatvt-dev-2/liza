@@ -22,7 +22,7 @@ const defaultReviewClaimCooldown = 60 * time.Second
 type ClaimReviewerTaskInput struct {
 	ProjectRoot   string
 	AgentID       string
-	WorkflowRole  string
+	Role          string
 	LeaseDuration int
 }
 
@@ -49,15 +49,15 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		input.LeaseDuration = models.DefaultLeaseDurationSeconds
 	}
 
-	workflowRole := input.WorkflowRole
-	if workflowRole == "" {
+	role := input.Role
+	if role == "" {
 		// Infer role from agent ID; default to code reviewer.
-		role, err := identity.ExtractRole(input.AgentID)
-		if err == nil && roles.IsValid(role) {
-			workflowRole = role
+		inferred, err := identity.ExtractRole(input.AgentID)
+		if err == nil && roles.IsValid(inferred) {
+			role = inferred
 		}
-		if workflowRole == "" {
-			workflowRole = models.RoleCodeReviewer
+		if role == "" {
+			role = models.RoleCodeReviewer
 		}
 	}
 
@@ -80,7 +80,7 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		// Find reviewable task with highest priority
 		var candidates []*models.Task
 		for i := range state.Tasks {
-			if state.Tasks[i].IsClaimable(workflowRole, state.Tasks, pr) {
+			if state.Tasks[i].IsClaimable(role, state.Tasks, pr) {
 				candidates = append(candidates, &state.Tasks[i])
 			}
 		}
