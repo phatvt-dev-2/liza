@@ -86,6 +86,18 @@ func (h *Heartbeat) beat() error {
 		agent.LeaseExpires = &newLease
 		state.Agents[h.agentID] = agent
 
+		// Renew task lease if agent is actively assigned
+		if agent.CurrentTask != nil {
+			if task := state.FindTask(*agent.CurrentTask); task != nil {
+				if task.AssignedTo != nil && *task.AssignedTo == h.agentID && task.LeaseExpires != nil {
+					task.LeaseExpires = &newLease
+				}
+				if task.ReviewingBy != nil && *task.ReviewingBy == h.agentID && task.ReviewLeaseExpires != nil {
+					task.ReviewLeaseExpires = &newLease
+				}
+			}
+		}
+
 		return nil
 	})
 }

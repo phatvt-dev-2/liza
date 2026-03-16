@@ -546,3 +546,206 @@ func TestHeartbeatBoundsValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestHeartbeatRenewsTaskLease(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	staleLeaseTime := now.Add(-5 * time.Minute) // expired lease
+	taskID := "coding-1"
+
+	initialState := testhelpers.CreateValidState()
+	initialState.Agents = map[string]models.Agent{
+		"coder-1": {
+			Role:         "coder",
+			Status:       models.AgentStatusWorking,
+			CurrentTask:  testhelpers.StringPtr(taskID),
+			Heartbeat:    now.Add(-10 * time.Minute),
+			LeaseExpires: &staleLeaseTime,
+		},
+	}
+	initialState.Tasks = []models.Task{
+		{
+			ID:           taskID,
+			Description:  "Test task",
+			Status:       models.TaskStatusImplementing,
+			Priority:     1,
+			AssignedTo:   testhelpers.StringPtr("coder-1"),
+			LeaseExpires: &staleLeaseTime,
+			SpecRef:      "specs/test.md",
+			DoneWhen:     "tests pass",
+			Scope:        "internal/",
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	config := HeartbeatConfig{
+		AgentID:       "coder-1",
+		StatePath:     stateFile,
+		Interval:      50 * time.Millisecond,
+		LeaseDuration: 30 * time.Minute,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	hb := NewHeartbeat(config)
+	doneCh := make(chan error, 1)
+	go func() { doneCh <- hb.Start(ctx) }()
+	<-doneCh
+
+	bb := db.New(stateFile)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.LeaseExpires == nil {
+		t.Fatal("Task LeaseExpires is nil after heartbeat")
+	}
+	if !task.LeaseExpires.After(staleLeaseTime) {
+		t.Errorf("Task lease not renewed: initial=%v, final=%v", staleLeaseTime, *task.LeaseExpires)
+	}
+	if task.LeaseExpires.Before(time.Now().UTC()) {
+		t.Error("Task lease is in the past after heartbeat")
+	}
+}
+
+func TestHeartbeatRenewsReviewLease(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	staleLeaseTime := now.Add(-5 * time.Minute)
+	taskID := "coding-2"
+
+	initialState := testhelpers.CreateValidState()
+	initialState.Agents = map[string]models.Agent{
+		"reviewer-1": {
+			Role:         "code-reviewer",
+			Status:       models.AgentStatusWorking,
+			CurrentTask:  testhelpers.StringPtr(taskID),
+			Heartbeat:    now.Add(-10 * time.Minute),
+			LeaseExpires: &staleLeaseTime,
+		},
+	}
+	initialState.Tasks = []models.Task{
+		{
+			ID:                 taskID,
+			Description:        "Test task for review",
+			Status:             models.TaskStatusReviewing,
+			Priority:           1,
+			ReviewingBy:        testhelpers.StringPtr("reviewer-1"),
+			ReviewLeaseExpires: &staleLeaseTime,
+			SpecRef:            "specs/test.md",
+			DoneWhen:           "tests pass",
+			Scope:              "internal/",
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	config := HeartbeatConfig{
+		AgentID:       "reviewer-1",
+		StatePath:     stateFile,
+		Interval:      50 * time.Millisecond,
+		LeaseDuration: 30 * time.Minute,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	hb := NewHeartbeat(config)
+	doneCh := make(chan error, 1)
+	go func() { doneCh <- hb.Start(ctx) }()
+	<-doneCh
+
+	bb := db.New(stateFile)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.ReviewLeaseExpires == nil {
+		t.Fatal("ReviewLeaseExpires is nil after heartbeat")
+	}
+	if !task.ReviewLeaseExpires.After(staleLeaseTime) {
+		t.Errorf("Review lease not renewed: initial=%v, final=%v", staleLeaseTime, *task.ReviewLeaseExpires)
+	}
+	if task.ReviewLeaseExpires.Before(time.Now().UTC()) {
+		t.Error("Review lease is in the past after heartbeat")
+	}
+}
+
+func TestHeartbeatSkipsClearedLease(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	taskID := "coding-3"
+
+	initialState := testhelpers.CreateValidState()
+	initialState.Agents = map[string]models.Agent{
+		"coder-1": {
+			Role:         "coder",
+			Status:       models.AgentStatusWorking,
+			CurrentTask:  testhelpers.StringPtr(taskID),
+			Heartbeat:    now.Add(-10 * time.Minute),
+			LeaseExpires: testhelpers.TimePtr(now.Add(-5 * time.Minute)),
+		},
+	}
+	initialState.Tasks = []models.Task{
+		{
+			ID:           taskID,
+			Description:  "Blocked task",
+			Status:       models.TaskStatusBlocked,
+			Priority:     1,
+			AssignedTo:   testhelpers.StringPtr("coder-1"),
+			LeaseExpires: nil, // intentionally cleared (e.g. BLOCKED)
+			SpecRef:      "specs/test.md",
+			DoneWhen:     "tests pass",
+			Scope:        "internal/",
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	config := HeartbeatConfig{
+		AgentID:       "coder-1",
+		StatePath:     stateFile,
+		Interval:      50 * time.Millisecond,
+		LeaseDuration: 30 * time.Minute,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	hb := NewHeartbeat(config)
+	doneCh := make(chan error, 1)
+	go func() { doneCh <- hb.Start(ctx) }()
+	<-doneCh
+
+	bb := db.New(stateFile)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.LeaseExpires != nil {
+		t.Errorf("Task LeaseExpires should remain nil for cleared lease, got %v", *task.LeaseExpires)
+	}
+}
