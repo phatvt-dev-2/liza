@@ -283,6 +283,10 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    - **Orchestrator's supervisor** reads approved `output[]` and creates one downstream task per entry — purely mechanical,
      no LLM judgment involved in task creation
 
+   **Canonical code-plan artifact path:** Code-planners MUST save their plan document to
+   `specs/plans/<task-id>.md`. If a prior version exists (from a merged earlier attempt),
+   use `specs/plans/<task-id>-v<N>.md`. Code Plan Reviewers reject plans at non-canonical paths.
+
    **Path convention for `spec_ref`:** All `spec_ref` values in `output[]` (and on tasks generally) MUST
    use **repo-relative paths** (e.g. `specs/plans/auth-module.md`), never worktree-prefixed paths
    (e.g. ~~`.worktrees/code-planning-1/specs/plans/auth-module.md`~~). Doers work inside worktrees,

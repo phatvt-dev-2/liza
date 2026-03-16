@@ -1056,6 +1056,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"WORKTREE RULES:",
 			"TASK DECOMPOSITION PRINCIPLE:",
 			"IMPLEMENTATION PHASE:",
+			"specs/plans/task-planner.md", // canonical plan file path with task ID
 			"COLLECTIVE PLAN SCOPING",
 			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
 		} {
@@ -1094,6 +1095,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"CODE PLAN REVIEWER TOOLS:",
 			"liza_submit_verdict",
 			"REVIEW CHECKLIST:",
+			"specs/plans/task-cpr",         // interpolated task ID in reviewer gate
+			"Plan file location",           // gate label present in checklist
+			"Plan artifact not in diff at", // gate condition wording
 			"VERDICT SUBMISSION",
 		} {
 			if !strings.Contains(output, key) {

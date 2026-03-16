@@ -19,13 +19,20 @@
 
 IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
-2. For EACH coding task in your plan, call liza_set_task_output with structured entries.
+2. Plan file location:
+   Run: mkdir -p {{.Worktree}}/specs/plans
+   Save your plan to: {{.Worktree}}/specs/plans/{{.TaskID}}.md
+   If that file already exists (from a prior merged version), use the next
+   version: {{.Worktree}}/specs/plans/{{.TaskID}}-v2.md, then -v3.md, etc.
+   Accepted file names (under specs/plans/): {{.TaskID}}.md or {{.TaskID}}-v<N>.md (nothing else).
+   All later references to "the plan file" mean the exact path chosen here.
+3. For EACH coding task in your plan, call liza_set_task_output with structured entries.
    Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
    Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source).
    Extract each field verbatim from the plan file — do not compose from memory or paraphrase.
-3. Update worktree artifacts required by DONE WHEN.
-4. Validate done_when criteria with concrete checks.
-5. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza_submit_for_review until all pass):
+4. Update worktree artifacts required by DONE WHEN.
+5. Validate done_when criteria with concrete checks.
+6. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza_submit_for_review until all pass):
    a. Each output[] entry passes TASK DECOMPOSITION PRINCIPLE checks above.
    b. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
       ("tests pass" is vague; "TestFoo in pkg/bar passes asserting X" is falsifiable.)
@@ -33,15 +40,15 @@ IMPLEMENTATION PHASE:
       output[] entry. Unmapped requirements = not ready to submit.
    d. output[] completeness: one entry per planned coding task, each with all four fields
       (desc, done_when, scope, spec_ref) populated.
-   e. output[] parity: re-read the plan file in the worktree and verify each output[]
+   e. output[] parity: re-read the plan file at the path chosen in step 2 and verify each output[]
       entry's desc, done_when, scope, and spec_ref is character-identical to the plan.
       If any field was paraphrased, replace it with the verbatim text before submitting.
    f. Cross-reference consistency: for every cross-reference in the plan ("owned by CPx",
-      "depends on CPx", "out of scope for CPx"), search the plan file you committed in the
-      worktree and confirm the referenced task explicitly states that responsibility,
+      "depends on CPx", "out of scope for CPx"), search the plan file at the path chosen in step 2
+      and confirm the referenced task explicitly states that responsibility,
       dependency, or exclusion. If any reference points to a task that does not claim it,
       fix the plan before submitting.
-6. Submit using liza_submit_for_review only after all checks in step 5 pass.
+7. Submit using liza_submit_for_review only after all checks in step 6 pass.
 {{- else if eq .Role "epic-planner"}}
 
 IMPLEMENTATION PHASE:
