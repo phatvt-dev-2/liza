@@ -44,7 +44,7 @@ multiple approvals with provider diversity constraints before merge eligibility.
 
 **Desc:** Add quorum states to role-pair schema and transition map
 
-**Done When:** RolePairStates has PartiallyApproved and Reviewing2 optional string fields. validPhases includes partially-approved and reviewing-2. Resolver methods PartiallyApprovedStatus() and Reviewing2Status() exist. PipelineResolver interface in models/task.go includes both methods. Validation rejects role-pairs where quorum > 1 but quorum states are missing. TransitionMap() includes reviewing → partially-approved, partially-approved → reviewing-2, reviewing-2 → approved|rejected when states declared. BuildPipelineTransitions includes reviewing-2 → partially-approved (stale revert) and partially-approved → abandoned|superseded. pipeline.yaml coding-pair declares CODE_PARTIALLY_APPROVED and REVIEWING_CODE_2. All existing tests pass plus new tests for quorum state transitions.
+**Done When:** RolePairStates has PartiallyApproved and Reviewing2 optional string fields. validPhases includes partially-approved and reviewing-2. Resolver methods PartiallyApprovedStatus() and Reviewing2Status() exist. PipelineResolver interface in models/task.go includes both methods. Validation rejects role-pairs where the effective quorum can exceed 1 but quorum states are missing — this includes both role-pairs with base quorum > 1 AND role-pairs where any override (significant-change, architecture-impact) specifies quorum > 1, even if base quorum is 1. TransitionMap() includes reviewing → partially-approved, partially-approved → reviewing-2, reviewing-2 → approved|rejected when states declared. BuildPipelineTransitions includes reviewing-2 → partially-approved (stale revert) and partially-approved → abandoned|superseded. pipeline.yaml coding-pair declares CODE_PARTIALLY_APPROVED and REVIEWING_CODE_2. All existing tests pass plus new tests for quorum state transitions including TestQuorumStatesRequiredForOverrides (base quorum 1, override quorum 2, missing states → rejected).
 
 **Scope:** internal/pipeline/config.go, internal/pipeline/resolver.go, internal/ops/pipeline_ops.go, internal/models/task.go (interface only), internal/embedded/pipeline.yaml, tests in all affected packages
 
@@ -114,7 +114,7 @@ multiple approvals with provider diversity constraints before merge eligibility.
 
 **Desc:** Extend ClaimReviewerTask for partially-approved tasks with priority and diversity
 
-**Done When:** isClaimablePipeline returns true for reviewer role when task status is partially_approved. ClaimReviewerTask transitions partially_approved → reviewing_2. Claim priority: partially_approved candidates selected before submitted candidates at same priority level. Provider diversity: among equal-priority candidates, tasks where claiming reviewer's provider differs from existing approvals are preferred (soft preference). TestClaimPartiallyApproved, TestClaimPriority, TestClaimDiversity pass.
+**Done When:** isClaimablePipeline returns true for reviewer role when task status is partially_approved. ClaimReviewerTask transitions partially_approved → reviewing_2. Claim priority: partially_approved candidates selected before submitted candidates at same priority level. Provider diversity for partially-approved tasks: among equal-priority candidates, tasks where claiming reviewer's provider differs from existing approvals are preferred (soft preference). Provider diversity for fresh submissions (submitted tasks with no existing approvals): tasks where the claiming reviewer's provider differs from the only other registered reviewer's provider for the role-pair are preferred (soft preference); when multiple other reviewers exist with mixed providers, diversity is always satisfiable and no preference is applied. TestClaimPartiallyApproved, TestClaimPriority, TestClaimDiversityWithApprovals, TestClaimDiversityFreshSubmissions pass.
 
 **Scope:** internal/ops/claim_reviewer_task.go, internal/models/task.go, tests
 
@@ -211,7 +211,8 @@ CP3-4         CP3-5         │       │
 | Modify reviewer PreWork merge gate: quorum + provider diversity (best-effort) | CP3-10 |
 | 'All reviewers share one provider' fallback logic | CP3-10 |
 | Reviewer claim priority: `PARTIALLY_APPROVED` first | CP3-7 |
-| Provider diversity preference in claims | CP3-7 |
+| Provider diversity preference in claims (partially-approved: vs existing approvals) | CP3-7 |
+| Provider diversity preference in claims (fresh submissions: vs reviewer pool) | CP3-7 |
 | Impact upgrade triggers quorum recalculation | CP3-6 |
 | Stale lease handling for reviewing_2 | CP3-8 |
 | Provider metadata (already exists on Agent) | — (no change needed) |
