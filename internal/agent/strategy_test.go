@@ -543,17 +543,17 @@ func TestWaitConfig(t *testing.T) {
 		wantMaxWait time.Duration
 	}{
 		// Doer roles use Coder defaults
-		{"coder", 30 * time.Second, 1800 * time.Second},
-		{"code-planner", 30 * time.Second, 1800 * time.Second},
-		{"epic-planner", 30 * time.Second, 1800 * time.Second},
-		{"us-writer", 30 * time.Second, 1800 * time.Second},
+		{"coder", 30 * time.Second, 7200 * time.Second},
+		{"code-planner", 30 * time.Second, 7200 * time.Second},
+		{"epic-planner", 30 * time.Second, 7200 * time.Second},
+		{"us-writer", 30 * time.Second, 7200 * time.Second},
 		// Reviewer roles use Reviewer defaults
-		{"code-reviewer", 30 * time.Second, 1800 * time.Second},
-		{"code-plan-reviewer", 30 * time.Second, 1800 * time.Second},
-		{"epic-plan-reviewer", 30 * time.Second, 1800 * time.Second},
-		{"us-reviewer", 30 * time.Second, 1800 * time.Second},
+		{"code-reviewer", 30 * time.Second, 7200 * time.Second},
+		{"code-plan-reviewer", 30 * time.Second, 7200 * time.Second},
+		{"epic-plan-reviewer", 30 * time.Second, 7200 * time.Second},
+		{"us-reviewer", 30 * time.Second, 7200 * time.Second},
 		// Orchestrator uses Orchestrator defaults
-		{"orchestrator", 60 * time.Second, 1800 * time.Second},
+		{"orchestrator", 60 * time.Second, 7200 * time.Second},
 	}
 
 	zeroState := &models.State{}

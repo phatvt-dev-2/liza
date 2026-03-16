@@ -78,11 +78,11 @@ const (
 	DefaultMaxReviewCycles          = 5
 	DefaultLeaseDurationSeconds     = 1800 // 30 minutes
 	DefaultCoderPollInterval        = 30
-	DefaultCoderMaxWait             = 1800 // 30 minutes
+	DefaultCoderMaxWait             = 7200 // 2 hours
 	DefaultOrchestratorPollInterval = 60
-	DefaultOrchestratorMaxWait      = 1800 // 30 minutes
+	DefaultOrchestratorMaxWait      = 7200 // 2 hours
 	DefaultReviewerPollInterval     = 30
-	DefaultReviewerMaxWait          = 1800 // 30 minutes
+	DefaultReviewerMaxWait          = 7200 // 2 hours
 	DefaultExit42MaxBackoffSec      = 60
 	DefaultExit42RestartLimit       = 5
 )
@@ -114,7 +114,7 @@ type Config struct {
 	CoderMaxWait             int `yaml:"coder_max_wait"`
 	OrchestratorPollInterval int `yaml:"orchestrator_poll_interval"`
 	// OrchestratorMaxWait is the maximum time an orchestrator agent will wait for work
-	// before exiting. When 0, defaults to DefaultOrchestratorMaxWait (30 minutes).
+	// before exiting. When 0, defaults to DefaultOrchestratorMaxWait (2 hours).
 	// The orchestrator will exit earlier if STOPPED mode is detected or context is cancelled.
 	OrchestratorMaxWait     int            `yaml:"orchestrator_max_wait"`
 	ReviewerPollInterval    int            `yaml:"reviewer_poll_interval"`

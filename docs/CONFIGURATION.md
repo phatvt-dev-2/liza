@@ -81,11 +81,11 @@ All configuration lives in `.liza/state.yaml` under the `config` section.
 | `heartbeat_interval` | 60 | 1 | 300 | seconds | Heartbeat frequency |
 | `lease_duration` | 1800 | 300 | 7200 | seconds | Task lease duration |
 | `coder_poll_interval` | 30 | 5 | 120 | seconds | Check interval (legacy, now event-driven) |
-| `coder_max_wait` | 1800 | 300 | 7200 | seconds | Max idle before agent exits |
+| `coder_max_wait` | 7200 | 300 | 7200 | seconds | Max idle before agent exits |
 | `planner_poll_interval` | 60 | — | — | seconds | Planner polling interval |
-| `planner_max_wait` | 1800 | — | — | seconds | Max planner idle before exit |
+| `planner_max_wait` | 7200 | — | — | seconds | Max planner idle before exit |
 | `reviewer_poll_interval` | 30 | — | — | seconds | Reviewer polling interval |
-| `reviewer_max_wait` | 1800 | — | — | seconds | Max reviewer idle before exit |
+| `reviewer_max_wait` | 7200 | — | — | seconds | Max reviewer idle before exit |
 
 ### Agent Execution Timeouts
 
@@ -97,7 +97,7 @@ All configuration lives in `.liza/state.yaml` under the `config` section.
 
 When exceeded, supervisor kills CLI, resets agent to IDLE, retries after 5s delay.
 
-**Note:** Planners now respect `planner_max_wait` (default 30 minutes). Previously planners ran indefinitely; they now exit after the configured idle timeout, same as coders and reviewers.
+**Note:** Planners now respect `planner_max_wait` (default 2 hours). Previously planners ran indefinitely; they now exit after the configured idle timeout, same as coders and reviewers.
 
 ## Tuning Guidelines
 

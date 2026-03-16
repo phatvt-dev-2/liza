@@ -344,6 +344,15 @@ func verifyInitialization(t *testing.T, tmpDir, description, specRef string) {
 	if state.Config.Mode != models.SystemModeRunning {
 		t.Errorf("state.Config.Mode = %q, want %q", state.Config.Mode, models.SystemModeRunning)
 	}
+	if state.Config.CoderMaxWait != models.DefaultCoderMaxWait {
+		t.Errorf("state.Config.CoderMaxWait = %d, want %d", state.Config.CoderMaxWait, models.DefaultCoderMaxWait)
+	}
+	if state.Config.OrchestratorMaxWait != models.DefaultOrchestratorMaxWait {
+		t.Errorf("state.Config.OrchestratorMaxWait = %d, want %d", state.Config.OrchestratorMaxWait, models.DefaultOrchestratorMaxWait)
+	}
+	if state.Config.ReviewerMaxWait != models.DefaultReviewerMaxWait {
+		t.Errorf("state.Config.ReviewerMaxWait = %d, want %d", state.Config.ReviewerMaxWait, models.DefaultReviewerMaxWait)
+	}
 
 	// Verify circuit breaker
 	if state.CircuitBreaker.Status != "OK" {
