@@ -2185,6 +2185,107 @@ func TestHandleWriteCheckpointWithScopeExtensions(t *testing.T) {
 	}
 }
 
+// TestHandleWriteCheckpointWithImpact verifies impact param is stored in checkpoint Extra
+func TestHandleWriteCheckpointWithImpact(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Tasks[0].Status = models.TaskStatusImplementing
+		assignedTo := "coder-1"
+		state.Tasks[0].AssignedTo = &assignedTo
+		worktree := ".worktrees/task-1"
+		state.Tasks[0].Worktree = &worktree
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	result, err := server.handleWriteCheckpoint(map[string]any{
+		"task_id":         "task-1",
+		"agent_id":        "coder-1",
+		"intent":          "Refactor auth module",
+		"validation_plan": "go test ./...",
+		"files_to_modify": []any{"internal/auth/auth.go"},
+		"impact":          "architecture",
+	})
+
+	if err != nil {
+		t.Fatalf("handleWriteCheckpoint with impact failed: %v", err)
+	}
+
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+
+	// Verify impact was stored in checkpoint Extra
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.Tasks[0]
+	var found bool
+	for _, entry := range task.History {
+		if entry.Event == "pre_execution_checkpoint" {
+			if v, ok := entry.Extra["impact"].(string); ok && v == "architecture" {
+				found = true
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected impact=architecture in checkpoint history entry")
+	}
+}
+
+// TestHandleWriteCheckpointInvalidImpact verifies invalid impact values are rejected
+func TestHandleWriteCheckpointInvalidImpact(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Tasks[0].Status = models.TaskStatusImplementing
+		assignedTo := "coder-1"
+		state.Tasks[0].AssignedTo = &assignedTo
+		worktree := ".worktrees/task-1"
+		state.Tasks[0].Worktree = &worktree
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	_, err = server.handleWriteCheckpoint(map[string]any{
+		"task_id":         "task-1",
+		"agent_id":        "coder-1",
+		"intent":          "test",
+		"validation_plan": "test",
+		"files_to_modify": []any{"f.go"},
+		"impact":          "critical",
+	})
+
+	if err == nil {
+		t.Fatal("Expected error for invalid impact value")
+	}
+	if !strings.Contains(err.Error(), "invalid impact value") {
+		t.Errorf("Expected 'invalid impact value' in error, got: %v", err)
+	}
+}
+
 // TestHandleSubmitForReviewWithoutCheckpoint verifies submission is rejected without checkpoint
 func TestHandleSubmitForReviewWithoutCheckpoint(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspaceWithGit(t)

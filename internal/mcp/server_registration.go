@@ -613,6 +613,10 @@ func (s *Server) registerComplexOperations() {
 							Type:        "array",
 							Description: "Files outside task scope that must be modified, with justification. Each entry: {\"file\": \"path\", \"justification\": \"why\"}",
 						},
+						"impact": {
+							Type:        "string",
+							Description: "Change impact classification: standard (default), significant, or architecture. Determines review quorum requirements.",
+						},
 					},
 					Required: []string{"task_id", "agent_id", "intent", "validation_plan", "files_to_modify"},
 				},

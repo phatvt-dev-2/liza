@@ -157,6 +157,7 @@ func (s *Server) handleWriteCheckpoint(params map[string]any) (any, error) {
 
 	risks, _ := params["risks"].(string)
 	tddNotRequired, _ := params["tdd_not_required"].(string)
+	impact, _ := params["impact"].(string)
 	scopeExtensions := extractScopeExtensions(params, "scope_extensions")
 
 	input := &ops.WriteCheckpointInput{
@@ -167,6 +168,7 @@ func (s *Server) handleWriteCheckpoint(params map[string]any) (any, error) {
 		FilesToModify:   filesToModify,
 		Assumptions:     assumptions,
 		Risks:           risks,
+		Impact:          impact,
 		TDDNotRequired:  tddNotRequired,
 		ScopeExtensions: scopeExtensions,
 	}

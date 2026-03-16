@@ -16,6 +16,14 @@ type ScopeExtensionEntry struct {
 	Justification string
 }
 
+// validImpactValues defines the accepted impact classification values.
+var validImpactValues = map[string]bool{
+	"":             true,
+	"standard":     true,
+	"significant":  true,
+	"architecture": true,
+}
+
 // WriteCheckpointInput contains the parameters for writing a pre-execution checkpoint.
 type WriteCheckpointInput struct {
 	TaskID          string
@@ -27,6 +35,7 @@ type WriteCheckpointInput struct {
 	Risks           string
 	TDDNotRequired  string
 	ScopeExtensions []ScopeExtensionEntry
+	Impact          string
 }
 
 // WriteCheckpoint writes a pre-execution checkpoint to a task's history.
@@ -46,6 +55,9 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 	}
 	if len(input.FilesToModify) == 0 {
 		return &PreconditionError{Reason: "files_to_modify is required (at least one file)"}
+	}
+	if !validImpactValues[input.Impact] {
+		return &PreconditionError{Reason: fmt.Sprintf("invalid impact value %q: must be empty, standard, significant, or architecture", input.Impact)}
 	}
 
 	lp := paths.New(projectRoot)
@@ -97,6 +109,9 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 		if input.TDDNotRequired != "" {
 			extra["tdd_not_required"] = input.TDDNotRequired
 		}
+		if input.Impact != "" {
+			extra["impact"] = input.Impact
+		}
 		if len(input.ScopeExtensions) > 0 {
 			entries := make([]map[string]string, len(input.ScopeExtensions))
 			for i, se := range input.ScopeExtensions {
@@ -137,6 +152,21 @@ func GetTDDWaiver(history []models.TaskHistoryEntry, agentID string) string {
 		entry := history[i]
 		if entry.Event == models.TaskEventPreExecutionCheckpoint && entry.Agent != nil && *entry.Agent == agentID {
 			if v, ok := entry.Extra["tdd_not_required"].(string); ok {
+				return v
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// GetCheckpointImpact returns the impact classification from the latest
+// pre_execution_checkpoint by agentID, or "" if none was declared.
+func GetCheckpointImpact(history []models.TaskHistoryEntry, agentID string) string {
+	for i := len(history) - 1; i >= 0; i-- {
+		entry := history[i]
+		if entry.Event == models.TaskEventPreExecutionCheckpoint && entry.Agent != nil && *entry.Agent == agentID {
+			if v, ok := entry.Extra["impact"].(string); ok {
 				return v
 			}
 			return ""

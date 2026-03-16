@@ -592,6 +592,148 @@ func TestGetTDDWaiver(t *testing.T) {
 	}
 }
 
+func TestWriteCheckpointImpact(t *testing.T) {
+	t.Run("valid values accepted", func(t *testing.T) {
+		validValues := []string{"", "standard", "significant", "architecture"}
+		for _, impact := range validValues {
+			t.Run("impact_"+impact, func(t *testing.T) {
+				tmpDir := t.TempDir()
+				stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+				now := time.Now().UTC()
+				state := testhelpers.CreateValidState()
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+				}
+				testhelpers.WriteInitialState(t, stateFile, state)
+
+				err := WriteCheckpoint(tmpDir, &WriteCheckpointInput{
+					TaskID:         "task-1",
+					AgentID:        "coder-1",
+					Intent:         "Implement feature",
+					ValidationPlan: "go test ./...",
+					FilesToModify:  []string{"main.go"},
+					Impact:         impact,
+				})
+				if err != nil {
+					t.Fatalf("WriteCheckpoint failed for impact %q: %v", impact, err)
+				}
+
+				bb := db.New(stateFile)
+				readState, err := bb.Read()
+				if err != nil {
+					t.Fatalf("Failed to read state: %v", err)
+				}
+
+				task := readState.FindTask("task-1")
+				lastEntry := task.History[len(task.History)-1]
+
+				if impact == "" {
+					// Empty impact should not be stored in Extra
+					if _, ok := lastEntry.Extra["impact"]; ok {
+						t.Error("Expected no impact key when field is empty")
+					}
+				} else {
+					val, ok := lastEntry.Extra["impact"].(string)
+					if !ok {
+						t.Fatalf("Expected impact in Extra, got %v", lastEntry.Extra["impact"])
+					}
+					if val != impact {
+						t.Errorf("Expected impact %q, got %q", impact, val)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("invalid values rejected", func(t *testing.T) {
+		invalidValues := []string{"critical", "high", "low", "STANDARD", "Architecture"}
+		for _, impact := range invalidValues {
+			t.Run("impact_"+impact, func(t *testing.T) {
+				err := WriteCheckpoint("/nonexistent", &WriteCheckpointInput{
+					TaskID:         "task-1",
+					AgentID:        "coder-1",
+					Intent:         "test",
+					ValidationPlan: "test",
+					FilesToModify:  []string{"f"},
+					Impact:         impact,
+				})
+				testhelpers.RequireErrorContains(t, err, "invalid impact value")
+			})
+		}
+	})
+}
+
+func TestGetCheckpointImpact(t *testing.T) {
+	agent := "coder-1"
+	otherAgent := "coder-2"
+
+	tests := []struct {
+		name    string
+		history []models.TaskHistoryEntry
+		agentID string
+		want    string
+	}{
+		{
+			name:    "empty history",
+			history: nil,
+			agentID: "coder-1",
+			want:    "",
+		},
+		{
+			name: "checkpoint without impact",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{"intent": "test"}},
+			},
+			agentID: "coder-1",
+			want:    "",
+		},
+		{
+			name: "checkpoint with impact",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
+					"intent": "test",
+					"impact": "significant",
+				}},
+			},
+			agentID: "coder-1",
+			want:    "significant",
+		},
+		{
+			name: "checkpoint from different agent ignored",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &otherAgent, Extra: map[string]any{
+					"impact": "architecture",
+				}},
+			},
+			agentID: "coder-1",
+			want:    "",
+		},
+		{
+			name: "latest checkpoint wins",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
+					"impact": "architecture",
+				}},
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
+					"intent": "new checkpoint without impact",
+				}},
+			},
+			agentID: "coder-1",
+			want:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetCheckpointImpact(tt.history, tt.agentID)
+			if got != tt.want {
+				t.Errorf("GetCheckpointImpact() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestHasCheckpoint(t *testing.T) {
 	agent := "coder-1"
 	otherAgent := "coder-2"
