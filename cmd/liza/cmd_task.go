@@ -220,6 +220,40 @@ Effects:
 	},
 }
 
+var assessBlockedCmd = &cobra.Command{
+	Use:   "assess-blocked <task-id>",
+	Short: "Record orchestrator assessment of a BLOCKED task",
+	Long: `Record that the orchestrator has assessed a BLOCKED task.
+
+This prevents the orchestrator re-wake loop where blocked tasks that have
+already been triaged continue to trigger new orchestrator sessions.
+
+After assessing, the task remains BLOCKED but won't trigger further wakes
+unless new activity occurs (dependency changes, human notes, etc.).
+
+Requirements:
+  - Agent ID must be provided (via --agent-id flag)
+  - Task must be in BLOCKED status`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+
+		note, _ := cmd.Flags().GetString("note")
+
+		agentID, err := resolveOrchestratorID(cmd)
+		if err != nil {
+			return err
+		}
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		return commands.AssessBlockedCommand(projectRoot, taskID, note, agentID)
+	},
+}
+
 var deleteTaskCmd = &cobra.Command{
 	Use:   "task <task-id>",
 	Short: "Delete a task from the state database",
@@ -246,6 +280,7 @@ func init() {
 	rootCmd.AddCommand(addTaskCmd)
 	rootCmd.AddCommand(supersedeTaskCmd)
 	rootCmd.AddCommand(markBlockedCmd)
+	rootCmd.AddCommand(assessBlockedCmd)
 	deleteCmd.AddCommand(deleteTaskCmd)
 
 	// Mark-blocked command flags
@@ -254,6 +289,10 @@ func init() {
 	markBlockedCmd.Flags().String("agent-id", "", "agent ID marking the task as blocked")
 	markBlockedCmd.MarkFlagRequired("reason")
 	markBlockedCmd.MarkFlagRequired("questions")
+
+	// Assess-blocked command flags
+	assessBlockedCmd.Flags().String("agent-id", "", "orchestrator agent ID (auto-resolved if not provided)")
+	assessBlockedCmd.Flags().String("note", "", "optional note about the assessment outcome")
 
 	// Add-task command flags
 	addTaskCmd.Flags().String("file", "", "path to YAML file containing task details")

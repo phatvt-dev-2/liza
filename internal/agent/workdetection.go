@@ -45,7 +45,7 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 		Trigger:     WakeTriggerBlocked,
 		Description: "Blocked tasks need orchestrator intervention.",
 		Count: func(state *models.State) int {
-			return countTasksByStatus(state, models.TaskStatusBlocked)
+			return countActionableBlockedTasks(state)
 		},
 	},
 	{
@@ -111,14 +111,76 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 	return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 }
 
-func countTasksByStatus(state *models.State, status models.TaskStatus) int {
+// countActionableBlockedTasks counts BLOCKED tasks that the orchestrator should
+// wake up for. A blocked task is actionable if it has never been assessed, or if
+// new activity has occurred since the last assessment (on the task itself, its
+// dependencies, or via human notes).
+func countActionableBlockedTasks(state *models.State) int {
 	count := 0
-	for _, task := range state.Tasks {
-		if task.Status == status {
+	for i := range state.Tasks {
+		if state.Tasks[i].Status == models.TaskStatusBlocked && isBlockedTaskActionable(&state.Tasks[i], state) {
 			count++
 		}
 	}
 	return count
+}
+
+// isBlockedTaskActionable determines whether a blocked task should trigger an
+// orchestrator wake. Returns true if:
+//   - No orchestrator_assessment history entry exists (new block, needs triage)
+//   - The task itself has a non-assessment history entry after the last assessment
+//   - Any dependency has a non-assessment history entry after the last assessment
+//   - A human note targets this task (by ID or "all") after the last assessment
+func isBlockedTaskActionable(task *models.Task, state *models.State) bool {
+	// Find the last orchestrator_assessment (reverse scan).
+	var lastAssessment *models.TaskHistoryEntry
+	for i := len(task.History) - 1; i >= 0; i-- {
+		if task.History[i].Event == models.TaskEventOrchestratorAssessment {
+			lastAssessment = &task.History[i]
+			break
+		}
+	}
+
+	// Never assessed → actionable.
+	if lastAssessment == nil {
+		return true
+	}
+
+	// Check own history for non-assessment activity after last assessment.
+	for i := range task.History {
+		if task.History[i].Event != models.TaskEventOrchestratorAssessment &&
+			task.History[i].Time.After(lastAssessment.Time) {
+			return true
+		}
+	}
+
+	// Check dependency history for non-assessment activity after last assessment.
+	for _, depID := range task.DependsOn {
+		dep := state.FindTask(depID)
+		if dep == nil {
+			continue // orphan reference, skip gracefully
+		}
+		for i := range dep.History {
+			if dep.History[i].Event != models.TaskEventOrchestratorAssessment &&
+				dep.History[i].Time.After(lastAssessment.Time) {
+				return true
+			}
+		}
+	}
+
+	// Check human notes targeting this task (by ID or "all") after last assessment.
+	// Design choice: notes on dependency tasks do NOT re-activate this blocked task.
+	// Rationale: human targets specific tasks by ID; if they want to wake all
+	// dependents, they add notes to each or use for:"all". This avoids surprising
+	// cascade wakes when a human annotates a dependency for unrelated reasons.
+	for i := range state.HumanNotes {
+		note := &state.HumanNotes[i]
+		if (note.For == task.ID || note.For == "all") && note.Timestamp.After(lastAssessment.Time) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func countHypothesisExhaustedTasks(state *models.State) int {

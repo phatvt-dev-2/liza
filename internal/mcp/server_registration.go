@@ -353,6 +353,33 @@ func (s *Server) registerMutationTools() {
 			handler: s.handleReleaseClaim,
 		},
 
+		// liza_assess_blocked tool
+		{
+			tool: protocol.Tool{
+				Name:        "liza_assess_blocked",
+				Description: "Record that the orchestrator has assessed a BLOCKED task. Prevents re-wake loops by marking the task as triaged. Requires orchestrator role.",
+				InputSchema: protocol.InputSchema{
+					Type: "object",
+					Properties: map[string]protocol.Property{
+						"task_id": {
+							Type:        "string",
+							Description: "Task ID to assess",
+						},
+						"agent_id": {
+							Type:        "string",
+							Description: "Agent ID performing the action",
+						},
+						"note": {
+							Type:        "string",
+							Description: "Optional note about the assessment outcome",
+						},
+					},
+					Required: []string{"task_id"},
+				},
+			},
+			handler: s.handleAssessBlocked,
+		},
+
 		// liza_supersede_task tool
 		{
 			tool: protocol.Tool{

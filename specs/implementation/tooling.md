@@ -49,6 +49,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza status` | Show system status |
 | `liza get` | Get blackboard data |
 | `liza mark-blocked` | Mark task as blocked |
+| `liza assess-blocked` | Record orchestrator assessment of a blocked task (prevents re-wake) |
 | `liza supersede-task` | Supersede a task |
 | `liza delete agent\|task` | Delete agent or task entry |
 
@@ -174,6 +175,7 @@ CLI commands are divided into agent-callable and supervisor-only:
 | `liza submit-for-review` | Coder | Request review (atomic state transition) |
 | `liza submit-verdict` | Code Reviewer | Approve/reject (atomic state transition) |
 | `liza mark-blocked` | Coder, Planner | Mark task as blocked |
+| `liza assess-blocked` | Orchestrator | Record assessment of blocked task (prevents re-wake loops) |
 | `liza wt-merge` | Supervisor | Merge after Code Reviewer approves |
 | `liza wt-delete` | Planner | Clean up abandoned tasks |
 

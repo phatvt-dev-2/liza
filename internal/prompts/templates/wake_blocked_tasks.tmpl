@@ -14,8 +14,12 @@ Tasks are BLOCKED. Analyze and resolve immediately:
    - Execute tool: liza_add_tasks with {"tasks": [{"id": "task-4", ...}], "agent_id": "{{.AgentID}}"} (create replacement tasks)
    - Execute tool: liza_supersede_task with {"task_id": "task-3", "replacement_ids": ["task-4", "task-5"], "reason": "Split due to complexity", "agent_id": "{{.AgentID}}"}
    - Execute tool: liza_wt_delete with {"task_id": "task-3", "agent_id": "{{.AgentID}}"} (if worktree exists)
-4. Log decisions in task history
+4. After analyzing each blocked task:
+   - If you resolved it (unblocked or superseded): no further action needed for that task
+   - If you CANNOT resolve it (genuine spec ambiguity, external dependency): call liza_assess_blocked to record your assessment
+     Execute tool: liza_assess_blocked with {"task_id": "<task-id>", "note": "<why it cannot be resolved now>"}
+     This prevents re-waking for the same unresolvable block. The task will trigger again only when new information arrives (dependency changes, human notes).
 5. Execute all state-modifying tools in this session. Do NOT defer.
 
-Do NOT call liza_sprint_checkpoint. If you cannot resolve the blocker (genuine spec ambiguity, external dependency), leave the task BLOCKED and exit. Other tasks must continue uninterrupted.
+Do NOT call liza_sprint_checkpoint. If you cannot resolve a blocker, assess it and exit. Other tasks must continue uninterrupted.
 {{- end -}}

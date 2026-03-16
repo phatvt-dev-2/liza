@@ -169,6 +169,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				"- Immediate discoveries: 0",
 				"ORCHESTRATOR COMMANDS:",
 				"liza_add_tasks",
+				"liza_assess_blocked",
 				"liza_supersede_task",
 				`liza_wt_delete`,
 				`Tool parameters: {"task_id": "...", "agent_id": "orchestrator-1"}`,
@@ -199,6 +200,7 @@ func TestBuildOrchestratorContext(t *testing.T) {
 				"- Blocked: 1",
 				"Tasks are BLOCKED. Analyze and resolve immediately:",
 				"Read blocked tasks from blackboard",
+				"liza_assess_blocked",
 			},
 		},
 		{

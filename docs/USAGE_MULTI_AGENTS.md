@@ -301,6 +301,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza submit-for-review <task-id> <commit-sha>` | Submit a task for review (doer agents) |
 | `liza submit-verdict <task-id> <APPROVED\|REJECTED> [reason]` | Submit a review verdict (reviewer agents; reason required for REJECTED) |
 | `liza mark-blocked <task-id>` | Mark a task as BLOCKED with reason and questions |
+| `liza assess-blocked <task-id>` | Record orchestrator assessment of a BLOCKED task (prevents re-wake loops) |
 | `liza handoff <task-id> <summary> <next-action>` | Context-exhaustion handoff for a doer agent's claimed task |
 | `liza supersede-task <task-id>` | Mark a task as SUPERSEDED by replacements |
 | `liza proceed <task-id> <transition>` | Execute inter-pair pipeline transition (e.g., code-plan-to-coding) |
@@ -359,6 +360,7 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
       "mcp__liza__liza_handoff",
       "mcp__liza__liza_submit_verdict",
       "mcp__liza__liza_mark_blocked",
+      "mcp__liza__liza_assess_blocked",
       "mcp__liza__liza_release_claim",
       "mcp__liza__liza_supersede_task",
       "mcp__liza__liza_set_task_output",

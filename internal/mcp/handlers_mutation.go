@@ -283,6 +283,33 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 	))
 }
 
+// handleAssessBlocked implements the liza_assess_blocked tool
+// Maps to: liza assess-blocked
+func (s *Server) handleAssessBlocked(params map[string]any) (any, error) {
+	taskID, err := requireString(params, "task_id")
+	if err != nil {
+		return nil, err
+	}
+
+	agentID, err := s.resolveOrchestratorID(params)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := requireRole(agentID, roles.RuntimeOrchestrator); err != nil {
+		return nil, err
+	}
+
+	note, _ := params["note"].(string)
+
+	result, err := ops.AssessBlocked(s.projectRoot, taskID, note, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("assess blocked failed: %w", err)
+	}
+
+	return textResult(fmt.Sprintf("Task %s assessed by orchestrator", result.TaskID))
+}
+
 // handleDeleteAgent implements the liza_delete_agent tool
 // Maps to: liza delete agent
 func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {

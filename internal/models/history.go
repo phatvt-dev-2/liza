@@ -71,6 +71,7 @@ const (
 	TaskEventWorktreeRecovered        TaskEventName = "worktree_recovered"
 	TaskEventDoerClaimReleased        TaskEventName = "doer_claim_released"
 	TaskEventReviewClaimReleased      TaskEventName = "review_claim_released"
+	TaskEventOrchestratorAssessment   TaskEventName = "orchestrator_assessment"
 )
 
 // TaskHistoryEntry represents a single event in a task's history
