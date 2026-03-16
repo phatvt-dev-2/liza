@@ -269,6 +269,10 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 				Reason: &reason,
 			})
 
+			// Refresh lease — coder needs time to address rejection.
+			// If escalation triggers below, lease is cleared along with assignment.
+			renewLease(state, task)
+
 			reviewLimit := effectiveReviewCycleLimit(state.Config)
 			iterationLimit := effectiveCoderIterationLimit(task, state.Config)
 

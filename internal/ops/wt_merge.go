@@ -105,6 +105,15 @@ func markIntegrationFailed(bb *db.Blackboard, taskID, agentID, reason, mergeComm
 		}
 		t.FailedBy = appendUniqueAgentID(t.FailedBy, agentID)
 
+		// Refresh lease — task stays assigned to original coder for conflict resolution.
+		renewLease(s, t)
+		if t.AssignedTo != nil {
+			if agent, ok := s.Agents[*t.AssignedTo]; ok {
+				agent.LeaseExpires = t.LeaseExpires
+				s.Agents[*t.AssignedTo] = agent
+			}
+		}
+
 		entry := models.TaskHistoryEntry{
 			Time:   time.Now(),
 			Event:  models.TaskEventIntegrationFailed,

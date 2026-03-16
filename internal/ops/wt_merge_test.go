@@ -1358,3 +1358,94 @@ func readStateForTest(t *testing.T, stateFile string) *models.State {
 	}
 	return state
 }
+
+func TestMarkIntegrationFailed_RefreshesLease(t *testing.T) {
+	tmpDir, stateFile := setupPipelineTest(t)
+
+	coderID := "coder-1"
+	reviewerID := "code-reviewer-1"
+	taskID := "task-lease"
+	now := time.Now().UTC()
+	leaseDuration := 120 // seconds
+
+	initialState := testhelpers.CreateValidState()
+	initialState.Config.IntegrationBranch = "integration"
+	initialState.Config.LeaseDuration = leaseDuration
+
+	expiredLease := now.Add(-10 * time.Minute)
+	worktree := ".worktrees/" + taskID
+	initialState.Tasks = []models.Task{
+		{
+			ID:           taskID,
+			Description:  "Test lease refresh",
+			Status:       models.TaskStatusApproved,
+			Priority:     1,
+			Created:      now,
+			SpecRef:      "README.md",
+			DoneWhen:     "Done",
+			Scope:        "Test",
+			RolePair:     "coding-pair",
+			Worktree:     &worktree,
+			AssignedTo:   &coderID,
+			LeaseExpires: &expiredLease,
+			History:      []models.TaskHistoryEntry{},
+		},
+	}
+	initialState.Agents[coderID] = models.Agent{
+		Role:         "coder",
+		Status:       models.AgentStatusWaiting,
+		CurrentTask:  &taskID,
+		LeaseExpires: &expiredLease,
+	}
+	initialState.Agents[reviewerID] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusWorking,
+	}
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	bb := db.New(stateFile)
+	pb, err := loadPipelineBundle(tmpDir)
+	if err != nil {
+		t.Fatalf("loadPipelineBundle() error: %v", err)
+	}
+
+	callStart := time.Now().UTC()
+	// reviewerID is the agent calling MergeWorktree; coderID is AssignedTo
+	err = markIntegrationFailed(bb, taskID, reviewerID, "merge conflict", "", pb)
+	if err != nil {
+		t.Fatalf("markIntegrationFailed() error: %v", err)
+	}
+
+	state := readStateForTest(t, stateFile)
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+
+	// Task lease should be refreshed
+	expectedMin := callStart.Add(time.Duration(leaseDuration) * time.Second)
+	if task.LeaseExpires == nil {
+		t.Fatal("Task LeaseExpires is nil, want refreshed lease")
+	}
+	if task.LeaseExpires.Before(expectedMin) {
+		t.Errorf("Task LeaseExpires = %v, want >= %v", task.LeaseExpires, expectedMin)
+	}
+
+	// Coder agent lease (AssignedTo) should match task lease
+	coderAgent, ok := state.Agents[coderID]
+	if !ok {
+		t.Fatalf("Coder agent %q not found", coderID)
+	}
+	if coderAgent.LeaseExpires == nil {
+		t.Fatal("Coder agent LeaseExpires is nil, want synced with task")
+	}
+	if !coderAgent.LeaseExpires.Equal(*task.LeaseExpires) {
+		t.Errorf("Coder agent LeaseExpires = %v, want equal to task LeaseExpires %v", coderAgent.LeaseExpires, task.LeaseExpires)
+	}
+
+	// Reviewer agent lease should NOT have been refreshed
+	reviewerAgent := state.Agents[reviewerID]
+	if reviewerAgent.LeaseExpires != nil {
+		t.Errorf("Reviewer agent LeaseExpires = %v, want nil (reviewer was not the target)", reviewerAgent.LeaseExpires)
+	}
+}

@@ -1132,3 +1132,112 @@ func assertReleasedAgent(t *testing.T, state *models.State, agentID string) {
 		t.Errorf("%s should be released to IDLE, got status=%v current_task=%v", agentID, agent.Status, agent.CurrentTask)
 	}
 }
+
+func TestSubmitVerdict_RejectedRefreshesLease(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	leaseDuration := 120
+	expiredLease := now.Add(-10 * time.Minute)
+
+	state := testhelpers.CreateValidState()
+	state.Config.LeaseDuration = leaseDuration
+	coderID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	task.AssignedTo = &coderID
+	task.LeaseExpires = &expiredLease
+	state.Tasks = []models.Task{task}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusWorking,
+	}
+	state.Agents[coderID] = models.Agent{
+		Role:   "coder",
+		Status: models.AgentStatusWaiting,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	callStart := time.Now().UTC()
+	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Needs work", "code-reviewer-1", "")
+	if err != nil {
+		t.Fatalf("SubmitVerdict() error: %v", err)
+	}
+	if result.EscalatedToBlocked {
+		t.Fatal("Unexpected escalation — test expects non-escalating rejection")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	rejTask := readState.FindTask("task-1")
+	if rejTask == nil {
+		t.Fatal("Task not found")
+	}
+
+	// Lease should be refreshed on non-escalating rejection
+	expectedMin := callStart.Add(time.Duration(leaseDuration) * time.Second)
+	if rejTask.LeaseExpires == nil {
+		t.Fatal("LeaseExpires is nil, want refreshed lease")
+	}
+	if rejTask.LeaseExpires.Before(expectedMin) {
+		t.Errorf("LeaseExpires = %v, want >= %v", rejTask.LeaseExpires, expectedMin)
+	}
+}
+
+func TestSubmitVerdict_EscalationClearsLease(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	coderID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	task.AssignedTo = &coderID
+	task.ReviewCyclesCurrent = 1
+	task.ReviewCyclesTotal = 1
+	state := testhelpers.CreateValidState()
+	state.Config.MaxReviewCycles = 2
+	state.Tasks = []models.Task{task}
+
+	taskRef := "task-1"
+	state.Agents[coderID] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWaiting,
+		CurrentTask: &taskRef,
+	}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusReviewing,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Still broken", "code-reviewer-1", "")
+	if err != nil {
+		t.Fatalf("SubmitVerdict() error: %v", err)
+	}
+	if !result.EscalatedToBlocked {
+		t.Fatal("Expected escalation to BLOCKED")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	blockedTask := readState.FindTask("task-1")
+	if blockedTask == nil {
+		t.Fatal("Task not found")
+	}
+
+	// Escalation should clear lease and assignment
+	if blockedTask.LeaseExpires != nil {
+		t.Errorf("LeaseExpires = %v, want nil after escalation", blockedTask.LeaseExpires)
+	}
+	if blockedTask.AssignedTo != nil {
+		t.Errorf("AssignedTo = %v, want nil after escalation", blockedTask.AssignedTo)
+	}
+}

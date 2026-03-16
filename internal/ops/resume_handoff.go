@@ -82,14 +82,7 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 				return &PreconditionError{Reason: fmt.Sprintf("task %s is no longer assigned to %s", id, agentID)}
 			}
 
-			if t.LeaseExpires == nil || t.LeaseExpires.Before(now) {
-				leaseDuration := s.Config.LeaseDuration
-				if leaseDuration <= 0 {
-					leaseDuration = models.DefaultLeaseDurationSeconds
-				}
-				renewed := now.Add(time.Duration(leaseDuration) * time.Second)
-				t.LeaseExpires = &renewed
-			}
+			renewLease(s, t)
 
 			t.HandoffPending = false
 			t.History = append(t.History, models.TaskHistoryEntry{

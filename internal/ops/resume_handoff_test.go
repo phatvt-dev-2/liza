@@ -285,16 +285,18 @@ func TestResumeHandoff_StaleCandidateSkipped(t *testing.T) {
 	}
 }
 
-func TestResumeHandoff_KeepsValidLease(t *testing.T) {
+func TestResumeHandoff_AlwaysRefreshesLease(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
 	agentID := "coder-1"
 	worktree := ".worktrees/task-1"
-	// Lease is still valid (expires in 1 hour)
+	leaseDuration := 120
+	// Lease is still valid (expires in 1 hour) but should be refreshed anyway
 	validLease := time.Now().UTC().Add(1 * time.Hour)
 
 	state := testhelpers.CreateValidState()
+	state.Config.LeaseDuration = leaseDuration
 	state.Tasks = []models.Task{
 		{
 			ID:             "task-1",
@@ -308,6 +310,7 @@ func TestResumeHandoff_KeepsValidLease(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
+	callStart := time.Now().UTC()
 	result, err := ResumeHandoff(ResumeHandoffInput{
 		ProjectRoot: tmpDir,
 		AgentID:     agentID,
@@ -332,8 +335,16 @@ func TestResumeHandoff_KeepsValidLease(t *testing.T) {
 		t.Fatal("Task not found")
 	}
 
-	// Lease should be unchanged since it was already valid
-	if task.LeaseExpires == nil || !task.LeaseExpires.Equal(validLease) {
-		t.Errorf("LeaseExpires changed from %v to %v, should keep valid lease", validLease, task.LeaseExpires)
+	// Lease should be unconditionally refreshed (not preserved at old value)
+	expectedMin := callStart.Add(time.Duration(leaseDuration) * time.Second)
+	if task.LeaseExpires == nil {
+		t.Fatal("LeaseExpires is nil, want refreshed lease")
+	}
+	if task.LeaseExpires.Before(expectedMin) {
+		t.Errorf("LeaseExpires = %v, want >= %v (fresh lease from callStart)", task.LeaseExpires, expectedMin)
+	}
+	// The old 1-hour lease should have been replaced with a 2-minute lease
+	if task.LeaseExpires.Equal(validLease) {
+		t.Error("LeaseExpires still equals old valid lease — should have been refreshed")
 	}
 }
