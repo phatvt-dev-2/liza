@@ -165,6 +165,13 @@ function detectAndParse(text) {
   return null;
 }
 
+// Commands where exit code 1 means "no matches/differences found", not an error.
+const BENIGN_EXIT1_COMMANDS = new Set(["rg", "grep", "egrep", "fgrep", "ag", "ack", "diff"]);
+
+function isBenignExit(cmdName, exitCode) {
+  return exitCode === 1 && BENIGN_EXIT1_COMMANDS.has(cmdName);
+}
+
 function extractCommandName(cmd) {
   if (!cmd) return cmd;
   const prefixes = ["/usr/bin/zsh -lc ", "/bin/bash -lc ", "/bin/sh -c "];
@@ -279,11 +286,13 @@ function analyzeCodex(parsed) {
   const timeline = [];
   for (const item of items) {
     if (item.type === "command_execution") {
+      const cmdName = extractCommandName(item.command);
+      const exitCode = item.exitCode;
       timeline.push({
-        turnNum: 1, toolName: extractCommandName(item.command),
+        turnNum: 1, toolName: cmdName,
         detail: extractCommandDetail(item.command),
         resultChars: item.outputLen || 0,
-        isError: item.exitCode != null && item.exitCode !== 0,
+        isError: exitCode != null && exitCode !== 0 && !isBenignExit(cmdName, exitCode),
         preview: item.outputPreview || "",
       });
     } else if (item.type === "mcp_tool_call") {
@@ -429,12 +438,20 @@ function analyzeClaudeCode(parsed) {
     }
     if (ev.type === "tool_result" && ev.toolUseId && pendingToolUses[ev.toolUseId]) {
       const pending = pendingToolUses[ev.toolUseId];
+      // For Bash commands, check if exit code 1 is benign (rg/grep no matches)
+      let effectiveError = !!ev.isError;
+      if (effectiveError && pending.name === "Bash" && pending.detail) {
+        const bashCmd = pending.detail.trim().split(/\s+/)[0].split("/").pop();
+        if (BENIGN_EXIT1_COMMANDS.has(bashCmd) && !(ev.preview || "").trim()) {
+          effectiveError = false;
+        }
+      }
       timeline.push({
         turnNum: pending.turnNum,
         toolName: pending.name,
         detail: pending.detail,
         resultChars: ev.chars || 0,
-        isError: !!ev.isError,
+        isError: effectiveError,
         preview: ev.preview || "",
       });
       delete pendingToolUses[ev.toolUseId];

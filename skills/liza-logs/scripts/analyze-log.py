@@ -121,6 +121,20 @@ def detect_format(first_line: str) -> str:
 # Skill detection helpers
 # ---------------------------------------------------------------------------
 
+# Commands where exit code 1 means "no matches/differences found", not an error.
+# Real errors use exit code >= 2.
+_BENIGN_EXIT1_COMMANDS = frozenset({"rg", "grep", "egrep", "fgrep", "ag", "ack", "diff"})
+
+
+def _is_benign_exit(cmd_name: str, exit_code: int) -> bool:
+    """Return True if exit code is a normal non-error signal for the command.
+
+    Some tools use exit code 1 for "no matches found" (grep, rg) or
+    "differences found" (diff), which is expected behavior, not an error.
+    """
+    return exit_code == 1 and cmd_name in _BENIGN_EXIT1_COMMANDS
+
+
 _SKILL_PATH_RE = re.compile(r"skills/([a-z][a-z0-9_-]*)/SKILL\.md$")
 
 
@@ -321,13 +335,20 @@ def parse_rich(lines: list[str]) -> SessionReport:
 
                     if tool_use_id and tool_use_id in pending_tool_uses:
                         name, detail, turn_num = pending_tool_uses.pop(tool_use_id)
+                        # For Bash commands, check if exit code 1 is benign
+                        # (e.g., rg/grep with no matches produce empty output)
+                        effective_error = is_error
+                        if is_error and name == "Bash" and detail:
+                            bash_cmd = detail.strip().split()[0].rsplit("/", 1)[-1]
+                            if bash_cmd in _BENIGN_EXIT1_COMMANDS and not result_preview.strip():
+                                effective_error = False
                         report.actions.append(
                             TurnAction(
                                 turn_num=turn_num,
                                 tool_name=name,
                                 detail=detail,
                                 result_chars=result_chars,
-                                is_error=is_error,
+                                is_error=effective_error,
                                 result_preview=result_preview,
                             )
                         )
@@ -456,13 +477,14 @@ def parse_sparse(lines: list[str]) -> SessionReport:
                             detail = cmd[len(prefix) :].strip().strip("'\"")
                             break
                     output = item.get("aggregated_output", "") or ""
+                    exit_code = item.get("exit_code", 0)
                     report.actions.append(
                         TurnAction(
                             turn_num=1,
                             tool_name=name,
                             detail=detail[:80],
                             result_chars=len(output),
-                            is_error=item.get("exit_code", 0) != 0,
+                            is_error=exit_code != 0 and not _is_benign_exit(name, exit_code),
                             result_preview=output[:120].replace("\n", " "),
                         )
                     )
