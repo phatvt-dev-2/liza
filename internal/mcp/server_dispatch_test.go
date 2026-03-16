@@ -642,6 +642,19 @@ func TestClassifyError(t *testing.T) {
 			wantCode: protocol.ValidationError,
 			wantMsg:  "requires one of [coder] roles (got orchestrator from orchestrator-1)",
 		},
+		// IntegrationFailedError (typed — exposes reason)
+		{
+			name:     "typed IntegrationFailedError",
+			err:      &ops.IntegrationFailedError{Reason: "merge conflict"},
+			wantCode: protocol.ValidationError,
+			wantMsg:  "integration failed: merge conflict — task moved to INTEGRATION_FAILED",
+		},
+		{
+			name:     "wrapped IntegrationFailedError",
+			err:      fmt.Errorf("submit for review failed: %w", &ops.IntegrationFailedError{Reason: "merge conflict"}),
+			wantCode: protocol.ValidationError,
+			wantMsg:  "integration failed: merge conflict — task moved to INTEGRATION_FAILED",
+		},
 		// Default: internal error
 		{
 			name:     "generic error",

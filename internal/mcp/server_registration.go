@@ -192,7 +192,7 @@ func (s *Server) registerMutationTools() {
 		{
 			tool: protocol.Tool{
 				Name:        "liza_submit_for_review",
-				Description: "Submit completed work for review after commit SHA validation. Requires coder, code-planner, epic-planner, or us-writer role.",
+				Description: "Submit completed work for review after commit SHA validation. Rebases onto integration branch; if rebase conflicts, returns error and task moves to INTEGRATION_FAILED — re-claim with liza_claim_task, resolve conflicts, then re-submit. Requires coder, code-planner, epic-planner, or us-writer role.",
 				InputSchema: protocol.InputSchema{
 					Type: "object",
 					Properties: map[string]protocol.Property{
@@ -501,7 +501,7 @@ func (s *Server) registerComplexOperations() {
 		{
 			tool: protocol.Tool{
 				Name:        "liza_wt_merge",
-				Description: "Merge approved task to integration branch. Requires code-reviewer, code-plan-reviewer, epic-plan-reviewer, or us-reviewer role.",
+				Description: "Merge approved task to integration branch. If merge conflicts or integration tests fail, task moves to INTEGRATION_FAILED and must be re-claimed by a coder for conflict resolution. Requires code-reviewer, code-plan-reviewer, epic-plan-reviewer, or us-reviewer role.",
 				InputSchema: protocol.InputSchema{
 					Type: "object",
 					Properties: map[string]protocol.Property{

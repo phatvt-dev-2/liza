@@ -193,7 +193,7 @@ func matchStringErrorRule(msg string) *protocol.JSONRPCError {
 
 // classifyError converts Go errors to MCP error codes.
 // Maps internal error patterns to JSON-RPC error codes for intelligent client handling.
-// All branches use sanitized messages — raw err.Error() is never exposed to clients.
+// Typed errors may expose controlled fields (e.g. Reason) — raw err.Error() is never exposed directly.
 func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	// Type-based checks first (preferred)
 	var nie *NotInitializedError
@@ -215,6 +215,11 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	var roleErr *RoleError
 	if errors.As(err, &roleErr) {
 		return protocol.NewError(protocol.ValidationError, roleErr.Error(), nil)
+	}
+	var intErr *ops.IntegrationFailedError
+	if errors.As(err, &intErr) {
+		return protocol.NewError(protocol.ValidationError,
+			fmt.Sprintf("integration failed: %s — task moved to INTEGRATION_FAILED", intErr.Reason), nil)
 	}
 
 	msg := err.Error()
