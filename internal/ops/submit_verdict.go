@@ -24,10 +24,59 @@ type VerdictResult struct {
 	BlockedReason      string
 }
 
+// impactOrder defines the ordering for impact levels.
+// Higher index = higher impact. Used by ResolveEffectiveImpact.
+var impactOrder = map[string]int{
+	"standard":     0,
+	"significant":  1,
+	"architecture": 2,
+}
+
+// validImpacts is the set of accepted impact values for verdicts.
+var validImpacts = map[string]bool{
+	"":             true, // empty = not specified
+	"standard":     true,
+	"significant":  true,
+	"architecture": true,
+}
+
+// ResolveEffectiveImpact scans checkpoint and verdict history entries since the
+// last rejection, returning the maximum impact found.
+// Ordering: standard < significant < architecture; default: "standard".
+func ResolveEffectiveImpact(history []models.TaskHistoryEntry) string {
+	maxImpact := "standard"
+	maxRank := 0
+
+	// Iterate in reverse; stop at the last rejection boundary.
+	for i := len(history) - 1; i >= 0; i-- {
+		entry := history[i]
+
+		if entry.Event == models.TaskEventRejected {
+			break // rejection resets the cycle
+		}
+
+		// Only checkpoint and verdict entries contribute impact.
+		if entry.Event != models.TaskEventPreExecutionCheckpoint && entry.Event != models.TaskEventApproved {
+			continue
+		}
+
+		if v, ok := entry.Extra["impact"].(string); ok && v != "" {
+			if rank, known := impactOrder[v]; known && rank > maxRank {
+				maxRank = rank
+				maxImpact = v
+			}
+		}
+	}
+
+	return maxImpact
+}
+
 // SubmitVerdict atomically applies a review verdict: APPROVED transitions to
-// APPROVED status, REJECTED increments review cycles and requires a reason.
+// APPROVED or PARTIALLY_APPROVED status (based on quorum), REJECTED increments
+// review cycles and requires a reason. The optional impact parameter records
+// the reviewer's impact classification; it cannot downgrade the effective impact.
 // No terminal I/O.
-func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*VerdictResult, error) {
+func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string) (*VerdictResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -45,6 +94,10 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 
 	if verdict == "REJECTED" && reason == "" {
 		return nil, &PreconditionError{Reason: "rejection reason is required for REJECTED verdict"}
+	}
+
+	if !validImpacts[impact] {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("invalid impact value: %s (must be standard, significant, or architecture)", impact)}
 	}
 
 	lp := paths.New(projectRoot)
@@ -82,6 +135,10 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 	if err != nil {
 		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
 	}
+
+	// Resolve quorum states (optional — may not exist if quorum is always 1)
+	partiallyApprovedStatus, _ := resolver.PartiallyApprovedStatus(task.RolePair)
+
 	pipelineTransitions := BuildPipelineTransitions(resolver)
 
 	// Fast-fail before git operations; re-checked authoritatively inside Modify.
@@ -89,6 +146,16 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		(expectedReviewing2Status != "" && task.Status == expectedReviewing2Status)
 	if !isReviewing {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not in a reviewing state (current status: %s)", taskID, task.Status)}
+	}
+
+	// Resolve effective impact from history and enforce escalation.
+	effectiveImpact := ResolveEffectiveImpact(task.History)
+	if impact != "" {
+		// Enforce: verdict impact must be >= resolved effective impact (never downgrade)
+		if impactOrder[impact] < impactOrder[effectiveImpact] {
+			return nil, &PreconditionError{Reason: fmt.Sprintf("cannot downgrade impact from %q to %q — impact can only escalate", effectiveImpact, impact)}
+		}
+		effectiveImpact = impact
 	}
 
 	// Phase 2: Validate ReviewCommit exists and matches worktree HEAD
@@ -134,10 +201,6 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 		}
 
 		if verdict == "APPROVED" {
-			if err := transitionTask(approvedStatus); err != nil {
-				return err
-			}
-
 			// Build approval from agent registry and append to approvals list
 			provider := ""
 			if agent, ok := state.Agents[agentID]; ok {
@@ -149,15 +212,38 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 				Timestamp: now,
 			})
 
-			// Derived field for backward compatibility
-			task.ApprovedBy = &agentID
-			task.RejectionReason = nil
-
-			task.History = append(task.History, models.TaskHistoryEntry{
+			// Build history entry with optional impact in Extra
+			historyEntry := models.TaskHistoryEntry{
 				Time:  now,
 				Event: models.TaskEventApproved,
 				Agent: &agentID,
-			})
+			}
+			if impact != "" {
+				historyEntry.Extra = map[string]any{"impact": impact}
+			}
+			task.History = append(task.History, historyEntry)
+
+			// Evaluate quorum: determine if more approvals are needed.
+			effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, effectiveImpact)
+			if qErr != nil {
+				return fmt.Errorf("failed to resolve quorum: %w", qErr)
+			}
+
+			if task.ApprovalCount() < effectiveQuorum && partiallyApprovedStatus != "" {
+				// Quorum not met — transition to partially_approved
+				if err := transitionTask(partiallyApprovedStatus); err != nil {
+					return err
+				}
+			} else {
+				// Quorum met — transition to approved
+				if err := transitionTask(approvedStatus); err != nil {
+					return err
+				}
+			}
+
+			// Derived field for backward compatibility
+			task.ApprovedBy = &agentID
+			task.RejectionReason = nil
 		} else {
 			if err := transitionTask(rejectedStatus); err != nil {
 				return err

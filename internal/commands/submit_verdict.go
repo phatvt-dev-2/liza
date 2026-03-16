@@ -8,8 +8,8 @@ import (
 
 // SubmitVerdictCommand submits a review verdict and prints the result to stdout.
 // Delegates business logic to ops.SubmitVerdict.
-func SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID string) error {
-	result, err := ops.SubmitVerdict(projectRoot, taskID, verdict, reason, agentID)
+func SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID, impact string) error {
+	result, err := ops.SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact)
 	if err != nil {
 		return fmt.Errorf("submit verdict: %w", err)
 	}

@@ -121,7 +121,9 @@ For REJECTED verdict:
 			return err
 		}
 
-		return commands.SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID)
+		impact, _ := cmd.Flags().GetString("impact")
+
+		return commands.SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID, impact)
 	},
 }
 
@@ -174,6 +176,9 @@ func init() {
 	rootCmd.AddCommand(handoffCmd)
 	rootCmd.AddCommand(submitVerdictCmd)
 	rootCmd.AddCommand(releaseClaimCmd)
+
+	// Submit-verdict flags
+	submitVerdictCmd.Flags().String("impact", "", "impact classification (standard, significant, architecture)")
 
 	// Release-claim command flags
 	releaseClaimCmd.Flags().String("role", roles.ClaimReviewer, "claim type to release (doer, reviewer, both)")

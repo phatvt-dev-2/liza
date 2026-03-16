@@ -47,7 +47,7 @@ func TestSubmitVerdict_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := SubmitVerdict("/nonexistent", tt.taskID, tt.verdict, tt.reason, tt.agentID)
+			_, err := SubmitVerdict("/nonexistent", tt.taskID, tt.verdict, tt.reason, tt.agentID, "")
 			testhelpers.RequireErrorContains(t, err, tt.errContains)
 		})
 	}
@@ -69,7 +69,7 @@ func TestSubmitVerdict_VerdictNormalization(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "approved", "", "code-reviewer-1")
+	result, err := SubmitVerdict(tmpDir, "task-1", "approved", "", "code-reviewer-1", "")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestSubmitVerdict_Approved(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestSubmitVerdict_Rejected(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Missing error handling", "code-reviewer-1")
+	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Missing error handling", "code-reviewer-1", "")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestSubmitVerdict_TaskNotFound(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SubmitVerdict(tmpDir, "nonexistent", "APPROVED", "", "code-reviewer-1")
+	_, err := SubmitVerdict(tmpDir, "nonexistent", "APPROVED", "", "code-reviewer-1", "")
 	if err == nil {
 		t.Fatal("Expected error for nonexistent task")
 	}
@@ -224,7 +224,7 @@ func TestSubmitVerdict_WrongStatus(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 	testhelpers.RequireErrorContains(t, err, "not in a reviewing state")
 }
 
@@ -245,7 +245,7 @@ func TestSubmitVerdict_AgentReleased(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 
 			testhelpers.WriteInitialState(t, stateFile, state)
 
-			result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", tt.rejectionReason, "code-reviewer-1")
+			result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", tt.rejectionReason, "code-reviewer-1", "")
 			if err != nil {
 				t.Fatalf("SubmitVerdict() error: %v", err)
 			}
@@ -409,7 +409,7 @@ func TestSubmitVerdict_MissingReviewCommit(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 	if err == nil {
 		t.Fatal("Expected error for missing review_commit, got nil")
 	}
@@ -457,7 +457,7 @@ func TestSubmitVerdict_ReviewCommitMismatch(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err = SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	_, err = SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 	if err == nil {
 		t.Fatal("Expected error for ReviewCommit vs worktree HEAD mismatch")
 	}
@@ -500,7 +500,7 @@ func TestSubmitVerdict_StatErrorNotSilenced(t *testing.T) {
 		t.Fatalf("Failed to create fixture: %v", err)
 	}
 
-	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 	if err == nil {
 		t.Fatal("Expected stat error, got nil")
 	}
@@ -537,7 +537,7 @@ func TestSubmitVerdictApprovals(t *testing.T) {
 		}
 		testhelpers.WriteInitialState(t, stateFile, state)
 
-		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 		if err != nil {
 			t.Fatalf("SubmitVerdict() error: %v", err)
 		}
@@ -603,7 +603,7 @@ func TestSubmitVerdictApprovals(t *testing.T) {
 		}
 		testhelpers.WriteInitialState(t, stateFile, state)
 
-		result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Needs rework", "code-reviewer-1")
+		result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Needs rework", "code-reviewer-1", "")
 		if err != nil {
 			t.Fatalf("SubmitVerdict() error: %v", err)
 		}
@@ -645,7 +645,7 @@ func TestSubmitVerdictApprovals(t *testing.T) {
 		}
 		testhelpers.WriteInitialState(t, stateFile, state)
 
-		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 		if err != nil {
 			t.Fatalf("SubmitVerdict() error: %v", err)
 		}
@@ -705,7 +705,7 @@ func TestSubmitVerdict_ApprovedFromReviewing2(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-2")
+	result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-2", "")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -768,7 +768,7 @@ func TestSubmitVerdict_RejectedFromReviewing2(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Needs improvement", "code-reviewer-2")
+	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Needs improvement", "code-reviewer-2", "")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -792,6 +792,336 @@ func TestSubmitVerdict_RejectedFromReviewing2(t *testing.T) {
 	if task.RejectionReason == nil || *task.RejectionReason != "Needs improvement" {
 		t.Error("RejectionReason not set correctly")
 	}
+}
+
+func TestResolveEffectiveImpact(t *testing.T) {
+	tests := []struct {
+		name    string
+		history []models.TaskHistoryEntry
+		want    string
+	}{
+		{
+			name:    "no impact declared returns standard",
+			history: nil,
+			want:    "standard",
+		},
+		{
+			name: "checkpoint-only impact",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Extra: map[string]any{"impact": "significant"}},
+			},
+			want: "significant",
+		},
+		{
+			name: "verdict upgrades checkpoint impact",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Extra: map[string]any{"impact": "significant"}},
+				{Event: models.TaskEventApproved, Extra: map[string]any{"impact": "architecture"}},
+			},
+			want: "architecture",
+		},
+		{
+			name: "rejection resets cycle — post-rejection checkpoint starts fresh",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Extra: map[string]any{"impact": "architecture"}},
+				{Event: models.TaskEventRejected},
+				{Event: models.TaskEventPreExecutionCheckpoint, Extra: map[string]any{"impact": "standard"}},
+			},
+			want: "standard",
+		},
+		{
+			name: "entries without impact are ignored",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Extra: map[string]any{"impact": "significant"}},
+				{Event: models.TaskEventSubmittedForReview},
+			},
+			want: "significant",
+		},
+		{
+			name: "only checkpoint and verdict events contribute impact",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Extra: map[string]any{"impact": "standard"}},
+				{Event: models.TaskEventApproved, Extra: map[string]any{"impact": "significant"}},
+				{Event: models.TaskEventBlocked},
+			},
+			want: "significant",
+		},
+		{
+			name: "empty extra on checkpoint defaults to standard",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint},
+			},
+			want: "standard",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveEffectiveImpact(tt.history)
+			if got != tt.want {
+				t.Errorf("ResolveEffectiveImpact() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestQuorumEvaluation(t *testing.T) {
+	setupQuorumEnv := func(t *testing.T, task models.Task, agents map[string]models.Agent, pipelineYAML string) (string, string) {
+		t.Helper()
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		// Write custom pipeline config
+		pipelinePath := filepath.Join(tmpDir, ".liza", "pipeline.yaml")
+		if err := os.WriteFile(pipelinePath, []byte(pipelineYAML), 0644); err != nil {
+			t.Fatalf("Failed to write pipeline config: %v", err)
+		}
+
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{task}
+		for id, agent := range agents {
+			state.Agents[id] = agent
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+		return tmpDir, stateFile
+	}
+
+	// Pipeline with quorum 1 (standard) but quorum 2 for architecture
+	quorum2Pipeline := `pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: Coder
+      timeouts: {execution: 2h, poll-interval: 30s, max-wait: 30m}
+      context-sections: [assigned-task]
+      allowed-operations: [write-checkpoint, submit-for-review]
+    code-reviewer:
+      type: reviewer
+      display-name: Code Reviewer
+      timeouts: {execution: 30m, poll-interval: 30s, max-wait: 30m}
+      context-sections: [review-task]
+      allowed-operations: [submit-verdict]
+    orchestrator:
+      type: orchestrator
+      display-name: Orchestrator
+      max-instances: 1
+      timeouts: {execution: 4h, poll-interval: 60s, max-wait: 30m}
+      context-sections: [orchestrator-dashboard]
+      allowed-operations: [add-tasks]
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      review-policy:
+        quorum: 1
+        significant-change:
+          quorum: 2
+          provider-diversity: preferred
+        architecture-impact:
+          quorum: 2
+          provider-diversity: preferred
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+        partially-approved: CODE_PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_CODE_2
+  sub-pipelines:
+    coding:
+      steps: [coding-pair]
+`
+
+	t.Run("quorum-1 standard path — single approval transitions to approved", func(t *testing.T) {
+		now := time.Now().UTC()
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+		// Checkpoint with standard impact
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:  now.Add(-5 * time.Minute),
+			Event: models.TaskEventPreExecutionCheckpoint,
+			Extra: map[string]any{"impact": "standard"},
+		})
+
+		tmpDir, stateFile := setupQuorumEnv(t, task, map[string]models.Agent{
+			"code-reviewer-1": {Role: "code-reviewer", Status: models.AgentStatusWorking, Provider: "claude"},
+		}, quorum2Pipeline)
+
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "APPROVED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+		}
+
+		bb := db.New(stateFile)
+		readState, _ := bb.Read()
+		taskResult := readState.FindTask("task-1")
+		if taskResult.Status != models.TaskStatusApproved {
+			t.Errorf("Status = %v, want CODE_APPROVED", taskResult.Status)
+		}
+	})
+
+	t.Run("quorum-2 both reviewers approve — second approval transitions to approved", func(t *testing.T) {
+		now := time.Now().UTC()
+
+		// Task already partially approved by reviewer 1, now in reviewing_2
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+		task.Status = models.TaskStatus("REVIEWING_CODE_2")
+		task.Approvals = []models.Approval{
+			{Agent: "code-reviewer-1", Provider: "claude", Timestamp: now.Add(-5 * time.Minute)},
+		}
+		reviewingBy := "code-reviewer-2"
+		task.ReviewingBy = &reviewingBy
+		// History with architecture impact
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:  now.Add(-10 * time.Minute),
+			Event: models.TaskEventPreExecutionCheckpoint,
+			Extra: map[string]any{"impact": "architecture"},
+		})
+
+		tmpDir, stateFile := setupQuorumEnv(t, task, map[string]models.Agent{
+			"code-reviewer-1": {Role: "code-reviewer", Status: models.AgentStatusIdle, Provider: "claude"},
+			"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusWorking, Provider: "codex"},
+		}, quorum2Pipeline)
+
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-2", "")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "APPROVED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+		}
+
+		bb := db.New(stateFile)
+		readState, _ := bb.Read()
+		taskResult := readState.FindTask("task-1")
+		if taskResult.Status != models.TaskStatusApproved {
+			t.Errorf("Status = %v, want CODE_APPROVED", taskResult.Status)
+		}
+		if taskResult.ApprovalCount() != 2 {
+			t.Errorf("ApprovalCount() = %d, want 2", taskResult.ApprovalCount())
+		}
+	})
+
+	t.Run("impact upgrade triggers partial approval", func(t *testing.T) {
+		now := time.Now().UTC()
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+		// Checkpoint with standard impact
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:  now.Add(-5 * time.Minute),
+			Event: models.TaskEventPreExecutionCheckpoint,
+			Extra: map[string]any{"impact": "standard"},
+		})
+
+		tmpDir, stateFile := setupQuorumEnv(t, task, map[string]models.Agent{
+			"code-reviewer-1": {Role: "code-reviewer", Status: models.AgentStatusWorking, Provider: "claude"},
+		}, quorum2Pipeline)
+
+		// Reviewer approves with architecture impact — upgrades quorum to 2
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "architecture")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "APPROVED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+		}
+
+		bb := db.New(stateFile)
+		readState, _ := bb.Read()
+		taskResult := readState.FindTask("task-1")
+		if taskResult.Status != models.TaskStatus("CODE_PARTIALLY_APPROVED") {
+			t.Errorf("Status = %v, want CODE_PARTIALLY_APPROVED", taskResult.Status)
+		}
+		if taskResult.ApprovalCount() != 1 {
+			t.Errorf("ApprovalCount() = %d, want 1", taskResult.ApprovalCount())
+		}
+
+		// Verify impact stored in history extra
+		found := false
+		for i := len(taskResult.History) - 1; i >= 0; i-- {
+			if taskResult.History[i].Event == models.TaskEventApproved {
+				if v, ok := taskResult.History[i].Extra["impact"].(string); ok && v == "architecture" {
+					found = true
+				}
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected impact=architecture in approved history entry Extra")
+		}
+	})
+
+	t.Run("rejection clears and restarts", func(t *testing.T) {
+		now := time.Now().UTC()
+
+		// Task in reviewing_2 with 1 prior approval
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+		task.Status = models.TaskStatus("REVIEWING_CODE_2")
+		task.Approvals = []models.Approval{
+			{Agent: "code-reviewer-1", Provider: "claude", Timestamp: now.Add(-5 * time.Minute)},
+		}
+		priorApprover := "code-reviewer-1"
+		task.ApprovedBy = &priorApprover
+		reviewingBy := "code-reviewer-2"
+		task.ReviewingBy = &reviewingBy
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:  now.Add(-10 * time.Minute),
+			Event: models.TaskEventPreExecutionCheckpoint,
+			Extra: map[string]any{"impact": "architecture"},
+		})
+
+		tmpDir, stateFile := setupQuorumEnv(t, task, map[string]models.Agent{
+			"code-reviewer-2": {Role: "code-reviewer", Status: models.AgentStatusWorking, Provider: "codex"},
+		}, quorum2Pipeline)
+
+		result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Architectural concerns", "code-reviewer-2", "")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "REJECTED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "REJECTED")
+		}
+
+		bb := db.New(stateFile)
+		readState, _ := bb.Read()
+		taskResult := readState.FindTask("task-1")
+		if taskResult.Status != models.TaskStatusRejected {
+			t.Errorf("Status = %v, want CODE_REJECTED", taskResult.Status)
+		}
+		if taskResult.Approvals != nil {
+			t.Errorf("Approvals = %v, want nil after rejection", taskResult.Approvals)
+		}
+		if taskResult.ApprovedBy != nil {
+			t.Errorf("ApprovedBy = %v, want nil after rejection", taskResult.ApprovedBy)
+		}
+	})
+
+	t.Run("impact downgrade rejected", func(t *testing.T) {
+		now := time.Now().UTC()
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+		// Checkpoint declares architecture impact
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:  now.Add(-5 * time.Minute),
+			Event: models.TaskEventPreExecutionCheckpoint,
+			Extra: map[string]any{"impact": "architecture"},
+		})
+
+		tmpDir, _ := setupQuorumEnv(t, task, map[string]models.Agent{
+			"code-reviewer-1": {Role: "code-reviewer", Status: models.AgentStatusWorking, Provider: "claude"},
+		}, quorum2Pipeline)
+
+		// Reviewer attempts to downgrade to standard — should be rejected
+		_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "standard")
+		if err == nil {
+			t.Fatal("Expected error for impact downgrade")
+		}
+		if !strings.Contains(err.Error(), "cannot downgrade") {
+			t.Errorf("Error = %q, want to contain 'cannot downgrade'", err.Error())
+		}
+	})
 }
 
 func assertReleasedAgent(t *testing.T, state *models.State, agentID string) {

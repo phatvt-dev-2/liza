@@ -168,8 +168,9 @@ func (s *Server) handleSubmitVerdict(params map[string]any) (any, error) {
 	}
 
 	reason, _ := params["reason"].(string)
+	impact, _ := params["impact"].(string)
 
-	result, err := ops.SubmitVerdict(s.projectRoot, taskID, verdict, reason, agentID)
+	result, err := ops.SubmitVerdict(s.projectRoot, taskID, verdict, reason, agentID, impact)
 	if err != nil {
 		return nil, fmt.Errorf("submit verdict failed: %w", err)
 	}

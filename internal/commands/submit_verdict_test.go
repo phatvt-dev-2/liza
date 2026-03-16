@@ -307,7 +307,7 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			bb := testhelpers.WriteInitialState(t, statePath, initialState)
 
 			// Execute command
-			err := SubmitVerdictCommand(tmpDir, tt.taskID, tt.verdict, tt.reason, tt.agentID)
+			err := SubmitVerdictCommand(tmpDir, tt.taskID, tt.verdict, tt.reason, tt.agentID, "")
 
 			// Check error
 			if tt.wantErr {

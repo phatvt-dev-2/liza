@@ -273,6 +273,11 @@ func (s *Server) registerMutationTools() {
 							Type:        "string",
 							Description: "Reason for verdict (required for REJECTED)",
 						},
+						"impact": {
+							Type:        "string",
+							Description: "Impact classification for the change (standard, significant, architecture). Can only escalate, never downgrade. When set, may trigger quorum recalculation.",
+							Enum:        []string{"standard", "significant", "architecture"},
+						},
 					},
 					Required: []string{"task_id", "verdict", "agent_id"},
 				},

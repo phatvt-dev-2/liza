@@ -512,7 +512,7 @@ func TestSubmitVerdict_PipelineApproved(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "plan-1", "APPROVED", "", "code-plan-reviewer-1")
+	result, err := SubmitVerdict(tmpDir, "plan-1", "APPROVED", "", "code-plan-reviewer-1", "")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}
@@ -568,7 +568,7 @@ func TestSubmitVerdict_PipelineCodingPairApproved(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+	result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 	if err != nil {
 		t.Fatalf("SubmitVerdict() error: %v", err)
 	}

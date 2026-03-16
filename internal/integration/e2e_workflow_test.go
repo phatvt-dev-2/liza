@@ -191,7 +191,7 @@ func TestSimpleWorkflow(t *testing.T) {
 	// Transition to REVIEWING (simulates supervisor reviewer claim)
 	testhelpers.TransitionToReviewing(t, bb, taskID, reviewerID)
 
-	if err := commands.SubmitVerdictCommand(projectDir, taskID, "APPROVED", "", reviewerID); err != nil {
+	if err := commands.SubmitVerdictCommand(projectDir, taskID, "APPROVED", "", reviewerID, ""); err != nil {
 		t.Fatalf("SubmitVerdict failed: %v", err)
 	}
 
