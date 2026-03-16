@@ -151,29 +151,8 @@ func runChecks(_ context.Context, config WatchConfig) error {
 		alerts = append(alerts, check()...)
 	}
 
-	circuitBreakerAlerts, err := checkCircuitBreakerEscalation(config.ProjectRoot, state)
-	if err != nil {
-		alerts = append(alerts, alert{
-			Timestamp: time.Now().UTC(),
-			Level:     alertLevelCritical,
-			Category:  "CIRCUIT BREAKER ERROR",
-			Message:   err.Error(),
-		})
-	} else {
-		alerts = append(alerts, circuitBreakerAlerts...)
-	}
-
-	sprintStalledAlerts, err := checkSprintStalled(config.ProjectRoot, state, config.StateCache)
-	if err != nil {
-		alerts = append(alerts, alert{
-			Timestamp: time.Now().UTC(),
-			Level:     alertLevelCritical,
-			Category:  "SPRINT STALL ERROR",
-			Message:   err.Error(),
-		})
-	} else {
-		alerts = append(alerts, sprintStalledAlerts...)
-	}
+	alerts = append(alerts, checkCircuitBreakerEscalation(state, config.StateCache)...)
+	alerts = append(alerts, checkSprintStalled(state, config.StateCache)...)
 
 	if err := ValidateCommand(statePath, true); err != nil {
 		alerts = append(alerts, alert{
@@ -194,73 +173,47 @@ func runChecks(_ context.Context, config WatchConfig) error {
 	return nil
 }
 
-func checkCircuitBreakerEscalation(projectRoot string, state *models.State) ([]alert, error) {
+func checkCircuitBreakerEscalation(state *models.State, cache map[string]time.Time) []alert {
 	mode := state.Config.Mode
 	if mode == "" {
 		mode = models.SystemModeRunning
 	}
 
-	// Auto-escalation should only run during active execution.
+	// Only check during active execution.
 	if mode != models.SystemModeRunning || state.Sprint.Status != models.SprintStatusInProgress {
-		return nil, nil
+		delete(cache, "circuit_breaker:alert")
+		return nil
 	}
 
 	// Keep both checks: manual edits or interrupted writes can leave one field stale.
 	// Either value indicates a previously triggered circuit-breaker state.
 	if state.CircuitBreaker.Status == "TRIGGERED" || state.CircuitBreaker.CurrentTrigger != nil {
-		return nil, nil
+		delete(cache, "circuit_breaker:alert")
+		return nil
 	}
 
 	patternResult := analysis.DetectPatterns(state.Anomalies)
 	if !patternResult.Triggered {
-		return nil, nil
+		delete(cache, "circuit_breaker:alert")
+		return nil
 	}
 
-	// Analyze/Checkpoint each re-read state under lock. This snapshot pre-check is
-	// best-effort only and may race with manual mode/sprint changes.
-	analyzeResult, err := ops.Analyze(projectRoot)
-	if err != nil {
-		return nil, fmt.Errorf("auto circuit-breaker analysis failed: %w", err)
-	}
-	if !analyzeResult.Triggered {
-		return nil, nil
+	// Throttle: only alert once per triggered period.
+	if _, seen := cache["circuit_breaker:alert"]; seen {
+		return nil
 	}
 
-	sprintCheckpointResult, err := ops.SprintCheckpoint(projectRoot)
-	if err != nil {
-		// Another process may checkpoint between read and mutation.
-		if errors.Is(err, ops.ErrSprintAlreadyCheckpoint) {
-			return []alert{{
-				Timestamp: time.Now().UTC(),
-				Level:     alertLevelCritical,
-				Category:  "CIRCUIT BREAKER",
-				Message: fmt.Sprintf("pattern=%s severity=%s report=%s (sprint already at CHECKPOINT)",
-					analyzeResult.Pattern, analyzeResult.Severity, analyzeResult.ReportPath),
-			}}, nil
-		}
-		return nil, fmt.Errorf("auto checkpoint after circuit-breaker trigger failed: %w", err)
-	}
-
-	timestamp := time.Now().UTC()
-	return []alert{
-		{
-			Timestamp: timestamp,
-			Level:     alertLevelCritical,
-			Category:  "CIRCUIT BREAKER",
-			Message: fmt.Sprintf("pattern=%s severity=%s report=%s",
-				analyzeResult.Pattern, analyzeResult.Severity, analyzeResult.ReportPath),
-		},
-		{
-			Timestamp: timestamp,
-			Level:     alertLevelCritical,
-			Category:  "AUTO CHECKPOINT",
-			Message: fmt.Sprintf("created at %s report=%s",
-				sprintCheckpointResult.CheckpointAt.UTC().Format(time.RFC3339), sprintCheckpointResult.ReportPath),
-		},
-	}, nil
+	cache["circuit_breaker:alert"] = time.Now().UTC()
+	return []alert{{
+		Timestamp: time.Now().UTC(),
+		Level:     alertLevelCritical,
+		Category:  "CIRCUIT BREAKER",
+		Message: fmt.Sprintf("pattern=%s severity=%s — run 'liza analyze' then 'liza sprint-checkpoint'",
+			patternResult.Pattern, patternResult.Severity),
+	}}
 }
 
-func checkSprintStalled(projectRoot string, state *models.State, cache map[string]time.Time) ([]alert, error) {
+func checkSprintStalled(state *models.State, cache map[string]time.Time) []alert {
 	mode := state.Config.Mode
 	if mode == "" {
 		mode = models.SystemModeRunning
@@ -269,20 +222,20 @@ func checkSprintStalled(projectRoot string, state *models.State, cache map[strin
 	if mode != models.SystemModeRunning || state.Sprint.Status != models.SprintStatusInProgress {
 		// Clear throttle when sprint leaves IN_PROGRESS (e.g. after checkpoint).
 		// This ensures that if the human resumes without unblocking tasks,
-		// the next stall detection re-triggers a fresh checkpoint.
+		// the next stall detection re-triggers a fresh alert.
 		delete(cache, "sprint_stalled:alert")
-		return nil, nil
+		return nil
 	}
 
 	if !state.SprintStalled() {
 		delete(cache, "sprint_stalled:alert")
-		return nil, nil
+		return nil
 	}
 
 	// Throttle: only alert once per stall event within a single IN_PROGRESS period.
 	// The sprint status guard above resets the throttle across checkpoint/resume cycles.
 	if _, seen := cache["sprint_stalled:alert"]; seen {
-		return nil, nil
+		return nil
 	}
 
 	blockedCount := 0
@@ -293,41 +246,14 @@ func checkSprintStalled(projectRoot string, state *models.State, cache map[strin
 		}
 	}
 
-	// ops.SprintCheckpoint re-reads state under lock. Another process may checkpoint
-	// between our snapshot read and this call (same race pattern as circuit breaker).
-	sprintCheckpointResult, err := ops.SprintCheckpoint(projectRoot)
-	if err != nil {
-		if errors.Is(err, ops.ErrSprintAlreadyCheckpoint) {
-			cache["sprint_stalled:alert"] = time.Now().UTC()
-			return []alert{{
-				Timestamp: time.Now().UTC(),
-				Level:     alertLevelCritical,
-				Category:  "SPRINT STALLED",
-				Message: fmt.Sprintf("all %d non-terminal planned tasks are BLOCKED (sprint already at CHECKPOINT)",
-					blockedCount),
-			}}, nil
-		}
-		return nil, fmt.Errorf("auto checkpoint after sprint stall failed: %w", err)
-	}
-
 	cache["sprint_stalled:alert"] = time.Now().UTC()
-	timestamp := time.Now().UTC()
-	return []alert{
-		{
-			Timestamp: timestamp,
-			Level:     alertLevelCritical,
-			Category:  "SPRINT STALLED",
-			Message: fmt.Sprintf("all %d non-terminal planned tasks are BLOCKED",
-				blockedCount),
-		},
-		{
-			Timestamp: timestamp,
-			Level:     alertLevelCritical,
-			Category:  "AUTO CHECKPOINT",
-			Message: fmt.Sprintf("created at %s report=%s",
-				sprintCheckpointResult.CheckpointAt.UTC().Format(time.RFC3339), sprintCheckpointResult.ReportPath),
-		},
-	}, nil
+	return []alert{{
+		Timestamp: time.Now().UTC(),
+		Level:     alertLevelCritical,
+		Category:  "SPRINT STALLED",
+		Message: fmt.Sprintf("all %d non-terminal planned tasks are BLOCKED",
+			blockedCount),
+	}}
 }
 
 func checkExpiredLeases(state *models.State) []alert {

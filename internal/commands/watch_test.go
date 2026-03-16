@@ -830,27 +830,18 @@ func TestWatchCommand(t *testing.T) {
 func TestCheckSprintStalled(t *testing.T) {
 	now := time.Now().UTC()
 
-	t.Run("sprint stalled - all blocked - triggers checkpoint", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-		testhelpers.SetupPipelineConfig(t, tmpDir)
-		lizaPaths := paths.New(tmpDir)
-
+	t.Run("sprint stalled - all blocked - emits alert", func(t *testing.T) {
 		state := testhelpers.CreateValidState()
 		state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
 		state.Tasks = []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
 			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusBlocked, now),
 		}
-		testhelpers.WriteInitialState(t, stateFile, state)
 
 		cache := make(map[string]time.Time)
-		alerts, err := checkSprintStalled(tmpDir, state, cache)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(alerts) != 2 {
-			t.Fatalf("len(alerts) = %d, want 2", len(alerts))
+		alerts := checkSprintStalled(state, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("len(alerts) = %d, want 1", len(alerts))
 		}
 		if alerts[0].Category != "SPRINT STALLED" {
 			t.Errorf("alert[0].Category = %q, want %q", alerts[0].Category, "SPRINT STALLED")
@@ -861,46 +852,20 @@ func TestCheckSprintStalled(t *testing.T) {
 		if !strings.Contains(alerts[0].Message, "2 non-terminal planned tasks are BLOCKED") {
 			t.Errorf("alert[0].Message = %q, expected blocked count", alerts[0].Message)
 		}
-		if alerts[1].Category != "AUTO CHECKPOINT" {
-			t.Errorf("alert[1].Category = %q, want %q", alerts[1].Category, "AUTO CHECKPOINT")
-		}
-
-		// Verify sprint was checkpointed
-		bb := db.New(stateFile)
-		updatedState, err := bb.Read()
-		if err != nil {
-			t.Fatalf("failed to read state: %v", err)
-		}
-		if updatedState.Sprint.Status != models.SprintStatusCheckpoint {
-			t.Errorf("sprint.status = %s, want %s", updatedState.Sprint.Status, models.SprintStatusCheckpoint)
-		}
-
-		// Verify report was written
-		if _, err := os.Stat(lizaPaths.SprintSummaryPath()); err != nil {
-			t.Fatalf("expected sprint summary report: %v", err)
-		}
 	})
 
-	t.Run("mix of terminal and blocked - triggers checkpoint", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-		testhelpers.SetupPipelineConfig(t, tmpDir)
-
+	t.Run("mix of terminal and blocked - emits alert", func(t *testing.T) {
 		state := testhelpers.CreateValidState()
 		state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
 		state.Tasks = []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
 			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusBlocked, now),
 		}
-		testhelpers.WriteInitialState(t, stateFile, state)
 
 		cache := make(map[string]time.Time)
-		alerts, err := checkSprintStalled(tmpDir, state, cache)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(alerts) != 2 {
-			t.Fatalf("len(alerts) = %d, want 2", len(alerts))
+		alerts := checkSprintStalled(state, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("len(alerts) = %d, want 1", len(alerts))
 		}
 		if !strings.Contains(alerts[0].Message, "1 non-terminal planned tasks are BLOCKED") {
 			t.Errorf("alert[0].Message = %q, expected 1 blocked", alerts[0].Message)
@@ -916,10 +881,7 @@ func TestCheckSprintStalled(t *testing.T) {
 		}
 
 		cache := make(map[string]time.Time)
-		alerts, err := checkSprintStalled("/nonexistent", state, cache)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		alerts := checkSprintStalled(state, cache)
 		if len(alerts) != 0 {
 			t.Errorf("len(alerts) = %d, want 0", len(alerts))
 		}
@@ -934,53 +896,37 @@ func TestCheckSprintStalled(t *testing.T) {
 		}
 
 		cache := make(map[string]time.Time)
-		alerts, err := checkSprintStalled("/nonexistent", state, cache)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		alerts := checkSprintStalled(state, cache)
 		if len(alerts) != 0 {
 			t.Errorf("len(alerts) = %d, want 0 (guarded by sprint status)", len(alerts))
 		}
 	})
 
-	t.Run("stall then resume still stalled re-triggers checkpoint", func(t *testing.T) {
+	t.Run("stall then resume still stalled re-triggers alert", func(t *testing.T) {
 		// Regression: cache must be cleared when sprint leaves IN_PROGRESS,
-		// so a resumed-but-still-stalled sprint gets a fresh checkpoint.
-		tmpDir := t.TempDir()
-		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-		testhelpers.SetupPipelineConfig(t, tmpDir)
-
-		state := testhelpers.CreateValidState()
-		state.Sprint.Scope.Planned = []string{"task-1"}
-		state.Tasks = []models.Task{
+		// so a resumed-but-still-stalled sprint gets a fresh alert.
+		stalledState := testhelpers.CreateValidState()
+		stalledState.Sprint.Scope.Planned = []string{"task-1"}
+		stalledState.Tasks = []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
 		}
-		testhelpers.WriteInitialState(t, stateFile, state)
 
 		cache := make(map[string]time.Time)
 
-		// Step 1: Stall detected → checkpoint
-		alerts, err := checkSprintStalled(tmpDir, state, cache)
-		if err != nil {
-			t.Fatalf("step 1: unexpected error: %v", err)
-		}
-		if len(alerts) != 2 {
-			t.Fatalf("step 1: len(alerts) = %d, want 2", len(alerts))
+		// Step 1: Stall detected → alert fires
+		alerts := checkSprintStalled(stalledState, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("step 1: len(alerts) = %d, want 1", len(alerts))
 		}
 
-		// Step 2: Sprint is now at CHECKPOINT — simulate watch tick
-		bb := db.New(stateFile)
-		checkpointState, err := bb.Read()
-		if err != nil {
-			t.Fatalf("failed to read checkpointed state: %v", err)
+		// Step 2: Sprint moves to CHECKPOINT — simulate watch tick
+		checkpointState := testhelpers.CreateValidState()
+		checkpointState.Sprint.Status = models.SprintStatusCheckpoint
+		checkpointState.Sprint.Scope.Planned = []string{"task-1"}
+		checkpointState.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
 		}
-		if checkpointState.Sprint.Status != models.SprintStatusCheckpoint {
-			t.Fatalf("sprint.status = %s, want CHECKPOINT", checkpointState.Sprint.Status)
-		}
-		alerts, err = checkSprintStalled(tmpDir, checkpointState, cache)
-		if err != nil {
-			t.Fatalf("step 2: unexpected error: %v", err)
-		}
+		alerts = checkSprintStalled(checkpointState, cache)
 		if len(alerts) != 0 {
 			t.Errorf("step 2: len(alerts) = %d, want 0", len(alerts))
 		}
@@ -990,26 +936,16 @@ func TestCheckSprintStalled(t *testing.T) {
 		}
 
 		// Step 3: Human resumes without fixing → sprint back to IN_PROGRESS, still stalled
-		err = bb.Modify(func(s *models.State) error {
-			s.Sprint.Status = models.SprintStatusInProgress
-			s.Sprint.Timeline.CheckpointAt = nil
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("failed to resume sprint: %v", err)
-		}
-		resumedState, err := bb.Read()
-		if err != nil {
-			t.Fatalf("failed to read resumed state: %v", err)
+		resumedState := testhelpers.CreateValidState()
+		resumedState.Sprint.Scope.Planned = []string{"task-1"}
+		resumedState.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
 		}
 
-		// Step 4: Stall re-detected → fresh checkpoint
-		alerts, err = checkSprintStalled(tmpDir, resumedState, cache)
-		if err != nil {
-			t.Fatalf("step 4: unexpected error: %v", err)
-		}
-		if len(alerts) != 2 {
-			t.Fatalf("step 4: len(alerts) = %d, want 2 (should re-trigger after resume)", len(alerts))
+		// Step 4: Stall re-detected → fresh alert
+		alerts = checkSprintStalled(resumedState, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("step 4: len(alerts) = %d, want 1 (should re-trigger after resume)", len(alerts))
 		}
 		if alerts[0].Category != "SPRINT STALLED" {
 			t.Errorf("step 4: alert[0].Category = %q, want SPRINT STALLED", alerts[0].Category)
@@ -1017,47 +953,29 @@ func TestCheckSprintStalled(t *testing.T) {
 	})
 
 	t.Run("throttling - second call does not re-trigger", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-		testhelpers.SetupPipelineConfig(t, tmpDir)
-
 		state := testhelpers.CreateValidState()
 		state.Sprint.Scope.Planned = []string{"task-1"}
 		state.Tasks = []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
 		}
-		testhelpers.WriteInitialState(t, stateFile, state)
 
 		cache := make(map[string]time.Time)
 
 		// First call triggers
-		alerts, err := checkSprintStalled(tmpDir, state, cache)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(alerts) != 2 {
-			t.Fatalf("first call: len(alerts) = %d, want 2", len(alerts))
+		alerts := checkSprintStalled(state, cache)
+		if len(alerts) != 1 {
+			t.Fatalf("first call: len(alerts) = %d, want 1", len(alerts))
 		}
 
-		// Re-read state since checkpoint modified it
-		bb := db.New(stateFile)
-		updatedState, err := bb.Read()
-		if err != nil {
-			t.Fatalf("failed to read state: %v", err)
-		}
-
-		// Second call should be guarded (sprint is now at CHECKPOINT)
-		alerts, err = checkSprintStalled(tmpDir, updatedState, cache)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		// Second call should be throttled (cache key set)
+		alerts = checkSprintStalled(state, cache)
 		if len(alerts) != 0 {
-			t.Errorf("second call: len(alerts) = %d, want 0 (sprint now at CHECKPOINT)", len(alerts))
+			t.Errorf("second call: len(alerts) = %d, want 0 (throttled by cache)", len(alerts))
 		}
 	})
 }
 
-func TestRunChecks_AutoSprintCheckpointOnCircuitBreakerPattern(t *testing.T) {
+func TestRunChecks_CircuitBreakerAlertOnPattern(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
@@ -1109,49 +1027,20 @@ func TestRunChecks_AutoSprintCheckpointOnCircuitBreakerPattern(t *testing.T) {
 		t.Fatalf("runChecks() error: %v", err)
 	}
 
+	// Verify NO state mutation — watch is read-only.
 	bb := db.New(stateFile)
 	updatedState, err := bb.Read()
 	if err != nil {
-		t.Fatalf("failed to read updated state: %v", err)
+		t.Fatalf("failed to read state: %v", err)
+	}
+	if updatedState.Config.Mode != models.SystemModeRunning {
+		t.Errorf("mode = %s, want %s (watch must not mutate)", updatedState.Config.Mode, models.SystemModeRunning)
+	}
+	if updatedState.Sprint.Status != models.SprintStatusInProgress {
+		t.Errorf("sprint.status = %s, want %s (watch must not mutate)", updatedState.Sprint.Status, models.SprintStatusInProgress)
 	}
 
-	if updatedState.Config.Mode != models.SystemModeCircuitBreakerTripped {
-		t.Errorf("mode = %s, want %s", updatedState.Config.Mode, models.SystemModeCircuitBreakerTripped)
-	}
-	if updatedState.Sprint.Status != models.SprintStatusCheckpoint {
-		t.Errorf("sprint.status = %s, want %s", updatedState.Sprint.Status, models.SprintStatusCheckpoint)
-	}
-	if updatedState.Sprint.Timeline.CheckpointAt == nil {
-		t.Fatal("expected sprint checkpoint_at to be set")
-	}
-	if updatedState.CircuitBreaker.Status != "TRIGGERED" {
-		t.Errorf("circuit_breaker.status = %s, want TRIGGERED", updatedState.CircuitBreaker.Status)
-	}
-	if updatedState.CircuitBreaker.CurrentTrigger == nil {
-		t.Fatal("expected current_trigger to be populated")
-	}
-	if updatedState.CircuitBreaker.CurrentTrigger.Pattern != "retry_cluster" {
-		t.Errorf("trigger pattern = %s, want retry_cluster", updatedState.CircuitBreaker.CurrentTrigger.Pattern)
-	}
-
-	if _, err := os.Stat(lizaPaths.CircuitBreakerReportPath()); err != nil {
-		t.Fatalf("expected circuit breaker report: %v", err)
-	}
-	reportData, err := os.ReadFile(lizaPaths.CircuitBreakerReportPath())
-	if err != nil {
-		t.Fatalf("failed to read circuit breaker report: %v", err)
-	}
-	reportText := string(reportData)
-	if !strings.Contains(reportText, "retry_cluster") {
-		t.Errorf("expected retry_cluster in report, got:\n%s", reportText)
-	}
-	if !strings.Contains(reportText, "3 retry_loop anomalies with similar error patterns") {
-		t.Errorf("expected retry evidence in report, got:\n%s", reportText)
-	}
-	if _, err := os.Stat(lizaPaths.SprintSummaryPath()); err != nil {
-		t.Fatalf("expected sprint summary report: %v", err)
-	}
-
+	// Verify CIRCUIT BREAKER alert was emitted.
 	alertLogData, err := os.ReadFile(lizaPaths.AlertsLogPath())
 	if err != nil {
 		t.Fatalf("failed to read alerts log: %v", err)
@@ -1160,12 +1049,12 @@ func TestRunChecks_AutoSprintCheckpointOnCircuitBreakerPattern(t *testing.T) {
 	if !strings.Contains(alertLogText, "CIRCUIT BREAKER") {
 		t.Errorf("expected CIRCUIT BREAKER alert in log, got:\n%s", alertLogText)
 	}
-	if !strings.Contains(alertLogText, "AUTO CHECKPOINT") {
-		t.Errorf("expected AUTO CHECKPOINT alert in log, got:\n%s", alertLogText)
+	if strings.Contains(alertLogText, "AUTO CHECKPOINT") {
+		t.Errorf("unexpected AUTO CHECKPOINT alert in log (watch must not checkpoint)")
 	}
 }
 
-func TestRunChecks_NoCircuitBreakerEscalationBelowThreshold(t *testing.T) {
+func TestRunChecks_NoCircuitBreakerAlertBelowThreshold(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
@@ -1207,43 +1096,26 @@ func TestRunChecks_NoCircuitBreakerEscalationBelowThreshold(t *testing.T) {
 		t.Fatalf("runChecks() error: %v", err)
 	}
 
-	bb := db.New(stateFile)
-	updatedState, err := bb.Read()
+	// Below threshold → no CIRCUIT BREAKER alert.
+	alertsLogPath := lizaPaths.AlertsLogPath()
+	if _, err := os.Stat(alertsLogPath); os.IsNotExist(err) {
+		// No alerts log at all — pass (no alerts emitted).
+		return
+	}
+	alertLogData, err := os.ReadFile(alertsLogPath)
 	if err != nil {
-		t.Fatalf("failed to read updated state: %v", err)
+		t.Fatalf("failed to read alerts log: %v", err)
 	}
-
-	if updatedState.Config.Mode != models.SystemModeRunning {
-		t.Errorf("mode = %s, want %s", updatedState.Config.Mode, models.SystemModeRunning)
-	}
-	if updatedState.Sprint.Status != models.SprintStatusInProgress {
-		t.Errorf("sprint.status = %s, want %s", updatedState.Sprint.Status, models.SprintStatusInProgress)
-	}
-	if updatedState.Sprint.Timeline.CheckpointAt != nil {
-		t.Fatalf("did not expect checkpoint_at, got %s", updatedState.Sprint.Timeline.CheckpointAt.UTC().Format(time.RFC3339))
-	}
-	if updatedState.CircuitBreaker.Status != "OK" {
-		t.Errorf("circuit_breaker.status = %s, want OK", updatedState.CircuitBreaker.Status)
-	}
-
-	if _, err := os.Stat(lizaPaths.CircuitBreakerReportPath()); !os.IsNotExist(err) {
-		t.Errorf("expected no circuit breaker report, err=%v", err)
-	}
-	if _, err := os.Stat(lizaPaths.SprintSummaryPath()); !os.IsNotExist(err) {
-		t.Errorf("expected no sprint summary report, err=%v", err)
+	if strings.Contains(string(alertLogData), "CIRCUIT BREAKER") {
+		t.Errorf("unexpected CIRCUIT BREAKER alert below threshold:\n%s", string(alertLogData))
 	}
 }
 
-func TestRunChecks_CircuitBreakerErrorDoesNotDropOtherAlerts(t *testing.T) {
+func TestRunChecks_CircuitBreakerAlertCoexistsWithOtherAlerts(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
 	lizaPaths := paths.New(tmpDir)
-
-	// Force ops.Analyze report write failure: report path exists as a directory.
-	if err := os.Mkdir(lizaPaths.CircuitBreakerReportPath(), 0755); err != nil {
-		t.Fatalf("failed to create report-path directory: %v", err)
-	}
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -1291,10 +1163,10 @@ func TestRunChecks_CircuitBreakerErrorDoesNotDropOtherAlerts(t *testing.T) {
 	}
 
 	if err := runChecks(context.Background(), config); err != nil {
-		t.Fatalf("runChecks() should not fail on circuit-breaker escalation errors: %v", err)
+		t.Fatalf("runChecks() error: %v", err)
 	}
 
-	// Existing operational alerts should still be emitted.
+	// Both circuit breaker and operational alerts should be emitted.
 	alertLogData, err := os.ReadFile(lizaPaths.AlertsLogPath())
 	if err != nil {
 		t.Fatalf("failed to read alerts log: %v", err)
@@ -1303,21 +1175,21 @@ func TestRunChecks_CircuitBreakerErrorDoesNotDropOtherAlerts(t *testing.T) {
 	if !strings.Contains(alertLogText, "INTEGRATION FAILED") {
 		t.Errorf("expected INTEGRATION FAILED alert in log, got:\n%s", alertLogText)
 	}
-	if !strings.Contains(alertLogText, "CIRCUIT BREAKER ERROR") {
-		t.Errorf("expected CIRCUIT BREAKER ERROR alert in log, got:\n%s", alertLogText)
+	if !strings.Contains(alertLogText, "CIRCUIT BREAKER") {
+		t.Errorf("expected CIRCUIT BREAKER alert in log, got:\n%s", alertLogText)
 	}
 
-	// On escalation failure, state should remain unmutated by analyze/checkpoint.
+	// Verify NO state mutation.
 	bb := db.New(stateFile)
 	updatedState, err := bb.Read()
 	if err != nil {
-		t.Fatalf("failed to read updated state: %v", err)
+		t.Fatalf("failed to read state: %v", err)
 	}
 	if updatedState.Config.Mode != models.SystemModeRunning {
-		t.Errorf("mode = %s, want %s", updatedState.Config.Mode, models.SystemModeRunning)
+		t.Errorf("mode = %s, want %s (watch must not mutate)", updatedState.Config.Mode, models.SystemModeRunning)
 	}
 	if updatedState.Sprint.Status != models.SprintStatusInProgress {
-		t.Errorf("sprint.status = %s, want %s", updatedState.Sprint.Status, models.SprintStatusInProgress)
+		t.Errorf("sprint.status = %s, want %s (watch must not mutate)", updatedState.Sprint.Status, models.SprintStatusInProgress)
 	}
 }
 
