@@ -228,7 +228,7 @@ The human need not justify invocation. The phrase itself is sufficient authority
 1. Read initialization files:
    - `REPOSITORY.md` (repo root)
    - `docs/USAGE.md` (from repo root)
-   - `lessons/agents/README.md` (if it exists — project-specific operational lessons)
+   - `GUARDRAILS.md` (from repo root, if it exists — project-specific operational lessons)
    - `~/.liza/AGENT_TOOLS.md`
    - `~/.liza/COLLABORATION_CONTINUITY.md`
 2. Build the 6 mental models. This should be done before ANY substantive response, including greetings.
