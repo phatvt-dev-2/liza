@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -350,9 +351,9 @@ func TestResolver_ContextSections(t *testing.T) {
 		t.Fatalf("ContextSections(coder): %v", err)
 	}
 	want := []string{
-		"assigned-task", "collective-plan-scoping", "handoff-resume", "integration-fix",
-		"prior-rejection", "doer-state-transitions", "doer-tools", "anomaly-logging",
-		"blocking-protocol", "worktree-rules", "commit-workflow", "implementation-phase",
+		"assigned-task", "worktree-rules", "collective-plan-scoping", "handoff-resume",
+		"integration-fix", "prior-rejection", "doer-state-transitions", "doer-tools",
+		"anomaly-logging", "blocking-protocol", "commit-workflow", "implementation-phase",
 		"submission-phase", "mandatory-docs", "skills-affinity",
 	}
 	if len(got) != len(want) {
@@ -548,5 +549,89 @@ pipeline:
 	}
 	if got != 0 {
 		t.Errorf("MaxInstances(coder) = %d, want 0 (unset = unlimited)", got)
+	}
+}
+
+// TestResolver_WorktreeRulesBeforeReadBearingBlocks ensures worktree-rules is rendered
+// before any block that can trigger file reads, preventing agents from reading files
+// with the wrong path prefix before seeing worktree grounding instructions.
+func TestResolver_WorktreeRulesBeforeReadBearingBlocks(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+
+	readBearingBlocks := []string{
+		"collective-plan-scoping",
+		"integration-fix",
+		"review-instructions",
+	}
+
+	for _, role := range []string{
+		"coder", "code-reviewer",
+		"code-planner", "code-plan-reviewer",
+		"epic-planner", "epic-plan-reviewer",
+		"us-writer", "us-reviewer",
+	} {
+		sections, err := r.ContextSections(role)
+		if err != nil {
+			t.Fatalf("ContextSections(%s): %v", role, err)
+		}
+
+		wtIdx := -1
+		for i, s := range sections {
+			if s == "worktree-rules" {
+				wtIdx = i
+				break
+			}
+		}
+		if wtIdx == -1 {
+			t.Errorf("%s: worktree-rules not found in context-sections", role)
+			continue
+		}
+
+		for _, block := range readBearingBlocks {
+			for i, s := range sections {
+				if s == block && i < wtIdx {
+					t.Errorf("%s: read-bearing block %q at index %d precedes worktree-rules at index %d",
+						role, block, i, wtIdx)
+				}
+			}
+		}
+	}
+}
+
+// TestResolver_FixtureMatchesEmbeddedPipeline ensures the Phase 2 test fixture
+// stays in sync with the production embedded pipeline for context-sections ordering.
+func TestResolver_FixtureMatchesEmbeddedPipeline(t *testing.T) {
+	fixture := NewResolver(loadPhase2Config(t))
+
+	embeddedData, err := os.ReadFile("../embedded/pipeline.yaml")
+	if err != nil {
+		t.Fatalf("failed to read embedded pipeline.yaml: %v", err)
+	}
+	embeddedCfg, err := LoadFromBytes(embeddedData)
+	if err != nil {
+		t.Fatalf("LoadFromBytes(embedded): %v", err)
+	}
+	embedded := NewResolver(embeddedCfg)
+
+	for _, role := range []string{
+		"orchestrator",
+		"coder", "code-reviewer",
+		"code-planner", "code-plan-reviewer",
+		"epic-planner", "epic-plan-reviewer",
+		"us-writer", "us-reviewer",
+	} {
+		fixtureSections, err := fixture.ContextSections(role)
+		if err != nil {
+			t.Fatalf("fixture.ContextSections(%s): %v", role, err)
+		}
+		embeddedSections, err := embedded.ContextSections(role)
+		if err != nil {
+			t.Fatalf("embedded.ContextSections(%s): %v", role, err)
+		}
+
+		if !slices.Equal(fixtureSections, embeddedSections) {
+			t.Errorf("%s: context-sections diverge between fixture and embedded pipeline\n  fixture:  %v\n  embedded: %v",
+				role, fixtureSections, embeddedSections)
+		}
 	}
 }

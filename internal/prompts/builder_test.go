@@ -976,7 +976,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"REVIEWER TOOL:",
 			"liza_submit_verdict",
 			"ANOMALY LOGGING:",
-			"WORKTREE GIT RULES:",
+			"WORKTREE RULES:",
 			"REVIEW SCOPE:",
 			"REJECTION FORMAT",
 			"VERDICT SUBMISSION",

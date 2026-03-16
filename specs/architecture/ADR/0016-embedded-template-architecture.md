@@ -40,8 +40,13 @@ Chose **Option 3**, implemented in two steps:
 base_prompt.tmpl
 ├── shared_reference.tmpl     (operational context for all roles)
 ├── planner_context.tmpl      (or coder_, reviewer_)
-│   └── coder_integration_fix.tmpl  (conditional)
 └── wake_*.tmpl               (trigger-specific context)
+
+blocks/                        (modular context sections)
+├── worktree_rules.tmpl        (worktree grounding — rendered early)
+├── integration_fix.tmpl       (conditional, for merge conflicts)
+├── implementation_phase.tmpl  (role-specific implementation steps)
+└── ...                        (other context sections)
 ```
 
 ### Rationale

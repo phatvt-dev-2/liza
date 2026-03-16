@@ -1,14 +1,14 @@
 {{- define "worktree-rules" -}}
-{{- if eq .RoleType "reviewer"}}
-
-WORKTREE GIT RULES:
-- All git commands MUST use -C {{.Worktree}} to prevent shared state corruption.
-{{- else}}
 
 WORKTREE RULES:
-- All git commands MUST use -C {{.Worktree}} to prevent shared state corruption.
+First, run: cd {{.Worktree}} && pwd
+Verify the output matches {{.Worktree}}. Then:
+- ALL file operations use {{.Worktree}}/ prefix (Read, Edit, Glob, Grep tools)
+- All git commands MUST use: git -C {{.Worktree}}
+- NEVER use the project root path for file operations
+{{- if eq .RoleType "doer"}}
 - File Read/Edit paths must match exactly — the edit tool tracks reads by string, not inode.
-  Use {{.Worktree}}/path for ALL file operations. Never retype or reconstruct the path.
+  Never retype or reconstruct the path.
 - To CREATE new files: use Write directly without Read. Do not attempt Read first (it will error).
 {{- end}}
 {{- end -}}

@@ -40,10 +40,10 @@ pipeline:
       display-name: "Epic Planner"
       context-sections:
         - assigned-task
+        - worktree-rules
         - prior-rejection
         - doer-state-transitions
         - doer-tools
-        - worktree-rules
         - capability-scoping
         - implementation-phase
         - mandatory-docs
@@ -53,11 +53,11 @@ pipeline:
       display-name: "Epic Plan Reviewer"
       context-sections:
         - review-task
+        - worktree-rules
         - prior-rejection
         - reviewer-state-transitions
         - reviewer-tools
         - anomaly-logging
-        - worktree-rules
         - review-instructions
         - rejection-format
         - verdict-submission
@@ -68,11 +68,11 @@ pipeline:
       display-name: "US Writer"
       context-sections:
         - assigned-task
+        - worktree-rules
         - collective-plan-scoping
         - prior-rejection
         - doer-state-transitions
         - doer-tools
-        - worktree-rules
         - capability-scoping
         - implementation-phase
         - mandatory-docs
@@ -82,12 +82,12 @@ pipeline:
       display-name: "US Reviewer"
       context-sections:
         - review-task
+        - worktree-rules
         - collective-plan-scoping
         - prior-rejection
         - reviewer-state-transitions
         - reviewer-tools
         - anomaly-logging
-        - worktree-rules
         - review-instructions
         - rejection-format
         - verdict-submission
@@ -98,11 +98,11 @@ pipeline:
       display-name: "Code Planner"
       context-sections:
         - assigned-task
+        - worktree-rules
         - collective-plan-scoping
         - prior-rejection
         - doer-state-transitions
         - doer-tools
-        - worktree-rules
         - task-decomposition
         - implementation-phase
         - mandatory-docs
@@ -112,12 +112,12 @@ pipeline:
       display-name: "Code Plan Reviewer"
       context-sections:
         - review-task
+        - worktree-rules
         - collective-plan-scoping
         - prior-rejection
         - reviewer-state-transitions
         - reviewer-tools
         - anomaly-logging
-        - worktree-rules
         - review-instructions
         - rejection-format
         - verdict-submission
@@ -128,6 +128,7 @@ pipeline:
       display-name: "Coder"
       context-sections:
         - assigned-task
+        - worktree-rules
         - collective-plan-scoping
         - handoff-resume
         - integration-fix
@@ -136,7 +137,6 @@ pipeline:
         - doer-tools
         - anomaly-logging
         - blocking-protocol
-        - worktree-rules
         - commit-workflow
         - implementation-phase
         - submission-phase
@@ -147,13 +147,13 @@ pipeline:
       display-name: "Code Reviewer"
       context-sections:
         - review-task
+        - worktree-rules
         - collective-plan-scoping
         - scope-extensions
         - prior-rejection
         - reviewer-state-transitions
         - reviewer-tools
         - anomaly-logging
-        - worktree-rules
         - review-instructions
         - rejection-format
         - verdict-submission
