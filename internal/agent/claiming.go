@@ -122,7 +122,7 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr mod
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if models.IsApprovedForMerge(task, pr) &&
-			task.ApprovedBy != nil && *task.ApprovedBy == agentID &&
+			task.LastApprover() == agentID &&
 			task.MergeCommit == nil {
 
 			logger.Info("Merging approved task", "task_id", task.ID)
@@ -170,7 +170,7 @@ func hasPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResol
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if models.IsApprovedForMerge(task, pr) &&
-			task.ApprovedBy != nil && *task.ApprovedBy == agentID &&
+			task.LastApprover() == agentID &&
 			task.MergeCommit == nil {
 			return true
 		}

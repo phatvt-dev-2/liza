@@ -520,6 +520,151 @@ func TestSubmitVerdict_StatErrorNotSilenced(t *testing.T) {
 	}
 }
 
+func TestSubmitVerdictApprovals(t *testing.T) {
+	t.Run("approved builds approval and sets derived approved_by", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now),
+		}
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:     "code-reviewer",
+			Status:   models.AgentStatusWorking,
+			Provider: "claude",
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "APPROVED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+		}
+
+		bb := db.New(stateFile)
+		readState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("Failed to read state: %v", err)
+		}
+
+		task := readState.FindTask("task-1")
+		if task == nil {
+			t.Fatal("Task not found")
+		}
+
+		// Verify approvals list
+		if task.ApprovalCount() != 1 {
+			t.Fatalf("ApprovalCount() = %d, want 1", task.ApprovalCount())
+		}
+		approval := task.Approvals[0]
+		if approval.Agent != "code-reviewer-1" {
+			t.Errorf("Approval.Agent = %q, want %q", approval.Agent, "code-reviewer-1")
+		}
+		if approval.Provider != "claude" {
+			t.Errorf("Approval.Provider = %q, want %q", approval.Provider, "claude")
+		}
+		if approval.Timestamp.IsZero() {
+			t.Error("Approval.Timestamp is zero")
+		}
+
+		// Verify derived ApprovedBy for backward compat
+		if task.ApprovedBy == nil || *task.ApprovedBy != "code-reviewer-1" {
+			t.Error("ApprovedBy (derived) should be code-reviewer-1")
+		}
+
+		// Verify LastApprover matches
+		if task.LastApprover() != "code-reviewer-1" {
+			t.Errorf("LastApprover() = %q, want %q", task.LastApprover(), "code-reviewer-1")
+		}
+	})
+
+	t.Run("rejected clears approvals", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+		// Pre-populate approvals (simulating a partially-approved task re-entering review)
+		task.Approvals = []models.Approval{
+			{Agent: "code-reviewer-2", Provider: "codex", Timestamp: now.Add(-10 * time.Minute)},
+		}
+		state.Tasks = []models.Task{task}
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:     "code-reviewer",
+			Status:   models.AgentStatusWorking,
+			Provider: "claude",
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Needs rework", "code-reviewer-1")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "REJECTED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "REJECTED")
+		}
+
+		bb := db.New(stateFile)
+		readState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("Failed to read state: %v", err)
+		}
+
+		rejTask := readState.FindTask("task-1")
+		if rejTask == nil {
+			t.Fatal("Task not found")
+		}
+		if rejTask.Approvals != nil {
+			t.Errorf("Approvals = %v, want nil after rejection", rejTask.Approvals)
+		}
+	})
+
+	t.Run("approved with empty provider falls back gracefully", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now),
+		}
+		// Agent without provider set (backward compat scenario)
+		state.Agents["code-reviewer-1"] = models.Agent{
+			Role:   "code-reviewer",
+			Status: models.AgentStatusWorking,
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "APPROVED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+		}
+
+		bb := db.New(stateFile)
+		readState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("Failed to read state: %v", err)
+		}
+
+		task := readState.FindTask("task-1")
+		if task.ApprovalCount() != 1 {
+			t.Fatalf("ApprovalCount() = %d, want 1", task.ApprovalCount())
+		}
+		// Provider should be empty string, not cause a crash
+		if task.Approvals[0].Provider != "" {
+			t.Errorf("Approval.Provider = %q, want empty string", task.Approvals[0].Provider)
+		}
+	})
+}
+
 func assertReleasedAgent(t *testing.T, state *models.State, agentID string) {
 	t.Helper()
 

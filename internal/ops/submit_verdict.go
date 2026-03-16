@@ -131,6 +131,19 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 			if err := transitionTask(approvedStatus); err != nil {
 				return err
 			}
+
+			// Build approval from agent registry and append to approvals list
+			provider := ""
+			if agent, ok := state.Agents[agentID]; ok {
+				provider = agent.Provider
+			}
+			task.Approvals = append(task.Approvals, models.Approval{
+				Agent:     agentID,
+				Provider:  provider,
+				Timestamp: now,
+			})
+
+			// Derived field for backward compatibility
 			task.ApprovedBy = &agentID
 			task.RejectionReason = nil
 
@@ -143,6 +156,10 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID string) (*Verdi
 			if err := transitionTask(rejectedStatus); err != nil {
 				return err
 			}
+
+			// Rejection at any stage clears all approvals (spec: both reviewers re-review)
+			task.ClearApprovals()
+
 			task.RejectionReason = &reason
 			task.ReviewCyclesCurrent++
 			task.ReviewCyclesTotal++

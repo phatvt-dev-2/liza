@@ -31,7 +31,7 @@ func TestHasPendingMerges(t *testing.T) {
 				{
 					ID:          "task-1",
 					Status:      models.TaskStatusApproved,
-					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
+					Approvals:   []models.Approval{{Agent: "code-reviewer-1", Provider: "claude"}},
 					MergeCommit: testhelpers.StringPtr("abc123"),
 				},
 			},
@@ -42,10 +42,9 @@ func TestHasPendingMerges(t *testing.T) {
 			name: "approved task by different agent returns false",
 			tasks: []models.Task{
 				{
-					ID:          "task-1",
-					Status:      models.TaskStatusApproved,
-					ApprovedBy:  testhelpers.StringPtr("code-reviewer-2"),
-					MergeCommit: nil,
+					ID:        "task-1",
+					Status:    models.TaskStatusApproved,
+					Approvals: []models.Approval{{Agent: "code-reviewer-2", Provider: "codex"}},
 				},
 			},
 			agentID:  "code-reviewer-1",
@@ -55,11 +54,10 @@ func TestHasPendingMerges(t *testing.T) {
 			name: "approved task by this agent without merge_commit returns true",
 			tasks: []models.Task{
 				{
-					ID:          "task-1",
-					Status:      models.TaskStatusApproved,
-					RolePair:    "coding-pair",
-					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
-					MergeCommit: nil,
+					ID:        "task-1",
+					Status:    models.TaskStatusApproved,
+					RolePair:  "coding-pair",
+					Approvals: []models.Approval{{Agent: "code-reviewer-1", Provider: "claude"}},
 				},
 			},
 			agentID:  "code-reviewer-1",
@@ -72,15 +70,14 @@ func TestHasPendingMerges(t *testing.T) {
 					ID:          "task-1",
 					Status:      models.TaskStatusApproved,
 					RolePair:    "coding-pair",
-					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
+					Approvals:   []models.Approval{{Agent: "code-reviewer-1", Provider: "claude"}},
 					MergeCommit: testhelpers.StringPtr("abc123"),
 				},
 				{
-					ID:          "task-2",
-					Status:      models.TaskStatusApproved,
-					RolePair:    "coding-pair",
-					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
-					MergeCommit: nil,
+					ID:        "task-2",
+					Status:    models.TaskStatusApproved,
+					RolePair:  "coding-pair",
+					Approvals: []models.Approval{{Agent: "code-reviewer-1", Provider: "claude"}},
 				},
 			},
 			agentID:  "code-reviewer-1",
@@ -90,11 +87,10 @@ func TestHasPendingMerges(t *testing.T) {
 			name: "coding_plan_approved task by this agent without merge_commit returns true",
 			tasks: []models.Task{
 				{
-					ID:          "task-1",
-					Status:      models.TaskStatusCodingPlanApproved,
-					RolePair:    "code-planning-pair",
-					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
-					MergeCommit: nil,
+					ID:        "task-1",
+					Status:    models.TaskStatusCodingPlanApproved,
+					RolePair:  "code-planning-pair",
+					Approvals: []models.Approval{{Agent: "code-reviewer-1", Provider: "claude"}},
 				},
 			},
 			agentID:  "code-reviewer-1",
@@ -104,10 +100,9 @@ func TestHasPendingMerges(t *testing.T) {
 			name: "integration_failed task returns false",
 			tasks: []models.Task{
 				{
-					ID:          "task-1",
-					Status:      models.TaskStatusIntegrationFailed,
-					ApprovedBy:  testhelpers.StringPtr("code-reviewer-1"),
-					MergeCommit: nil,
+					ID:        "task-1",
+					Status:    models.TaskStatusIntegrationFailed,
+					Approvals: []models.Approval{{Agent: "code-reviewer-1", Provider: "claude"}},
 				},
 			},
 			agentID:  "code-reviewer-1",
@@ -160,10 +155,10 @@ func TestHasPendingMerges_Pipeline(t *testing.T) {
 			name: "CODE_APPROVED pipeline task returns true",
 			tasks: []models.Task{
 				{
-					ID:         "task-1",
-					Status:     "CODE_APPROVED",
-					RolePair:   "coding-pair",
-					ApprovedBy: testhelpers.StringPtr("code-reviewer-1"),
+					ID:        "task-1",
+					Status:    "CODE_APPROVED",
+					RolePair:  "coding-pair",
+					Approvals: []models.Approval{{Agent: "code-reviewer-1", Provider: "claude"}},
 				},
 			},
 			agentID:  "code-reviewer-1",
@@ -173,10 +168,10 @@ func TestHasPendingMerges_Pipeline(t *testing.T) {
 			name: "CODE_APPROVED pipeline task by different agent returns false",
 			tasks: []models.Task{
 				{
-					ID:         "task-1",
-					Status:     "CODE_APPROVED",
-					RolePair:   "coding-pair",
-					ApprovedBy: testhelpers.StringPtr("code-reviewer-2"),
+					ID:        "task-1",
+					Status:    "CODE_APPROVED",
+					RolePair:  "coding-pair",
+					Approvals: []models.Approval{{Agent: "code-reviewer-2", Provider: "codex"}},
 				},
 			},
 			agentID:  "code-reviewer-1",
@@ -186,10 +181,10 @@ func TestHasPendingMerges_Pipeline(t *testing.T) {
 			name: "CODING_PLAN_APPROVED pipeline task returns true",
 			tasks: []models.Task{
 				{
-					ID:         "task-1",
-					Status:     "CODING_PLAN_APPROVED",
-					RolePair:   "code-planning-pair",
-					ApprovedBy: testhelpers.StringPtr("code-plan-reviewer-1"),
+					ID:        "task-1",
+					Status:    "CODING_PLAN_APPROVED",
+					RolePair:  "code-planning-pair",
+					Approvals: []models.Approval{{Agent: "code-plan-reviewer-1", Provider: "claude"}},
 				},
 			},
 			agentID:  "code-plan-reviewer-1",
@@ -238,10 +233,10 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 			name: "US_APPROVED us-writing-pair task returns true",
 			tasks: []models.Task{
 				{
-					ID:         "task-1",
-					Status:     "US_APPROVED",
-					RolePair:   "us-writing-pair",
-					ApprovedBy: testhelpers.StringPtr("us-reviewer-1"),
+					ID:        "task-1",
+					Status:    "US_APPROVED",
+					RolePair:  "us-writing-pair",
+					Approvals: []models.Approval{{Agent: "us-reviewer-1", Provider: "claude"}},
 				},
 			},
 			agentID:  "us-reviewer-1",
@@ -251,10 +246,10 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 			name: "EPIC_PLAN_APPROVED epic-planning-pair task returns true",
 			tasks: []models.Task{
 				{
-					ID:         "task-1",
-					Status:     "EPIC_PLAN_APPROVED",
-					RolePair:   "epic-planning-pair",
-					ApprovedBy: testhelpers.StringPtr("epic-plan-reviewer-1"),
+					ID:        "task-1",
+					Status:    "EPIC_PLAN_APPROVED",
+					RolePair:  "epic-planning-pair",
+					Approvals: []models.Approval{{Agent: "epic-plan-reviewer-1", Provider: "claude"}},
 				},
 			},
 			agentID:  "epic-plan-reviewer-1",
@@ -264,10 +259,10 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 			name: "US_APPROVED by different agent returns false",
 			tasks: []models.Task{
 				{
-					ID:         "task-1",
-					Status:     "US_APPROVED",
-					RolePair:   "us-writing-pair",
-					ApprovedBy: testhelpers.StringPtr("us-reviewer-2"),
+					ID:        "task-1",
+					Status:    "US_APPROVED",
+					RolePair:  "us-writing-pair",
+					Approvals: []models.Approval{{Agent: "us-reviewer-2", Provider: "codex"}},
 				},
 			},
 			agentID:  "us-reviewer-1",
@@ -280,7 +275,7 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 					ID:          "task-1",
 					Status:      "US_APPROVED",
 					RolePair:    "us-writing-pair",
-					ApprovedBy:  testhelpers.StringPtr("us-reviewer-1"),
+					Approvals:   []models.Approval{{Agent: "us-reviewer-1", Provider: "claude"}},
 					MergeCommit: testhelpers.StringPtr("abc123"),
 				},
 			},
@@ -291,10 +286,10 @@ func TestHasPendingMerges_Phase2Pipeline(t *testing.T) {
 			name: "CODE_APPROVED coding-pair still works in Phase 2 config",
 			tasks: []models.Task{
 				{
-					ID:         "task-1",
-					Status:     "CODE_APPROVED",
-					RolePair:   "coding-pair",
-					ApprovedBy: testhelpers.StringPtr("code-reviewer-1"),
+					ID:        "task-1",
+					Status:    "CODE_APPROVED",
+					RolePair:  "coding-pair",
+					Approvals: []models.Approval{{Agent: "code-reviewer-1", Provider: "claude"}},
 				},
 			},
 			agentID:  "code-reviewer-1",
@@ -390,6 +385,112 @@ func TestLogTaskSubmissionIfCompleted_Phase2Pipeline(t *testing.T) {
 			err := logTaskSubmissionIfCompleted(bb, tt.task.ID, "agent-1", pr)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("logTaskSubmissionIfCompleted() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestMergeIdentityCheck verifies that hasPendingMerges (and by extension
+// handleApprovedMerges, which uses the same condition) identifies the merge
+// owner via task.LastApprover() from the approvals list, not task.ApprovedBy.
+func TestMergeIdentityCheck(t *testing.T) {
+	tests := []struct {
+		name     string
+		tasks    []models.Task
+		agentID  string
+		expected bool
+	}{
+		{
+			name: "LastApprover matches agentID returns true",
+			tasks: []models.Task{
+				{
+					ID:       "task-1",
+					Status:   models.TaskStatusApproved,
+					RolePair: "coding-pair",
+					Approvals: []models.Approval{
+						{Agent: "code-reviewer-1", Provider: "claude"},
+					},
+				},
+			},
+			agentID:  "code-reviewer-1",
+			expected: true,
+		},
+		{
+			name: "LastApprover differs from agentID returns false",
+			tasks: []models.Task{
+				{
+					ID:       "task-1",
+					Status:   models.TaskStatusApproved,
+					RolePair: "coding-pair",
+					Approvals: []models.Approval{
+						{Agent: "code-reviewer-2", Provider: "codex"},
+					},
+				},
+			},
+			agentID:  "code-reviewer-1",
+			expected: false,
+		},
+		{
+			name: "empty approvals returns false",
+			tasks: []models.Task{
+				{
+					ID:       "task-1",
+					Status:   models.TaskStatusApproved,
+					RolePair: "coding-pair",
+				},
+			},
+			agentID:  "code-reviewer-1",
+			expected: false,
+		},
+		{
+			name: "multi-approval LastApprover matches",
+			tasks: []models.Task{
+				{
+					ID:       "task-1",
+					Status:   models.TaskStatusApproved,
+					RolePair: "coding-pair",
+					Approvals: []models.Approval{
+						{Agent: "code-reviewer-2", Provider: "codex"},
+						{Agent: "code-reviewer-1", Provider: "claude"},
+					},
+				},
+			},
+			agentID:  "code-reviewer-1",
+			expected: true,
+		},
+		{
+			name: "multi-approval LastApprover does not match",
+			tasks: []models.Task{
+				{
+					ID:       "task-1",
+					Status:   models.TaskStatusApproved,
+					RolePair: "coding-pair",
+					Approvals: []models.Approval{
+						{Agent: "code-reviewer-1", Provider: "claude"},
+						{Agent: "code-reviewer-2", Provider: "codex"},
+					},
+				},
+			},
+			agentID:  "code-reviewer-1",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			state := testhelpers.CreateValidState()
+			state.Tasks = tt.tasks
+			testhelpers.WriteInitialState(t, statePath, state)
+
+			bb := db.New(statePath)
+			pr, _ := ops.LoadResolverForModels(tmpDir)
+
+			result := hasPendingMerges(bb, tt.agentID, pr)
+			if result != tt.expected {
+				t.Errorf("hasPendingMerges() = %v, expected %v", result, tt.expected)
 			}
 		})
 	}
