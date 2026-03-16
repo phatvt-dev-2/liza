@@ -14,6 +14,27 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - handoff-resume
+        - integration-fix
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - anomaly-logging
+        - blocking-protocol
+        - worktree-rules
+        - commit-workflow
+        - implementation-phase
+        - submission-phase
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - debugging
+        - testing
+        - clean-code
+      mandatory-docs: []
     code-reviewer:
       type: reviewer
       display-name: "Code Reviewer"
@@ -24,6 +45,25 @@ pipeline:
         max-wait: 30m
       allowed-operations:
         - submit-verdict
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - scope-extensions
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - code-review
+        - systemic-thinking
+        - software-architecture-review
+      mandatory-docs: []
     orchestrator:
       type: orchestrator
       display-name: "Orchestrator"
@@ -41,24 +81,123 @@ pipeline:
         - delete-agent
         - clear-stale-review-claims
         - update-sprint-metrics
+      context-sections:
+        - orchestrator-dashboard
+        - wake-instructions
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - systemic-thinking
+      mandatory-docs: []
     epic-planner:
       type: doer
       display-name: "Epic Planner"
+      context-sections:
+        - assigned-task
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - worktree-rules
+        - capability-scoping
+        - implementation-phase
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - epic-writing
+        - systemic-thinking
+      mandatory-docs: []
     epic-plan-reviewer:
       type: reviewer
       display-name: "Epic Plan Reviewer"
+      context-sections:
+        - review-task
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - spec-review
+        - systemic-thinking
+      mandatory-docs: []
     us-writer:
       type: doer
       display-name: "US Writer"
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - worktree-rules
+        - capability-scoping
+        - implementation-phase
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - user-story-writing
+      mandatory-docs: []
     us-reviewer:
       type: reviewer
       display-name: "US Reviewer"
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - spec-review
+      mandatory-docs: []
     code-planner:
       type: doer
       display-name: "Code Planner"
+      context-sections:
+        - assigned-task
+        - collective-plan-scoping
+        - prior-rejection
+        - doer-state-transitions
+        - doer-tools
+        - worktree-rules
+        - task-decomposition
+        - implementation-phase
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - software-architecture-review
+      mandatory-docs: []
     code-plan-reviewer:
       type: reviewer
       display-name: "Code Plan Reviewer"
+      context-sections:
+        - review-task
+        - collective-plan-scoping
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - worktree-rules
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - software-architecture-review
+        - systemic-thinking
+      mandatory-docs: []
 
   role-pairs:
     epic-planning-pair:

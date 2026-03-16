@@ -341,98 +341,8 @@ func TestResolver_RoleDisplayName(t *testing.T) {
 	}
 }
 
-// resolverWithDeclarativeFields builds a minimal config with context-sections,
-// skills, and mandatory-docs populated for 3 representative roles.
-func resolverWithDeclarativeFields(t *testing.T) *Resolver {
-	t.Helper()
-	yamlData := []byte(`
-pipeline:
-  roles:
-    coder:
-      type: doer
-      display-name: "Coder"
-      context-sections:
-        - assigned-task
-        - collective-plan-scoping
-        - handoff-resume
-        - integration-fix
-        - prior-rejection
-        - doer-state-transitions
-        - doer-tools
-        - anomaly-logging
-        - blocking-protocol
-        - worktree-rules
-        - commit-workflow
-        - implementation-phase
-        - submission-phase
-        - mandatory-docs
-        - skills-affinity
-      skills:
-        - debugging
-        - testing
-        - clean-code
-      mandatory-docs: []
-    code-reviewer:
-      type: reviewer
-      display-name: "Code Reviewer"
-      context-sections:
-        - review-task
-        - collective-plan-scoping
-        - scope-extensions
-        - prior-rejection
-        - reviewer-state-transitions
-        - reviewer-tools
-        - anomaly-logging
-        - worktree-rules
-        - review-instructions
-        - rejection-format
-        - verdict-submission
-        - mandatory-docs
-        - skills-affinity
-      skills:
-        - code-review
-        - systemic-thinking
-        - software-architecture-review
-      mandatory-docs: []
-    orchestrator:
-      type: orchestrator
-      display-name: "Orchestrator"
-      max-instances: 1
-      context-sections:
-        - orchestrator-dashboard
-        - wake-instructions
-        - mandatory-docs
-        - skills-affinity
-      skills:
-        - systemic-thinking
-      mandatory-docs: []
-  role-pairs:
-    coding-pair:
-      doer: coder
-      reviewer: code-reviewer
-      states:
-        initial: DRAFT_CODE
-        executing: IMPLEMENTING_CODE
-        submitted: CODE_READY_FOR_REVIEW
-        reviewing: REVIEWING_CODE
-        approved: CODE_APPROVED
-        rejected: CODE_REJECTED
-  sub-pipelines:
-    coding-subpipeline:
-      steps:
-        - coding-pair
-  entry-points:
-    default: coding-subpipeline.coding-pair
-`)
-	cfg, err := LoadFromBytes(yamlData)
-	if err != nil {
-		t.Fatalf("LoadFromBytes: %v", err)
-	}
-	return NewResolver(cfg)
-}
-
 func TestResolver_ContextSections(t *testing.T) {
-	r := resolverWithDeclarativeFields(t)
+	r := NewResolver(loadPhase2Config(t))
 
 	// Coder should have 15 context-sections.
 	got, err := r.ContextSections("coder")
@@ -495,7 +405,7 @@ func TestResolver_ContextSections(t *testing.T) {
 }
 
 func TestResolver_Skills(t *testing.T) {
-	r := resolverWithDeclarativeFields(t)
+	r := NewResolver(loadPhase2Config(t))
 
 	// Coder skills.
 	got, err := r.Skills("coder")
@@ -544,7 +454,7 @@ func TestResolver_Skills(t *testing.T) {
 }
 
 func TestResolver_MandatoryDocs(t *testing.T) {
-	r := resolverWithDeclarativeFields(t)
+	r := NewResolver(loadPhase2Config(t))
 
 	// Coder has empty mandatory-docs.
 	got, err := r.MandatoryDocs("coder")
