@@ -10,5 +10,8 @@ Verify the output matches {{.Worktree}}. Then:
 - File Read/Edit paths must match exactly — the edit tool tracks reads by string, not inode.
   Never retype or reconstruct the path.
 - To CREATE new files: use Write directly without Read. Do not attempt Read first (it will error).
+{{- else if eq .RoleType "reviewer"}}
+- Do NOT modify git state: no git stash, git reset, git checkout, git commit, git clean, or any command that changes tracked files.
+- To inspect base version of any file: git -C {{.Worktree}} show {{.BaseCommit}}:<path>
 {{- end}}
 {{- end -}}
