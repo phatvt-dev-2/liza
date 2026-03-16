@@ -88,6 +88,32 @@ type ResolvedTimeouts struct {
 	MaxWait      time.Duration
 }
 
+// PartiallyApprovedStatus returns the partially-approved state for the given role-pair.
+// Returns an error if the state is not configured (quorum <= 1).
+func (r *Resolver) PartiallyApprovedStatus(rolePair string) (models.TaskStatus, error) {
+	s, err := r.lookupStates(rolePair)
+	if err != nil {
+		return "", err
+	}
+	if s.PartiallyApproved == "" {
+		return "", fmt.Errorf("role-pair %q has no partially-approved state", rolePair)
+	}
+	return models.TaskStatus(s.PartiallyApproved), nil
+}
+
+// Reviewing2Status returns the reviewing-2 state for the given role-pair.
+// Returns an error if the state is not configured (quorum <= 1).
+func (r *Resolver) Reviewing2Status(rolePair string) (models.TaskStatus, error) {
+	s, err := r.lookupStates(rolePair)
+	if err != nil {
+		return "", err
+	}
+	if s.Reviewing2 == "" {
+		return "", fmt.Errorf("role-pair %q has no reviewing-2 state", rolePair)
+	}
+	return models.TaskStatus(s.Reviewing2), nil
+}
+
 // RoleType returns the type (doer, reviewer, orchestrator) for the named role.
 func (r *Resolver) RoleType(name string) (string, error) {
 	role, ok := r.config.Pipeline.Roles[name]

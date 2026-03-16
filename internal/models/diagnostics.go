@@ -124,7 +124,19 @@ func isInProgressPipeline(task *Task, pr PipelineResolver) bool {
 	executing, _ := pr.ExecutingStatus(task.RolePair)
 	submitted, _ := pr.SubmittedStatus(task.RolePair)
 	reviewing, _ := pr.ReviewingStatus(task.RolePair)
-	return task.Status == executing || task.Status == submitted || task.Status == reviewing
+	if task.Status == executing || task.Status == submitted || task.Status == reviewing {
+		return true
+	}
+	// Quorum states are also in-progress (task is in the review pipeline).
+	partiallyApproved, err := pr.PartiallyApprovedStatus(task.RolePair)
+	if err == nil && task.Status == partiallyApproved {
+		return true
+	}
+	reviewing2, err := pr.Reviewing2Status(task.RolePair)
+	if err == nil && task.Status == reviewing2 {
+		return true
+	}
+	return false
 }
 
 // GetReviewerWorkDiagnostics returns detailed diagnostic information about review availability.
@@ -136,6 +148,8 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 	unassigned := 0
 	expiredLeases := 0
 	activelyReviewing := 0
+	awaitingSecondReview := 0
+	inSecondReview := 0
 
 	for _, task := range state.Tasks {
 		// Pipeline path: use resolver to classify statuses dynamically.
@@ -154,14 +168,25 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 
 			submitted, _ := pr.SubmittedStatus(task.RolePair)
 			reviewing, _ := pr.ReviewingStatus(task.RolePair)
+			partiallyApproved, errPA := pr.PartiallyApprovedStatus(task.RolePair)
+			reviewing2, errR2 := pr.Reviewing2Status(task.RolePair)
 
-			if task.Status == submitted {
+			switch {
+			case task.Status == submitted:
 				unassigned++
-			} else if task.Status == reviewing {
+			case task.Status == reviewing:
 				if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
 					expiredLeases++
 				} else {
 					activelyReviewing++
+				}
+			case errPA == nil && task.Status == partiallyApproved:
+				awaitingSecondReview++
+			case errR2 == nil && task.Status == reviewing2:
+				if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
+					expiredLeases++
+				} else {
+					inSecondReview++
 				}
 			}
 			continue
@@ -180,10 +205,16 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 		}
 	}
 
-	if unassigned > 0 {
-		parts := []string{fmt.Sprintf("Found %d reviewable task(s)", unassigned)}
+	if unassigned > 0 || awaitingSecondReview > 0 {
+		parts := []string{fmt.Sprintf("Found %d reviewable task(s)", unassigned+awaitingSecondReview)}
+		if awaitingSecondReview > 0 {
+			parts = append(parts, fmt.Sprintf("%d awaiting second review", awaitingSecondReview))
+		}
 		if expiredLeases > 0 {
 			parts = append(parts, fmt.Sprintf("%d with stale leases (pending reclamation)", expiredLeases))
+		}
+		if inSecondReview > 0 {
+			parts = append(parts, fmt.Sprintf("%d in second review", inSecondReview))
 		}
 		return strings.Join(parts, "; ")
 	}
@@ -194,6 +225,9 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 	}
 	if activelyReviewing > 0 {
 		parts = append(parts, fmt.Sprintf("%d actively being reviewed", activelyReviewing))
+	}
+	if inSecondReview > 0 {
+		parts = append(parts, fmt.Sprintf("%d in second review", inSecondReview))
 	}
 
 	return strings.Join(parts, "; ")

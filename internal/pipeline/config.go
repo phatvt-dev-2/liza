@@ -89,12 +89,14 @@ type RolePairDef struct {
 
 // RolePairStates holds the six state names for a role-pair's lifecycle.
 type RolePairStates struct {
-	Initial   string `yaml:"initial"`
-	Executing string `yaml:"executing"`
-	Submitted string `yaml:"submitted"`
-	Reviewing string `yaml:"reviewing"`
-	Approved  string `yaml:"approved"`
-	Rejected  string `yaml:"rejected"`
+	Initial           string `yaml:"initial"`
+	Executing         string `yaml:"executing"`
+	Submitted         string `yaml:"submitted"`
+	Reviewing         string `yaml:"reviewing"`
+	Approved          string `yaml:"approved"`
+	Rejected          string `yaml:"rejected"`
+	PartiallyApproved string `yaml:"partially-approved,omitempty"`
+	Reviewing2        string `yaml:"reviewing-2,omitempty"`
 }
 
 // SubPipeline defines an ordered sequence of role-pair steps and transitions between them.

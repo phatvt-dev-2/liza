@@ -349,3 +349,131 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+func TestDiagnosticsQuorumStates(t *testing.T) {
+	// Resolver with quorum states configured.
+	pr := &mockPipelineResolver{
+		doer:              "coder",
+		reviewer:          "code-reviewer",
+		initial:           TaskStatusReady,
+		rejected:          TaskStatusRejected,
+		submitted:         TaskStatusReadyForReview,
+		reviewing:         TaskStatusReviewing,
+		executing:         TaskStatusImplementing,
+		approved:          TaskStatusApproved,
+		partiallyApproved: "CODE_PARTIALLY_APPROVED",
+		reviewing2:        "REVIEWING_CODE_2",
+	}
+
+	now := time.Now().UTC()
+	pastTime := now.Add(-10 * time.Minute)
+	futureTime := now.Add(10 * time.Minute)
+
+	t.Run("CountReviewableTasks counts partially_approved", func(t *testing.T) {
+		state := &State{
+			Tasks: []Task{
+				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},
+				{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+				{ID: "t3", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair"},
+			},
+		}
+		got := CountReviewableTasks(state, RoleCodeReviewer, pr)
+		if got != 2 { // submitted + partially_approved
+			t.Errorf("CountReviewableTasks() = %d, want 2 (submitted + partially_approved)", got)
+		}
+	})
+
+	t.Run("CountReviewableTasks partially_approved only", func(t *testing.T) {
+		state := &State{
+			Tasks: []Task{
+				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},
+			},
+		}
+		got := CountReviewableTasks(state, RoleCodeReviewer, pr)
+		if got != 1 {
+			t.Errorf("CountReviewableTasks() = %d, want 1", got)
+		}
+	})
+
+	t.Run("diagnostics reports partially_approved as awaiting second review", func(t *testing.T) {
+		state := &State{
+			Tasks: []Task{
+				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},
+			},
+		}
+		got := GetReviewerWorkDiagnostics(state, pr)
+		if !strings.Contains(got, "awaiting second review") {
+			t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain 'awaiting second review'", got)
+		}
+	})
+
+	t.Run("diagnostics reports reviewing_2 as in second review", func(t *testing.T) {
+		state := &State{
+			Tasks: []Task{
+				{ID: "t1", Status: "REVIEWING_CODE_2", Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &futureTime},
+			},
+		}
+		got := GetReviewerWorkDiagnostics(state, pr)
+		if !strings.Contains(got, "in second review") {
+			t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain 'in second review'", got)
+		}
+	})
+
+	t.Run("diagnostics reports reviewing_2 with expired lease as stale", func(t *testing.T) {
+		state := &State{
+			Tasks: []Task{
+				{ID: "t1", Status: "REVIEWING_CODE_2", Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &pastTime},
+			},
+		}
+		got := GetReviewerWorkDiagnostics(state, pr)
+		if !strings.Contains(got, "stale leases") {
+			t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain 'stale leases'", got)
+		}
+	})
+
+	t.Run("diagnostics mixed quorum and regular states", func(t *testing.T) {
+		state := &State{
+			Tasks: []Task{
+				{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+				{ID: "t2", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},
+				{ID: "t3", Status: "REVIEWING_CODE_2", Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &futureTime},
+				{ID: "t4", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &futureTime},
+			},
+		}
+		got := GetReviewerWorkDiagnostics(state, pr)
+		// t1 = unassigned (submitted), t2 = awaiting second review
+		if !strings.Contains(got, "reviewable") {
+			t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain 'reviewable'", got)
+		}
+		if !strings.Contains(got, "awaiting second review") {
+			t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain 'awaiting second review'", got)
+		}
+		if !strings.Contains(got, "in second review") {
+			t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain 'in second review'", got)
+		}
+	})
+
+	t.Run("quorum states without quorum config fall back gracefully", func(t *testing.T) {
+		// Resolver without quorum states (quorum 1 scenario).
+		prNoQuorum := &mockPipelineResolver{
+			doer:      "coder",
+			reviewer:  "code-reviewer",
+			initial:   TaskStatusReady,
+			rejected:  TaskStatusRejected,
+			submitted: TaskStatusReadyForReview,
+			reviewing: TaskStatusReviewing,
+			executing: TaskStatusImplementing,
+			approved:  TaskStatusApproved,
+			// partiallyApproved and reviewing2 left empty (zero value)
+		}
+		state := &State{
+			Tasks: []Task{
+				{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+			},
+		}
+		got := GetReviewerWorkDiagnostics(state, prNoQuorum)
+		if !strings.Contains(got, "Found 1 reviewable task(s)") {
+			t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain 'Found 1 reviewable task(s)'", got)
+		}
+	})
+}

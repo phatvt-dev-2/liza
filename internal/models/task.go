@@ -216,6 +216,8 @@ type PipelineResolver interface {
 	ReviewingStatus(rolePair string) (TaskStatus, error)
 	ExecutingStatus(rolePair string) (TaskStatus, error)
 	ApprovedStatus(rolePair string) (TaskStatus, error)
+	PartiallyApprovedStatus(rolePair string) (TaskStatus, error)
+	Reviewing2Status(rolePair string) (TaskStatus, error)
 }
 
 // EffectiveType returns the task's type, defaulting to TaskTypeCoding when empty (backward compat).
@@ -321,7 +323,15 @@ func (t *Task) isClaimablePipeline(role string, pr PipelineResolver) bool {
 		if err != nil {
 			return false
 		}
-		return t.Status == submitted
+		if t.Status == submitted {
+			return true
+		}
+		// Quorum > 1: partially_approved tasks need a second reviewer.
+		partiallyApproved, err := pr.PartiallyApprovedStatus(t.RolePair)
+		if err == nil && t.Status == partiallyApproved {
+			return true
+		}
+		return false
 
 	default:
 		return false
