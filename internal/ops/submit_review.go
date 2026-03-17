@@ -213,6 +213,12 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 			Agent: &agentID,
 		})
 
+		task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
+			Timestamp: now,
+			Agent:     agentID,
+			Trigger:   models.HandoffTriggerSubmission,
+		})
+
 		if agent, ok := state.Agents[agentID]; ok {
 			agent.Status = models.AgentStatusWaiting
 			agent.CurrentTask = nil

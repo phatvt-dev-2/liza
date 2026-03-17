@@ -314,6 +314,123 @@ func TestSubmitForReview_RebaseConflict_TransitionsToIntegrationFailed(t *testin
 	}
 }
 
+// setupSuccessfulSubmitScenario creates a git repo with a worktree that can be
+// cleanly rebased onto integration. Returns (tmpDir, taskID, worktreeCommitSHA, agentID, blackboard).
+func setupSuccessfulSubmitScenario(t *testing.T) (string, string, string, string, *db.Blackboard) {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+
+	g := git.New(tmpDir)
+	taskID := "task-submit-handoff"
+	baseCommit, err := g.CreateWorktree(taskID, "integration")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+	wtPath := g.GetWorktreePath(taskID)
+
+	// Add a source file and a test file (TDD requirement)
+	if err := os.WriteFile(filepath.Join(wtPath, "feature.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtPath, "feature_test.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "feature.go", "feature_test.go")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Add feature with tests")
+	wtCommit := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
+
+	agentID := "coder-1"
+	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+	worktree := g.GetWorktreeRelPath(taskID)
+	initialState := &models.State{
+		Config: models.Config{
+			IntegrationBranch: "integration",
+			LeaseDuration:     1800,
+		},
+		Tasks: []models.Task{
+			{
+				ID:           taskID,
+				Description:  "Task for handoff event test",
+				Status:       models.TaskStatusImplementing,
+				RolePair:     "coding-pair",
+				AssignedTo:   &agentID,
+				LeaseExpires: &leaseExpires,
+				Worktree:     &worktree,
+				BaseCommit:   &baseCommit,
+				Iteration:    1,
+				Created:      time.Now().UTC(),
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: models.TaskEventPreExecutionCheckpoint,
+						Agent: &agentID,
+						Extra: map[string]any{
+							"intent":          "test handoff event",
+							"validation_plan": "verify handoff event appended",
+							"files_to_modify": []string{"feature.go"},
+						},
+					},
+				},
+			},
+		},
+		Agents: map[string]models.Agent{
+			agentID: {Status: models.AgentStatusWorking, CurrentTask: &taskID},
+		},
+	}
+
+	bb := testhelpers.WriteInitialState(t, statePath, initialState)
+	return tmpDir, taskID, wtCommit, agentID, bb
+}
+
+func TestSubmitForReview_WritesHandoffEvent(t *testing.T) {
+	tmpDir, taskID, wtCommit, agentID, bb := setupSuccessfulSubmitScenario(t)
+
+	result, err := SubmitForReview(tmpDir, taskID, wtCommit, agentID)
+	if err != nil {
+		t.Fatalf("SubmitForReview() unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("SubmitForReview() returned nil result")
+	}
+
+	// Read state and verify HandoffEvent
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("bb.Read() error: %v", err)
+	}
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("task not found after submission")
+	}
+
+	if len(task.HandoffEvents) != 1 {
+		t.Fatalf("expected 1 HandoffEvent, got %d", len(task.HandoffEvents))
+	}
+
+	event := task.HandoffEvents[0]
+	if event.Trigger != models.HandoffTriggerSubmission {
+		t.Errorf("HandoffEvent.Trigger = %q, want %q", event.Trigger, models.HandoffTriggerSubmission)
+	}
+	if event.Agent != agentID {
+		t.Errorf("HandoffEvent.Agent = %q, want %q", event.Agent, agentID)
+	}
+	if event.Timestamp.IsZero() {
+		t.Error("HandoffEvent.Timestamp is zero")
+	}
+	// Submission is auto-generated: succeeded/failed should be empty
+	if len(event.Succeeded) != 0 {
+		t.Errorf("HandoffEvent.Succeeded should be empty for submission, got %v", event.Succeeded)
+	}
+	if len(event.Failed) != 0 {
+		t.Errorf("HandoffEvent.Failed should be empty for submission, got %v", event.Failed)
+	}
+}
+
 // TestSubmitForReview_TDDEnforcement_CustomDoerRole verifies that TDD enforcement
 // applies to any doer role (not just the literal "coder" role) by using a custom
 // pipeline config with a custom doer role name.
