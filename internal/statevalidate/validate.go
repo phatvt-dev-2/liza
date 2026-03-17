@@ -58,6 +58,7 @@ func ValidateStateFile(statePath string, skipSpecFileCheck bool, warnWriter io.W
 		},
 		validateDiscovered,
 		validateAnomalies,
+		validateHandoffEvents,
 		validateSprint,
 	}
 

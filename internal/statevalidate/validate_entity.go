@@ -57,3 +57,72 @@ func validateAnomalies(state *models.State, projectRoot string, skipSpecFileChec
 	}
 	return nil
 }
+
+// validateHandoffEvents checks that:
+// (1) each HandoffEvent has non-zero Timestamp, non-empty Agent, and valid Trigger
+// (2) tasks in post-submission states have at least one event with trigger submission
+// (3) tasks in MERGED state have at least one event with trigger completion
+func validateHandoffEvents(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+	for _, task := range state.Tasks {
+		for j, event := range task.HandoffEvents {
+			if event.Timestamp.IsZero() {
+				return fmt.Errorf("task %s: handoff_events[%d] has zero timestamp", task.ID, j)
+			}
+			if event.Agent == "" {
+				return fmt.Errorf("task %s: handoff_events[%d] has empty agent", task.ID, j)
+			}
+			if !isValidHandoffTrigger(event.Trigger) {
+				return fmt.Errorf("task %s: handoff_events[%d] has invalid trigger %q", task.ID, j, event.Trigger)
+			}
+		}
+
+		if isPostSubmissionStatus(task.Status) {
+			if !hasHandoffTrigger(task.HandoffEvents, models.HandoffTriggerSubmission) {
+				return fmt.Errorf("task %s in status %s has no handoff event with trigger %q",
+					task.ID, task.Status, models.HandoffTriggerSubmission)
+			}
+		}
+
+		if task.Status == models.TaskStatusMerged {
+			if !hasHandoffTrigger(task.HandoffEvents, models.HandoffTriggerCompletion) {
+				return fmt.Errorf("task %s in status %s has no handoff event with trigger %q",
+					task.ID, task.Status, models.HandoffTriggerCompletion)
+			}
+		}
+	}
+	return nil
+}
+
+func isValidHandoffTrigger(trigger models.HandoffTrigger) bool {
+	switch trigger {
+	case models.HandoffTriggerContextExhaustion,
+		models.HandoffTriggerSubmission,
+		models.HandoffTriggerCompletion:
+		return true
+	}
+	return false
+}
+
+func hasHandoffTrigger(events []models.HandoffEvent, trigger models.HandoffTrigger) bool {
+	for _, e := range events {
+		if e.Trigger == trigger {
+			return true
+		}
+	}
+	return false
+}
+
+// isPostSubmissionStatus returns true if the task status implies the task has
+// been through the submission flow at least once.
+func isPostSubmissionStatus(status models.TaskStatus) bool {
+	switch status {
+	case models.TaskStatusReadyForReview, models.TaskStatusReviewing,
+		models.TaskStatusRejected, models.TaskStatusApproved,
+		models.TaskStatusMerged, models.TaskStatusIntegrationFailed,
+		models.TaskStatusPartiallyApproved, models.TaskStatusReviewingCode2,
+		models.TaskStatusCodingPlanToReview, models.TaskStatusReviewingCodingPlan,
+		models.TaskStatusCodingPlanApproved, models.TaskStatusCodingPlanRejected:
+		return true
+	}
+	return false
+}
