@@ -1,6 +1,6 @@
 # Declarative Role Definitions
 
-Status: Draft
+Status: Done
 
 ## Context
 

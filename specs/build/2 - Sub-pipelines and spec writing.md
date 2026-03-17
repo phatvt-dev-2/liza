@@ -1,9 +1,6 @@
 # Goal
 
-Status: In Progress
-
-Phase 1: Done
-Phase 2: To do
+Status: Done
 
 ## Context
 
