@@ -446,9 +446,15 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 		t.Worktree = nil
 		t.MergeCommit = &mergeCommit
 
-		// Release the assigned agent
+		// Release the assigned agent — only if still working on this task.
+		// After submission the coder's CurrentTask is cleared; if the coder
+		// has since claimed another task we must not blow them to IDLE.
 		if t.AssignedTo != nil {
-			s.ReleaseAgent(*t.AssignedTo)
+			if a, ok := s.Agents[*t.AssignedTo]; ok {
+				if a.CurrentTask != nil && *a.CurrentTask == taskID {
+					s.ReleaseAgent(*t.AssignedTo)
+				}
+			}
 		}
 
 		// Add history entry with merge-gate extra fields

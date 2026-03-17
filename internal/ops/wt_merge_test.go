@@ -1348,6 +1348,58 @@ func TestMergeWorktree_CleansWorkingTreeWhenNotOnIntegration(t *testing.T) {
 	}
 }
 
+// TestMergeWorktree_DoesNotReleaseCoder_WhenCoderMovedOn verifies that merging
+// task-1 does NOT reset a coder to IDLE if the coder has already claimed task-2.
+// This is the race: submit task-1 → claim task-2 → merge task-1. The stale
+// AssignedTo on task-1 still points to the coder, but CurrentTask has moved on.
+func TestMergeWorktree_DoesNotReleaseCoder_WhenCoderMovedOn(t *testing.T) {
+	taskID := "merge-guard"
+	coderID := "coder-1"
+	reviewerID := "code-reviewer-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, coderID)
+
+	// Simulate: coder submitted task-1 and has since claimed task-2.
+	// Agent's CurrentTask is now task-2, status WORKING.
+	task2ID := "task-2"
+	bb := db.New(stateFile)
+	err := bb.Modify(func(state *models.State) error {
+		state.Agents[coderID] = models.Agent{
+			Role:        "coder",
+			Status:      models.AgentStatusWorking,
+			CurrentTask: &task2ID,
+		}
+		state.Agents[reviewerID] = models.Agent{
+			Role:   "code-reviewer",
+			Status: models.AgentStatusWorking,
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to set up agent state: %v", err)
+	}
+
+	result, err := MergeWorktree(tmpDir, taskID, reviewerID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+	if result.MergeCommit == "" {
+		t.Fatal("MergeCommit should not be empty")
+	}
+
+	// Verify: coder is still WORKING on task-2, NOT reset to IDLE.
+	state := readStateForTest(t, stateFile)
+	coder, ok := state.Agents[coderID]
+	if !ok {
+		t.Fatal("Coder agent not found in state")
+	}
+	if coder.Status != models.AgentStatusWorking {
+		t.Errorf("Coder status = %v, want WORKING (should not have been released)", coder.Status)
+	}
+	if coder.CurrentTask == nil || *coder.CurrentTask != task2ID {
+		t.Errorf("Coder CurrentTask = %v, want %q", coder.CurrentTask, task2ID)
+	}
+}
+
 // readStateForTest reads state from a state file for test verification.
 func readStateForTest(t *testing.T, stateFile string) *models.State {
 	t.Helper()

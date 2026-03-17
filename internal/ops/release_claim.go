@@ -124,7 +124,11 @@ func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, p
 	}
 
 	if agent != nil {
-		state.ReleaseAgent(*agent)
+		if a, ok := state.Agents[*agent]; ok {
+			if a.CurrentTask != nil && *a.CurrentTask == task.ID {
+				state.ReleaseAgent(*agent)
+			}
+		}
 	}
 
 	cfg.clearFn(task)

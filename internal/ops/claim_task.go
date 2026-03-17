@@ -481,7 +481,11 @@ func enforceRejectedIterationLimit(
 
 		if task.AssignedTo != nil {
 			previous := *task.AssignedTo
-			state.ReleaseAgent(previous)
+			if a, ok := state.Agents[previous]; ok {
+				if a.CurrentTask != nil && *a.CurrentTask == task.ID {
+					state.ReleaseAgent(previous)
+				}
+			}
 		}
 		task.AssignedTo = nil
 

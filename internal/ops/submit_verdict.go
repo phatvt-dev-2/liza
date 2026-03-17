@@ -297,7 +297,11 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 				if task.AssignedTo != nil {
 					assignedCoder := *task.AssignedTo
 					if assignedCoder != agentID {
-						state.ReleaseAgent(assignedCoder)
+						if a, ok := state.Agents[assignedCoder]; ok {
+							if a.CurrentTask != nil && *a.CurrentTask == taskID {
+								state.ReleaseAgent(assignedCoder)
+							}
+						}
 					}
 				}
 				task.AssignedTo = nil

@@ -761,6 +761,63 @@ func TestClaimTask_PostWorktreeCmdRunsOnSameCoderReclaim(t *testing.T) {
 	}
 }
 
+// TestClaimTask_IterationLimitDoesNotReleaseCoder_WhenCoderMovedOn verifies
+// that when a REJECTED task hits iteration limit and transitions to BLOCKED,
+// it does NOT reset a coder who has already claimed a different task.
+func TestClaimTask_IterationLimitDoesNotReleaseCoder_WhenCoderMovedOn(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.MaxCoderIterations = 3
+
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	task.Iteration = 3
+	// task.AssignedTo is "coder-1" (set by BuildTaskByStatus for REJECTED)
+	state.Tasks = []models.Task{task}
+
+	// Coder has moved on: CurrentTask = "task-2", status = WORKING.
+	task2ID := "task-2"
+	state.Agents["coder-1"] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: &task2ID,
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// A different coder tries to claim task-1, triggering iteration limit.
+	_, err := ClaimTask(tmpDir, "task-1", "coder-2")
+	if err == nil {
+		t.Fatal("Expected iteration-limit error")
+	}
+	if !strings.Contains(err.Error(), "transitioned to BLOCKED") {
+		t.Errorf("Error = %q, want to contain 'transitioned to BLOCKED'", err.Error())
+	}
+
+	readState := readClaimStateForTest(t, stateFile)
+	blockedTask := readState.FindTask("task-1")
+	if blockedTask == nil {
+		t.Fatal("Task not found in state")
+	}
+	if blockedTask.Status != models.TaskStatusBlocked {
+		t.Errorf("Task status = %v, want BLOCKED", blockedTask.Status)
+	}
+	if blockedTask.AssignedTo != nil {
+		t.Error("AssignedTo should be cleared when task is blocked")
+	}
+
+	// The key assertion: coder-1 is still WORKING on task-2.
+	agent := readState.Agents["coder-1"]
+	if agent.Status != models.AgentStatusWorking {
+		t.Errorf("Agent status = %v, want WORKING (coder moved to task-2, should not be released)", agent.Status)
+	}
+	if agent.CurrentTask == nil || *agent.CurrentTask != task2ID {
+		t.Errorf("Agent CurrentTask = %v, want %q", agent.CurrentTask, task2ID)
+	}
+}
+
 // readClaimStateForTest reads state for claim test verification.
 func readClaimStateForTest(t *testing.T, stateFile string) *models.State {
 	t.Helper()

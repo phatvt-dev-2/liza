@@ -71,6 +71,13 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
 
+			// Release the reviewer agent if still assigned to this task.
+			if a, ok := state.Agents[staleReviewer]; ok {
+				if a.CurrentTask != nil && *a.CurrentTask == task.ID {
+					state.ReleaseAgent(staleReviewer)
+				}
+			}
+
 			detail := fmt.Sprintf("Review claim expired at %s (reviewer: %s)", expiredAt, staleReviewer)
 			logEntry := log.Entry{
 				Timestamp: now,
