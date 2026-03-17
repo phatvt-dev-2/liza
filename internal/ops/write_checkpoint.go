@@ -167,6 +167,21 @@ func GetCheckpointImpact(history []models.TaskHistoryEntry, agentID string) stri
 	return ""
 }
 
+// GetValidationPlan returns the validation_plan from the latest
+// pre_execution_checkpoint by agentID, or "" if none was declared.
+func GetValidationPlan(history []models.TaskHistoryEntry, agentID string) string {
+	for i := len(history) - 1; i >= 0; i-- {
+		entry := history[i]
+		if entry.Event == models.TaskEventPreExecutionCheckpoint && entry.Agent != nil && *entry.Agent == agentID {
+			if v, ok := entry.Extra["validation_plan"].(string); ok {
+				return v
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
 // GetLatestScopeExtensions returns scope_extensions from the latest
 // pre_execution_checkpoint by agentID, or nil if none were declared.
 func GetLatestScopeExtensions(history []models.TaskHistoryEntry, agentID string) []map[string]string {

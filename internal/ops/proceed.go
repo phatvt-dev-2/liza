@@ -381,6 +381,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 		Priority:    1,
 		ParentTask:  &parentID,
 		SpecRef:     paths.NormalizeSpecRef(entry.SpecRef),
+		PlanRef:     paths.NormalizeSpecRef(entry.PlanRef),
 		DoneWhen:    entry.DoneWhen,
 		Scope:       entry.Scope,
 		DependsOn:   deps,
@@ -407,6 +408,7 @@ func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef tran
 		Priority:    parent.Priority,
 		ParentTask:  &parentID,
 		SpecRef:     paths.NormalizeSpecRef(parent.SpecRef),
+		PlanRef:     parent.PlanRef, // inherited from parent (set from OutputEntry for per-subtask, propagated for one-to-one)
 		DoneWhen:    fmt.Sprintf("Complete %s work based on parent task %s", doerName, parentID),
 		Scope:       fmt.Sprintf("Based on parent task %s", parentID),
 		Created:     now,

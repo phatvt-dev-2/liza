@@ -23,6 +23,7 @@ type AddTaskInput struct {
 	RolePair    string
 	Description string
 	SpecRef     string
+	PlanRef     string
 	DoneWhen    string
 	Scope       string
 	Priority    int
@@ -131,6 +132,7 @@ func AddTask(statePath, logPath string, input *AddTaskInput, orchestratorID stri
 		Status:      initialStatus,
 		Priority:    input.Priority,
 		SpecRef:     paths.NormalizeSpecRef(input.SpecRef),
+		PlanRef:     paths.NormalizeSpecRef(input.PlanRef),
 		DoneWhen:    input.DoneWhen,
 		Scope:       input.Scope,
 		DependsOn:   normalizedDeps,

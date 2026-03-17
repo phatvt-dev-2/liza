@@ -124,6 +124,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		DoneWhen:     task.DoneWhen,
 		Scope:        task.Scope,
 		SpecRef:      task.SpecRef,
+		PlanRef:      task.PlanRef,
 		Worktree:     resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		IterationNum: task.Iteration,
 		AttemptNum:   len(task.Attempted) + 1,
@@ -167,6 +168,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		data.AssignedTo = derefString(task.AssignedTo)
 		if task.AssignedTo != nil {
 			data.ScopeExtensions = ops.GetLatestScopeExtensions(task.History, *task.AssignedTo)
+			data.ValidationPlan = ops.GetValidationPlan(task.History, *task.AssignedTo)
 		}
 	}
 

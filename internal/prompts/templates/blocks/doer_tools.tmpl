@@ -26,7 +26,7 @@ CODE PLANNER TOOLS:
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
 - liza_set_task_output — Persist structured task definitions for downstream task creation
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "output": [
-    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "depends_on": ["0", "2"]}
+    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "plan_ref": "...", "depends_on": ["0", "2"]}
   ]}
   depends_on: optional array of sibling index strings. "0" means "depends on output[0]".
   Indices are resolved to child task IDs at transition time.
@@ -42,7 +42,7 @@ EPIC PLANNER TOOLS:
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
 - liza_set_task_output — Persist one entry per capability for downstream US Writer tasks
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "output": [
-    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "depends_on": ["0"]}
+    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "plan_ref": "...", "depends_on": ["0"]}
   ]}
   depends_on: optional array of sibling index strings for ordering capabilities.
 - liza_mark_blocked — Cannot proceed

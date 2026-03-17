@@ -183,6 +183,7 @@ type Task struct {
 	MergeCommit         *string            `yaml:"merge_commit,omitempty"`
 	LeaseExpires        *time.Time         `yaml:"lease_expires,omitempty"`
 	SpecRef             string             `yaml:"spec_ref"`
+	PlanRef             string             `yaml:"plan_ref,omitempty"`
 	DoneWhen            string             `yaml:"done_when"`
 	Scope               string             `yaml:"scope"`
 	RejectionReason     *string            `yaml:"rejection_reason,omitempty"`
@@ -210,6 +211,7 @@ type OutputEntry struct {
 	DoneWhen  string   `yaml:"done_when"`
 	Scope     string   `yaml:"scope"`
 	SpecRef   string   `yaml:"spec_ref"`
+	PlanRef   string   `yaml:"plan_ref,omitempty"`
 	DependsOn []string `yaml:"depends_on,omitempty"`
 }
 

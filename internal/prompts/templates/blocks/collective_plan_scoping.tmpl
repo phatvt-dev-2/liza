@@ -22,5 +22,8 @@ SIBLING TASKS (for {{- if eq .RoleType "reviewer"}} scope boundary awareness{{- 
 {{- range .SiblingTasks}}
 - {{.ID}}: {{.Description}} [{{.Status}}]
 {{- end}}
+{{- if ne .PlanRef ""}}
+PLAN ARTIFACT: {{.PlanRef}}
+{{- end}}
 {{- end}}
 {{- end -}}

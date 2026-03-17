@@ -2,6 +2,9 @@
 {{- if eq .Role "coder"}}
 
 --- IMPLEMENTATION PHASE ---
+{{- if ne .PlanRef ""}}
+Read the implementation plan at {{.PlanRef}} for task decomposition context.
+{{- end}}
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
 3. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.
@@ -28,6 +31,7 @@ IMPLEMENTATION PHASE:
 3. For EACH coding task in your plan, call liza_set_task_output with structured entries.
    Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
    Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source),
+   plan_ref (repo-relative path to the plan file — set to the plan file path from step 2 for all entries),
    depends_on (optional array of sibling index strings, e.g. ["0", "2"] — resolved to child task IDs at transition).
    Extract each field verbatim from the plan file — do not compose from memory or paraphrase.
 4. Update worktree artifacts required by DONE WHEN.
@@ -54,7 +58,7 @@ IMPLEMENTATION PHASE:
       - Task IDs must match the plan's task headings and correspond to output[] entry order (Task 1 = output[0], etc.).
       - Spec "Out of Scope" items do not need rows.
    d. output[] completeness: one entry per planned coding task, each with required fields
-      (desc, done_when, scope, spec_ref) populated. depends_on set where tasks have ordering constraints.
+      (desc, done_when, scope, spec_ref, plan_ref) populated. depends_on set where tasks have ordering constraints.
    e. output[] parity: re-read the plan file at the path chosen in step 2 and verify each output[]
       entry's desc, done_when, scope, and spec_ref is character-identical to the plan.
       If any field was paraphrased, replace it with the verbatim text before submitting.
@@ -76,6 +80,7 @@ IMPLEMENTATION PHASE:
    Each entry becomes a US Writer child task after merge. The Epic Plan Reviewer will verify these.
    Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary),
    spec_ref (path to the produced epic document — US Writers use this to locate the parent epic),
+   plan_ref (same as spec_ref for epic planners — the epic document IS the plan artifact),
    depends_on (optional array of sibling index strings for capability ordering).
    desc: extract verbatim from the capability's one-sentence description in the epic.
    done_when: derive a falsifiable condition from the capability description and story documents.
@@ -84,8 +89,8 @@ IMPLEMENTATION PHASE:
 6. Update worktree artifacts required by DONE WHEN.
 7. Validate done_when criteria with concrete checks.
 8. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza_submit_for_review until all pass):
-   a. output[] completeness: one entry per capability in the epic, each with all four fields
-      (desc, done_when, scope, spec_ref) populated.
+   a. output[] completeness: one entry per capability in the epic, each with all five fields
+      (desc, done_when, scope, spec_ref, plan_ref) populated.
    b. output[] parity: re-read the epic document in the worktree and verify:
       - desc is character-identical to the capability's one-sentence description.
       - done_when is consistent with the capability description and story documents.
@@ -100,6 +105,9 @@ IMPLEMENTATION PHASE:
 2. Read the user-story-writing skill FIRST: ~/.liza/skills/user-story-writing/SKILL.md
 3. Read the epic at {{.SpecRef}}. Locate your assigned capability by matching task SCOPE.
    Read only Personas + General Information + that capability section.
+{{- if ne .PlanRef ""}}
+   The plan artifact that produced this task is at {{.PlanRef}}.
+{{- end}}
 4. Follow the skill protocol: Parse → Write → Self-Review.
 5. Write user stories to the output file path specified by the task.
 6. Validate done_when criteria with concrete checks.

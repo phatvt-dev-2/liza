@@ -44,10 +44,11 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 		}
 	}
 
-	// Normalize spec_ref on each output entry to strip worktree prefixes.
+	// Normalize spec_ref and plan_ref on each output entry to strip worktree prefixes.
 	// Mutates input.Output in-place; callers do not reuse the slice.
 	for i := range input.Output {
 		input.Output[i].SpecRef = paths.NormalizeSpecRef(input.Output[i].SpecRef)
+		input.Output[i].PlanRef = paths.NormalizeSpecRef(input.Output[i].PlanRef)
 	}
 
 	lp := paths.New(projectRoot)

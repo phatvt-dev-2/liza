@@ -1768,3 +1768,106 @@ func TestProceed_DependsOnSelfReference(t *testing.T) {
 		t.Errorf("Error = %q, want to contain 'references itself'", err.Error())
 	}
 }
+
+func TestProceed_ChildTasksGetPlanRefFromOutputEntry(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-planref-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with plan_ref",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Task A", DoneWhen: "A works", Scope: "a", SpecRef: "specs/a.md", PlanRef: "specs/plans/20260317-plan.md"},
+			{Desc: "Task B", DoneWhen: "B works", Scope: "b", SpecRef: "specs/b.md", PlanRef: "specs/plans/20260317-plan.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for i, childID := range result.ChildTaskIDs {
+		child := readState.FindTask(childID)
+		if child == nil {
+			t.Fatalf("Child task %d not found", i)
+		}
+		if child.PlanRef != "specs/plans/20260317-plan.md" {
+			t.Errorf("Child %d plan_ref = %q, want %q", i, child.PlanRef, "specs/plans/20260317-plan.md")
+		}
+	}
+}
+
+func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "us-planref-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "us-writing-pair",
+		Description:  "US with plan_ref",
+		Status:       models.TaskStatus("US_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "specs/auth-epic.md",
+		PlanRef:      "specs/auth-epic.md",
+		DoneWhen:     "US approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "us-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child := readState.FindTask(result.ChildTaskIDs[0])
+	if child == nil {
+		t.Fatal("Child task not found")
+	}
+	if child.PlanRef != "specs/auth-epic.md" {
+		t.Errorf("Child plan_ref = %q, want %q", child.PlanRef, "specs/auth-epic.md")
+	}
+}

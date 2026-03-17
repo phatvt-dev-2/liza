@@ -17,6 +17,8 @@ type RoleContextData struct {
 	DoneWhen       string
 	Scope          string
 	SpecRef        string
+	PlanRef        string
+	ValidationPlan string
 	Worktree       string // resolved absolute path
 	IterationNum   int
 	AttemptNum     int

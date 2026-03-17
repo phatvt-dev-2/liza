@@ -70,6 +70,69 @@ func TestValidate_RejectsWorktreePrefixInOutputSpecRef(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsWorktreePrefixInTaskPlanRef(t *testing.T) {
+	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	state.Tasks = []models.Task{
+		{
+			ID:          "task-1",
+			Description: "Test task",
+			Status:      models.TaskStatusReady,
+			Priority:    1,
+			Created:     now,
+			SpecRef:     "specs/auth.md",
+			PlanRef:     ".worktrees/code-planning-1/specs/plans/plan.md",
+			DoneWhen:    "Done",
+			Scope:       "test",
+			Iteration:   1,
+		},
+	}
+
+	err := validateTaskInvariants(state, t.TempDir(), true, nil, nil)
+	if err == nil {
+		t.Fatal("Expected error for worktree-prefixed plan_ref")
+	}
+	if !strings.Contains(err.Error(), "plan_ref") && !strings.Contains(err.Error(), "worktree prefix") {
+		t.Errorf("Error = %q, want to contain 'plan_ref' and 'worktree prefix'", err.Error())
+	}
+}
+
+func TestValidate_RejectsWorktreePrefixInOutputPlanRef(t *testing.T) {
+	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	state.Tasks = []models.Task{
+		{
+			ID:           "task-1",
+			Description:  "Plan task",
+			Status:       models.TaskStatusCodingPlanApproved,
+			Priority:     1,
+			Created:      now,
+			SpecRef:      "specs/plans/auth.md",
+			DoneWhen:     "Plan approved",
+			Scope:        "auth",
+			Iteration:    1,
+			ReviewCommit: testhelpers.StringPtr("abc123"),
+			Output: []models.OutputEntry{
+				{
+					Desc:     "Implement login",
+					DoneWhen: "POST /login works",
+					Scope:    "auth",
+					SpecRef:  "specs/plans/auth.md#login",
+					PlanRef:  ".worktrees/code-planning-1/specs/plans/plan.md",
+				},
+			},
+		},
+	}
+
+	err := validateTaskInvariants(state, t.TempDir(), true, nil, nil)
+	if err == nil {
+		t.Fatal("Expected error for worktree-prefixed output plan_ref")
+	}
+	if !strings.Contains(err.Error(), "plan_ref") && !strings.Contains(err.Error(), "worktree prefix") {
+		t.Errorf("Error = %q, want to contain 'plan_ref' and 'worktree prefix'", err.Error())
+	}
+}
+
 func TestValidate_AcceptsRepoRelativeSpecRef(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	now := time.Now().UTC()

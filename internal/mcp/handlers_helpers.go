@@ -206,6 +206,7 @@ func extractTaskInputs(raw []any) ([]ops.AddTaskInput, error) {
 		depends := extractStringSlice(m, "depends")
 		taskType := stringFromMap(m, "type")
 		rolePair := stringFromMap(m, "role_pair")
+		planRef := stringFromMap(m, "plan_ref")
 
 		out = append(out, ops.AddTaskInput{
 			ID:          id,
@@ -213,6 +214,7 @@ func extractTaskInputs(raw []any) ([]ops.AddTaskInput, error) {
 			RolePair:    rolePair,
 			Description: desc,
 			SpecRef:     spec,
+			PlanRef:     planRef,
 			DoneWhen:    done,
 			Scope:       scope,
 			Priority:    priority,
@@ -260,6 +262,7 @@ func extractOutputEntries(raw []any) ([]models.OutputEntry, error) {
 			DoneWhen:  stringFromMap(m, "done_when"),
 			Scope:     stringFromMap(m, "scope"),
 			SpecRef:   stringFromMap(m, "spec_ref"),
+			PlanRef:   stringFromMap(m, "plan_ref"),
 			DependsOn: extractStringSlice(m, "depends_on"),
 		}
 		out = append(out, entry)

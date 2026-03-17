@@ -1264,3 +1264,104 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 		}
 	})
 }
+
+func TestBuildRoleContext_PlanRefAndValidationPlan(t *testing.T) {
+	projectRoot := setupPipelineConfig(t)
+	resolver := testPipelineResolver(t)
+
+	t.Run("coder with PlanRef renders plan context", func(t *testing.T) {
+		data := &RoleContextData{
+			Role: "coder", AgentID: "coder-1", RoleType: "doer",
+			TaskID: "task-1", Description: "Implement feature X",
+			DoneWhen: "Feature X works", Scope: "internal/feature",
+			Worktree:          projectRoot + "/.worktrees/task-1",
+			IterationNum:      1,
+			IntegrationBranch: "integration",
+			PlanRef:           "specs/plans/20260317-plan.md",
+			ProjectRoot:       projectRoot,
+		}
+		sections, _ := resolver.ContextSections("coder")
+		output, err := BuildRoleContext("coder", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+		if !strings.Contains(output, "specs/plans/20260317-plan.md") {
+			t.Error("output missing PlanRef path")
+		}
+		if !strings.Contains(output, "implementation plan") {
+			t.Error("output missing plan context text")
+		}
+	})
+
+	t.Run("code-reviewer with PlanRef and ValidationPlan", func(t *testing.T) {
+		data := &RoleContextData{
+			Role: "code-reviewer", AgentID: "code-reviewer-1", RoleType: "reviewer",
+			TaskID: "task-1", Description: "Implement feature X",
+			DoneWhen: "Feature X works", Scope: "internal/feature",
+			Worktree:     projectRoot + "/.worktrees/task-1",
+			IterationNum: 1,
+			BaseCommit:   "abc", ReviewCommit: "def", AssignedTo: "coder-1",
+			PlanRef:        "specs/plans/20260317-plan.md",
+			ValidationPlan: "run go test ./... and verify all pass",
+			ProjectRoot:    projectRoot,
+		}
+		sections, _ := resolver.ContextSections("code-reviewer")
+		output, err := BuildRoleContext("code-reviewer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+		if !strings.Contains(output, "specs/plans/20260317-plan.md") {
+			t.Error("output missing PlanRef path")
+		}
+		if !strings.Contains(output, "DOER VALIDATION PLAN:") {
+			t.Error("output missing DOER VALIDATION PLAN section")
+		}
+		if !strings.Contains(output, "run go test ./... and verify all pass") {
+			t.Error("output missing validation plan content")
+		}
+	})
+
+	t.Run("code-plan-reviewer with ValidationPlan", func(t *testing.T) {
+		data := &RoleContextData{
+			Role: "code-plan-reviewer", AgentID: "code-plan-reviewer-1", RoleType: "reviewer",
+			TaskID: "task-1", Description: "Plan feature X",
+			DoneWhen: "Plan approved", Scope: "internal/feature",
+			Worktree:     projectRoot + "/.worktrees/task-1",
+			IterationNum: 1,
+			BaseCommit:   "abc", ReviewCommit: "def", AssignedTo: "code-planner-1",
+			ValidationPlan: "verify plan file exists and output[] populated",
+			ProjectRoot:    projectRoot,
+		}
+		sections, _ := resolver.ContextSections("code-plan-reviewer")
+		output, err := BuildRoleContext("code-plan-reviewer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+		if !strings.Contains(output, "DOER VALIDATION PLAN:") {
+			t.Error("output missing DOER VALIDATION PLAN section")
+		}
+		if !strings.Contains(output, "verify plan file exists and output[] populated") {
+			t.Error("output missing validation plan content")
+		}
+	})
+
+	t.Run("coder without PlanRef omits plan context", func(t *testing.T) {
+		data := &RoleContextData{
+			Role: "coder", AgentID: "coder-1", RoleType: "doer",
+			TaskID: "task-1", Description: "Implement feature X",
+			DoneWhen: "Feature X works", Scope: "internal/feature",
+			Worktree:          projectRoot + "/.worktrees/task-1",
+			IterationNum:      1,
+			IntegrationBranch: "integration",
+			ProjectRoot:       projectRoot,
+		}
+		sections, _ := resolver.ContextSections("coder")
+		output, err := BuildRoleContext("coder", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+		if strings.Contains(output, "implementation plan at") {
+			t.Error("output should NOT contain plan reference when PlanRef is empty")
+		}
+	})
+}

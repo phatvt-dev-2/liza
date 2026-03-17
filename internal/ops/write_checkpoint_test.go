@@ -785,3 +785,74 @@ func TestHasCheckpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestGetValidationPlan(t *testing.T) {
+	agent := "coder-1"
+	otherAgent := "coder-2"
+
+	tests := []struct {
+		name    string
+		history []models.TaskHistoryEntry
+		agentID string
+		want    string
+	}{
+		{
+			name:    "empty history",
+			history: nil,
+			agentID: "coder-1",
+			want:    "",
+		},
+		{
+			name: "checkpoint without validation_plan",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{"intent": "test"}},
+			},
+			agentID: "coder-1",
+			want:    "",
+		},
+		{
+			name: "checkpoint with validation_plan",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
+					"intent":          "test",
+					"validation_plan": "run go test ./... and verify all pass",
+				}},
+			},
+			agentID: "coder-1",
+			want:    "run go test ./... and verify all pass",
+		},
+		{
+			name: "checkpoint from different agent ignored",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &otherAgent, Extra: map[string]any{
+					"validation_plan": "plan from other agent",
+				}},
+			},
+			agentID: "coder-1",
+			want:    "",
+		},
+		{
+			name: "latest checkpoint wins",
+			history: []models.TaskHistoryEntry{
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
+					"validation_plan": "old plan",
+				}},
+				{Event: models.TaskEventPreExecutionCheckpoint, Agent: &agent, Extra: map[string]any{
+					"intent":          "new checkpoint",
+					"validation_plan": "new plan",
+				}},
+			},
+			agentID: "coder-1",
+			want:    "new plan",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetValidationPlan(tt.history, tt.agentID)
+			if got != tt.want {
+				t.Errorf("GetValidationPlan() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

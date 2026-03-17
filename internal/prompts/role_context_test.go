@@ -319,3 +319,32 @@ func TestRoleContextData_OrchestratorPopulation(t *testing.T) {
 		t.Errorf("Skills length = %d, want 1", len(data.Skills))
 	}
 }
+
+func TestRoleContextData_PlanRefAndValidationPlan(t *testing.T) {
+	// Coder gets PlanRef but not ValidationPlan
+	coderData := RoleContextData{
+		Role:     "coder",
+		RoleType: "doer",
+		PlanRef:  "specs/plans/20260317-plan.md",
+	}
+	if coderData.PlanRef != "specs/plans/20260317-plan.md" {
+		t.Errorf("Coder PlanRef = %q, want %q", coderData.PlanRef, "specs/plans/20260317-plan.md")
+	}
+	if coderData.ValidationPlan != "" {
+		t.Errorf("Coder ValidationPlan should be empty, got %q", coderData.ValidationPlan)
+	}
+
+	// Reviewer gets both PlanRef and ValidationPlan
+	reviewerData := RoleContextData{
+		Role:           "code-reviewer",
+		RoleType:       "reviewer",
+		PlanRef:        "specs/plans/20260317-plan.md",
+		ValidationPlan: "run go test ./... and verify all pass",
+	}
+	if reviewerData.PlanRef != "specs/plans/20260317-plan.md" {
+		t.Errorf("Reviewer PlanRef = %q, want %q", reviewerData.PlanRef, "specs/plans/20260317-plan.md")
+	}
+	if reviewerData.ValidationPlan != "run go test ./... and verify all pass" {
+		t.Errorf("Reviewer ValidationPlan = %q, want %q", reviewerData.ValidationPlan, "run go test ./... and verify all pass")
+	}
+}

@@ -126,7 +126,7 @@ func (s *Server) registerMutationTools() {
 					Properties: map[string]protocol.Property{
 						"tasks": {
 							Type:        "array",
-							Description: "Array of task objects. Each object has: id (string, required), desc (string, required), spec (string, required), done (string, required), scope (string, required), priority (number, default 1), depends (array of strings), type (string, default 'coding'), role_pair (string)",
+							Description: "Array of task objects. Each object has: id (string, required), desc (string, required), spec (string, required), done (string, required), scope (string, required), priority (number, default 1), depends (array of strings), type (string, default 'coding'), role_pair (string), plan_ref (string, optional)",
 						},
 						"agent_id": {
 							Type:        "string",
@@ -156,6 +156,7 @@ func (s *Server) registerMutationTools() {
 						"depends":   {Type: "array", Description: "List of task IDs this task depends on"},
 						"type":      {Type: "string", Description: "Task type (default: coding)", Default: "coding"},
 						"role_pair": {Type: "string", Description: "Role pair for the task (e.g. 'code-planning-pair')"},
+						"plan_ref":  {Type: "string", Description: "Path to the plan artifact that spawned this task"},
 						"agent_id":  {Type: "string", Description: "Agent ID performing the action (default: auto-resolved from registered orchestrator)"},
 					},
 					Required: []string{"id", "desc", "spec", "done", "scope"},
@@ -695,7 +696,7 @@ func (s *Server) registerComplexOperations() {
 						},
 						"output": {
 							Type:        "array",
-							Description: "Array of output entries, each with: desc (string), done_when (string), scope (string), spec_ref (string, optional), depends_on (array of index strings referencing other entries, optional)",
+							Description: "Array of output entries, each with: desc (string), done_when (string), scope (string), spec_ref (string, optional), plan_ref (string, optional — path to the plan artifact), depends_on (array of index strings referencing other entries, optional)",
 						},
 					},
 					Required: []string{"task_id", "agent_id", "output"},

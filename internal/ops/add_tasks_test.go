@@ -525,6 +525,98 @@ func TestAddTasks_PartialSuccess(t *testing.T) {
 	}
 }
 
+func TestAddTask_OptionalPlanRefStoredOnTask(t *testing.T) {
+	stateFile, logFile := setupPipelineProject(t)
+	// Create plan file so state validation passes
+	projectRoot := filepath.Dir(filepath.Dir(stateFile))
+	planDir := filepath.Join(projectRoot, "specs", "plans")
+	if err := os.MkdirAll(planDir, 0755); err != nil {
+		t.Fatalf("Failed to create plans dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "20260317-plan.md"), []byte("# Plan\n"), 0644); err != nil {
+		t.Fatalf("Failed to create plan file: %v", err)
+	}
+
+	input := &AddTaskInput{
+		ID:          "task-planref",
+		Description: "Task with plan_ref",
+		SpecRef:     "specs/vision.md",
+		PlanRef:     "specs/plans/20260317-plan.md",
+		DoneWhen:    "Tests pass",
+		Scope:       "internal/ops",
+		Priority:    1,
+		RolePair:    "coding-pair",
+	}
+
+	result, err := AddTask(stateFile, logFile, input, "orchestrator-1")
+	if err != nil {
+		t.Fatalf("AddTask() error: %v", err)
+	}
+	if result.TaskID != "task-planref" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-planref")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-planref")
+	if task == nil {
+		t.Fatal("Task not found in state")
+	}
+	if task.PlanRef != "specs/plans/20260317-plan.md" {
+		t.Errorf("PlanRef = %q, want %q", task.PlanRef, "specs/plans/20260317-plan.md")
+	}
+}
+
+func TestAddTask_PlanRefNormalizesWorktreePrefix(t *testing.T) {
+	stateFile, logFile := setupPipelineProject(t)
+	// Create plan file so state validation passes after normalization
+	projectRoot := filepath.Dir(filepath.Dir(stateFile))
+	planDir := filepath.Join(projectRoot, "specs", "plans")
+	if err := os.MkdirAll(planDir, 0755); err != nil {
+		t.Fatalf("Failed to create plans dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "plan.md"), []byte("# Plan\n"), 0644); err != nil {
+		t.Fatalf("Failed to create plan file: %v", err)
+	}
+
+	input := &AddTaskInput{
+		ID:          "task-wt-planref",
+		Description: "Task with worktree plan_ref",
+		SpecRef:     "specs/vision.md",
+		PlanRef:     ".worktrees/planner-1/specs/plans/plan.md",
+		DoneWhen:    "Tests pass",
+		Scope:       "internal/ops",
+		Priority:    1,
+		RolePair:    "coding-pair",
+	}
+
+	result, err := AddTask(stateFile, logFile, input, "orchestrator-1")
+	if err != nil {
+		t.Fatalf("AddTask() error: %v", err)
+	}
+	if result.TaskID != "task-wt-planref" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-wt-planref")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-wt-planref")
+	if task == nil {
+		t.Fatal("Task not found in state")
+	}
+	if task.PlanRef != "specs/plans/plan.md" {
+		t.Errorf("PlanRef = %q, want %q (worktree prefix should be stripped)", task.PlanRef, "specs/plans/plan.md")
+	}
+}
+
 func TestAddTasks_EmptyInput(t *testing.T) {
 	input := &AddTasksInput{Tasks: []AddTaskInput{}}
 	_, err := AddTasks("/nonexistent", "/dev/null", input)
