@@ -8,6 +8,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -250,6 +251,26 @@ func collectFiles(fsys embed.FS) ([]string, error) {
 	return files, err
 }
 
+// BackupFile copies src to src.bak using streaming I/O.
+func BackupFile(src string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(src + ".bak")
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
 // confirmMerge prompts the user for yes/no confirmation and returns true if accepted.
 func confirmMerge(prompt string, reader *bufio.Reader) (bool, error) {
 	fmt.Print(prompt)
@@ -439,11 +460,26 @@ func WriteMCPSettings(projectRoot string, reader *bufio.Reader) error {
 }
 
 // WritePipelineConfig writes the embedded pipeline.yaml to the target directory.
-// Only writes if the file doesn't already exist.
-func WritePipelineConfig(targetDir string) error {
+// If the file doesn't exist, writes it unconditionally.
+// If the file exists and stdin is nil, skips silently (test callers).
+// If the file exists and stdin is non-nil, prompts the user to overwrite.
+func WritePipelineConfig(targetDir string, stdin *bufio.Reader) error {
 	pipelinePath := filepath.Join(targetDir, "pipeline.yaml")
 	if _, err := os.Stat(pipelinePath); err == nil {
-		return nil
+		if stdin == nil {
+			return nil
+		}
+		ok, err := confirmMerge("pipeline.yaml already exists. Overwrite with embedded version? (y/n): ", stdin)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		// Back up existing file before overwriting
+		if err := BackupFile(pipelinePath); err != nil {
+			return fmt.Errorf("failed to backup pipeline.yaml: %w", err)
+		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("checking pipeline.yaml: %w", err)
 	}

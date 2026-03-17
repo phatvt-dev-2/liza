@@ -105,7 +105,7 @@ func SetupCommand(params SetupParams) error {
 		autoReplaced = append(autoReplaced, agentToolsTarget)
 	}
 
-	if err := embedded.WritePipelineConfig(params.TargetDir); err != nil {
+	if err := embedded.WritePipelineConfig(params.TargetDir, stdin); err != nil {
 		return fmt.Errorf("failed to write pipeline.yaml: %w", err)
 	}
 
@@ -236,24 +236,10 @@ func printSetupSummary(targetDir string, written []string, skipFiles map[string]
 	fmt.Printf("See: contracts/contract-activation.md § Claude\n")
 }
 
-// backupFile copies src to src.bak, preserving permissions.
+// backupFile copies src to src.bak using streaming I/O.
+// Delegates to embedded.BackupFile.
 func backupFile(src string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(src + ".bak")
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Close()
+	return embedded.BackupFile(src)
 }
 
 // agentExtraLink describes an additional symlink to create beyond skills.

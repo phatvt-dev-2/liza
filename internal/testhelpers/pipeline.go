@@ -17,7 +17,7 @@ func SetupPipelineConfig(t *testing.T, tmpDir string) {
 	if err := os.MkdirAll(lizaDir, 0755); err != nil {
 		t.Fatalf("Failed to create .liza directory: %v", err)
 	}
-	if err := embedded.WritePipelineConfig(lizaDir); err != nil {
+	if err := embedded.WritePipelineConfig(lizaDir, nil); err != nil {
 		t.Fatalf("Failed to write pipeline config: %v", err)
 	}
 }

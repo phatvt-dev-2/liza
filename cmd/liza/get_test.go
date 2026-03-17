@@ -37,7 +37,7 @@ func TestGetCommand(t *testing.T) {
 	}
 
 	// Write pipeline config so role-based agent ID detection works
-	if err := embedded.WritePipelineConfig(lizaDir); err != nil {
+	if err := embedded.WritePipelineConfig(lizaDir, nil); err != nil {
 		t.Fatalf("failed to write pipeline config: %v", err)
 	}
 

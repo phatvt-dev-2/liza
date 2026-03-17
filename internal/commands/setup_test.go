@@ -448,12 +448,17 @@ func TestSetupCommand_AgentIdempotent(t *testing.T) {
 
 	// Run setup twice
 	for i := 0; i < 2; i++ {
+		// Second run needs "y" for bulk overwrite + "y" for AGENT_TOOLS.md + "y" for pipeline overwrite
+		input := "y\n"
+		if i > 0 {
+			input = "y\ny\ny\n"
+		}
 		err := SetupCommand(SetupParams{
 			TargetDir: lizaDir,
 			Agents:    []string{"claude"},
 			HomeDir:   homeDir,
 			Force:     i > 0, // second run needs --force since files exist
-			Stdin:     strings.NewReader("y\n"),
+			Stdin:     strings.NewReader(input),
 		})
 		if err != nil {
 			t.Fatalf("SetupCommand run %d failed: %v", i+1, err)
@@ -496,13 +501,13 @@ func TestSetupCommand_AgentExistingWrongSymlink(t *testing.T) {
 	os.Remove(linkPath)
 	os.Symlink("/wrong/target", linkPath)
 
-	// Run setup again — "y" for bulk overwrite, "y" for AGENT_TOOLS.md, "y" for symlink replacement
+	// Run setup again — "y" for bulk overwrite, "y" for AGENT_TOOLS.md, "y" for pipeline overwrite, "y" for symlink replacement
 	err := SetupCommand(SetupParams{
 		TargetDir: lizaDir,
 		Agents:    []string{"claude"},
 		HomeDir:   homeDir,
 		Force:     true,
-		Stdin:     strings.NewReader("y\ny\ny\n"),
+		Stdin:     strings.NewReader("y\ny\ny\ny\n"),
 	})
 	if err != nil {
 		t.Fatalf("SetupCommand failed: %v", err)
