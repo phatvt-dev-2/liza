@@ -7,6 +7,8 @@ CODER TOOLS:
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
 - liza_handoff — Context near exhaustion (~90%)
   {"task_id": "{{.TaskID}}", "summary": "<what is done>", "next_action": "<exact next step>", "agent_id": "{{.AgentID}}"}
+  Optional structured fields: "succeeded" (array), "failed" (array), "hypothesis" (string), "key_files" (array), "dead_ends" (array)
+  When provided, structured fields override summary/next_action for richer handoff context.
 - liza_mark_blocked — Cannot proceed (spec ambiguity, missing dependency)
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
 - liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
