@@ -46,9 +46,13 @@ DO comply with the guidance defined in ~/.liza/AGENT_TOOLS.md
 COMMUNICATION: Agents communicate via blackboard only through MCP tools, not direct interaction.
 
 FORBIDDEN:
+{{- if ne .Role "orchestrator"}}
 - Do NOT attempt to claim tasks - the supervisor has already claimed your task
+{{- end}}
 - Do NOT manually modify task status
+{{- if ne .Role "orchestrator"}}
 - Do NOT skip worktrees or "simplify" the protocol
+{{- end}}
 - Do NOT make architecture decisions - follow the spec exactly
 
 EXIT CODES:

@@ -112,9 +112,14 @@ func TestBuildBasePrompt(t *testing.T) {
 				"You are a Liza orchestrator agent",
 				"QUERY TOOLS",
 				`Query workspace state: liza_get {"query": "tasks"}`,
+				"FORBIDDEN:",
+				"Do NOT manually modify task status",
+				"Do NOT make architecture decisions",
 			},
 			wantNotContain: []string{
 				"Query your assigned task",
+				"Do NOT attempt to claim tasks",
+				"Do NOT skip worktrees",
 			},
 		},
 	}
