@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-03-11T18:00:00Z"
+last_updated: "2026-03-17T12:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -609,10 +609,68 @@ clusters:
       limitations: "Read-only tools still procedural; one layer of wrapping indirection"
     note: "Extends ADR-0039 (RBAC) and ADR-0030 (Code-Enforced Guardrails)"
 
+  # --- Wave 5: 2026-03-11 to 2026-03-17 ---
+
+  - id: 44
+    title: "Task Event Constants"
+    commit_shas: ["e7ba1fe", "f117d54", "1e04164", "57bb3b6", "44306ec", "a815895"]
+    date_range: "2026-03-11"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0044-task-event-constants.md"
+    user_context:
+      problem: "Task event string literals scattered across ops/commands — same problem ADR-0024 solved for roles"
+      alternatives: "None — same pattern as ADR-0024"
+      rationale: "Single source of truth for event names, grep-able constants"
+      limitations: "Type alias, not distinct type — IDE support but no compile-time enforcement"
+    note: "Extends ADR-0024 (Unified Role Constants) — same pattern, different domain"
+
+  - id: 45
+    title: "Declarative Role Definitions in Pipeline YAML"
+    commit_shas: ["f0d1f26", "f05d531", "23b2fda", "534f85c", "4163846", "1dc64a5", "ad6ef20"]
+    date_range: "2026-03-13 to 2026-03-15"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0045-declarative-role-definitions.md"
+    user_context:
+      problem: "Role properties hardcoded in Go — always intended as intermediate step toward declarative"
+      alternatives: "None — declarative is the established direction"
+      rationale: "Maintainability and extensibility; hardcoding is an intermediate step"
+      limitations: "Only type and display-name implemented; future properties deferred"
+    note: "Extends ADR-0035 (Declarative Sub-Pipelines). Phase 1 of Declarative Role Definitions spec."
+
+  - id: 46
+    title: "Review Quorum"
+    commit_shas: ["8663ae3", "81b4070", "8e6b1b3", "7f9f2f6", "6fde40a", "2e527f3", "313dd67", "38c3986", "9a1f705", "dcce0cc", "e3e3708", "82d4199", "8adf8c8", "76db525", "ff60ffe"]
+    date_range: "2026-03-16"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0046-review-quorum.md"
+    user_context:
+      problem: "Human uses two reviewers (Claude + Codex) systematically in pairing — replicate in MAS"
+      alternatives: "None — declarative pipeline provides the natural extension point"
+      rationale: "Different models have different blind spots; adversarial diversity beats adversarial quantity"
+      limitations: "Provider diversity is best-effort; impact classification relies on reviewer judgment"
+    note: "Phase 3 of Declarative Role Definitions spec. Extends ADR-0035, ADR-0045."
+
+  - id: 47
+    title: "Dual Name Elimination"
+    commit_shas: ["ca6a81d", "c8e96e2", "fe629ba", "aa2d1d3", "ab09eaf", "cc0179c", "20b582a", "1e1f52f"]
+    date_range: "2026-03-16"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0047-dual-name-elimination.md"
+    user_context:
+      problem: "ADR-0024 accepted dual naming as tech debt; declarative roles made workflow form redundant"
+      alternatives: "None — duality served no purpose after ADR-0045"
+      rationale: "Tech debt payback; every ToWorkflow/ToRuntime call was a no-op"
+      limitations: "liza migrate needed for manually-edited state files (edge case)"
+    note: "Phase 4 of Declarative Role Definitions spec. Completes ADR-0024 tech debt."
+
 processing_cursor:
   step: "cluster_analysis"
   substep: "high_confidence_complete"
-  note: "Wave 4 started (ADR-0043). Remaining March 11 commits assessed as non-ADR-worthy refactoring/fixes."
+  note: "Wave 5 complete (ADR-0044 to ADR-0047). Non-ADR commits: resolver-based role dispatch (extension of ADR-0041), prompt improvements, operational fixes, CI/docs."
 
 configuration:
   adr_output_dir: "specs/architecture/ADR"
