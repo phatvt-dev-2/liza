@@ -189,19 +189,26 @@ func countImmediateDiscoveries(discovered []models.Discovery) int {
 // BuildRoleContext assembles role-specific context by rendering the named template
 // blocks in order and concatenating their output. Each block is a modular .tmpl file
 // in templates/blocks/ that receives a unified RoleContextData.
+//
+// Block boundaries are normalized here rather than relying on template whitespace
+// control ({{- -}} trimming), which is fragile and linter-hostile. Each non-empty
+// block is TrimSpace'd and joined with a blank-line separator.
 func BuildRoleContext(role string, sectionNames []string, data *RoleContextData) (string, error) {
-	var buf bytes.Buffer
+	var blocks []string
 	for _, section := range sectionNames {
 		var sectionBuf bytes.Buffer
 		if err := blockTmpl.ExecuteTemplate(&sectionBuf, section, data); err != nil {
 			return "", fmt.Errorf("block template %q for role %q: %w", section, role, err)
 		}
-		rendered := sectionBuf.String()
-		// Skip empty blocks (conditional blocks that rendered nothing)
-		if strings.TrimSpace(rendered) == "" {
+		rendered := strings.TrimSpace(sectionBuf.String())
+		if rendered == "" {
 			continue
 		}
-		buf.WriteString(rendered)
+		blocks = append(blocks, rendered)
 	}
-	return buf.String(), nil
+	if len(blocks) == 0 {
+		return "", nil
+	}
+	// Leading \n\n separates from base prompt; \n\n between blocks = one blank line.
+	return "\n\n" + strings.Join(blocks, "\n\n") + "\n", nil
 }
