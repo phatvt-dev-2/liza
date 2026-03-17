@@ -90,19 +90,25 @@ func TestHandoff_Success(t *testing.T) {
 		t.Error("HandoffPending should be true")
 	}
 
-	// Verify handoff note
-	note, exists := readState.Handoff["task-1"]
-	if !exists {
-		t.Fatal("Handoff note not found")
+	// Verify handoff event appended to task
+	if len(task.HandoffEvents) != 1 {
+		t.Fatalf("HandoffEvents count = %d, want 1", len(task.HandoffEvents))
 	}
-	if note.Agent != "coder-1" {
-		t.Errorf("Handoff agent = %q, want %q", note.Agent, "coder-1")
+	he := task.HandoffEvents[0]
+	if he.Agent != "coder-1" {
+		t.Errorf("HandoffEvent.Agent = %q, want %q", he.Agent, "coder-1")
 	}
-	if note.Summary != "Context at 80%" {
-		t.Errorf("Handoff summary = %q, want %q", note.Summary, "Context at 80%")
+	if he.Trigger != models.HandoffTriggerContextExhaustion {
+		t.Errorf("HandoffEvent.Trigger = %q, want %q", he.Trigger, models.HandoffTriggerContextExhaustion)
 	}
-	if note.NextAction != "Continue from function X" {
-		t.Errorf("Handoff nextAction = %q, want %q", note.NextAction, "Continue from function X")
+	if len(he.Succeeded) != 1 || he.Succeeded[0] != "Context at 80%" {
+		t.Errorf("HandoffEvent.Succeeded = %v, want [%q]", he.Succeeded, "Context at 80%")
+	}
+	if he.NextStep != "Continue from function X" {
+		t.Errorf("HandoffEvent.NextStep = %q, want %q", he.NextStep, "Continue from function X")
+	}
+	if he.Timestamp.IsZero() {
+		t.Error("HandoffEvent.Timestamp should not be zero")
 	}
 
 	// Verify agent status

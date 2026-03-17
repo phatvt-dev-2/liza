@@ -18,8 +18,8 @@ type HandoffResult struct {
 }
 
 // Handoff atomically marks a task for context-exhaustion handoff: sets
-// handoff_pending, records a handoff note with summary/next_action, and
-// transitions the initiating agent to HANDOFF status. No terminal I/O.
+// handoff_pending, appends a HandoffEvent to the task, and transitions
+// the initiating agent to HANDOFF status. No terminal I/O.
 func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*HandoffResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
@@ -77,15 +77,13 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 			Note:  &note,
 		})
 
-		if state.Handoff == nil {
-			state.Handoff = make(map[string]models.HandoffNote)
-		}
-		state.Handoff[taskID] = models.HandoffNote{
-			Agent:      agentID,
-			Timestamp:  now,
-			Summary:    summary,
-			NextAction: nextAction,
-		}
+		task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
+			Timestamp: now,
+			Agent:     agentID,
+			Trigger:   models.HandoffTriggerContextExhaustion,
+			Succeeded: []string{summary},
+			NextStep:  nextAction,
+		})
 
 		agent, exists := state.Agents[agentID]
 		if !exists {
