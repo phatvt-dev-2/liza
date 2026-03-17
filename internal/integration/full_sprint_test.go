@@ -231,7 +231,7 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 
 // executeReviewer simulates what a reviewer agent does: approve the task.
 func (m *SmartMockCLIExecutor) executeReviewer(projectRoot, agentID, taskID, role string) error {
-	if _, err := ops.SubmitVerdict(projectRoot, taskID, "APPROVED", "", agentID); err != nil {
+	if _, err := ops.SubmitVerdict(projectRoot, taskID, "APPROVED", "", agentID, ""); err != nil {
 		return fmt.Errorf("SubmitVerdict: %w", err)
 	}
 
