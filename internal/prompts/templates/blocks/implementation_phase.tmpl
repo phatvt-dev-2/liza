@@ -21,10 +21,8 @@ IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Plan file location:
    Run: mkdir -p {{.Worktree}}/specs/plans
-   Save your plan to: {{.Worktree}}/specs/plans/{{.TaskID}}.md
-   If that file already exists (from a prior merged version), use the next
-   version: {{.Worktree}}/specs/plans/{{.TaskID}}-v2.md, then -v3.md, etc.
-   Accepted file names (under specs/plans/): {{.TaskID}}.md or {{.TaskID}}-v<N>.md (nothing else).
+   Capture a timestamp by running: date -u +'%Y%m%d-%H%M%S'
+   Save your plan to: {{.Worktree}}/specs/plans/TIMESTAMP-{{.TaskID}}.md
    All later references to "the plan file" mean the exact path chosen here.
    (Include a "## Spec Compliance Matrix" section — see step 6c.)
 3. For EACH coding task in your plan, call liza_set_task_output with structured entries.

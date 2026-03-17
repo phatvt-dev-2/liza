@@ -284,8 +284,9 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
      no LLM judgment involved in task creation
 
    **Canonical code-plan artifact path:** Code-planners MUST save their plan document to
-   `specs/plans/<task-id>.md`. If a prior version exists (from a merged earlier attempt),
-   use `specs/plans/<task-id>-v<N>.md`. Code Plan Reviewers reject plans at non-canonical paths.
+   `specs/plans/<YYYYMMDD-HHMMSS>-<task-id>.md` (timestamp from `date -u +'%Y%m%d-%H%M%S'`
+   at plan creation time). The timestamp ensures uniqueness across attempts.
+   Code Plan Reviewers reject plans at non-canonical paths.
 
    **Path convention for `spec_ref`:** All `spec_ref` values in `output[]` (and on tasks generally) MUST
    use **repo-relative paths** (e.g. `specs/plans/auth-module.md`), never worktree-prefixed paths
