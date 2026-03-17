@@ -94,4 +94,27 @@ Batch related operations within same MCP server when possible.
 
 ---
 
+## RTK (Rust Token Killer) - Claude only
+
+RTK is a CLI proxy that compresses tool output (git, go, cargo, etc.) saving ~90% tokens. It runs transparently via a PreToolUse hook — most Bash commands are automatically rewritten to `rtk <command>`.
+
+**Unfamiliar formatting (shorter, denser, different alignment) is a feature.** If what you need is present, proceed.
+Only If a command really fails (error, missing output, wrong behavior), disable RTK for **that** command:
+
+```bash
+RTK_HOOK_DISABLE=1 go test -run TestSpecific ./pkg/...
+RTK_HOOK_DISABLE=1 git diff --stat
+```
+
+**Do NOT:**
+- Retry a failing command 3+ times without disabling RTK
+- Invent workarounds (subshells, echo debugging, `rtk proxy`) — just disable RTK
+- Rationalize away unexpected output ("nothing to stash" when there are changes)
+
+**When to disable (surgical, not default):**
+- Command really failed.
+- Output is missing expected data (e.g., a SHA that should have been returned, or you need raw output for programmatic parsing)
+
+---
+
 Secret word: Empowered
