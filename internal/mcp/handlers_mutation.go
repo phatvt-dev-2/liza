@@ -141,7 +141,22 @@ func (s *Server) handleHandoff(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	result, err := ops.Handoff(s.projectRoot, taskID, summary, nextAction, agentID)
+	input := &ops.HandoffInput{
+		ProjectRoot: s.projectRoot,
+		TaskID:      taskID,
+		Summary:     summary,
+		NextAction:  nextAction,
+		AgentID:     agentID,
+		Succeeded:   extractStringSlice(params, "succeeded"),
+		Failed:      extractStringSlice(params, "failed"),
+		KeyFiles:    extractStringSlice(params, "key_files"),
+		DeadEnds:    extractStringSlice(params, "dead_ends"),
+	}
+	if h, ok := params["hypothesis"].(string); ok {
+		input.Hypothesis = h
+	}
+
+	result, err := ops.Handoff(input)
 	if err != nil {
 		return nil, fmt.Errorf("handoff failed: %w", err)
 	}

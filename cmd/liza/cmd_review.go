@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
 )
@@ -73,7 +74,12 @@ Updates:
 			return err
 		}
 
-		return commands.HandoffCommand(projectRoot, taskID, summary, nextAction, agentID)
+		return commands.HandoffCommand(projectRoot, &ops.HandoffInput{
+			TaskID:     taskID,
+			Summary:    summary,
+			NextAction: nextAction,
+			AgentID:    agentID,
+		})
 	},
 }
 

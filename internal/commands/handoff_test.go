@@ -6,27 +6,27 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestHandoffCommand(t *testing.T) {
 	tests := []struct {
 		name          string
-		taskID        string
-		summary       string
-		nextAction    string
-		agentID       string
+		input         *ops.HandoffInput
 		setupState    func(*models.State)
 		wantErr       bool
 		wantErrSubstr string
 		validateState func(*testing.T, *models.State)
 	}{
 		{
-			name:       "successful handoff",
-			taskID:     "task-1",
-			summary:    "Implemented parsing and validation",
-			nextAction: "Finish edge case tests",
-			agentID:    "coder-1",
+			name: "successful handoff with legacy fields",
+			input: &ops.HandoffInput{
+				TaskID:     "task-1",
+				Summary:    "Implemented parsing and validation",
+				NextAction: "Finish edge case tests",
+				AgentID:    "coder-1",
+			},
 			setupState: func(s *models.State) {
 				now := time.Now().UTC()
 				assigned := "coder-1"
@@ -62,22 +62,20 @@ func TestHandoffCommand(t *testing.T) {
 				if task.History[0].Event != "handoff_initiated" {
 					t.Fatalf("expected handoff_initiated event, got %s", task.History[0].Event)
 				}
-				if task.History[0].Note == nil || !strings.Contains(*task.History[0].Note, "next_action") {
-					t.Fatalf("expected history note to include next_action, got %v", task.History[0].Note)
-				}
 
-				note, ok := s.Handoff["task-1"]
-				if !ok {
-					t.Fatalf("expected handoff note for task-1")
+				// Verify HandoffEvent with backward compat mapping
+				if len(task.HandoffEvents) != 1 {
+					t.Fatalf("expected 1 handoff event, got %d", len(task.HandoffEvents))
 				}
-				if note.Agent != "coder-1" {
-					t.Fatalf("expected handoff agent coder-1, got %s", note.Agent)
+				he := task.HandoffEvents[0]
+				if he.Agent != "coder-1" {
+					t.Fatalf("expected handoff agent coder-1, got %s", he.Agent)
 				}
-				if note.Summary != "Implemented parsing and validation" {
-					t.Fatalf("unexpected handoff summary: %s", note.Summary)
+				if len(he.Succeeded) != 1 || he.Succeeded[0] != "Implemented parsing and validation" {
+					t.Fatalf("expected succeeded=[summary], got %v", he.Succeeded)
 				}
-				if note.NextAction != "Finish edge case tests" {
-					t.Fatalf("unexpected handoff next_action: %s", note.NextAction)
+				if he.NextStep != "Finish edge case tests" {
+					t.Fatalf("expected next_step from next_action, got %s", he.NextStep)
 				}
 
 				agent, ok := s.Agents["coder-1"]
@@ -93,47 +91,114 @@ func TestHandoffCommand(t *testing.T) {
 			},
 		},
 		{
-			name:          "missing task ID",
-			taskID:        "",
-			summary:       "summary",
-			nextAction:    "next",
-			agentID:       "coder-1",
+			name: "successful handoff with structured fields",
+			input: &ops.HandoffInput{
+				TaskID:     "task-1",
+				Summary:    "legacy summary",
+				NextAction: "next step",
+				AgentID:    "coder-1",
+				Succeeded:  []string{"built parser", "added validation"},
+				Failed:     []string{"edge case handling"},
+				Hypothesis: "nil pointer on empty input",
+				KeyFiles:   []string{"parser.go"},
+				DeadEnds:   []string{"regex approach"},
+			},
+			setupState: func(s *models.State) {
+				now := time.Now().UTC()
+				assigned := "coder-1"
+				lease := now.Add(30 * time.Minute)
+				s.Tasks = []models.Task{
+					{
+						ID:           "task-1",
+						Description:  "Test task",
+						Status:       models.TaskStatusImplementing,
+						AssignedTo:   &assigned,
+						LeaseExpires: &lease,
+						Created:      now,
+						SpecRef:      "README.md",
+						DoneWhen:     "Done",
+						Scope:        "Scope",
+						History:      []models.TaskHistoryEntry{},
+					},
+				}
+				s.Agents["coder-1"] = models.Agent{
+					Role:      "coder",
+					Status:    models.AgentStatusWorking,
+					Heartbeat: now,
+				}
+			},
+			validateState: func(t *testing.T, s *models.State) {
+				task := &s.Tasks[0]
+				if len(task.HandoffEvents) != 1 {
+					t.Fatalf("expected 1 handoff event, got %d", len(task.HandoffEvents))
+				}
+				he := task.HandoffEvents[0]
+				// Succeeded should use explicit value, not legacy summary
+				if len(he.Succeeded) != 2 || he.Succeeded[0] != "built parser" {
+					t.Fatalf("expected explicit succeeded, got %v", he.Succeeded)
+				}
+				if len(he.Failed) != 1 || he.Failed[0] != "edge case handling" {
+					t.Fatalf("expected failed, got %v", he.Failed)
+				}
+				if he.Hypothesis != "nil pointer on empty input" {
+					t.Fatalf("expected hypothesis, got %s", he.Hypothesis)
+				}
+				if len(he.KeyFiles) != 1 || he.KeyFiles[0] != "parser.go" {
+					t.Fatalf("expected key_files, got %v", he.KeyFiles)
+				}
+				if len(he.DeadEnds) != 1 || he.DeadEnds[0] != "regex approach" {
+					t.Fatalf("expected dead_ends, got %v", he.DeadEnds)
+				}
+			},
+		},
+		{
+			name: "missing task ID",
+			input: &ops.HandoffInput{
+				Summary:    "summary",
+				NextAction: "next",
+				AgentID:    "coder-1",
+			},
 			wantErr:       true,
 			wantErrSubstr: "task ID is required",
 		},
 		{
-			name:          "missing summary",
-			taskID:        "task-1",
-			summary:       "",
-			nextAction:    "next",
-			agentID:       "coder-1",
+			name: "missing summary",
+			input: &ops.HandoffInput{
+				TaskID:     "task-1",
+				NextAction: "next",
+				AgentID:    "coder-1",
+			},
 			wantErr:       true,
 			wantErrSubstr: "summary is required",
 		},
 		{
-			name:          "missing next action",
-			taskID:        "task-1",
-			summary:       "summary",
-			nextAction:    "",
-			agentID:       "coder-1",
+			name: "missing next action",
+			input: &ops.HandoffInput{
+				TaskID:  "task-1",
+				Summary: "summary",
+				AgentID: "coder-1",
+			},
 			wantErr:       true,
 			wantErrSubstr: "next action is required",
 		},
 		{
-			name:          "missing agent",
-			taskID:        "task-1",
-			summary:       "summary",
-			nextAction:    "next",
-			agentID:       "",
+			name: "missing agent",
+			input: &ops.HandoffInput{
+				TaskID:     "task-1",
+				Summary:    "summary",
+				NextAction: "next",
+			},
 			wantErr:       true,
 			wantErrSubstr: "LIZA_AGENT_ID is required",
 		},
 		{
-			name:       "task not found",
-			taskID:     "missing",
-			summary:    "summary",
-			nextAction: "next",
-			agentID:    "coder-1",
+			name: "task not found",
+			input: &ops.HandoffInput{
+				TaskID:     "missing",
+				Summary:    "summary",
+				NextAction: "next",
+				AgentID:    "coder-1",
+			},
 			setupState: func(s *models.State) {
 				s.Tasks = []models.Task{}
 			},
@@ -141,11 +206,13 @@ func TestHandoffCommand(t *testing.T) {
 			wantErrSubstr: "task not found",
 		},
 		{
-			name:       "task not claimed",
-			taskID:     "task-1",
-			summary:    "summary",
-			nextAction: "next",
-			agentID:    "coder-1",
+			name: "task not claimed",
+			input: &ops.HandoffInput{
+				TaskID:     "task-1",
+				Summary:    "summary",
+				NextAction: "next",
+				AgentID:    "coder-1",
+			},
 			setupState: func(s *models.State) {
 				now := time.Now().UTC()
 				s.Tasks = []models.Task{
@@ -165,11 +232,13 @@ func TestHandoffCommand(t *testing.T) {
 			wantErrSubstr: "is not in an executing status",
 		},
 		{
-			name:       "task assigned to different coder",
-			taskID:     "task-1",
-			summary:    "summary",
-			nextAction: "next",
-			agentID:    "coder-1",
+			name: "task assigned to different coder",
+			input: &ops.HandoffInput{
+				TaskID:     "task-1",
+				Summary:    "summary",
+				NextAction: "next",
+				AgentID:    "coder-1",
+			},
 			setupState: func(s *models.State) {
 				now := time.Now().UTC()
 				assigned := "coder-2"
@@ -214,7 +283,7 @@ func TestHandoffCommand(t *testing.T) {
 
 			bb := testhelpers.WriteInitialState(t, statePath, initialState)
 
-			err := HandoffCommand(tmpDir, tt.taskID, tt.summary, tt.nextAction, tt.agentID)
+			err := HandoffCommand(tmpDir, tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")

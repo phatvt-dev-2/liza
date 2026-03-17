@@ -240,6 +240,26 @@ func (s *Server) registerMutationTools() {
 							Type:        "string",
 							Description: "Coder agent ID initiating handoff",
 						},
+						"succeeded": {
+							Type:        "array",
+							Description: "What was attempted and worked (overrides summary when provided)",
+						},
+						"failed": {
+							Type:        "array",
+							Description: "What was tried and failed, and why",
+						},
+						"hypothesis": {
+							Type:        "string",
+							Description: "Current hypothesis and recommended next step",
+						},
+						"key_files": {
+							Type:        "array",
+							Description: "Files that matter for continuing the task",
+						},
+						"dead_ends": {
+							Type:        "array",
+							Description: "Approaches that were tried and should be avoided",
+						},
 					},
 					Required: []string{"task_id", "summary", "next_action", "agent_id"},
 				},

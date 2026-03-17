@@ -944,7 +944,7 @@ func TestHandleSubmitForReviewCommitMismatch(t *testing.T) {
 	}
 }
 
-// TestHandleHandoff verifies liza_handoff tool
+// TestHandleHandoff verifies liza_handoff tool with legacy fields (backward compat)
 func TestHandleHandoff(t *testing.T) {
 	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
 	defer cleanup()
@@ -995,16 +995,107 @@ func TestHandleHandoff(t *testing.T) {
 	if !task.HandoffPending {
 		t.Fatal("expected task handoff_pending to be true")
 	}
-	note, ok := state.Handoff["task-1"]
-	if !ok {
-		t.Fatal("expected handoff note for task-1")
+
+	// Verify HandoffEvent with backward compat: summary→succeeded, next_action→next_step
+	if len(task.HandoffEvents) != 1 {
+		t.Fatalf("expected 1 handoff event, got %d", len(task.HandoffEvents))
 	}
-	if note.Summary == "" || note.NextAction == "" {
-		t.Fatal("expected handoff note summary and next_action to be set")
+	he := task.HandoffEvents[0]
+	if he.Agent != "coder-1" {
+		t.Fatalf("expected agent coder-1, got %s", he.Agent)
 	}
+	if he.Trigger != models.HandoffTriggerContextExhaustion {
+		t.Fatalf("expected trigger context_exhaustion, got %s", he.Trigger)
+	}
+	if len(he.Succeeded) != 1 || he.Succeeded[0] != "Implemented parser and core validation" {
+		t.Fatalf("expected succeeded=[summary], got %v", he.Succeeded)
+	}
+	if he.NextStep != "Add edge-case tests for malformed payloads" {
+		t.Fatalf("expected next_step from next_action, got %s", he.NextStep)
+	}
+
 	agent := state.Agents["coder-1"]
 	if agent.Status != models.AgentStatusHandoff {
 		t.Fatalf("expected agent status HANDOFF, got %s", agent.Status)
+	}
+}
+
+// TestHandleHandoff_StructuredFields verifies liza_handoff with new optional fields
+func TestHandleHandoff_StructuredFields(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Tasks[0].Status = models.TaskStatusImplementing
+		assignedTo := "coder-1"
+		state.Tasks[0].AssignedTo = &assignedTo
+		state.Agents["coder-1"] = models.Agent{
+			Role:      "coder",
+			Status:    models.AgentStatusWorking,
+			Heartbeat: time.Now().UTC(),
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	result, err := server.handleHandoff(map[string]any{
+		"task_id":     "task-1",
+		"summary":     "legacy summary",
+		"next_action": "next step",
+		"agent_id":    "coder-1",
+		"succeeded":   []any{"parsed input", "validated schema"},
+		"failed":      []any{"edge case for empty input"},
+		"hypothesis":  "empty input triggers nil pointer",
+		"key_files":   []any{"internal/parser.go", "internal/validate.go"},
+		"dead_ends":   []any{"tried regex approach"},
+	})
+	if err != nil {
+		t.Fatalf("handleHandoff with structured fields failed: %v", err)
+	}
+
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.Tasks[0]
+	if len(task.HandoffEvents) != 1 {
+		t.Fatalf("expected 1 handoff event, got %d", len(task.HandoffEvents))
+	}
+	he := task.HandoffEvents[0]
+
+	// Succeeded should use explicit value, not legacy summary
+	if len(he.Succeeded) != 2 || he.Succeeded[0] != "parsed input" || he.Succeeded[1] != "validated schema" {
+		t.Fatalf("expected explicit succeeded, got %v", he.Succeeded)
+	}
+	if len(he.Failed) != 1 || he.Failed[0] != "edge case for empty input" {
+		t.Fatalf("expected failed, got %v", he.Failed)
+	}
+	if he.Hypothesis != "empty input triggers nil pointer" {
+		t.Fatalf("expected hypothesis, got %s", he.Hypothesis)
+	}
+	if he.NextStep != "next step" {
+		t.Fatalf("expected next_step from next_action, got %s", he.NextStep)
+	}
+	if len(he.KeyFiles) != 2 || he.KeyFiles[0] != "internal/parser.go" {
+		t.Fatalf("expected key_files, got %v", he.KeyFiles)
+	}
+	if len(he.DeadEnds) != 1 || he.DeadEnds[0] != "tried regex approach" {
+		t.Fatalf("expected dead_ends, got %v", he.DeadEnds)
 	}
 }
 

@@ -17,33 +17,51 @@ type HandoffResult struct {
 	AgentID string
 }
 
+// HandoffInput carries all parameters for a handoff operation.
+// Summary and NextAction are required legacy fields. The optional structured
+// fields override the legacy mapping when provided: if Succeeded is non-empty
+// it is used directly; otherwise Summary maps to Succeeded: [summary].
+// NextAction always maps to HandoffEvent.NextStep.
+type HandoffInput struct {
+	ProjectRoot string
+	TaskID      string
+	Summary     string // required — legacy field
+	NextAction  string // required — maps to NextStep
+	AgentID     string
+	Succeeded   []string // optional — overrides Summary→Succeeded mapping
+	Failed      []string // optional
+	Hypothesis  string   // optional
+	KeyFiles    []string // optional
+	DeadEnds    []string // optional
+}
+
 // Handoff atomically marks a task for context-exhaustion handoff: sets
 // handoff_pending, appends a HandoffEvent to the task, and transitions
 // the initiating agent to HANDOFF status. No terminal I/O.
-func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*HandoffResult, error) {
-	if taskID == "" {
+func Handoff(input *HandoffInput) (*HandoffResult, error) {
+	if input.TaskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
-	if summary == "" {
+	if input.Summary == "" {
 		return nil, &PreconditionError{Reason: "summary is required"}
 	}
-	if nextAction == "" {
+	if input.NextAction == "" {
 		return nil, &PreconditionError{Reason: "next action is required"}
 	}
-	if agentID == "" {
+	if input.AgentID == "" {
 		return nil, &PreconditionError{Reason: "LIZA_AGENT_ID is required"}
 	}
 
-	lp := paths.New(projectRoot)
+	lp := paths.New(input.ProjectRoot)
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
 
-	runtimeRole, err := identity.ExtractRole(agentID)
+	runtimeRole, err := identity.ExtractRole(input.AgentID)
 	if err != nil {
-		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
+		return nil, fmt.Errorf("invalid agent ID %s: %w", input.AgentID, err)
 	}
 
-	resolver, _, resolverErr := loadResolver(projectRoot)
+	resolver, _, resolverErr := loadResolver(input.ProjectRoot)
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
@@ -54,45 +72,55 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 		}
 	}
 
+	// Build HandoffEvent with backward-compat mapping
+	succeeded := input.Succeeded
+	if len(succeeded) == 0 {
+		succeeded = []string{input.Summary}
+	}
+
 	err = bb.Modify(func(state *models.State) error {
-		task := state.FindTask(taskID)
+		task := state.FindTask(input.TaskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: "task", ID: input.TaskID}
 		}
 
 		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing status (current status: %s)", taskID, task.Status)}
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing status (current status: %s)", input.TaskID, task.Status)}
 		}
 
-		if task.AssignedTo == nil || *task.AssignedTo != agentID {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s", taskID, agentID)}
+		if task.AssignedTo == nil || *task.AssignedTo != input.AgentID {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s", input.TaskID, input.AgentID)}
 		}
 
 		task.HandoffPending = true
-		note := fmt.Sprintf("summary: %s | next_action: %s", summary, nextAction)
+		note := fmt.Sprintf("summary: %s | next_action: %s", input.Summary, input.NextAction)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
 			Event: models.TaskEventHandoffInitiated,
-			Agent: &agentID,
+			Agent: &input.AgentID,
 			Note:  &note,
 		})
 
 		task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
-			Timestamp: now,
-			Agent:     agentID,
-			Trigger:   models.HandoffTriggerContextExhaustion,
-			Succeeded: []string{summary},
-			NextStep:  nextAction,
+			Timestamp:  now,
+			Agent:      input.AgentID,
+			Trigger:    models.HandoffTriggerContextExhaustion,
+			Succeeded:  succeeded,
+			Failed:     input.Failed,
+			Hypothesis: input.Hypothesis,
+			NextStep:   input.NextAction,
+			KeyFiles:   input.KeyFiles,
+			DeadEnds:   input.DeadEnds,
 		})
 
-		agent, exists := state.Agents[agentID]
+		agent, exists := state.Agents[input.AgentID]
 		if !exists {
 			agent = models.Agent{Role: runtimeRole}
 		}
 		agent.Status = models.AgentStatusHandoff
-		agent.CurrentTask = &taskID
+		agent.CurrentTask = &input.TaskID
 		agent.Heartbeat = now
-		state.Agents[agentID] = agent
+		state.Agents[input.AgentID] = agent
 
 		return nil
 	})
@@ -101,7 +129,7 @@ func Handoff(projectRoot, taskID, summary, nextAction, agentID string) (*Handoff
 	}
 
 	return &HandoffResult{
-		TaskID:  taskID,
-		AgentID: agentID,
+		TaskID:  input.TaskID,
+		AgentID: input.AgentID,
 	}, nil
 }

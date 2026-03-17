@@ -8,8 +8,9 @@ import (
 
 // HandoffCommand initiates a context-exhaustion handoff and prints the result to stdout.
 // Delegates business logic to ops.Handoff.
-func HandoffCommand(projectRoot, taskID, summary, nextAction, agentID string) error {
-	result, err := ops.Handoff(projectRoot, taskID, summary, nextAction, agentID)
+func HandoffCommand(projectRoot string, input *ops.HandoffInput) error {
+	input.ProjectRoot = projectRoot
+	result, err := ops.Handoff(input)
 	if err != nil {
 		return fmt.Errorf("handoff: %w", err)
 	}
