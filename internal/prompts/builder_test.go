@@ -291,7 +291,7 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"- Total tasks: 2",
 				"- Merged: 2",
 				"Planning sprint tasks have been merged with output[] entries",
-				"Pipeline transitions are handled automatically by the supervisor",
+				"Pipeline transitions will execute automatically after checkpoint and human resume",
 				`liza_sprint_checkpoint`,
 			},
 		},
@@ -690,7 +690,7 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 			wantTrigger: "PLANNING_COMPLETE",
 			wantContains: []string{
 				"Planning sprint tasks have been merged with output[] entries",
-				"Pipeline transitions are handled automatically by the supervisor",
+				"Pipeline transitions will execute automatically after checkpoint and human resume",
 				"FULL autonomy to execute MCP tools immediately",
 				"liza_sprint_checkpoint",
 			},

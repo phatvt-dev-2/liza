@@ -12,6 +12,12 @@ const (
 	SprintStatusAborted    SprintStatus = "ABORTED"
 )
 
+// CheckpointTrigger values record why a checkpoint was created.
+const (
+	CheckpointTriggerPlanningComplete = "PLANNING_COMPLETE"
+	CheckpointTriggerSprintComplete   = "SPRINT_COMPLETE"
+)
+
 // IsValid checks if the sprint status is valid
 func (ss SprintStatus) IsValid() bool {
 	switch ss {
@@ -23,15 +29,16 @@ func (ss SprintStatus) IsValid() bool {
 
 // Sprint represents a sprint with scope, timeline, and metrics
 type Sprint struct {
-	ID            string         `yaml:"id"`
-	Number        int            `yaml:"number"`
-	GoalRef       string         `yaml:"goal_ref"`
-	Scope         SprintScope    `yaml:"scope"`
-	Timeline      SprintTimeline `yaml:"timeline"`
-	Status        SprintStatus   `yaml:"status"`
-	Metrics       SprintMetrics  `yaml:"metrics"`
-	Retrospective *string        `yaml:"retrospective,omitempty"`
-	Extra         map[string]any `yaml:",inline"`
+	ID                string         `yaml:"id"`
+	Number            int            `yaml:"number"`
+	GoalRef           string         `yaml:"goal_ref"`
+	Scope             SprintScope    `yaml:"scope"`
+	Timeline          SprintTimeline `yaml:"timeline"`
+	Status            SprintStatus   `yaml:"status"`
+	Metrics           SprintMetrics  `yaml:"metrics"`
+	CheckpointTrigger string         `yaml:"checkpoint_trigger,omitempty"`
+	Retrospective     *string        `yaml:"retrospective,omitempty"`
+	Extra             map[string]any `yaml:",inline"`
 }
 
 // SprintSummary is a lightweight record of a completed sprint kept in state.yaml.

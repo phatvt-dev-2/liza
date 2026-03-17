@@ -278,7 +278,7 @@ Design contradictions that create structural friction.
 
 **Implication:** A sprint can report completion while unresolved implementation risk remains in flight under replacement tasks.
 
-**Current mitigation:** Pipeline-created children (from `ExecuteAvailableTransitions`) are now automatically added to `sprint.scope.planned[]`, preventing premature sprint completion when planning tasks transition to coding tasks. Orchestrator-created replacement tasks (rescoping) are still NOT automatically added — humans must manually update scope or wait for all active tasks. Sprint governance protocol (`sprint-governance.md`) documents this as expected behavior.
+**Current mitigation:** Pipeline-created children (from `ExecuteAvailableTransitions`, executed by orchestrator PreWork after planning checkpoint is resumed) are automatically added to `sprint.scope.planned[]`, preventing premature sprint completion when planning tasks transition to coding tasks. Orchestrator-created replacement tasks (rescoping) are still NOT automatically added — humans must manually update scope or wait for all active tasks. Sprint governance protocol (`sprint-governance.md`) documents this as expected behavior.
 
 **Remaining gap:** Orchestrator rescoping (SUPERSEDED → replacement tasks) does not auto-update scope. This is intentional — rescoping is a human-guided decision, and auto-inclusion could mask scope creep.
 
@@ -564,11 +564,11 @@ Bottlenecks that emerge under load.
 **Category:** STRESS POINT
 **Related:** [Human Availability as Bottleneck](#human-availability-as-bottleneck)
 
-**Issue:** The two-step sprint advance flow (CHECKPOINT → `liza resume` → COMPLETED → `liza proceed` to create child tasks → `liza resume` again) requires human intervention at every inter-pipeline boundary. The sub-pipelines spec explicitly states: "the transition CODING_PLAN_APPROVED → DRAFT (coding pair) is a human privilege via `liza proceed`." With 4 role-pairs in series, a single feature passes through 4 human gates. The existing "Human Availability as Bottleneck" issue documents human as circuit breaker and escalation point, but the sub-pipeline architecture makes human intervention structural rather than exceptional: every inter-pair transition requires it. The compound effect on throughput is that the system's maximum velocity is capped by human response time multiplied by the number of pipeline stages, regardless of how many agents are deployed.
+**Issue:** Inter-pipeline transitions require human intervention at every boundary. With 4 role-pairs in series, a single feature passes through 4 human gates. The existing "Human Availability as Bottleneck" issue documents human as circuit breaker and escalation point, but the sub-pipeline architecture makes human intervention structural rather than exceptional: every inter-pair transition requires it. The compound effect on throughput is that the system's maximum velocity is capped by human response time multiplied by the number of pipeline stages, regardless of how many agents are deployed.
 
 **Implication:** The system's throughput ceiling shifts from "agent capacity" to "human gate frequency × pipeline depth" — adding more agents doesn't help when the bottleneck is the mandatory human touch between every role-pair.
 
-**Current mitigation:** Intentional design — human review at sprint boundaries is the trust mechanism. The spec describes this as "if the specs are good, the coding sprint can be trusted to run autonomously."
+**Current mitigation:** The Planning Transition Gate reduces this from a two-step flow to a single checkpoint: the orchestrator checkpoints with `checkpoint_trigger: PLANNING_COMPLETE`, the human reviews and resumes, and child tasks are created automatically by the orchestrator's PreWork. This eliminates the separate `liza proceed` step for pipeline-configured transitions. Human review at sprint boundaries remains the trust mechanism.
 
 **Future options:**
 - Allow configurable auto-proceed for low-risk transitions (e.g., code-plan → coding when plan approval rate is high)

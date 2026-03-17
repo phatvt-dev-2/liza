@@ -594,6 +594,10 @@ func (s *Server) registerComplexOperations() {
 							Type:        "string",
 							Description: "Agent ID performing the action",
 						},
+						"trigger": {
+							Type:        "string",
+							Description: "Why the checkpoint was created (e.g. PLANNING_COMPLETE, SPRINT_COMPLETE). Empty for manual checkpoints.",
+						},
 					},
 					Required: []string{"agent_id"},
 				},

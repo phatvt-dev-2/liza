@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 )
 
@@ -90,7 +91,12 @@ func (s *Server) handleAnalyze(params map[string]any) (any, error) {
 // handleSprintCheckpoint implements the liza_sprint_checkpoint tool
 // Maps to: liza checkpoint
 func (s *Server) handleSprintCheckpoint(params map[string]any) (any, error) {
-	result, err := ops.SprintCheckpoint(s.projectRoot)
+	trigger, _ := params["trigger"].(string)
+	if trigger != "" && trigger != models.CheckpointTriggerPlanningComplete && trigger != models.CheckpointTriggerSprintComplete {
+		return nil, fmt.Errorf("invalid trigger %q: must be %q, %q, or empty",
+			trigger, models.CheckpointTriggerPlanningComplete, models.CheckpointTriggerSprintComplete)
+	}
+	result, err := ops.SprintCheckpoint(s.projectRoot, trigger)
 	if err != nil {
 		return nil, fmt.Errorf("checkpoint failed: %w", err)
 	}

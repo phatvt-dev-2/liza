@@ -50,7 +50,7 @@ Code-planner and code-plan-reviewer templates were added in earlier commits as p
 Role checks extended to include all new roles — `us-reviewer` can call `submit_verdict` and `wt_merge`; pipeline doer roles can call `write_checkpoint`, `submit_for_review`, `set_task_output`.
 
 **Wake triggers:**
-`PLANNING_COMPLETE` trigger added for planning-to-coding transitions, restricted to code-planning-pair tasks.
+`PLANNING_COMPLETE` trigger added for planning-to-coding transitions. When detected, the orchestrator creates a checkpoint with `checkpoint_trigger: PLANNING_COMPLETE` so the human can review planning output before coding begins. After the human resumes, the orchestrator's PreWork executes pipeline transitions to create child tasks.
 
 ### Rationale
 

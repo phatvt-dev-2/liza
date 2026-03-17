@@ -21,8 +21,9 @@ type SprintCheckpointResult struct {
 }
 
 // SprintCheckpoint transitions sprint status to CHECKPOINT, causing agents to pause,
-// and writes a sprint summary report. No terminal I/O.
-func SprintCheckpoint(projectRoot string) (*SprintCheckpointResult, error) {
+// and writes a sprint summary report. The trigger parameter records why the checkpoint
+// was created (e.g. "PLANNING_COMPLETE", "SPRINT_COMPLETE", or "" for manual). No terminal I/O.
+func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResult, error) {
 	lizaPaths := paths.New(projectRoot)
 	statePath := lizaPaths.StatePath()
 	reportPath := lizaPaths.SprintSummaryPath()
@@ -43,6 +44,22 @@ func SprintCheckpoint(projectRoot string) (*SprintCheckpointResult, error) {
 		return nil, fmt.Errorf("cannot checkpoint: sprint is ABORTED")
 	}
 
+	// Auto-detect PLANNING_COMPLETE when trigger is empty.
+	// This makes the system resilient to LLM omission of the trigger parameter.
+	if trigger == "" {
+		if detCtx, detErr := LoadDetectionContext(projectRoot); detErr == nil {
+			for _, taskID := range state.Sprint.Scope.Planned {
+				task := state.FindTask(taskID)
+				if IsUnconsumedPlanningOutput(task, detCtx.PlanningPairs) {
+					trigger = models.CheckpointTriggerPlanningComplete
+					break
+				}
+			}
+		}
+		// If LoadDetectionContext fails (no pipeline config), trigger stays empty.
+		// This is fine for legacy projects without pipelines.
+	}
+
 	timestamp := time.Now()
 	report := generateSprintSummary(state, timestamp)
 
@@ -53,6 +70,7 @@ func SprintCheckpoint(projectRoot string) (*SprintCheckpointResult, error) {
 	err = blackboard.Modify(func(s *models.State) error {
 		s.Sprint.Status = models.SprintStatusCheckpoint
 		s.Sprint.Timeline.CheckpointAt = &timestamp
+		s.Sprint.CheckpointTrigger = trigger
 		return nil
 	})
 

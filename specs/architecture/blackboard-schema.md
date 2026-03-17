@@ -221,7 +221,7 @@ tasks:
 
 ### Sub-pipeline Fields
 
-Tasks support inter-pair transitions via `liza proceed`:
+Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator PreWork (automatic after planning checkpoint):
 
 ```yaml
 - id: plan-task-1
@@ -243,8 +243,8 @@ Tasks support inter-pair transitions via `liza proceed`:
 | Field | Type | Set By | Purpose |
 |-------|------|--------|---------|
 | `output` | `[]OutputEntry` | Doer agent | Structured subtask definitions for next role pair |
-| `parent_task` | `*string` | `liza proceed` | Back-reference from child to parent task |
-| `transitions_executed` | `map[string]bool` | `liza proceed` | Idempotency — prevents duplicate transitions |
+| `parent_task` | `*string` | `liza proceed` / orchestrator | Back-reference from child to parent task |
+| `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions |
 
 **OutputEntry fields** (all required):
 - `desc`: Task description for the child task
@@ -527,6 +527,7 @@ sprint:
     checkpoint_at: null
     ended: null
   status: IN_PROGRESS  # Sprint status: IN_PROGRESS, CHECKPOINT, COMPLETED, ABORTED (differs from goal status)
+  checkpoint_trigger: ""  # Why last checkpoint was created: PLANNING_COMPLETE, SPRINT_COMPLETE, or empty (manual/other)
   metrics:
     tasks_done: 2
     tasks_in_progress: 1

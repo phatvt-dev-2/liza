@@ -34,7 +34,44 @@ func (s *orchestratorStrategy) WaitConfig(state *models.State) (pollInterval, ma
 	return time.Duration(poll) * time.Second, time.Duration(max) * time.Second
 }
 
-func (s *orchestratorStrategy) PreWork(_ context.Context, _ *db.Blackboard, _ SupervisorConfig) (bool, error) {
+func (s *orchestratorStrategy) PreWork(_ context.Context, bb *db.Blackboard, config SupervisorConfig) (bool, error) {
+	logger := GetLogger()
+
+	state, err := bb.Read()
+	if err != nil {
+		logger.Warn("Failed to read state for transition check", "error", err)
+		return false, nil
+	}
+
+	// Gate: checkpoint was for planning completion AND sprint has been resumed.
+	// checkpoint_trigger == models.CheckpointTriggerPlanningComplete rules out manual/sprint-complete checkpoints.
+	// status == IN_PROGRESS means the human reviewed and resumed.
+	if state.Sprint.CheckpointTrigger != models.CheckpointTriggerPlanningComplete ||
+		state.Sprint.Status != models.SprintStatusInProgress {
+		return false, nil
+	}
+
+	detCtx, detErr := ops.LoadDetectionContext(config.ProjectRoot)
+	if detErr != nil {
+		logger.Warn("Failed to load detection context", "error", detErr)
+		return false, nil
+	}
+
+	if countMergedPlanningTasksWithOutput(state, detCtx.PlanningPairs) > 0 {
+		if err := handleAvailableTransitions(config.ProjectRoot); err != nil {
+			logger.Warn("Transition handler error", "error", err)
+		}
+	}
+
+	// Clear trigger even if transitions failed — the human approved, so don't
+	// re-checkpoint. Transition errors are logged; retry is manual.
+	if err := bb.Modify(func(s *models.State) error {
+		s.Sprint.CheckpointTrigger = ""
+		return nil
+	}); err != nil {
+		logger.Warn("Failed to clear checkpoint trigger", "error", err)
+	}
+
 	return false, nil
 }
 

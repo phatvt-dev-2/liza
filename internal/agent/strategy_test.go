@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 // testResolver returns a pipeline.Resolver built from a minimal but complete
@@ -682,19 +684,137 @@ func TestDoerPreWork_IsNoOp(t *testing.T) {
 	}
 }
 
-// TestOrchestratorPreWork_IsNoOp verifies orchestrator PreWork returns (false, nil).
-func TestOrchestratorPreWork_IsNoOp(t *testing.T) {
+// TestOrchestratorPreWork_NoTrigger verifies orchestrator PreWork is a no-op when
+// there is no checkpoint trigger.
+func TestOrchestratorPreWork_NoTrigger(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.CheckpointTrigger = ""
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
 	resolver := testResolver(t)
 	s, err := NewRoleStrategy("orchestrator", resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy() error = %v", err)
 	}
-	shouldContinue, err := s.PreWork(context.Background(), nil, SupervisorConfig{})
+	shouldContinue, err := s.PreWork(context.Background(), bb, SupervisorConfig{ProjectRoot: tmpDir})
 	if err != nil {
 		t.Errorf("PreWork() error = %v", err)
 	}
 	if shouldContinue {
 		t.Error("PreWork() shouldContinue = true, want false")
+	}
+}
+
+// TestOrchestratorPreWork_PlanningComplete_NotResumed verifies the gate does NOT fire
+// when checkpoint trigger is PLANNING_COMPLETE but sprint is still at CHECKPOINT.
+func TestOrchestratorPreWork_PlanningComplete_NotResumed(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.CheckpointTrigger = "PLANNING_COMPLETE"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+	task.RolePair = "code-planning-pair"
+	task.Output = []models.OutputEntry{
+		{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
+	}
+	state.Sprint.Scope.Planned = []string{"task-1"}
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+	resolver := testResolver(t)
+	s, err := NewRoleStrategy("orchestrator", resolver)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy() error = %v", err)
+	}
+	shouldContinue, err := s.PreWork(context.Background(), bb, SupervisorConfig{ProjectRoot: tmpDir})
+	if err != nil {
+		t.Errorf("PreWork() error = %v", err)
+	}
+	if shouldContinue {
+		t.Error("PreWork() shouldContinue = true, want false")
+	}
+}
+
+// TestOrchestratorPreWork_ManualCheckpoint verifies the gate does NOT fire
+// for a resumed manual checkpoint (no trigger). Differs from NoTrigger by
+// simulating a checkpoint that was resumed (CheckpointAt set, IN_PROGRESS).
+func TestOrchestratorPreWork_ManualCheckpoint(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.CheckpointTrigger = ""
+	state.Sprint.Timeline.CheckpointAt = &now // manual checkpoint was taken and resumed
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+	resolver := testResolver(t)
+	s, err := NewRoleStrategy("orchestrator", resolver)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy() error = %v", err)
+	}
+	shouldContinue, err := s.PreWork(context.Background(), bb, SupervisorConfig{ProjectRoot: tmpDir})
+	if err != nil {
+		t.Errorf("PreWork() error = %v", err)
+	}
+	if shouldContinue {
+		t.Error("PreWork() shouldContinue = true, want false")
+	}
+}
+
+// TestOrchestratorPreWork_PlanningComplete_Resumed verifies the gate FIRES when
+// checkpoint trigger is PLANNING_COMPLETE, sprint is IN_PROGRESS, and there's
+// unconsumed planning output. After PreWork, the trigger should be cleared.
+func TestOrchestratorPreWork_PlanningComplete_Resumed(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.CheckpointTrigger = "PLANNING_COMPLETE"
+
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+	task.RolePair = "code-planning-pair"
+	task.Output = []models.OutputEntry{
+		{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
+	}
+	state.Sprint.Scope.Planned = []string{"task-1"}
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+	resolver := testResolver(t)
+	s, err := NewRoleStrategy("orchestrator", resolver)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy() error = %v", err)
+	}
+	shouldContinue, err := s.PreWork(context.Background(), bb, SupervisorConfig{ProjectRoot: tmpDir})
+	if err != nil {
+		t.Errorf("PreWork() error = %v", err)
+	}
+	if shouldContinue {
+		t.Error("PreWork() shouldContinue = true, want false")
+	}
+
+	// Verify the gate fired: checkpoint_trigger should be cleared
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.CheckpointTrigger != "" {
+		t.Errorf("CheckpointTrigger = %q after PreWork, want empty (gate should have fired and cleared it)", readState.Sprint.CheckpointTrigger)
 	}
 }
 

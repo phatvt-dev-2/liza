@@ -37,7 +37,7 @@ sprint:
 
 "Planned tasks" = tasks listed in `sprint.scope.planned[]`. The planned list is updated in two ways:
 - **At sprint creation:** initial task list is set
-- **By pipeline transitions:** when `ExecuteAvailableTransitions` creates child tasks from a merged planning task, children are automatically added to `sprint.scope.planned[]`
+- **By pipeline transitions:** when the orchestrator executes `ExecuteAvailableTransitions` after a planning checkpoint is resumed, children are automatically added to `sprint.scope.planned[]`
 
 Tasks created mid-sprint via orchestrator rescoping (e.g., task-3a and task-3b replacing SUPERSEDED task-3) are **not** automatically added to the planned list.
 
@@ -71,13 +71,16 @@ Checkpoints are **mandatory human review points**. No work proceeds until human 
 
 ### Checkpoint Triggers
 
-| Trigger | Automatic? | Notes |
-|---------|------------|-------|
-| Sprint tasks complete | Yes | Normal completion |
-| Sprint deadline reached | Yes | Time box enforced |
-| Circuit breaker fired | Yes | Systemic issue detected |
-| Sprint stalled | Yes | All non-terminal planned tasks BLOCKED |
-| `liza sprint-checkpoint` | Manual | Human-initiated review |
+| Trigger | Automatic? | `checkpoint_trigger` | Notes |
+|---------|------------|---------------------|-------|
+| Planning tasks merged with output | Yes | `PLANNING_COMPLETE` | Human reviews planning output before coding begins |
+| Sprint tasks complete | Yes | `SPRINT_COMPLETE` | Normal completion |
+| Sprint deadline reached | Yes | _(empty)_ | Time box enforced |
+| Circuit breaker fired | Yes | _(empty)_ | Systemic issue detected |
+| Sprint stalled | Yes | _(empty)_ | All non-terminal planned tasks BLOCKED |
+| `liza sprint-checkpoint` | Manual | _(empty)_ | Human-initiated review |
+
+The `checkpoint_trigger` field records _why_ the checkpoint was created. It is set by `liza_sprint_checkpoint` (MCP) or `SprintCheckpoint` (ops) and used by the orchestrator to gate post-resume actions (see Planning Transition Gate below).
 
 ### Checkpoint Timeout Behavior
 
@@ -170,6 +173,24 @@ This is acceptable for v1 because:
 5. DOCUMENT DECISION
    └── Add entry to sprint.retrospective with rationale
 ```
+
+### Planning Transition Gate
+
+When planning tasks (epic-planner, code-planner) are merged, the orchestrator checkpoints the sprint with `checkpoint_trigger: PLANNING_COMPLETE` instead of immediately creating child tasks. This gives the human a chance to review planning output before coding begins.
+
+**Two-wake model:**
+
+1. **Wake 1:** Orchestrator detects merged planning tasks with unconsumed `output[]` → creates checkpoint with `trigger: PLANNING_COMPLETE` → agents pause
+2. **Human reviews** planning output in the sprint summary → runs `liza resume`
+3. **Wake 2 (PreWork):** Orchestrator's PreWork checks `checkpoint_trigger == "PLANNING_COMPLETE" && status == IN_PROGRESS` with unconsumed output → executes `ExecuteAvailableTransitions` → child tasks created → doers can claim
+
+**Gate correctness:**
+- Fresh sprint (trigger empty) → gate does not fire
+- Manual checkpoint (trigger empty) → gate does not fire
+- Sprint-complete checkpoint (trigger `SPRINT_COMPLETE`) → gate does not fire
+- Planning checkpoint not yet resumed (status `CHECKPOINT`) → gate does not fire
+- Planning checkpoint resumed (trigger + `IN_PROGRESS`) → gate fires → transitions execute
+- After transitions consumed → `countMergedPlanningTasksWithOutput` returns 0 → idempotent
 
 ### Checkpoint Review Checklist
 
@@ -352,7 +373,7 @@ Non-terminal tasks automatically carry into the new sprint's planned scope. This
 
 Terminal tasks (MERGED, ABANDONED, SUPERSEDED) are generally NOT carried forward, with one exception:
 
-**Planning tasks with unconsumed output:** MERGED tasks that belong to a planning role-pair (e.g., `code-planning-pair`), have non-empty `output[]`, and have no `transitions_executed` are carried forward. These tasks have planning output that the orchestrator has not yet expanded into child tasks via PLANNING_COMPLETE. Without carry-forward, the new sprint would have an empty planned scope and the orchestrator would idle indefinitely.
+**Planning tasks with unconsumed output:** MERGED tasks that belong to a planning role-pair (e.g., `code-planning-pair`), have non-empty `output[]`, and have no `transitions_executed` are carried forward. These tasks have planning output that the orchestrator has not yet expanded into child tasks via the Planning Transition Gate (see above). Without carry-forward, the new sprint would have an empty planned scope and the orchestrator would idle indefinitely.
 
 ---
 
@@ -372,6 +393,7 @@ sprint:
     checkpoint_at: null
     ended: null
   status: IN_PROGRESS
+  checkpoint_trigger: ""
   metrics:
     tasks_done: 2
     tasks_in_progress: 1

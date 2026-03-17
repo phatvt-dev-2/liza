@@ -9,8 +9,9 @@ import (
 
 // SprintCheckpointCommand creates a sprint checkpoint and prints the result to stdout.
 // Delegates business logic to ops.SprintCheckpoint.
+// CLI checkpoints are manual — trigger is always empty.
 func SprintCheckpointCommand(projectRoot string) error {
-	result, err := ops.SprintCheckpoint(projectRoot)
+	result, err := ops.SprintCheckpoint(projectRoot, "")
 	if err != nil {
 		return fmt.Errorf("checkpoint: %w", err)
 	}

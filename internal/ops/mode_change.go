@@ -136,8 +136,12 @@ func resumeSprint(s *models.State, lizaPaths paths.LizaPaths, projectRoot string
 			// Sprint is truly done — mark COMPLETED for human review.
 			// Human runs liza proceed, then liza resume again to advance.
 			s.Sprint.Status = models.SprintStatusCompleted
+			// Clear trigger — COMPLETED sprint won't run orchestrator PreWork.
+			s.Sprint.CheckpointTrigger = ""
 		} else {
-			// Mid-sprint checkpoint — just resume the same sprint.
+			// Mid-sprint checkpoint — resume the same sprint.
+			// checkpoint_trigger is preserved so orchestrator PreWork can check it.
+			// PreWork clears it after executing transitions.
 			s.Sprint.Status = models.SprintStatusInProgress
 		}
 		return "CHECKPOINT", nil, nil

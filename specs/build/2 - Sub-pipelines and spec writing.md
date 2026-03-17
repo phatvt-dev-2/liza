@@ -216,7 +216,7 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
 
    **Trigger modes:**
    - `manual`: requires the human to run `liza proceed <task-id> <transition-name>`. Used for quality gates where human judgment is needed before the next pipeline stage begins (e.g. reviewing a plan before committing to implementation).
-   - `auto` *(RESERVED — not yet implemented)*: the Orchestrator's supervisor transitions the task automatically when it detects the `from` state. Happens on the next supervisor polling cycle. Preconditions beyond state match: for `per-subtask`, `output[]` must be non-empty and validated (each entry has `desc`, `done_when`, `scope`); for `one-to-one`, parent artifact must exist. No current transitions use `auto`.
+   - `auto` *(RESERVED — not yet implemented)*: the Orchestrator's supervisor transitions the task automatically when it detects the `from` state with no human gate. Preconditions beyond state match: for `per-subtask`, `output[]` must be non-empty and validated (each entry has `desc`, `done_when`, `scope`); for `one-to-one`, parent artifact must exist. No current transitions use `auto`. Note: the Planning Transition Gate (see sprint-governance.md) is checkpoint-gated, not fully automatic — the orchestrator creates a `PLANNING_COMPLETE` checkpoint and waits for human resume before executing transitions.
 
 6. ✅ Make the Task state machine configured via the yaml file.
 
@@ -298,13 +298,18 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
 
 8. ✅ Make the Orchestrator's supervisor create the downstream tasks from `output[]` on the configured transitions.
 
-   **Implementation note:** Downstream task creation is performed by `liza proceed` (the CLI
-   command invoked by the human), not automatically by the supervisor. The supervisor's role
-   is limited to intra-pair transitions (claim → execute → submit → review → approve/reject).
-   Cross-pair transitions remain a human-initiated operation, matching the `trigger: manual`
-   semantics in the YAML config. For pipeline-configured goals, `liza proceed` resolves the
-   transition definition from the frozen config via the resolver; for legacy goals, it falls
-   back to a hardcoded transition map.
+   **Implementation note:** Downstream task creation uses two paths:
+   - **Manual transitions** (`trigger: manual`): Human invokes `liza proceed` to create child tasks.
+   - **Automatic transitions** (pipeline-configured goals): The orchestrator's supervisor
+     creates a checkpoint with `checkpoint_trigger: PLANNING_COMPLETE` when planning tasks
+     are merged. After the human reviews and resumes, the orchestrator's PreWork executes
+     `ExecuteAvailableTransitions` to create child tasks. This ensures human review of
+     planning output before coding begins.
+
+   In both cases, the supervisor handles intra-pair transitions (claim → execute → submit →
+   review → approve/reject). For pipeline-configured goals, transition definitions are
+   resolved from the frozen config via the resolver; for legacy goals, a hardcoded transition
+   map is used as fallback.
 
 ---
 
@@ -499,10 +504,12 @@ MERGED (or ABANDONED/SUPERSEDED).
 
 **Sprint homogeneity:** Sprints are not restricted to a single role-pair — the predicate
 handles mixed-role-pair sprints by checking each task against its own role-pair's terminal.
-In practice, sprints tend to be homogeneous because `liza proceed` creates downstream tasks
+In practice, sprints tend to be homogeneous because pipeline transitions create downstream tasks
 for the next sprint, so each sprint naturally contains tasks from one pipeline stage. But
 the machinery doesn't enforce this — a sprint with both code-planning and coding tasks
-completes when all tasks reach MERGED. The `liza proceed` transition happens between sprints.
+completes when all tasks reach MERGED. Pipeline transitions happen between sprints (for
+automatic transitions, after the human resumes a `PLANNING_COMPLETE` checkpoint; for manual
+transitions, via `liza proceed`).
 
 **Sprint-terminal states by role-pair:**
 
@@ -522,7 +529,17 @@ or ABANDONED) but it is the universal sprint-terminal state.
 simple: terminal states are `{MERGED, ABANDONED, SUPERSEDED}` for all role-pairs.
 No pipeline-aware derivation needed.
 
-**`liza proceed` and sprint boundaries:**
+**Pipeline transitions and sprint boundaries:**
+
+*Automatic transitions (pipeline-configured goals):*
+- The orchestrator detects merged planning tasks with unconsumed `output[]` and checkpoints
+  with `checkpoint_trigger: PLANNING_COMPLETE`.
+- Human reviews planning output, then runs `liza resume`.
+- Orchestrator PreWork detects the trigger + IN_PROGRESS status → executes
+  `ExecuteAvailableTransitions` → child tasks created in the current sprint's scope.
+- Sequence: planning tasks merged → checkpoint → human reviews → `liza resume` → child tasks created.
+
+*Manual transitions (`liza proceed`):*
 - `liza proceed <task-id> <transition-name>` executes a manual inter-pair transition
   (e.g., MERGED → DRAFT_CODE via `code-plan-to-coding`).
 - It operates **between sprints** — the preceding sprint must be COMPLETED. CHECKPOINT
@@ -601,11 +618,11 @@ rediscover them as bugs.
   declarativity would require a DSL, which trades one complexity for another. The boundary
   is: YAML owns role-pair flow, code owns cross-cutting states and orchestration.
 
-- **Sprint lock-step.** Sprint boundaries force all tasks to complete before any can
-  `liza proceed`. This serializes independent tasks but is the price of human judgment at
-  boundaries — allowing partial proceed mid-sprint would undermine the "complete → review →
-  proceed" model. `liza proceed --all` (deferred) addresses the mechanical repetition but
-  not the serialization, which is by design.
+- **Sprint lock-step.** Sprint boundaries force all tasks to complete before transitions
+  execute. For automatic transitions, this means the `PLANNING_COMPLETE` checkpoint only
+  fires when all planning tasks are merged. This serializes independent tasks but is the
+  price of human judgment at boundaries — allowing partial transitions mid-sprint would
+  undermine the "complete → review → proceed" model.
 
 - **output[] decomposition quality.** Reviewers validate both the doer's artifact and its
   `output[]` decomposition. Decomposition review (are these the right subtasks?) is harder

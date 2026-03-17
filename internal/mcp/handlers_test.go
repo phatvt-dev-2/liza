@@ -1999,7 +1999,10 @@ func TestHandleSprintCheckpoint(t *testing.T) {
 
 	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
 
-	result, err := server.handleSprintCheckpoint(map[string]any{"agent_id": "orchestrator-1"})
+	result, err := server.handleSprintCheckpoint(map[string]any{
+		"agent_id": "orchestrator-1",
+		"trigger":  "PLANNING_COMPLETE",
+	})
 
 	if err != nil {
 		t.Fatalf("handleSprintCheckpoint failed: %v", err)
@@ -2029,6 +2032,27 @@ func TestHandleSprintCheckpoint(t *testing.T) {
 
 	if state.Sprint.Timeline.CheckpointAt == nil {
 		t.Error("Expected checkpoint_at to be set")
+	}
+
+	if state.Sprint.CheckpointTrigger != "PLANNING_COMPLETE" {
+		t.Errorf("CheckpointTrigger = %q, want %q", state.Sprint.CheckpointTrigger, "PLANNING_COMPLETE")
+	}
+}
+
+func TestHandleSprintCheckpoint_InvalidTrigger(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+	_, err := server.handleSprintCheckpoint(map[string]any{
+		"agent_id": "orchestrator-1",
+		"trigger":  "BOGUS_VALUE",
+	})
+	if err == nil {
+		t.Fatal("Expected error for invalid trigger")
+	}
+	if !strings.Contains(err.Error(), "invalid trigger") {
+		t.Errorf("Error = %q, want to contain 'invalid trigger'", err.Error())
 	}
 }
 

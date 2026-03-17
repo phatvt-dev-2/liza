@@ -27,7 +27,7 @@ func TestSprintCheckpoint_Success(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SprintCheckpoint(tmpDir)
+	result, err := SprintCheckpoint(tmpDir, "")
 	if err != nil {
 		t.Fatalf("SprintCheckpoint() error: %v", err)
 	}
@@ -65,6 +65,101 @@ func TestSprintCheckpoint_Success(t *testing.T) {
 	}
 }
 
+func TestSprintCheckpoint_StoresTrigger(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.Timeline.Started = time.Now().UTC().Add(-1 * time.Hour)
+	state.Sprint.Timeline.Deadline = time.Now().UTC().Add(5 * time.Hour)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := SprintCheckpoint(tmpDir, "PLANNING_COMPLETE")
+	if err != nil {
+		t.Fatalf("SprintCheckpoint() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.CheckpointTrigger != "PLANNING_COMPLETE" {
+		t.Errorf("CheckpointTrigger = %q, want %q", readState.Sprint.CheckpointTrigger, "PLANNING_COMPLETE")
+	}
+}
+
+func TestSprintCheckpoint_EmptyTrigger(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.Timeline.Started = time.Now().UTC().Add(-1 * time.Hour)
+	state.Sprint.Timeline.Deadline = time.Now().UTC().Add(5 * time.Hour)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := SprintCheckpoint(tmpDir, "")
+	if err != nil {
+		t.Fatalf("SprintCheckpoint() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.CheckpointTrigger != "" {
+		t.Errorf("CheckpointTrigger = %q, want empty", readState.Sprint.CheckpointTrigger)
+	}
+}
+
+func TestSprintCheckpoint_AutoDetectsPlanningComplete(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.Timeline.Started = now.Add(-1 * time.Hour)
+	state.Sprint.Timeline.Deadline = now.Add(5 * time.Hour)
+
+	// Add a merged planning task with unconsumed output
+	task := models.Task{
+		ID:          "plan-1",
+		Status:      models.TaskStatusMerged,
+		Description: "Plan feature X",
+		Created:     now,
+		SpecRef:     "specs/x.md",
+		DoneWhen:    "Plan approved",
+		Scope:       "specs/",
+		RolePair:    "code-planning-pair",
+		Output: []models.OutputEntry{
+			{Desc: "impl X", DoneWhen: "tests pass", Scope: "pkg/x"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Sprint.Scope.Planned = []string{"plan-1"}
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Pass empty trigger — should auto-detect PLANNING_COMPLETE
+	_, err := SprintCheckpoint(tmpDir, "")
+	if err != nil {
+		t.Fatalf("SprintCheckpoint() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.CheckpointTrigger != "PLANNING_COMPLETE" {
+		t.Errorf("CheckpointTrigger = %q, want %q (auto-detect)", readState.Sprint.CheckpointTrigger, "PLANNING_COMPLETE")
+	}
+}
+
 func TestSprintCheckpoint_AlreadyAtCheckpoint(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -73,7 +168,7 @@ func TestSprintCheckpoint_AlreadyAtCheckpoint(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusCheckpoint
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SprintCheckpoint(tmpDir)
+	_, err := SprintCheckpoint(tmpDir, "")
 	if err == nil {
 		t.Fatal("Expected error when already at CHECKPOINT")
 	}
@@ -90,7 +185,7 @@ func TestSprintCheckpoint_CompletedSprint(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusCompleted
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SprintCheckpoint(tmpDir)
+	_, err := SprintCheckpoint(tmpDir, "")
 	if err == nil {
 		t.Fatal("Expected error for COMPLETED sprint")
 	}
@@ -107,7 +202,7 @@ func TestSprintCheckpoint_AbortedSprint(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusAborted
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SprintCheckpoint(tmpDir)
+	_, err := SprintCheckpoint(tmpDir, "")
 	if err == nil {
 		t.Fatal("Expected error for ABORTED sprint")
 	}

@@ -1,8 +1,8 @@
 {{- define "wake_planning_complete" -}}
 Planning sprint tasks have been merged with output[] entries.
 
-Pipeline transitions are handled automatically by the supervisor — child tasks
-will be created in the next sprint. No manual task creation is needed.
+Pipeline transitions will execute automatically after checkpoint and human resume.
+No manual task creation is needed.
 
 ⚠️  AUTONOMY NOTICE ⚠️
 You have FULL autonomy to execute MCP tools immediately.
@@ -12,13 +12,13 @@ Do NOT wait for permission.
 
 1. Run liza_update_sprint_metrics with {"agent_id": "{{.AgentID}}"}.
 
-2. Create checkpoint for human review: execute liza_sprint_checkpoint with {"agent_id": "{{.AgentID}}"}.
+2. Create checkpoint for human review: execute liza_sprint_checkpoint with {"agent_id": "{{.AgentID}}", "trigger": "PLANNING_COMPLETE"}.
    The checkpoint will pause all agents and generate a sprint summary.
 
 SUCCESS CRITERIA:
 - Sprint checkpointed for human review.
 
 ❌ INCORRECT (DO NOT DO THIS):
-1. Create tasks manually — the supervisor handles pipeline transitions.
+1. Create tasks manually — the supervisor handles pipeline transitions after resume.
 2. Exit without checkpointing.
 {{- end -}}

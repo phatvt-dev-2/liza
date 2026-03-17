@@ -123,7 +123,7 @@ analogous to the coding pair (IMPLEMENTING → READY_FOR_REVIEW → REVIEWING �
 | CODING_PLAN_TO_REVIEW | Code Planner done, awaiting Code Plan Reviewer | → REVIEWING_CODING_PLAN |
 | REVIEWING_CODING_PLAN | Code Plan Reviewer active | → CODING_PLAN_APPROVED, CODING_PLAN_REJECTED, CODING_PLAN_TO_REVIEW (stale lease) |
 | CODING_PLAN_REJECTED | Code Plan Reviewer rejected, feedback provided | → DRAFT_CODING_PLAN (supervisor reclaims for planner) |
-| CODING_PLAN_APPROVED | Code Plan Reviewer approved | Sprint-terminal (transition to coding pair via `liza proceed`) |
+| CODING_PLAN_APPROVED | Code Plan Reviewer approved | Sprint-terminal (transition to coding pair via orchestrator after planning checkpoint) |
 
 ```
      ┌────────────────────────────────────────────┐
@@ -159,12 +159,12 @@ analogous to the coding pair (IMPLEMENTING → READY_FOR_REVIEW → REVIEWING �
 │CODING_PLAN_APPROVED │  │CODING_PLAN_REJECTED │
 └─────────────────────┘  └─────────┬───────────┘
   Sprint-terminal                  │
-  (→ coding pair                resume (DRAFT_CODING_PLAN)
-   via liza proceed)
+  (→ coding pair via               resume (DRAFT_CODING_PLAN)
+   orchestrator after checkpoint)
 ```
 
 **Sprint-terminal:** CODING_PLAN_APPROVED is terminal for sprint completion (alongside MERGED, ABANDONED, SUPERSEDED).
-The transition CODING_PLAN_APPROVED → DRAFT (coding pair) is a human privilege via `liza proceed`.
+The transition CODING_PLAN_APPROVED → DRAFT (coding pair) is executed by the orchestrator after the human resumes a `PLANNING_COMPLETE` checkpoint. See [Planning Transition Gate](../protocols/sprint-governance.md#planning-transition-gate).
 
 **Claimability:**
 
@@ -372,10 +372,18 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 - `liza stop` → ABORTED (stop)
 
 **From COMPLETED:**
-- `liza proceed <task-id> <transition>` → creates child tasks from parent task's `output[]`
+- `liza proceed <task-id> <transition>` → creates child tasks from parent task's `output[]` (manual transitions)
 - `liza resume` → archives sprint, creates new sprint (IN_PROGRESS) with child tasks
 
-**Two-step sprint advance flow:**
+**Sprint advance flows:**
+
+*Planning tasks (automatic transitions):*
+1. Planning tasks merged → orchestrator checkpoints with `checkpoint_trigger: PLANNING_COMPLETE`
+2. Human reviews planning output → `liza resume` → IN_PROGRESS
+3. Orchestrator PreWork detects trigger + IN_PROGRESS → executes transitions → child tasks created
+4. Sprint continues or completes → next `liza resume` archives sprint
+
+*Manual transitions:*
 1. CHECKPOINT + all terminal → `liza resume` → COMPLETED (human review gate)
 2. Human runs `liza proceed` to create child tasks from approved plans
 3. Human runs `liza resume` → archives sprint, creates new sprint with child tasks
