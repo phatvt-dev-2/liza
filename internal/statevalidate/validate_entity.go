@@ -6,22 +6,6 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
-// validateHandoff checks that every handoff entry has both a summary and a
-// next_action. These fields are required for the next agent to resume work
-// without re-reading the entire context. Prevents incomplete handoffs that
-// would leave successor agents without enough information to continue.
-func validateHandoff(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-	for taskID, handoff := range state.Handoff {
-		if handoff.Summary == "" {
-			return fmt.Errorf("handoff entry for task %s missing summary", taskID)
-		}
-		if handoff.NextAction == "" {
-			return fmt.Errorf("handoff entry for task %s missing next_action", taskID)
-		}
-	}
-	return nil
-}
-
 // validateDiscovered checks that discovered items have a valid urgency value
 // (either "deferred" or "immediate", or empty). Prevents typos and invalid
 // urgency levels from entering the backlog where they would be silently ignored

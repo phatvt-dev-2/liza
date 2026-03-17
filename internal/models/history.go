@@ -134,20 +134,6 @@ type HandoffEvent struct {
 	DeadEnds   []string       `yaml:"dead_ends,omitempty"`
 }
 
-// HandoffNote represents context handoff between agents
-type HandoffNote struct {
-	Agent         string         `yaml:"agent"`
-	ContextUsed   int            `yaml:"context_used"`
-	Timestamp     time.Time      `yaml:"timestamp"`
-	Summary       string         `yaml:"summary"`
-	NextAction    string         `yaml:"next_action"`
-	Approach      *string        `yaml:"approach,omitempty"`
-	Blockers      *string        `yaml:"blockers,omitempty"`
-	FilesModified []string       `yaml:"files_modified,omitempty"`
-	NextSteps     []string       `yaml:"next_steps,omitempty"`
-	Extra         map[string]any `yaml:",inline"`
-}
-
 // HumanNote represents a note from a human to agents
 type HumanNote struct {
 	Timestamp time.Time      `yaml:"timestamp"`

@@ -437,7 +437,6 @@ func InitCommandWithConfig(params InitParams) error {
 		Tasks:       []models.Task{},
 		Agents:      make(map[string]models.Agent),
 		Discovered:  []models.Discovery{},
-		Handoff:     make(map[string]models.HandoffNote),
 		HumanNotes:  []models.HumanNote{},
 		SpecChanges: []models.SpecChange{},
 		Anomalies:   []models.Anomaly{},

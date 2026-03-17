@@ -266,7 +266,6 @@ func TestStateYAMLMarshaling(t *testing.T) {
 			},
 		},
 		Discovered:  []Discovery{},
-		Handoff:     map[string]HandoffNote{},
 		HumanNotes:  []HumanNote{},
 		SpecChanges: []SpecChange{},
 		Anomalies:   []Anomaly{},

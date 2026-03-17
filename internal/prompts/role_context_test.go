@@ -7,10 +7,11 @@ import (
 )
 
 func TestRoleContextData_CoderPopulation(t *testing.T) {
-	handoff := &models.HandoffNote{
-		Agent:      "coder-0",
-		Summary:    "Completed phase 1",
-		NextAction: "Continue with phase 2",
+	handoff := &models.HandoffEvent{
+		Agent:     "coder-0",
+		Trigger:   models.HandoffTriggerContextExhaustion,
+		Succeeded: []string{"Completed phase 1"},
+		NextStep:  "Continue with phase 2",
 	}
 
 	data := RoleContextData{
@@ -88,8 +89,11 @@ func TestRoleContextData_CoderPopulation(t *testing.T) {
 	if data.HandoffNote == nil {
 		t.Fatal("HandoffNote is nil, want non-nil")
 	}
-	if data.HandoffNote.Summary != "Completed phase 1" {
-		t.Errorf("HandoffNote.Summary = %q, want %q", data.HandoffNote.Summary, "Completed phase 1")
+	if len(data.HandoffNote.Succeeded) != 1 || data.HandoffNote.Succeeded[0] != "Completed phase 1" {
+		t.Errorf("HandoffNote.Succeeded = %v, want [Completed phase 1]", data.HandoffNote.Succeeded)
+	}
+	if data.HandoffNote.NextStep != "Continue with phase 2" {
+		t.Errorf("HandoffNote.NextStep = %q, want %q", data.HandoffNote.NextStep, "Continue with phase 2")
 	}
 
 	// Verify plan scoping

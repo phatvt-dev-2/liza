@@ -14,8 +14,8 @@ import (
 
 // ValidateStateFile validates the state.yaml file against all schema rules.
 // It orchestrates the full validation sequence: required fields, task states,
-// task invariants, dependencies, agent invariants, handoff entries, discovered
-// items, anomalies, and sprint configuration. Returns an error with a detailed
+// task invariants, dependencies, agent invariants, discovered items, anomalies,
+// and sprint configuration. Returns an error with a detailed
 // description if any validation rule fails.
 func ValidateStateFile(statePath string, skipSpecFileCheck bool, warnWriter io.Writer) error {
 	if warnWriter == nil {
@@ -56,7 +56,6 @@ func ValidateStateFile(statePath string, skipSpecFileCheck bool, warnWriter io.W
 		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 			return validateAgentInvariants(state, projectRoot, skipSpecFileCheck, warnWriter)
 		},
-		validateHandoff,
 		validateDiscovered,
 		validateAnomalies,
 		validateSprint,

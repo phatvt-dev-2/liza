@@ -150,9 +150,13 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 	if roleType == "doer" && config.Role == "coder" {
 		data.IntegrationBranch = state.Config.IntegrationBranch
 		data.IntegrationFix = task.IntegrationFix
-		if note, ok := state.Handoff[task.ID]; ok {
-			noteCopy := note
-			data.HandoffNote = &noteCopy
+		// Find the last context_exhaustion HandoffEvent for resume context
+		for i := len(task.HandoffEvents) - 1; i >= 0; i-- {
+			if task.HandoffEvents[i].Trigger == models.HandoffTriggerContextExhaustion {
+				evt := task.HandoffEvents[i]
+				data.HandoffNote = &evt
+				break
+			}
 		}
 	}
 

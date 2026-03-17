@@ -3,8 +3,36 @@
 
 === HANDOFF RESUME CONTEXT ===
 FROM: {{.HandoffNote.Agent}}
-SUMMARY: {{.HandoffNote.Summary}}
-NEXT ACTION: {{.HandoffNote.NextAction}}
+{{- if .HandoffNote.Succeeded}}
+SUCCEEDED:
+{{- range .HandoffNote.Succeeded}}
+- {{.}}
+{{- end}}
+{{- end}}
+{{- if .HandoffNote.Failed}}
+FAILED:
+{{- range .HandoffNote.Failed}}
+- {{.}}
+{{- end}}
+{{- end}}
+{{- if .HandoffNote.NextStep}}
+NEXT STEP: {{.HandoffNote.NextStep}}
+{{- end}}
+{{- if .HandoffNote.Hypothesis}}
+HYPOTHESIS: {{.HandoffNote.Hypothesis}}
+{{- end}}
+{{- if .HandoffNote.KeyFiles}}
+KEY FILES:
+{{- range .HandoffNote.KeyFiles}}
+- {{.}}
+{{- end}}
+{{- end}}
+{{- if .HandoffNote.DeadEnds}}
+DEAD ENDS:
+{{- range .HandoffNote.DeadEnds}}
+- {{.}}
+{{- end}}
+{{- end}}
 Resume from this point before starting any new approach.
 {{- end}}
 {{- end -}}

@@ -272,9 +272,8 @@ func TestHandoffCommand(t *testing.T) {
 					IntegrationBranch: "integration",
 					LeaseDuration:     1800,
 				},
-				Tasks:   []models.Task{},
-				Agents:  make(map[string]models.Agent),
-				Handoff: make(map[string]models.HandoffNote),
+				Tasks:  []models.Task{},
+				Agents: make(map[string]models.Agent),
 			}
 
 			if tt.setupState != nil {
