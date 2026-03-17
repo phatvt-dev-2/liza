@@ -1400,6 +1400,46 @@ func TestMergeWorktree_DoesNotReleaseCoder_WhenCoderMovedOn(t *testing.T) {
 	}
 }
 
+func TestMergeWorktree_WritesHandoffEvent(t *testing.T) {
+	taskID := "merge-handoff"
+	agentID := "code-reviewer-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	beforeMerge := time.Now().UTC()
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+	if result.TaskID != taskID {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, taskID)
+	}
+
+	// Verify state updated to MERGED with HandoffEvent
+	state := readStateForTest(t, stateFile)
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("Task not found in state")
+	}
+	if task.Status != models.TaskStatusMerged {
+		t.Fatalf("Task status = %v, want MERGED", task.Status)
+	}
+
+	// Must have exactly one handoff event (completion)
+	if len(task.HandoffEvents) != 1 {
+		t.Fatalf("HandoffEvents count = %d, want 1", len(task.HandoffEvents))
+	}
+	evt := task.HandoffEvents[0]
+	if evt.Trigger != models.HandoffTriggerCompletion {
+		t.Errorf("HandoffEvent.Trigger = %q, want %q", evt.Trigger, models.HandoffTriggerCompletion)
+	}
+	if evt.Agent != agentID {
+		t.Errorf("HandoffEvent.Agent = %q, want %q", evt.Agent, agentID)
+	}
+	if evt.Timestamp.Before(beforeMerge) {
+		t.Errorf("HandoffEvent.Timestamp = %v, want >= %v", evt.Timestamp, beforeMerge)
+	}
+}
+
 // readStateForTest reads state from a state file for test verification.
 func readStateForTest(t *testing.T, stateFile string) *models.State {
 	t.Helper()

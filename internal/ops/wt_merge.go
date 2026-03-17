@@ -446,6 +446,13 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 		t.Worktree = nil
 		t.MergeCommit = &mergeCommit
 
+		// Record completion handoff event — audit trail for sprint analysis.
+		t.HandoffEvents = append(t.HandoffEvents, models.HandoffEvent{
+			Timestamp: time.Now(),
+			Agent:     agentID,
+			Trigger:   models.HandoffTriggerCompletion,
+		})
+
 		// Release the assigned agent — only if still working on this task.
 		// After submission the coder's CurrentTask is cleared; if the coder
 		// has since claimed another task we must not blow them to IDLE.
