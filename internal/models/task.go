@@ -196,6 +196,7 @@ type Task struct {
 	DependsOn           []string           `yaml:"depends_on,omitempty"`
 	IntegrationFix      bool               `yaml:"integration_fix,omitempty"`
 	HandoffPending      bool               `yaml:"handoff_pending,omitempty"`
+	HandoffEvents       []HandoffEvent     `yaml:"handoff_events,omitempty"`
 	MaxIterations       int                `yaml:"max_iterations,omitempty"`
 	Created             time.Time          `yaml:"created"`
 	History             []TaskHistoryEntry `yaml:"history"`

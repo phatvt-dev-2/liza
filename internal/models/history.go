@@ -111,6 +111,29 @@ func (d *Discovery) IsValidUrgency() bool {
 	return d.Urgency == "immediate" || d.Urgency == "deferred"
 }
 
+// HandoffTrigger identifies what caused a handoff event.
+type HandoffTrigger string
+
+const (
+	HandoffTriggerContextExhaustion HandoffTrigger = "context_exhaustion"
+	HandoffTriggerSubmission        HandoffTrigger = "submission"
+	HandoffTriggerCompletion        HandoffTrigger = "completion"
+)
+
+// HandoffEvent captures structured context at task handoff points.
+// Events are append-only and form an ordered audit trail on each task.
+type HandoffEvent struct {
+	Timestamp  time.Time      `yaml:"timestamp"`
+	Agent      string         `yaml:"agent"`
+	Trigger    HandoffTrigger `yaml:"trigger"`
+	Succeeded  []string       `yaml:"succeeded,omitempty"`
+	Failed     []string       `yaml:"failed,omitempty"`
+	Hypothesis string         `yaml:"hypothesis,omitempty"`
+	NextStep   string         `yaml:"next_step,omitempty"`
+	KeyFiles   []string       `yaml:"key_files,omitempty"`
+	DeadEnds   []string       `yaml:"dead_ends,omitempty"`
+}
+
 // HandoffNote represents context handoff between agents
 type HandoffNote struct {
 	Agent         string         `yaml:"agent"`
