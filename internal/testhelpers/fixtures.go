@@ -184,6 +184,22 @@ func BuildTaskByStatus(taskID string, status models.TaskStatus, now time.Time) m
 		RolePair:    inferRolePair(status),
 	}
 
+	// Add HandoffEvents for post-submission statuses
+	if needsSubmissionEvent(status) {
+		task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
+			Timestamp: now,
+			Agent:     "coder-1",
+			Trigger:   models.HandoffTriggerSubmission,
+		})
+	}
+	if status == models.TaskStatusMerged {
+		task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
+			Timestamp: now,
+			Agent:     "code-reviewer-1",
+			Trigger:   models.HandoffTriggerCompletion,
+		})
+	}
+
 	switch status {
 	case models.TaskStatusReady:
 
@@ -350,6 +366,21 @@ func RegisterTestAgent(t *testing.T, bb *db.Blackboard, agentID, role string) {
 	if err != nil {
 		t.Fatalf("Failed to register agent %s: %v", agentID, err)
 	}
+}
+
+// needsSubmissionEvent returns true if a task in the given status should have
+// at least one HandoffEvent with trigger=submission to pass validation.
+func needsSubmissionEvent(status models.TaskStatus) bool {
+	switch status {
+	case models.TaskStatusReadyForReview, models.TaskStatusReviewing,
+		models.TaskStatusRejected, models.TaskStatusApproved,
+		models.TaskStatusMerged, models.TaskStatusIntegrationFailed,
+		models.TaskStatusPartiallyApproved, models.TaskStatusReviewingCode2,
+		models.TaskStatusCodingPlanToReview, models.TaskStatusReviewingCodingPlan,
+		models.TaskStatusCodingPlanApproved, models.TaskStatusCodingPlanRejected:
+		return true
+	}
+	return false
 }
 
 // inferRolePair returns the role-pair for role-pair-specific statuses.

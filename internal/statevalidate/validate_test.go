@@ -9,6 +9,7 @@ import (
 )
 
 func TestValidateHandoffEvents_Valid(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 
 	tests := []struct {
@@ -84,6 +85,7 @@ func TestValidateHandoffEvents_Valid(t *testing.T) {
 }
 
 func TestValidateHandoffEvents_MissingFields(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 
 	tests := []struct {
@@ -139,6 +141,7 @@ func TestValidateHandoffEvents_MissingFields(t *testing.T) {
 }
 
 func TestValidateHandoffEvents_MissingEvents(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 
 	tests := []struct {

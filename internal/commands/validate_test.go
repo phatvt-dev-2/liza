@@ -486,7 +486,8 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 				agent := "coder-1"
 				worktree := "wt-task-2"
 				baseCommit := "abc123"
-				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				now := time.Now().UTC()
+				leaseExpires := now.Add(30 * time.Minute)
 				rejectionReason := "Not good enough"
 				return []models.Task{
 					{
@@ -496,10 +497,13 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 						RolePair:        "coding-pair",
 						AssignedTo:      &agent,
 						RejectionReason: &rejectionReason,
-						Created:         time.Now().UTC(),
+						Created:         now,
 						SpecRef:         "specs/test.md",
 						DoneWhen:        "Complete",
 						History:         []models.TaskHistoryEntry{},
+						HandoffEvents: []models.HandoffEvent{
+							{Timestamp: now, Agent: "coder-1", Trigger: models.HandoffTriggerSubmission},
+						},
 					},
 					{
 						ID:           "task-2",

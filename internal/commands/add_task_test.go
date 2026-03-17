@@ -502,6 +502,10 @@ func TestAddTaskCommandFromFile(t *testing.T) {
 				DoneWhen:    "Task 0 done",
 				Scope:       "Task 0 scope",
 				History:     []models.TaskHistoryEntry{},
+				HandoffEvents: []models.HandoffEvent{
+					{Timestamp: now, Agent: "coder-1", Trigger: models.HandoffTriggerSubmission},
+					{Timestamp: now, Agent: "code-reviewer-1", Trigger: models.HandoffTriggerCompletion},
+				},
 			},
 			{
 				ID:          "task-1",
@@ -514,6 +518,10 @@ func TestAddTaskCommandFromFile(t *testing.T) {
 				DoneWhen:    "Task 1 done",
 				Scope:       "Task 1 scope",
 				History:     []models.TaskHistoryEntry{},
+				HandoffEvents: []models.HandoffEvent{
+					{Timestamp: now, Agent: "coder-1", Trigger: models.HandoffTriggerSubmission},
+					{Timestamp: now, Agent: "code-reviewer-1", Trigger: models.HandoffTriggerCompletion},
+				},
 			},
 		},
 		Agents: make(map[string]models.Agent),
