@@ -80,7 +80,7 @@ func PlanGlobalFiles(targetDir string) []string {
 
 // WriteGlobalFiles writes contracts and skills to the global Liza directory (~/.liza/).
 // Contracts are written flat into targetDir/ and skills into targetDir/skills/.
-// Each file is prepended with YAML frontmatter containing version metadata.
+// Markdown files are prepended with YAML frontmatter containing version metadata.
 // Files whose absolute path appears in skipFiles are silently skipped.
 // Returns the list of absolute paths written.
 func WriteGlobalFiles(targetDir string, skipFiles map[string]bool) ([]string, error) {
@@ -136,13 +136,18 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string, skipFiles map[string
 			return fmt.Errorf("failed to read embedded file %s: %w", path, err)
 		}
 
-		contentWithFrontmatter := PrependFrontmatter(content)
+		// Only prepend version frontmatter to Markdown files;
+		// scripts and other artifacts are written verbatim.
+		output := content
+		if strings.HasSuffix(relativePath, ".md") {
+			output = PrependFrontmatter(content)
+		}
 
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 			return fmt.Errorf("failed to create directory for %s: %w", targetPath, err)
 		}
 
-		if err := os.WriteFile(targetPath, contentWithFrontmatter, 0644); err != nil {
+		if err := os.WriteFile(targetPath, output, 0644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", targetPath, err)
 		}
 
