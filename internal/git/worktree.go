@@ -109,9 +109,12 @@ func (g *Git) RemoveWorktree(taskID string) error {
 		if err := os.RemoveAll(worktreePath); err != nil {
 			return fmt.Errorf("failed to remove worktree directory: %w", err)
 		}
-		// Clean up git's internal worktree tracking (.git/worktrees/<name>)
-		// to prevent future "worktree add" from failing on dangling entries
-		_, _ = g.exec("worktree", "prune")
+		// Clean up git's internal worktree tracking for this specific task.
+		// Targeted removal instead of global "git worktree prune" to prevent
+		// interference with concurrent worktree operations (global prune can
+		// corrupt in-flight "git worktree add" for other tasks).
+		metadataDir := filepath.Join(g.projectRoot, ".git", "worktrees", taskID)
+		_ = os.RemoveAll(metadataDir)
 	}
 
 	// Delete the branch (may not exist, so ignore errors)
@@ -171,4 +174,30 @@ func (g *Git) GetWorktreePath(taskID string) string {
 // GetWorktreeRelPath returns the relative path for a task's worktree
 func (g *Git) GetWorktreeRelPath(taskID string) string {
 	return filepath.Join(paths.WorktreesDirName, taskID)
+}
+
+// ValidateWorktreeHealth checks that a worktree directory and its .git link
+// file both exist and are accessible. A worktree without its .git file is an
+// orphan that git cannot operate on — this can happen when concurrent
+// RemoveWorktree operations interfere with in-flight worktree creation.
+// Callers must validate taskID before calling this — see paths.ValidateTaskID.
+func (g *Git) ValidateWorktreeHealth(taskID string) error {
+	worktreePath := g.GetWorktreePath(taskID)
+
+	if _, err := os.Stat(worktreePath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("worktree directory missing: %s", worktreePath)
+		}
+		return fmt.Errorf("worktree directory inaccessible: %w", err)
+	}
+
+	gitFile := filepath.Join(worktreePath, ".git")
+	if _, err := os.Stat(gitFile); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("worktree .git link file missing: %s (orphaned worktree)", gitFile)
+		}
+		return fmt.Errorf("worktree .git link file inaccessible: %w", err)
+	}
+
+	return nil
 }

@@ -294,11 +294,8 @@ func TestClaimTask_IntegrationFailed(t *testing.T) {
 	state.Tasks = []models.Task{task}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	// Create the worktree directory that IntegrationFailed expects to exist
-	wtDir := filepath.Join(tmpDir, ".worktrees", "task-1")
-	if err := os.MkdirAll(wtDir, 0755); err != nil {
-		t.Fatalf("Failed to create worktree dir: %v", err)
-	}
+	// Create a real git worktree (Phase 3 validates .git link file)
+	testhelpers.CreateTestWorktree(t, tmpDir, "task-1")
 
 	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
 	if err != nil {

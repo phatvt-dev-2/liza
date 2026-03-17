@@ -212,12 +212,10 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 			return fmt.Errorf("race condition: task status changed from %s to %s", taskStatus, task.Status)
 		}
 
-		// Verify worktree exists on disk before committing state
-		if worktreeCreated {
-			worktreePath := filepath.Join(lp.ProjectRoot(), worktreeRel)
-			if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
-				return &PreconditionError{Reason: fmt.Sprintf("worktree directory does not exist: %s", worktreePath)}
-			}
+		// Verify worktree health before committing state (unconditional —
+		// concurrent RemoveWorktree can corrupt even pre-existing worktrees).
+		if err := gitWrapper.ValidateWorktreeHealth(taskID); err != nil {
+			return &PreconditionError{Reason: fmt.Sprintf("worktree not healthy: %v", err)}
 		}
 
 		// Re-check dependencies under lock for strategies that require it

@@ -105,20 +105,15 @@ func SetupGlobalLiza(t *testing.T) string {
 	return fakeHome
 }
 
-// CreateTestWorktree creates a test worktree directory for a task.
-// It creates the .worktrees/<taskID> directory structure.
-// Note: This only creates the directory; it does NOT run git worktree commands
-// as those require more complex git state setup.
-//
-// This helper eliminates ~6-8 lines of duplicated code that appears 6-8 times
-// in claim_task_test.go, wt_create_test.go, and wt_delete_test.go.
+// CreateTestWorktree creates a real git worktree for a task.
+// It runs "git worktree add" to create a proper worktree with .git link file.
+// Requires SetupTestGitRepo to have been called first (needs integration branch).
 func CreateTestWorktree(t *testing.T, tmpDir, taskID string) {
 	t.Helper()
 
 	wtDir := filepath.Join(tmpDir, ".worktrees", taskID)
-	if err := os.MkdirAll(wtDir, 0755); err != nil {
-		t.Fatalf("Failed to create worktree directory: %v", err)
-	}
+	branchName := "task/" + taskID
+	MustGit(t, tmpDir, "worktree", "add", wtDir, "integration", "-b", branchName)
 }
 
 // CreateSpecFile creates a spec file in the specs/ directory.

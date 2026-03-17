@@ -117,6 +117,7 @@ func TestSetupLizaDir(t *testing.T) {
 
 func TestCreateTestWorktree(t *testing.T) {
 	tmpDir := t.TempDir()
+	SetupTestGitRepo(t, tmpDir)
 
 	// Create worktree for a task
 	taskID := "task-123"
@@ -132,10 +133,10 @@ func TestCreateTestWorktree(t *testing.T) {
 		t.Error("Worktree path is not a directory")
 	}
 
-	// Verify permissions (0755)
-	mode := info.Mode().Perm()
-	if mode != 0755 {
-		t.Errorf("Expected permissions 0755, got %o", mode)
+	// Verify .git link file exists (real worktree, not bare directory)
+	gitFile := filepath.Join(wtDir, ".git")
+	if _, err := os.Stat(gitFile); os.IsNotExist(err) {
+		t.Error(".git link file does not exist in worktree")
 	}
 }
 

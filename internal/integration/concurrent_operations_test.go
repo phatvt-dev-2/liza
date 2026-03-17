@@ -440,6 +440,9 @@ func TestConcurrentClaimIntegrationFailedTask(t *testing.T) {
 	taskID := "task-failed"
 	bb, _, _ := setupIntegrationTest(t, projectDir, []string{taskID})
 
+	// Create a real git worktree (Phase 3 validates .git link file)
+	testhelpers.CreateTestWorktree(t, projectDir, taskID)
+
 	// Set task to INTEGRATION_FAILED with a worktree (simulating failed merge)
 	worktreeName := ".worktrees/task-failed"
 	integrationFix := true
@@ -449,11 +452,6 @@ func TestConcurrentClaimIntegrationFailedTask(t *testing.T) {
 				state.Tasks[i].Status = models.TaskStatusIntegrationFailed
 				state.Tasks[i].IntegrationFix = integrationFix
 				state.Tasks[i].Worktree = &worktreeName
-				// Create dummy worktree directory
-				worktreePath := filepath.Join(projectDir, worktreeName)
-				if err := os.MkdirAll(worktreePath, 0755); err != nil {
-					return err
-				}
 				break
 			}
 		}

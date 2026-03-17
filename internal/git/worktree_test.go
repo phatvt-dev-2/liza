@@ -244,3 +244,100 @@ func TestGetWorktreeRelPath(t *testing.T) {
 		t.Errorf("GetWorktreeRelPath() = %q, want %q", got, expected)
 	}
 }
+
+func TestValidateWorktreeHealth(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	g := New(repoDir)
+
+	taskID := "task-health"
+
+	// Create a healthy worktree
+	if _, err := g.CreateWorktree(taskID, "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+
+	// Healthy worktree should pass validation
+	if err := g.ValidateWorktreeHealth(taskID); err != nil {
+		t.Errorf("ValidateWorktreeHealth() on healthy worktree: %v", err)
+	}
+
+	// Simulate orphaned worktree: remove .git file but keep directory
+	worktreePath := g.GetWorktreePath(taskID)
+	gitFile := filepath.Join(worktreePath, ".git")
+	if err := os.Remove(gitFile); err != nil {
+		t.Fatalf("failed to remove .git file: %v", err)
+	}
+
+	err := g.ValidateWorktreeHealth(taskID)
+	if err == nil {
+		t.Error("ValidateWorktreeHealth() should fail when .git file is missing")
+	} else if !strings.Contains(err.Error(), ".git link file missing") {
+		t.Errorf("ValidateWorktreeHealth() error = %v, want '.git link file missing'", err)
+	}
+
+	// Remove directory entirely
+	if err := os.RemoveAll(worktreePath); err != nil {
+		t.Fatalf("failed to remove worktree dir: %v", err)
+	}
+
+	err = g.ValidateWorktreeHealth(taskID)
+	if err == nil {
+		t.Error("ValidateWorktreeHealth() should fail when directory is missing")
+	} else if !strings.Contains(err.Error(), "directory missing") {
+		t.Errorf("ValidateWorktreeHealth() error = %v, want 'directory missing'", err)
+	}
+}
+
+func TestRemoveWorktreeFallbackCleansTargetedMetadata(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	g := New(repoDir)
+
+	taskA := "task-a"
+	taskB := "task-b"
+
+	// Create two worktrees
+	if _, err := g.CreateWorktree(taskA, "integration"); err != nil {
+		t.Fatalf("CreateWorktree(taskA) error = %v", err)
+	}
+	if _, err := g.CreateWorktree(taskB, "integration"); err != nil {
+		t.Fatalf("CreateWorktree(taskB) error = %v", err)
+	}
+
+	// Verify both metadata dirs exist under .git/worktrees/
+	metaA := filepath.Join(repoDir, ".git", "worktrees", taskA)
+	metaB := filepath.Join(repoDir, ".git", "worktrees", taskB)
+	if _, err := os.Stat(metaA); os.IsNotExist(err) {
+		t.Fatalf("metadata for %s should exist", taskA)
+	}
+	if _, err := os.Stat(metaB); os.IsNotExist(err) {
+		t.Fatalf("metadata for %s should exist", taskB)
+	}
+
+	// Simulate the fallback path: manually remove the worktree directory
+	// (making git worktree remove --force fail), then call RemoveWorktree.
+	// The .git file inside the worktree must be removed first, otherwise
+	// git worktree remove --force may succeed on the partial directory.
+	worktreePathA := g.GetWorktreePath(taskA)
+	if err := os.RemoveAll(filepath.Join(worktreePathA, ".git")); err != nil {
+		t.Fatalf("failed to remove .git from worktree A: %v", err)
+	}
+
+	if err := g.RemoveWorktree(taskA); err != nil {
+		t.Fatalf("RemoveWorktree(taskA) error = %v", err)
+	}
+
+	// taskA metadata should be cleaned up
+	if _, err := os.Stat(metaA); !os.IsNotExist(err) {
+		t.Error("metadata for taskA should be removed after RemoveWorktree")
+	}
+
+	// taskB metadata must still exist (global prune would have removed it too)
+	if _, err := os.Stat(metaB); os.IsNotExist(err) {
+		t.Error("metadata for taskB should NOT be affected by removing taskA")
+	}
+
+	// taskB worktree should still be healthy
+	if err := g.ValidateWorktreeHealth(taskB); err != nil {
+		t.Errorf("taskB worktree should still be healthy after removing taskA: %v", err)
+	}
+}
