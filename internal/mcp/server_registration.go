@@ -192,7 +192,7 @@ func (s *Server) registerMutationTools() {
 		{
 			tool: protocol.Tool{
 				Name:        "liza_submit_for_review",
-				Description: "Submit completed work for review after commit SHA validation. Rebases onto integration branch; if rebase conflicts, returns error and task moves to INTEGRATION_FAILED — re-claim with liza_claim_task, resolve conflicts, then re-submit. Requires coder, code-planner, epic-planner, or us-writer role.",
+				Description: "Submit completed work for review after commit SHA validation. Rebases onto integration branch; if rebase conflicts, returns error and task moves to INTEGRATION_FAILED — re-claim with liza_claim_task, resolve conflicts, then re-submit. On error, use liza_get tasks/<task-id> to check task state before retrying — commit SHA may be stale after rebase. Requires coder, code-planner, epic-planner, or us-writer role.",
 				InputSchema: protocol.InputSchema{
 					Type: "object",
 					Properties: map[string]protocol.Property{

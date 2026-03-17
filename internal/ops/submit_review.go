@@ -42,7 +42,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 
 	runtimeRole, err := identity.ExtractRole(agentID)
 	if err != nil {
-		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("invalid agent ID format: %s (%v)", agentID, err)}
 	}
 
 	// Phase 1: Read state to get config and validate preconditions
@@ -54,18 +54,18 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	// Resolve expected statuses from pipeline config
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
+		return nil, &OperationalError{Message: "failed to load pipeline config", Err: resolverErr}
 	}
 	if task.RolePair == "" {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
 	}
 	expectedCurrentStatus, err := resolver.ExecutingStatus(task.RolePair)
 	if err != nil {
-		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("unrecognized role-pair %q — check pipeline.yaml config", task.RolePair)}
 	}
 	targetSubmittedStatus, err := resolver.SubmittedStatus(task.RolePair)
 	if err != nil {
-		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+		return nil, &PreconditionError{Reason: fmt.Sprintf("unrecognized role-pair %q — check pipeline.yaml config", task.RolePair)}
 	}
 	pipelineTransitions := BuildPipelineTransitions(resolver)
 
@@ -100,7 +100,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 
 	wtBranch, err := g.GetWorktreeBranch(wtPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get worktree branch: %w", err)
+		return nil, &OperationalError{Message: "failed to determine worktree branch", Err: err}
 	}
 
 	expectedBranch := paths.TaskBranchPrefix + taskID
@@ -113,7 +113,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 
 	preRebaseCommit, err := g.GetWorktreeHEAD(taskID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get pre-rebase commit SHA: %w", err)
+		return nil, &OperationalError{Message: "failed to read worktree HEAD", Err: err}
 	}
 	if commitSHA != preRebaseCommit {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit SHA %s does not match worktree HEAD %s", commitSHA, preRebaseCommit)}
@@ -124,7 +124,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	if roleType == "doer" && task.EffectiveType() == models.TaskTypeCoding && task.BaseCommit != nil {
 		hasTests, err := HasTestFiles(g, taskID, *task.BaseCommit)
 		if err != nil {
-			return nil, fmt.Errorf("failed to check test files: %w", err)
+			return nil, &OperationalError{Message: "failed to check for test files", Err: err}
 		}
 		if !hasTests && GetTDDWaiver(task.History, agentID) == "" {
 			return nil, &PreconditionError{Reason: fmt.Sprintf("task %s: code tasks must include test files (e.g. *_test.go, *.test.ts, test_*.py) — TDD is mandatory", taskID)}
@@ -133,7 +133,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 
 	integrationBranch := state.Config.IntegrationBranch
 	if err := g.FetchFromLocal(wtPath, integrationBranch); err != nil {
-		return nil, fmt.Errorf("failed to fetch integration branch: %w", err)
+		return nil, &OperationalError{Message: fmt.Sprintf("failed to fetch integration branch %s", integrationBranch), Err: err}
 	}
 
 	// Capture integration HEAD immediately after fetch — this is the exact ref
@@ -141,7 +141,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	// advances between fetch and rebase completion.
 	rebaseBase, err := g.GetCommitSHA(integrationBranch)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get integration branch HEAD for rebase base: %w", err)
+		return nil, &OperationalError{Message: "failed to resolve integration branch HEAD", Err: err}
 	}
 
 	if err := g.RebaseOnto(wtPath, "FETCH_HEAD"); err != nil {
@@ -156,7 +156,7 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		// agent can retry without a state transition.
 		var rebaseConflict *gitpkg.RebaseConflictError
 		if !stderrors.As(err, &rebaseConflict) {
-			return nil, fmt.Errorf("failed to rebase onto integration: %w", err)
+			return nil, &OperationalError{Message: "rebase failed (not a merge conflict)", Err: err}
 		}
 
 		// Transition to INTEGRATION_FAILED so the orchestrator re-queues the task.
@@ -164,14 +164,17 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 		// See also: markIntegrationFailed in wt_merge.go (sibling for post-review merge path).
 		markErr := markSubmitRebaseConflict(bb, taskID, agentID, pipelineTransitions)
 		if markErr != nil {
-			return nil, fmt.Errorf("rebase conflict on %s (also failed to transition to INTEGRATION_FAILED: %w)", taskID, markErr)
+			return nil, &OperationalError{
+				Message: fmt.Sprintf("rebase conflict on %s: transition to INTEGRATION_FAILED also failed — worktree is intact (rebase aborted), check task state with liza_get tasks/%s before retrying", taskID, taskID),
+				Err:     markErr,
+			}
 		}
 		return nil, &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
 	}
 
 	postRebaseCommit, err := g.GetWorktreeHEAD(taskID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get post-rebase commit SHA: %w", err)
+		return nil, &OperationalError{Message: "failed to read worktree HEAD after rebase", Err: err}
 	}
 
 	// Phase 3: Atomic update with new commit SHA

@@ -655,6 +655,28 @@ func TestClassifyError(t *testing.T) {
 			wantCode: protocol.ValidationError,
 			wantMsg:  "integration failed: merge conflict — task moved to INTEGRATION_FAILED",
 		},
+		// OperationalError (typed — exposes Message, not Err)
+		{
+			name:     "typed OperationalError",
+			err:      &ops.OperationalError{Message: "failed to load pipeline config", Err: errors.New("/home/user/.liza/pipeline.yaml: permission denied")},
+			wantCode: protocol.InternalError,
+			wantMsg:  "failed to load pipeline config",
+		},
+		{
+			name:     "wrapped OperationalError",
+			err:      fmt.Errorf("submit failed: %w", &ops.OperationalError{Message: "failed to read worktree HEAD", Err: errors.New("git error")}),
+			wantCode: protocol.InternalError,
+			wantMsg:  "failed to read worktree HEAD",
+		},
+		{
+			name: "OperationalError wrapping PreconditionError matches PreconditionError first",
+			err: &ops.OperationalError{
+				Message: "op failed",
+				Err:     &ops.PreconditionError{Reason: "bad input"},
+			},
+			wantCode: protocol.ValidationError,
+			wantMsg:  "bad input",
+		},
 		// Default: internal error
 		{
 			name:     "generic error",
@@ -684,6 +706,7 @@ func TestClassifyError_DoesNotLeakInternalDetails(t *testing.T) {
 		errors.New("task not found: secret-task-id-12345"),
 		errors.New("lock timed out on /home/user/.liza/state.yaml"),
 		errors.New("something unexpected at internal/commands/foo.go:42"),
+		&ops.OperationalError{Message: "failed to load config", Err: errors.New("/home/user/.liza/pipeline.yaml: permission denied")},
 	}
 
 	for _, err := range sensitiveErrors {

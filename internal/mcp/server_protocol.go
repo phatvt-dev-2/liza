@@ -221,6 +221,10 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 		return protocol.NewError(protocol.ValidationError,
 			fmt.Sprintf("integration failed: %s — task moved to INTEGRATION_FAILED", intErr.Reason), nil)
 	}
+	var opErr *ops.OperationalError
+	if errors.As(err, &opErr) {
+		return protocol.NewError(protocol.InternalError, opErr.Message, nil)
+	}
 
 	msg := err.Error()
 
