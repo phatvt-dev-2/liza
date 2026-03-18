@@ -465,6 +465,79 @@ func TestResumeWithSprintAdvance_CarriesMergedPlanning(t *testing.T) {
 	}
 }
 
+// TestResumeWithSprintAdvance_ExecutesTransitions is a regression test for fdcb19a.
+// When advancing from COMPLETED, Resume must execute available transitions so
+// child tasks are created in the new sprint. Without this, merged planning tasks
+// with unconsumed output[] are carried forward indefinitely without creating children.
+func TestResumeWithSprintAdvance_ExecutesTransitions(t *testing.T) {
+	tmpDir, stateFile := setupAdvanceTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeRunning
+	state.Sprint.Status = models.SprintStatusCompleted
+	state.Sprint.Number = 1
+
+	// Merged epic-planning task with unconsumed output (2 entries → 2 US writing tasks)
+	planningTask := testhelpers.BuildTaskByStatus("epic-planning-1", models.TaskStatusMerged, now)
+	planningTask.RolePair = "epic-planning-pair"
+	planningTask.Output = []models.OutputEntry{
+		{Desc: "US 1", DoneWhen: "done", Scope: "pkg/a", SpecRef: "README.md"},
+		{Desc: "US 2", DoneWhen: "done", Scope: "pkg/b", SpecRef: "README.md"},
+	}
+
+	state.Tasks = []models.Task{planningTask}
+	state.Sprint.Scope.Planned = []string{"epic-planning-1"}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Resume(tmpDir, "human")
+	if err != nil {
+		t.Fatalf("Resume() error: %v", err)
+	}
+	if result.SprintAdvanced == nil {
+		t.Fatal("Expected SprintAdvanced to be non-nil")
+	}
+	if result.TransitionsExecuted != 1 {
+		t.Errorf("TransitionsExecuted = %d, want 1", result.TransitionsExecuted)
+	}
+	if result.TransitionError != "" {
+		t.Errorf("TransitionError = %q, want empty", result.TransitionError)
+	}
+
+	// Verify child tasks were created by post-advance transition execution
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	// Should have 3 tasks total: the parent + 2 children
+	if len(readState.Tasks) < 3 {
+		t.Errorf("Expected at least 3 tasks (parent + 2 children), got %d", len(readState.Tasks))
+	}
+
+	// Parent should have TransitionsExecuted set
+	parent := readState.FindTask("epic-planning-1")
+	if parent == nil {
+		t.Fatal("Parent task epic-planning-1 not found")
+	}
+	if len(parent.TransitionsExecuted) == 0 {
+		t.Error("Parent task TransitionsExecuted should be non-empty after transition")
+	}
+
+	// Children should be in the new sprint's planned scope
+	childCount := 0
+	for _, task := range readState.Tasks {
+		if task.ParentTask != nil && *task.ParentTask == "epic-planning-1" {
+			childCount++
+		}
+	}
+	if childCount != 2 {
+		t.Errorf("Expected 2 child tasks from output[], got %d", childCount)
+	}
+}
+
 func TestCollectMergedPlanningWithUnconsumedOutput_ConfiguredPairs(t *testing.T) {
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()

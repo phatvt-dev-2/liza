@@ -74,9 +74,11 @@ func changeMode(projectRoot, reason, changedBy string, target models.SystemMode)
 
 // ResumeResult contains the outcome of a system resume.
 type ResumeResult struct {
-	ResumedFrom    string
-	ChangedBy      string
-	SprintAdvanced *AdvanceSprintResult // non-nil when sprint was advanced to next
+	ResumedFrom         string
+	ChangedBy           string
+	SprintAdvanced      *AdvanceSprintResult // non-nil when sprint was advanced to next
+	TransitionsExecuted int                  // number of transitions fired on advance
+	TransitionError     string               // non-empty if post-advance transitions failed
 }
 
 // resumeSystemMode transitions PAUSED or CIRCUIT_BREAKER_TRIPPED to RUNNING.
@@ -107,7 +109,7 @@ func resumeSprint(s *models.State, lizaPaths paths.LizaPaths, projectRoot string
 	switch s.Sprint.Status {
 	case models.SprintStatusCompleted:
 		// COMPLETED sprint — archive and create new sprint.
-		// This is the second step: human ran liza proceed, now starts next sprint.
+		// Pipeline transitions are executed post-Modify by the caller (Resume).
 		plan, err := planSprintAdvanceFromCompleted(s, timestamp.UTC(), projectRoot)
 		if err != nil {
 			return "", nil, fmt.Errorf("sprint advance failed: %w", err)
@@ -210,9 +212,26 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 		return nil, fmt.Errorf("failed to resume system: %w", err)
 	}
 
+	// After sprint advance, execute available transitions so child tasks are
+	// created in the new sprint. This handles merged planning tasks with
+	// unconsumed output[] (e.g., epic → US writing, code plan → coding).
+	// The human already reviewed by resuming from COMPLETED; transitions
+	// are idempotent via TransitionsExecuted.
+	var transitionsExecuted int
+	var transitionError string
+	if advanceResult != nil {
+		if results, err := ExecuteAvailableTransitions(projectRoot); err != nil {
+			transitionError = err.Error()
+		} else {
+			transitionsExecuted = len(results)
+		}
+	}
+
 	return &ResumeResult{
-		ResumedFrom:    resumedFrom,
-		ChangedBy:      changedBy,
-		SprintAdvanced: advanceResult,
+		ResumedFrom:         resumedFrom,
+		ChangedBy:           changedBy,
+		SprintAdvanced:      advanceResult,
+		TransitionsExecuted: transitionsExecuted,
+		TransitionError:     transitionError,
 	}, nil
 }

@@ -24,6 +24,12 @@ func ResumeCommand(projectRoot, changedBy string) error {
 		if len(sa.CarriedTasks) > 0 {
 			fmt.Printf("  Carried tasks: %v\n", sa.CarriedTasks)
 		}
+		if result.TransitionsExecuted > 0 {
+			fmt.Printf("  Transitions executed: %d (child tasks created)\n", result.TransitionsExecuted)
+		}
+		if result.TransitionError != "" {
+			fmt.Printf("  ⚠️  Transition error: %s\n", result.TransitionError)
+		}
 	}
 
 	fmt.Println()
