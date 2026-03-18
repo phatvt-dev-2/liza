@@ -157,13 +157,15 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 					Desc:     fmt.Sprintf("Capability 1 from %s", taskID),
 					DoneWhen: "Capability 1 stories complete",
 					Scope:    "CAP-001 Authentication",
-					SpecRef:  "specs/epics/ep-001-auth.md",
+					SpecRef:  "specs/feature.md",
+					PlanRef:  "specs/epics/ep-001-auth.md#capability-cap-001---authentication",
 				},
 				{
 					Desc:     fmt.Sprintf("Capability 2 from %s", taskID),
 					DoneWhen: "Capability 2 stories complete",
 					Scope:    "CAP-002 Authorization",
-					SpecRef:  "specs/epics/ep-001-auth.md",
+					SpecRef:  "specs/feature.md",
+					PlanRef:  "specs/epics/ep-001-auth.md#capability-cap-002---authorization",
 				},
 			},
 		}); err != nil {
@@ -439,23 +441,30 @@ func TestFullSprintSequence(t *testing.T) {
 		assertTransitionExecuted(t, state, codePlanTaskID, "code-plan-to-coding")
 	}
 
-	// Verify capability scoping: each US task has the right scope and spec_ref from output[].
+	// Verify capability scoping: each US task has the right scope, spec_ref (goal spec),
+	// and plan_ref (epic document with section anchor) from output[].
 	usTask0 := state.FindTask("epic-1-epic-to-us-0")
 	usTask1 := state.FindTask("epic-1-epic-to-us-1")
 	if usTask0 != nil {
 		if usTask0.Scope != "CAP-001 Authentication" {
 			t.Errorf("US task 0 scope = %q, want %q", usTask0.Scope, "CAP-001 Authentication")
 		}
-		if usTask0.SpecRef != "specs/epics/ep-001-auth.md" {
-			t.Errorf("US task 0 spec_ref = %q, want %q", usTask0.SpecRef, "specs/epics/ep-001-auth.md")
+		if usTask0.SpecRef != "specs/feature.md" {
+			t.Errorf("US task 0 spec_ref = %q, want %q", usTask0.SpecRef, "specs/feature.md")
+		}
+		if usTask0.PlanRef != "specs/epics/ep-001-auth.md#capability-cap-001---authentication" {
+			t.Errorf("US task 0 plan_ref = %q, want %q", usTask0.PlanRef, "specs/epics/ep-001-auth.md#capability-cap-001---authentication")
 		}
 	}
 	if usTask1 != nil {
 		if usTask1.Scope != "CAP-002 Authorization" {
 			t.Errorf("US task 1 scope = %q, want %q", usTask1.Scope, "CAP-002 Authorization")
 		}
-		if usTask1.SpecRef != "specs/epics/ep-001-auth.md" {
-			t.Errorf("US task 1 spec_ref = %q, want %q", usTask1.SpecRef, "specs/epics/ep-001-auth.md")
+		if usTask1.SpecRef != "specs/feature.md" {
+			t.Errorf("US task 1 spec_ref = %q, want %q", usTask1.SpecRef, "specs/feature.md")
+		}
+		if usTask1.PlanRef != "specs/epics/ep-001-auth.md#capability-cap-002---authorization" {
+			t.Errorf("US task 1 plan_ref = %q, want %q", usTask1.PlanRef, "specs/epics/ep-001-auth.md#capability-cap-002---authorization")
 		}
 	}
 

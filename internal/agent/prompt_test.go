@@ -556,6 +556,27 @@ func TestBuildPrompt_IntegrationFixPropagation(t *testing.T) {
 	}
 }
 
+func TestSplitPlanRef(t *testing.T) {
+	tests := []struct {
+		input       string
+		wantFile    string
+		wantSection string
+	}{
+		{"specs/plans/EP-001.md#capability-cap-001---task-creation", "specs/plans/EP-001.md", "capability-cap-001---task-creation"},
+		{"specs/plans/EP-001.md", "specs/plans/EP-001.md", ""},
+		{"", "", ""},
+		{"#section-only", "", "section-only"},
+	}
+	for _, tc := range tests {
+		if got := splitPlanRefFile(tc.input); got != tc.wantFile {
+			t.Errorf("splitPlanRefFile(%q) = %q, want %q", tc.input, got, tc.wantFile)
+		}
+		if got := splitPlanRefSection(tc.input); got != tc.wantSection {
+			t.Errorf("splitPlanRefSection(%q) = %q, want %q", tc.input, got, tc.wantSection)
+		}
+	}
+}
+
 // TestPromptSaving tests prompt file creation
 func TestPromptSaving(t *testing.T) {
 	tmpDir := t.TempDir()

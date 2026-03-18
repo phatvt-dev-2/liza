@@ -17,7 +17,8 @@ type RoleContextData struct {
 	DoneWhen       string
 	Scope          string
 	SpecRef        string
-	PlanRef        string
+	PlanRef        string // file path only (no fragment)
+	PlanSection    string // anchor fragment (e.g., "capability-cap-001---task-creation"), empty if none
 	ValidationPlan string
 	Worktree       string // resolved absolute path
 	IterationNum   int

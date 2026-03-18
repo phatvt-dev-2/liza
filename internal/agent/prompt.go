@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
@@ -124,7 +125,8 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		DoneWhen:     task.DoneWhen,
 		Scope:        task.Scope,
 		SpecRef:      task.SpecRef,
-		PlanRef:      task.PlanRef,
+		PlanRef:      splitPlanRefFile(task.PlanRef),
+		PlanSection:  splitPlanRefSection(task.PlanRef),
 		Worktree:     resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		IterationNum: task.Iteration,
 		AttemptNum:   len(task.Attempted) + 1,
@@ -236,6 +238,22 @@ func collectSiblingTasks(state *models.State, currentTaskID string) ([]prompts.S
 	}
 
 	return siblings, len(planned), ordinal
+}
+
+// splitPlanRefFile returns the file path portion of a PlanRef, stripping any #fragment.
+func splitPlanRefFile(planRef string) string {
+	if i := strings.IndexByte(planRef, '#'); i >= 0 {
+		return planRef[:i]
+	}
+	return planRef
+}
+
+// splitPlanRefSection returns the fragment portion of a PlanRef (without the #), or "" if none.
+func splitPlanRefSection(planRef string) string {
+	if i := strings.IndexByte(planRef, '#'); i >= 0 {
+		return planRef[i+1:]
+	}
+	return ""
 }
 
 func savePrompt(promptDir, agentID, prompt string) (string, error) {

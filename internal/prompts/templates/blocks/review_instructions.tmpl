@@ -127,7 +127,9 @@ REVIEW PHASE:
 3. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
 4. Validate done_when criteria are satisfied.
 5. Verify output[] entries: run liza_get with {"query": "tasks/{{.TaskID}}"} and confirm
-   output[] has one entry per capability with valid desc, done_when, scope, spec_ref.
+   output[] has one entry per capability with valid desc, done_when, scope, spec_ref, plan_ref.
+   Verify: spec_ref equals the task's own spec_ref (goal spec reference, same for all entries).
+   Verify: each plan_ref is the epic document path with a #section-anchor matching the capability heading.
 6. Check each proposed capability against the review checklist and anti-pattern table above.
 7. Submit verdict with liza_submit_verdict.
 {{- else if eq .Role "us-reviewer"}}
@@ -172,8 +174,9 @@ Include this assessment in your rejection reason if rejecting.
 {{- end}}
 
 CAPABILITY SCOPING:
-This task covers ONE capability from the parent epic ({{.SpecRef}}). The epic contains
-multiple capabilities — sibling US Writer tasks cover the others. Verify stories only address
+This task covers ONE capability from the parent epic.
+{{- if ne .PlanRef ""}} The epic is at {{.PlanRef}}.{{- if ne .PlanSection ""}} Your capability section: #{{.PlanSection}}.{{- end}}{{- end}}
+Sibling US Writer tasks cover the other capabilities. Verify stories only address
 the assigned capability (match by task SCOPE). Stories covering other capabilities in the
 same epic are Scope Absorption — reject.
 
@@ -181,16 +184,12 @@ REVIEW PHASE:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 2. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
 3. Read both skills before evaluating: spec-review and user-story-writing.
-4. Read the epic at {{.SpecRef}}. Locate the assigned capability by matching task SCOPE.
+4. Read the epic at {{.PlanRef}}. Locate the assigned capability by matching task SCOPE.
    Verify stories only cover that capability section — not others in the same epic.
 5. Validate done_when criteria are satisfied.
 6. Check each user story against the anti-pattern checklist above.
 7. Verify SMARC criteria compliance for every story.
 8. Verify acceptance criteria are testable and user-observable.
-{{- if ne .PlanRef ""}}
-
-The plan artifact that produced this task is at {{.PlanRef}}.
-{{- end}}
 {{- if ne .ValidationPlan ""}}
 
 DOER VALIDATION PLAN: {{.ValidationPlan}}

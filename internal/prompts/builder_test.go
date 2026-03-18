@@ -1191,6 +1191,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			TaskID: "task-usw", Description: "Implement feature X",
 			DoneWhen: "Feature X works correctly", Scope: "internal/feature",
 			SpecRef:      "README.md",
+			PlanRef:      "specs/epics/ep-001.md",
+			PlanSection:  "capability-cap-001---task-creation",
 			Worktree:     projectRoot + "/.worktrees/task-usw",
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
@@ -1216,6 +1218,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"IMPLEMENTATION PHASE:",
 			"COLLECTIVE PLAN SCOPING",
 			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
+			"specs/epics/ep-001.md",
+			"#capability-cap-001---task-creation",
 		} {
 			if !strings.Contains(output, key) {
 				t.Errorf("output missing key string %q", key)
@@ -1230,6 +1234,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			TaskID: "task-usr", Description: "Implement feature X",
 			DoneWhen: "Feature X works correctly", Scope: "internal/feature",
 			SpecRef:      "README.md",
+			PlanRef:      "specs/epics/ep-001.md",
+			PlanSection:  "capability-cap-001---task-creation",
 			Worktree:     projectRoot + "/.worktrees/task-usr",
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
@@ -1257,6 +1263,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"QUALITY GATES:",
 			"CAPABILITY SCOPING:",
 			"VERDICT SUBMISSION",
+			"specs/epics/ep-001.md",
+			"#capability-cap-001---task-creation",
 		} {
 			if !strings.Contains(output, key) {
 				t.Errorf("output missing key string %q", key)
