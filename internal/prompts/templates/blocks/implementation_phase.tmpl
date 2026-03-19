@@ -76,7 +76,7 @@ IMPLEMENTATION PHASE:
 
 IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
-2. Read the epic-writing skill FIRST: ~/.liza/skills/epic-writing/SKILL.md
+2. Use the epic-writing skill FIRST.
 3. Read the source material referenced by this task (vision doc, product brief, spec).
 4. Follow the skill protocol: Size → Parse → Decompose → Write → Self-Review.
 5. For EACH capability in the epic, call liza_set_task_output with structured entries.
@@ -108,7 +108,7 @@ IMPLEMENTATION PHASE:
 
 IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
-2. Read the user-story-writing skill FIRST: ~/.liza/skills/user-story-writing/SKILL.md
+2. Use the user-story-writing skill FIRST.
 3. Read the epic at {{.PlanRef}}.{{- if ne .PlanSection ""}} Your capability section is anchored at #{{.PlanSection}}.{{- end}}
    Locate your assigned capability by matching task SCOPE.
    Read only Personas + General Information + that capability section.

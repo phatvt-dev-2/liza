@@ -89,8 +89,7 @@ REVIEW PHASE:
 {{- else if eq .Role "epic-plan-reviewer"}}
 
 EPIC-WRITING SKILL:
-You MUST read the epic-writing skill for full anti-pattern and quality criteria:
-  ~/.liza/skills/epic-writing/SKILL.md
+You MUST use the epic-writing skill for full anti-pattern and quality criteria.
 
 The review checklist below covers sizing and structural gates. The skill covers
 additional anti-patterns not duplicated here — check both when evaluating.
@@ -124,7 +123,7 @@ Include this assessment in your rejection reason if rejecting.
 
 REVIEW PHASE:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
-2. Read the epic-writing skill: ~/.liza/skills/epic-writing/SKILL.md
+2. Use the epic-writing skill for reviewing specifications.
 3. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
 4. Validate done_when criteria are satisfied.
 5. Verify output[] entries: run liza_get with {"query": "tasks/{{.TaskID}}"} and confirm
@@ -136,12 +135,10 @@ REVIEW PHASE:
 {{- else if eq .Role "us-reviewer"}}
 
 SPEC-REVIEW SKILL:
-You MUST read and follow the spec-review skill for reviewing specifications:
-  ~/.liza/skills/spec-review/SKILL.md
+You MUST use the spec-review skill for reviewing specifications.
 
 USER-STORY ANTI-PATTERNS (from user-story-writing skill):
-You MUST also read the user-story-writing skill for anti-pattern awareness:
-  ~/.liza/skills/user-story-writing/SKILL.md
+You MUST also use the user-story-writing skill for anti-pattern awareness.
 
 Reject any user story exhibiting these anti-patterns:
 
@@ -184,7 +181,7 @@ same epic are Scope Absorption — reject.
 REVIEW PHASE:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 2. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
-3. Read both skills before evaluating: spec-review and user-story-writing.
+3. Use both skills before evaluating: spec-review and user-story-writing.
 4. Read the epic at {{.PlanRef}}. Locate the assigned capability by matching task SCOPE.
    Verify stories only cover that capability section — not others in the same epic.
 5. Validate done_when criteria are satisfied.
