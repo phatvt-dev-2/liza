@@ -826,24 +826,24 @@ def render_turn_timeline(report: SessionReport) -> str:
 
     lines = [
         "",
-        "-" * 72,
+        "-" * 142,
         "TURN TIMELINE",
-        "-" * 72,
-        f"  {'#':>3s}  {'Tool':<20s} {'Detail':<30s} {'Result':>8s} {'Err':>4s}",
-        f"  {'-' * 3}  {'-' * 20} {'-' * 30} {'-' * 8} {'-' * 4}",
+        "-" * 142,
+        f"  {'#':>3s}  {'Tool':<20s} {'Detail':<100s} {'Result':>8s} {'Err':>4s}",
+        f"  {'-' * 3}  {'-' * 20} {'-' * 100} {'-' * 8} {'-' * 4}",
     ]
 
     for i, action in enumerate(report.actions, 1):
-        detail = action.detail[:30] if action.detail else ""
+        detail = action.detail[:100] if action.detail else ""
         result_size = f"{action.result_chars / 1024:.1f}K" if action.result_chars >= 1024 else f"{action.result_chars}"
         err = " ERR" if action.is_error else ""
-        lines.append(f"  {i:>3d}  {action.tool_name:<20s} {detail:<30s} {result_size:>8s} {err:>4s}")
+        lines.append(f"  {i:>3d}  {action.tool_name:<20s} {detail:<100s} {result_size:>8s} {err:>4s}")
 
     total_result = sum(a.result_chars for a in report.actions)
     error_count = sum(1 for a in report.actions if a.is_error)
-    lines.append(f"  {'-' * 3}  {'-' * 20} {'-' * 30} {'-' * 8} {'-' * 4}")
+    lines.append(f"  {'-' * 3}  {'-' * 20} {'-' * 100} {'-' * 8} {'-' * 4}")
     lines.append(
-        f"  {'':>3s}  {len(report.actions)} calls{' ' * 32}{total_result / 1024:.0f}K total   {error_count} err"
+        f"  {'':>3s}  {len(report.actions)} calls{' ' * 102}{total_result / 1024:.0f}K total   {error_count} err"
     )
 
     return "\n".join(lines) + "\n"
