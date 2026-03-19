@@ -92,6 +92,12 @@ Any non destructive tool by default.
 
 Batch related operations within same MCP server when possible.
 
+### Parallel Tool Calls - Claude only
+
+Before issuing parallel file-read tool calls, verify all target files exist (via Glob or `ls`).
+A non-existent file in a batch of parallel calls can cause all sibling calls to fail.
+Check first, then read only the files that exist.
+
 ---
 
 ## RTK (Rust Token Killer) - Claude only
