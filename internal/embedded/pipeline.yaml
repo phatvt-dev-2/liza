@@ -12,6 +12,7 @@ pipeline:
       allowed-operations:
         - add-tasks
         - supersede-task
+        - cancel-task
         - sprint-checkpoint
         - analyze
         - delete-agent

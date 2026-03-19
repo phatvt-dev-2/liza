@@ -276,6 +276,10 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 		return nil, err
 	}
 
+	if err := isOperationAllowed(s.resolver, s.pipelineLoadErr, agentID, "liza_supersede_task"); err != nil {
+		return nil, err
+	}
+
 	reason, err := requireString(params, "reason")
 	if err != nil {
 		return nil, err
@@ -290,6 +294,39 @@ func (s *Server) handleSupersede(params map[string]any) (any, error) {
 
 	return textResult(appendWarnings(
 		fmt.Sprintf("Task %s superseded (was %s)", result.TaskID, result.OriginalStatus),
+		result.Warnings,
+	))
+}
+
+// handleCancelTask implements the liza_cancel_task tool
+// Maps to: liza cancel-task
+func (s *Server) handleCancelTask(params map[string]any) (any, error) {
+	taskID, err := requireString(params, "task_id")
+	if err != nil {
+		return nil, err
+	}
+
+	agentID, err := s.resolveOrchestratorID(params)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := isOperationAllowed(s.resolver, s.pipelineLoadErr, agentID, "liza_cancel_task"); err != nil {
+		return nil, err
+	}
+
+	reason, err := requireString(params, "reason")
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := ops.CancelTask(s.projectRoot, taskID, reason, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("cancel task failed: %w", err)
+	}
+
+	return textResult(appendWarnings(
+		fmt.Sprintf("Task %s cancelled (was %s)", result.TaskID, result.OriginalStatus),
 		result.Warnings,
 	))
 }

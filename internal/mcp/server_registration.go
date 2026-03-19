@@ -453,11 +453,37 @@ func (s *Server) registerMutationTools() {
 							Description: "Agent ID performing the action",
 						},
 					},
-					Required: []string{"task_id", "reason", "agent_id"},
+					Required: []string{"task_id", "reason"},
 				},
 			},
-			handler:     s.handleSupersede,
-			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_supersede_task"),
+			handler: s.handleSupersede,
+		},
+
+		// liza_cancel_task tool
+		{
+			tool: protocol.Tool{
+				Name:        "liza_cancel_task",
+				Description: "Cancel a task (transition to ABANDONED) with a reason, preserving audit trail. Requires orchestrator role.",
+				InputSchema: protocol.InputSchema{
+					Type: "object",
+					Properties: map[string]protocol.Property{
+						"task_id": {
+							Type:        "string",
+							Description: "Task ID to cancel",
+						},
+						"reason": {
+							Type:        "string",
+							Description: "Reason for cancellation",
+						},
+						"agent_id": {
+							Type:        "string",
+							Description: "Agent ID performing the action",
+						},
+					},
+					Required: []string{"task_id", "reason"},
+				},
+			},
+			handler: s.handleCancelTask,
 		},
 	})
 }

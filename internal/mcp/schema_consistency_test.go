@@ -216,6 +216,11 @@ func TestHandlerParamExtractionKnownPatterns(t *testing.T) {
 			extractedMustHave: []string{"task_id", "reason"}, // agent_id extracted via resolveOrchestratorID helper
 		},
 		{
+			handler:           "handleCancelTask",
+			required:          []string{"task_id", "reason"},
+			extractedMustHave: []string{"task_id", "reason"}, // agent_id extracted via resolveOrchestratorID helper
+		},
+		{
 			handler:           "handleSubmitForReview",
 			required:          []string{"task_id", "commit_sha", "agent_id"},
 			extractedMustHave: []string{"task_id", "commit_sha", "agent_id"},

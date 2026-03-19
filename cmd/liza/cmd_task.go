@@ -289,6 +289,42 @@ Requirements:
 	},
 }
 
+var cancelTaskCmd = &cobra.Command{
+	Use:   "cancel-task <task-id> <reason>",
+	Short: "Cancel a task (transition to ABANDONED)",
+	Long: `Cancel a task by transitioning it to ABANDONED status with a reason.
+
+Unlike delete-task (removes from state) or supersede-task (requires replacements),
+cancel-task simply stops the task while preserving full audit trail.
+
+Cancellable states are determined by the pipeline transition map. Generally:
+  - Initial states: DRAFT_CODE, DRAFT_CODING_PLAN, DRAFT_EPIC_PLAN, DRAFT_US
+  - Rejected states: CODE_REJECTED, CODING_PLAN_REJECTED, etc.
+  - BLOCKED, INTEGRATION_FAILED
+
+Not cancellable: executing, submitted, reviewing, approved, or terminal states.
+
+Example:
+  liza cancel-task task-3 "Requirements no longer valid"`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+		reason := args[1]
+
+		agentID, err := resolveOrchestratorID(cmd)
+		if err != nil {
+			return err
+		}
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		return commands.CancelTaskCommand(projectRoot, taskID, reason, agentID)
+	},
+}
+
 var deleteTaskCmd = &cobra.Command{
 	Use:   "task <task-id>",
 	Short: "Delete a task from the state database",
@@ -314,6 +350,7 @@ func init() {
 	rootCmd.AddCommand(claimTaskCmd)
 	rootCmd.AddCommand(addTaskCmd)
 	rootCmd.AddCommand(supersedeTaskCmd)
+	rootCmd.AddCommand(cancelTaskCmd)
 	rootCmd.AddCommand(markBlockedCmd)
 	rootCmd.AddCommand(assessBlockedCmd)
 	rootCmd.AddCommand(assessHypothesisExhaustedCmd)
