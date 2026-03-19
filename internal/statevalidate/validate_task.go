@@ -39,7 +39,7 @@ func validateRequiredFields(state *models.State, projectRoot string, skipSpecFil
 	}
 
 	if !skipSpecFileCheck && state.Goal.SpecRef != "" {
-		if err := checkSpecFileExists(projectRoot, state.Goal.SpecRef); err != nil {
+		if err := checkSpecFileExists(projectRoot, state.Goal.SpecRef, state.Config.IntegrationBranch); err != nil {
 			return fmt.Errorf("goal %w", err)
 		}
 	}
@@ -201,7 +201,7 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			return fmt.Errorf("task %s spec_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.SpecRef)
 		}
 		if !skipSpecFileCheck && task.SpecRef != "" {
-			if err := checkSpecFileExists(projectRoot, task.SpecRef); err != nil {
+			if err := checkSpecFileExists(projectRoot, task.SpecRef, state.Config.IntegrationBranch); err != nil {
 				return fmt.Errorf("%w (task: %s)", err, task.ID)
 			}
 		}
@@ -209,7 +209,7 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			return fmt.Errorf("task %s plan_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.PlanRef)
 		}
 		if !skipSpecFileCheck && task.PlanRef != "" {
-			if err := checkSpecFileExists(projectRoot, task.PlanRef); err != nil {
+			if err := checkSpecFileExists(projectRoot, task.PlanRef, state.Config.IntegrationBranch); err != nil {
 				return fmt.Errorf("plan_ref: %w (task: %s)", err, task.ID)
 			}
 		}

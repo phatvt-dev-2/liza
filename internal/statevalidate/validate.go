@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -88,7 +89,7 @@ func ValidateAnomalies(state *models.State, projectRoot string, skipSpecFileChec
 // disk. Strips any fragment identifier (#section) before checking. Used by
 // both required-fields and task-invariants validation to ensure specs are
 // reachable.
-func checkSpecFileExists(projectRoot, specRef string) error {
+func checkSpecFileExists(projectRoot, specRef, integrationBranch string) error {
 	specFile := specRef
 	if idx := strings.Index(specFile, "#"); idx != -1 {
 		specFile = specFile[:idx]
@@ -97,10 +98,21 @@ func checkSpecFileExists(projectRoot, specRef string) error {
 	if !filepath.IsAbs(specPath) {
 		specPath = filepath.Join(projectRoot, specFile)
 	}
-	if _, err := os.Stat(specPath); os.IsNotExist(err) {
-		return fmt.Errorf("spec_ref file not found: %s", specFile)
+	if _, err := os.Stat(specPath); err == nil {
+		return nil
 	}
-	return nil
+	// Fallback: file may exist on integration branch but not on the repo-root
+	// filesystem (e.g. merged by a sibling worktree). Try git cat-file -e.
+	// If git is not on PATH or the branch doesn't exist, this falls through
+	// gracefully to the "file not found" error below.
+	if integrationBranch != "" && projectRoot != "" && !filepath.IsAbs(specFile) {
+		cmd := exec.Command("git", "cat-file", "-e", integrationBranch+":"+specFile)
+		cmd.Dir = projectRoot
+		if err := cmd.Run(); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("spec_ref file not found: %s", specFile)
 }
 
 // buildTaskIDSet creates a lookup set of all task IDs for O(1) existence

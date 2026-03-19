@@ -1,6 +1,9 @@
 package statevalidate
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -162,5 +165,110 @@ func TestValidate_AcceptsRepoRelativeSpecRef(t *testing.T) {
 	err := validateTaskInvariants(state, t.TempDir(), true, nil, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error for repo-relative spec_ref: %v", err)
+	}
+}
+
+// initGitRepo creates a temporary git repo with a single commit containing
+// the given file. Returns the repo path. The file is committed on "main" and
+// a branch named branchName is created pointing at that commit.
+func initGitRepo(t *testing.T, branchName, filePath, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	cmds := [][]string{
+		{"git", "init", "-b", "main"},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git command %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	// Create file and commit
+	fullPath := filepath.Join(dir, filePath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	addCmd := exec.Command("git", "add", filePath)
+	addCmd.Dir = dir
+	if out, err := addCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add failed: %v\n%s", err, out)
+	}
+	commitCmd := exec.Command("git", "commit", "-m", "initial")
+	commitCmd.Dir = dir
+	if out, err := commitCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit failed: %v\n%s", err, out)
+	}
+
+	// Create the integration branch at this commit
+	branchCmd := exec.Command("git", "branch", branchName)
+	branchCmd.Dir = dir
+	if out, err := branchCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git branch failed: %v\n%s", err, out)
+	}
+
+	// Remove the file from the working tree (simulate different branch checkout)
+	if err := os.Remove(fullPath); err != nil {
+		t.Fatal(err)
+	}
+
+	return dir
+}
+
+func TestCheckSpecFileExists_GitFallback_FileOnBranch(t *testing.T) {
+	repoDir := initGitRepo(t, "integration", "specs/auth.md", "# Auth spec")
+
+	err := checkSpecFileExists(repoDir, "specs/auth.md", "integration")
+	if err != nil {
+		t.Fatalf("Expected no error (file exists on integration branch), got: %v", err)
+	}
+}
+
+func TestCheckSpecFileExists_GitFallback_FileOnBranchWithFragment(t *testing.T) {
+	repoDir := initGitRepo(t, "integration", "specs/auth.md", "# Auth spec")
+
+	err := checkSpecFileExists(repoDir, "specs/auth.md#login", "integration")
+	if err != nil {
+		t.Fatalf("Expected no error (file with fragment exists on integration branch), got: %v", err)
+	}
+}
+
+func TestCheckSpecFileExists_GitFallback_FileNotOnAnyBranch(t *testing.T) {
+	repoDir := initGitRepo(t, "integration", "specs/auth.md", "# Auth spec")
+
+	err := checkSpecFileExists(repoDir, "specs/nonexistent.md", "integration")
+	if err == nil {
+		t.Fatal("Expected error for file not on any branch or filesystem")
+	}
+	if !strings.Contains(err.Error(), "spec_ref file not found") {
+		t.Errorf("Error = %q, want to contain 'spec_ref file not found'", err.Error())
+	}
+}
+
+func TestCheckSpecFileExists_GitFallback_EmptyBranch(t *testing.T) {
+	repoDir := initGitRepo(t, "integration", "specs/auth.md", "# Auth spec")
+
+	// Empty integration branch → no git fallback, file not on disk → error
+	err := checkSpecFileExists(repoDir, "specs/auth.md", "")
+	if err == nil {
+		t.Fatal("Expected error when integration branch is empty and file not on disk")
+	}
+}
+
+func TestCheckSpecFileExists_GitFallback_AbsolutePathSkipsFallback(t *testing.T) {
+	repoDir := initGitRepo(t, "integration", "specs/auth.md", "# Auth spec")
+
+	// Absolute path that doesn't exist on disk — git fallback should be skipped
+	absPath := filepath.Join(repoDir, "specs/auth.md") // file was removed by initGitRepo
+	err := checkSpecFileExists(repoDir, absPath, "integration")
+	if err == nil {
+		t.Fatal("Expected error for absolute path not on disk (git fallback should be skipped)")
 	}
 }
