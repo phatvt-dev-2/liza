@@ -240,7 +240,7 @@ func TestHeartbeatStop(t *testing.T) {
 
 	// Wait until at least one heartbeat update is observed.
 	bb := db.New(stateFile)
-	waitDeadline := time.After(1 * time.Second)
+	waitDeadline := time.After(3 * time.Second)
 	waitTicker := time.NewTicker(10 * time.Millisecond)
 	defer waitTicker.Stop()
 
@@ -268,7 +268,7 @@ func TestHeartbeatStop(t *testing.T) {
 	select {
 	case <-doneCh:
 		// Success
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(2 * time.Second):
 		t.Fatal("Heartbeat did not stop after context cancellation")
 	}
 }

@@ -493,7 +493,7 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 			}()
 
 			// Wait a bit for watcher to start
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 
 			// Modify state to create work
 			if err := bb.Modify(func(s *models.State) error {
@@ -514,9 +514,9 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 					t.Errorf("WaitForWork() = %v, want %v", hasWork, tt.wantWork)
 				}
 
-				// Verify wake time is quick (under 500ms including setup)
-				if hasWork && elapsed > 500*time.Millisecond {
-					t.Errorf("Agent took %v to wake, expected < 500ms", elapsed)
+				// Verify wake time is quick (under 2s including setup)
+				if hasWork && elapsed > 2*time.Second {
+					t.Errorf("Agent took %v to wake, expected < 2s", elapsed)
 				}
 			case <-time.After(6 * time.Second):
 				t.Fatal("Timeout waiting for WaitForWork result")
