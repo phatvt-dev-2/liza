@@ -10,6 +10,9 @@ tightly coupled, combining them is acceptable — but the intent must still be s
 Prefer more smaller tasks over fewer larger ones: each additional review cycle on a
 large task costs more than a review cycle on a small, focused task.
 Declare dependency order between tasks — no circular or missing dependencies.
+Shared-file rule: when two tasks modify the same file, they MUST have a depends_on
+relationship. Parallel coders work in isolated worktrees — shared files without
+dependency ordering cause merge conflicts. Audit scope overlaps before finalizing.
 Verify the plan covers ALL spec requirements — gaps will be rejected.
 
 REFACTORING TASKS:

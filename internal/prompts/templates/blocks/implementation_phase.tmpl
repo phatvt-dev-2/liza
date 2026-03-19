@@ -63,7 +63,10 @@ IMPLEMENTATION PHASE:
       entry's desc, done_when, scope, and spec_ref is character-identical to the plan.
       If any field was paraphrased, replace it with the verbatim text before submitting.
       Verify depends_on indices match the dependency order described in the plan.
-   f. Cross-reference consistency: for every cross-reference in the plan ("owned by CPx",
+   f. Shared-file audit: for each file appearing in more than one task's scope,
+      verify a depends_on chain exists between those tasks. Missing dependency on
+      shared files will cause merge conflicts for parallel coders.
+   g. Cross-reference consistency: for every cross-reference in the plan ("owned by CPx",
       "depends on CPx", "out of scope for CPx"), search the plan file at the path chosen in step 2
       and confirm the referenced task explicitly states that responsibility,
       dependency, or exclusion. If any reference points to a task that does not claim it,

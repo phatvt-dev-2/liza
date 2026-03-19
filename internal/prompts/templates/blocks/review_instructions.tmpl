@@ -51,6 +51,7 @@ REVIEW CHECKLIST:
 | Falsifiable done_when | done_when is vague or untestable |
 | Scope smell | done_when spans >2 packages or >4 conditions — verify the task has a single intent; reject with split suggestion if composite |
 | Dependency order | Tasks have circular or missing dependencies |
+| Shared-file dependency | Two tasks modify the same file but lack depends_on between them — parallel coders will hit merge conflicts |
 | Spec compliance matrix | Plan has no "## Spec Compliance Matrix" section, or matrix has GAP rows, or matrix omits spec requirements, or matrix task mappings are inaccurate |
 | output[] populated | Task has no output[] entries (planner must call liza_set_task_output) |
 | Plan file location | Plan artifact not in diff at specs/plans/TIMESTAMP-{{.TaskID}}.md |
