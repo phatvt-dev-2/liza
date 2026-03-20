@@ -260,6 +260,28 @@ function extractSkillFromPath(path) {
   return m ? m[1] : null;
 }
 
+function extractSecretWordsLines(text) {
+  if (!text) return [];
+  const lines = text.trim().split("\n").slice(0, 30);
+  return lines.map(l => l.trim()).filter(l => l.startsWith("Liza") || l.startsWith("Secret"));
+}
+
+function parseSecretWords(line) {
+  if (!line) return [];
+  const stripped = line.replace(/^Secret\s+words?:\s*/i, "");
+  const words = [];
+  for (const token of stripped.split(/\s+/)) {
+    const clean = token.replace(/[.,;:!?]+$/, "");
+    if (!clean) continue;
+    if ((clean[0] === clean[0].toUpperCase() && clean[0] !== clean[0].toLowerCase()) || clean.includes("-")) {
+      words.push(clean);
+    } else {
+      break;
+    }
+  }
+  return words;
+}
+
 // --- Analysis ---
 
 function analyzeCodex(parsed) {
@@ -330,6 +352,15 @@ function analyzeCodex(parsed) {
     }
   }
 
+  // --- Secret Words (first agent_message text) ---
+  let secretWordsLines = [];
+  for (const item of items) {
+    if (item.type === "agent_message" && item.text) {
+      secretWordsLines = extractSecretWordsLines(item.text);
+      break;
+    }
+  }
+
   // --- Tool Result Breakdown ---
   const toolResultBreakdown = {};
   for (const t of timeline) {
@@ -380,6 +411,7 @@ function analyzeCodex(parsed) {
     timeline, toolResultBreakdown, efficiencyInsights,
     struggleSequences: findStruggleSequences(timeline),
     skillInvocations,
+    secretWordsLines,
   };
 }
 
@@ -541,6 +573,15 @@ function analyzeClaudeCode(parsed) {
     }
   }
 
+  // --- Secret Words (first assistant text block, not thinking) ---
+  let secretWordsLines = [];
+  for (const ev of events) {
+    if (ev.type === "assistant" && ev.contentType === "text" && ev.text) {
+      secretWordsLines = extractSecretWordsLines(ev.text);
+      break;
+    }
+  }
+
   return {
     summary: { model: Object.keys(modelUsage)[0] || systemInfo?.model || "unknown",
       totalCostUsd: resultInfo?.totalCostUsd || 0, durationMs: resultInfo?.durationMs || 0,
@@ -562,6 +603,7 @@ function analyzeClaudeCode(parsed) {
     timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate,
     struggleSequences: findStruggleSequences(timeline),
     skillInvocations,
+    secretWordsLines,
   };
 }
 
@@ -649,7 +691,7 @@ function Table({ columns, rows }) {
 
 function CodexReport({ parsed }) {
   const analysis = useMemo(() => analyzeCodex(parsed), [parsed]);
-  const { summary, breakdown, totalCharsAll, topItems, timeline, toolResultBreakdown, efficiencyInsights, struggleSequences, skillInvocations } = analysis;
+  const { summary, breakdown, totalCharsAll, topItems, timeline, toolResultBreakdown, efficiencyInsights, struggleSequences, skillInvocations, secretWordsLines } = analysis;
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
@@ -698,6 +740,22 @@ function CodexReport({ parsed }) {
           { label: "Calls", key: "count", align: "right" },
         ]} rows={Object.entries(skillInvocations).sort((a,b) => b[1] - a[1]).map(([skill, count]) => ({ skill, count }))} />
       </>)}
+
+      <SectionTitle>Secret Words</SectionTitle>
+      {secretWordsLines.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {secretWordsLines.map((line, i) => (
+            <div key={i} style={{ fontSize: 12, color: C.textMuted, fontFamily: "monospace" }}>{line}</div>
+          ))}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+            {secretWordsLines.flatMap(l => parseSecretWords(l)).map((w, i) => (
+              <span key={i} style={{ background: C.green, color: "#000", padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{w}</span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: C.textMuted }}>No lines starting with "Liza" or "Secret" found in first 30 lines</div>
+      )}
 
       {timeline.length > 0 && (<>
         <SectionTitle>Action Timeline</SectionTitle>
@@ -785,7 +843,7 @@ function CodexReport({ parsed }) {
 function ClaudeCodeReport({ parsed }) {
   const analysis = useMemo(() => analyzeClaudeCode(parsed), [parsed]);
   const { summary, turns, mcpStatus, perMsgUsage, contentByType, totalCharsAll,
-    timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate, struggleSequences, skillInvocations } = analysis;
+    timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate, struggleSequences, skillInvocations, secretWordsLines } = analysis;
   const toolCalls = turns.flatMap(t => t.actions.filter(a => a.contentType === "tool_use").map(a => a.toolName)).filter(Boolean);
   const toolFreq = {};
   for (const t of toolCalls) toolFreq[t] = (toolFreq[t] || 0) + 1;
@@ -886,6 +944,22 @@ function ClaudeCodeReport({ parsed }) {
           { label: "Calls", key: "count", align: "right" },
         ]} rows={Object.entries(skillInvocations).sort((a,b) => b[1] - a[1]).map(([skill, count]) => ({ skill, count }))} />
       </>)}
+
+      <SectionTitle>Secret Words</SectionTitle>
+      {secretWordsLines.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {secretWordsLines.map((line, i) => (
+            <div key={i} style={{ fontSize: 12, color: C.textMuted, fontFamily: "monospace" }}>{line}</div>
+          ))}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+            {secretWordsLines.flatMap(l => parseSecretWords(l)).map((w, i) => (
+              <span key={i} style={{ background: C.green, color: "#000", padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{w}</span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: C.textMuted }}>No lines starting with "Liza" or "Secret" found in first 30 lines</div>
+      )}
 
       {timeline.length > 0 && (<>
         <SectionTitle>Turn Timeline</SectionTitle>

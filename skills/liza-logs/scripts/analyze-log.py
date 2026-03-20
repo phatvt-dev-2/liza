@@ -96,6 +96,8 @@ class SessionReport:
     mcp_servers: list[dict[str, str]] = field(default_factory=list)
     # Skill invocations (both formats)
     skill_invocations: dict[str, int] = field(default_factory=dict)
+    # Secret words (lines starting with "Liza" or "Secret" in first assistant block)
+    secret_words_lines: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +135,18 @@ def _is_benign_exit(cmd_name: str, exit_code: int) -> bool:
     "differences found" (diff), which is expected behavior, not an error.
     """
     return exit_code == 1 and cmd_name in _BENIGN_EXIT1_COMMANDS
+
+
+def _extract_secret_words_lines(text: str) -> list[str]:
+    """Extract lines starting with 'Liza' or 'Secret' from the first 30 lines."""
+    if not text:
+        return []
+    result = []
+    for line in text.strip().splitlines()[:30]:
+        stripped = line.strip()
+        if stripped.startswith("Liza") or stripped.startswith("Secret"):
+            result.append(stripped)
+    return result
 
 
 _SKILL_PATH_RE = re.compile(r"skills/([a-z][a-z0-9_-]*)/SKILL\.md$")
@@ -223,6 +237,8 @@ def parse_rich(lines: list[str]) -> SessionReport:
     seen_message_ids: dict[str, TurnUsage] = {}
     # For correlating tool_use → tool_result
     pending_tool_uses: dict[str, tuple[str, str, int]] = {}  # id → (name, detail, turn_num)
+    first_assistant_text = ""
+    first_assistant_captured = False
 
     for line in lines:
         line = line.strip()
@@ -268,6 +284,12 @@ def parse_rich(lines: list[str]) -> SessionReport:
                 item = _measure_content_block(block)
                 if item.chars > 0:
                     report.items.append(item)
+                # Capture first assistant text block for secret words
+                if not first_assistant_captured and block.get("type") == "text":
+                    raw = block.get("text", "")
+                    if raw.strip():
+                        first_assistant_text = raw
+                        first_assistant_captured = True
                 if block.get("type") == "tool_use":
                     name = block.get("name", "unknown")
                     report.tool_calls[name] = report.tool_calls.get(name, 0) + 1
@@ -371,6 +393,8 @@ def parse_rich(lines: list[str]) -> SessionReport:
         report.total_cache_read += turn.cache_read_input_tokens
         report.total_output_tokens += turn.output_tokens
 
+    report.secret_words_lines = _extract_secret_words_lines(first_assistant_text)
+
     return report
 
 
@@ -442,6 +466,8 @@ def parse_sparse(lines: list[str]) -> SessionReport:
     """Parse a sparse-format (Format B) log file."""
     report = SessionReport()
     report.meta.format = "sparse"
+    first_assistant_text = ""
+    first_assistant_captured = False
 
     for line in lines:
         line = line.strip()
@@ -464,6 +490,12 @@ def parse_sparse(lines: list[str]) -> SessionReport:
                 ci = _measure_sparse_item(item)
                 if ci.chars > 0:
                     report.items.append(ci)
+                # Capture first agent_message for secret words
+                if not first_assistant_captured and item.get("type") == "agent_message":
+                    raw = item.get("text", "")
+                    if raw.strip():
+                        first_assistant_text = raw
+                        first_assistant_captured = True
                 # Track tool calls and build timeline actions
                 itype = item.get("type", "")
                 if itype == "command_execution":
@@ -544,6 +576,8 @@ def parse_sparse(lines: list[str]) -> SessionReport:
             report.total_cache_creation = 0  # not available in sparse format
 
     report.meta.num_turns = 1  # sparse format only has one turn.completed
+
+    report.secret_words_lines = _extract_secret_words_lines(first_assistant_text)
 
     return report
 
@@ -795,6 +829,55 @@ def render_skill_invocations(report: SessionReport) -> str:
     lines.append(f"  {'-' * 40} {'-' * 6}")
     total = sum(report.skill_invocations.values())
     lines.append(f"  {'TOTAL':<40s} {total:>6d}")
+    return "\n".join(lines) + "\n"
+
+
+def _parse_secret_words(line: str) -> list[str]:
+    """Extract individual secret words from a line.
+
+    Secret words are capitalized or hyphenated tokens. Stops at the first
+    token that doesn't match (ignoring common prefixes like "Secret word:").
+    """
+    if not line:
+        return []
+    # Strip "Secret word:" / "Secret words:" prefix if present
+    stripped = re.sub(r"^Secret\s+words?:\s*", "", line)
+    words = []
+    for token in stripped.split():
+        clean = token.rstrip(".,;:!?")
+        if not clean:
+            continue
+        if clean[0].isupper() or "-" in clean:
+            words.append(clean)
+        else:
+            break
+    return words
+
+
+def render_secret_words(report: SessionReport) -> str:
+    """Secret words detection — lines starting with 'Liza' or 'Secret' in first assistant block."""
+    lines = [
+        "",
+        "-" * 72,
+        "SECRET WORDS",
+        "-" * 72,
+    ]
+
+    if report.secret_words_lines:
+        for raw in report.secret_words_lines:
+            lines.append(f"  Raw: {raw[:120]}")
+        # Collect words from all matching lines
+        all_words: list[str] = []
+        for raw in report.secret_words_lines:
+            all_words.extend(_parse_secret_words(raw))
+        if all_words:
+            lines.append(f"  Found: {', '.join(all_words)}")
+        else:
+            lines.append("  Found: (none)")
+    else:
+        lines.append("  (no lines starting with 'Liza' or 'Secret' in first 30 lines)")
+        lines.append("  Found: (none)")
+
     return "\n".join(lines) + "\n"
 
 
@@ -1069,6 +1152,7 @@ def render_report(report: SessionReport) -> str:
         render_top_items(report),
         render_tool_calls(report),
         render_skill_invocations(report),
+        render_secret_words(report),
     ]
 
     if report.meta.format == "rich":
