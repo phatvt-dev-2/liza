@@ -206,14 +206,14 @@ git log integration --oneline
 
 ### Running Multiple Sprints
 
-After a sprint completes (all tasks MERGED/ABANDONED), the system pauses at a checkpoint.
-To start a new sprint:
+When all tasks in a sprint reach terminal state (MERGED/ABANDONED), `liza resume` marks the sprint COMPLETED. Running `liza resume` a second time archives the completed sprint, creates a new IN_PROGRESS sprint, and executes available pipeline transitions — creating child tasks for the next role-pair.
 
-1. Remove the old blackboard: `rm -rf .liza`
-2. Re-initialize: `liza init "<new goal>" --spec <spec_ref>`
-3. Restart agents
+To start a completely fresh goal, remove the blackboard and re-initialize:
 
-The planner does not auto-detect changes to `vision.md` between sprints. Each sprint starts fresh from `liza init`.
+```bash
+rm -rf .liza
+liza init "<new goal>" --spec <spec_ref>
+```
 
 ### Sprint Lifecycle & Human Gates
 
@@ -262,21 +262,51 @@ The human reviews the sprint summary and decides:
 
 | Action | Command | When |
 |--------|---------|------|
-| Resume (next sprint) | `liza resume` | Ready for next sprint (after proceed, or when no transition needed) |
+| Accept & resume | `liza resume` | Satisfied with planner output, continue the sprint |
+| Amend & replan | Edit plan file, commit, then `liza replan` | Want to change a planner's output before proceeding |
 | Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks for the next role-pair from output[] |
 | Pause for manual work | (no command) | Want to make manual changes before continuing |
 | Abort | `liza stop` | Want to stop entirely |
 
 **`liza proceed`** creates child tasks from a completed task's `output[]` entries based on the pipeline transition's cardinality (`per-subtask`: one child per output entry, `one-to-one`: single child from parent). Use `liza status` to see available transitions for tasks at terminal states. After `proceed`, run `liza resume` to start the next sprint.
 
+#### Replanning at Checkpoint
+
+When a planning sprint checkpoints (trigger: `PLANNING_COMPLETE`), the planner's `output[]` entries represent the proposed task breakdown. The human may:
+
+1. **Accept the plan** — run `liza resume` to continue
+2. **Amend the plan** — edit the plan markdown file, commit, then run `liza replan`
+
+`liza replan` invalidates the old planning task's output and creates a new planning task with the same role-pair and spec. The sprint returns to IN_PROGRESS and the planner agent picks up the new task, re-reads the amended plan, and regenerates `output[]`.
+
+```bash
+# Typical replan workflow
+vim specs/plan.md                      # edit the plan
+git add specs/plan.md && git commit -m "amend plan"
+liza replan                            # auto-detects the planning task
+# or, if multiple planning tasks exist:
+liza replan code-planning-1            # specify task ID explicitly
+```
+
+The old task's output is preserved for audit (not cleared), just marked as superseded. Multiple replans increment the counter: `code-planning-1-replan-1`, `code-planning-1-replan-2`, etc.
+
 #### Sprint Status Flow
 
 ```
-IN_PROGRESS → CHECKPOINT → COMPLETED → (next sprint) IN_PROGRESS
-                  ↑              ↑
-                  │              └── liza resume (when all tasks terminal)
-                  └── orchestrator calls liza_sprint_checkpoint
+# rippletide-override: user approved
+IN_PROGRESS → CHECKPOINT ──→ COMPLETED ──→ (new sprint) IN_PROGRESS
+                  │  ↑            ↑              ↑
+                  │  │            │              └── liza resume (2nd: archive & advance)
+                  │  │            └── liza resume (1st: all tasks terminal → mark COMPLETED)
+                  │  └── orchestrator calls liza_sprint_checkpoint
+                  │
+                  ├── liza resume  (mid-sprint: not all terminal → back to IN_PROGRESS)
+                  └── liza replan  (amend plan → new planning task → back to IN_PROGRESS)
 ```
+
+**`liza resume` has two behaviors depending on sprint state:**
+- **At CHECKPOINT** (not all tasks terminal): resumes the current sprint as IN_PROGRESS
+- **At CHECKPOINT** (all tasks terminal): marks sprint COMPLETED. Run `liza resume` a second time to archive the sprint, create a new one, and execute available pipeline transitions
 
 ### CLI Commands
 
@@ -292,7 +322,8 @@ The `liza` binary provides all system operations. Key commands:
 | `liza watch` | Monitor blackboard, alert on anomalies, auto-checkpoint on circuit-breaker |
 | `liza status` | Show system and task status at a glance |
 | **System Control** | |
-| `liza pause` / `liza resume` | Pause/resume system (resume also handles CHECKPOINT → next sprint) |
+| `liza pause` / `liza resume` | Pause/resume system (resume also advances CHECKPOINT → COMPLETED → new sprint) |
+| `liza replan [task-id]` | Amend a planner's output at CHECKPOINT (invalidate old task, create new planning task) |
 | `liza stop` / `liza start` | Stop/start system |
 | `liza sprint-checkpoint` | Create a checkpoint (halt + summary) |
 | **Task Operations** | |
