@@ -305,6 +305,11 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 	// preventing clean exit after work completion.
 	cmd.Stdin = nil
 
+	// Ensure LIZA_AGENT_ID is available to child processes (hooks, MCP servers).
+	// The agent ID may have been resolved from --agent-id flag rather than the
+	// env var, so we set it explicitly to guarantee availability.
+	cmd.Env = append(os.Environ(), "LIZA_AGENT_ID="+agentID)
+
 	// Handle output: either save to file or stream to stdout/stderr.
 	// Separate buffers avoid the concurrency issue: exec.Cmd drains each pipe
 	// in its own goroutine, so each buffer is written by exactly one goroutine.
