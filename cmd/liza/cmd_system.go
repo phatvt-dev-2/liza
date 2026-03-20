@@ -281,6 +281,47 @@ missing children.`,
 	},
 }
 
+var replanCmd = &cobra.Command{
+	Use:   "replan [task-id]",
+	Short: "Re-invoke planner after amending a plan file",
+	Long: `Re-invoke a planner agent after amending a plan file at CHECKPOINT.
+
+This command invalidates the old planning task's output and creates a new
+planning task with the same role_pair and spec_ref. The sprint is set back
+to IN_PROGRESS so the planner agent picks up the new task.
+
+If task-id is omitted, the command auto-detects the single planning task
+with unconsumed output in the current sprint. If multiple planning tasks
+match, specify the task ID explicitly.
+
+Preconditions:
+  - Sprint must be at CHECKPOINT
+  - Target task must be MERGED with output[]
+  - No child tasks already created (TransitionsExecuted must be empty)
+  - Task must belong to a planning role-pair
+
+Example workflow:
+  1. Planner produces output → sprint checkpoints at PLANNING_COMPLETE
+  2. Human reviews and edits the plan markdown file
+  3. liza replan                    # auto-detect planning task
+  4. Planner agent claims new task, re-reads plan, regenerates output`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		changedBy := resolveChangedBy(cmd)
+		var taskID string
+		if len(args) > 0 {
+			taskID = args[0]
+		}
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		return commands.ReplanCommand(projectRoot, taskID, changedBy)
+	},
+}
+
 var resumeCmd = &cobra.Command{
 	Use:   "resume",
 	Short: "Resume the Liza system from PAUSED mode, CHECKPOINT, or COMPLETED sprint",
@@ -463,6 +504,7 @@ func init() {
 	rootCmd.AddCommand(stopCmd)
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(proceedCmd)
+	rootCmd.AddCommand(replanCmd)
 	rootCmd.AddCommand(resumeCmd)
 	rootCmd.AddCommand(sprintCheckpointCmd)
 	rootCmd.AddCommand(getCmd)
