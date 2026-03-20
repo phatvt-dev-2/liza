@@ -372,20 +372,57 @@ func TestFullSprintSequence(t *testing.T) {
 		t.Logf("  ✓ %s exited normally", agentID)
 	}
 
+	// simulateOrchestratorTransitions mimics the orchestrator checkpoint-resume
+	// cycle that fires pipeline transitions after planning work is merged.
+	// Since fdcb19a, transitions are gated on checkpoint acknowledgment in
+	// orchestrator PreWork rather than firing automatically in reviewer PreWork.
+	simulateOrchestratorTransitions := func(phase string) {
+		t.Helper()
+		t.Logf("▶ Simulating orchestrator transition gate (%s)", phase)
+
+		// Set the checkpoint trigger to PLANNING_COMPLETE (orchestrator would do this).
+		if err := bb.Modify(func(s *models.State) error {
+			s.Sprint.CheckpointTrigger = models.CheckpointTriggerPlanningComplete
+			return nil
+		}); err != nil {
+			t.Fatalf("Failed to set checkpoint trigger: %v", err)
+		}
+
+		// Execute available transitions (orchestrator PreWork does this after resume).
+		results, err := ops.ExecuteAvailableTransitions(projectDir)
+		if err != nil {
+			t.Fatalf("ExecuteAvailableTransitions failed: %v", err)
+		}
+		for _, r := range results {
+			t.Logf("  Transition: %s → %d children from %s", r.TransitionName, len(r.ChildTaskIDs), r.SourceTaskID)
+		}
+
+		// Clear the trigger (orchestrator PreWork does this after firing).
+		if err := bb.Modify(func(s *models.State) error {
+			s.Sprint.CheckpointTrigger = ""
+			return nil
+		}); err != nil {
+			t.Fatalf("Failed to clear checkpoint trigger: %v", err)
+		}
+	}
+
 	// ── Phase 1: Epic Planning ─────────────────────────────────────────
 	t.Log("=== Phase 1: Epic Planning ===")
 	runSupervisor("epic-planner-1", "epic-planner")
 	runSupervisor("epic-plan-reviewer-1", "epic-plan-reviewer")
+	simulateOrchestratorTransitions("epic → US")
 
 	// ── Phase 2: US Writing ────────────────────────────────────────────
 	t.Log("=== Phase 2: US Writing ===")
 	runSupervisor("us-writer-1", "us-writer")
 	runSupervisor("us-reviewer-1", "us-reviewer")
+	simulateOrchestratorTransitions("US → code-planning")
 
 	// ── Phase 3: Code Planning ─────────────────────────────────────────
 	t.Log("=== Phase 3: Code Planning ===")
 	runSupervisor("code-planner-1", "code-planner")
 	runSupervisor("code-plan-reviewer-1", "code-plan-reviewer")
+	simulateOrchestratorTransitions("code-planning → coding")
 
 	// ── Phase 4: Coding ────────────────────────────────────────────────
 	t.Log("=== Phase 4: Coding ===")
