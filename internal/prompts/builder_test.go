@@ -571,7 +571,7 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 	// --- ENVIRONMENT LESSONS ---
 	assertSection("env-lessons", []string{
 		"ENVIRONMENT LESSONS",
-		"lesson-capture skill",
+		"skill: lesson-capture",
 	})
 
 	// --- CODEBASE EXPLORATION: context-saving delegation ---

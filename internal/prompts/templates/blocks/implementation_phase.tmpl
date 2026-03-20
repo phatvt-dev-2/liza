@@ -7,7 +7,7 @@ Read the implementation plan at {{.PlanRef}} for task decomposition context.
 {{- end}}
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
-3. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.
+3. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Invoke skill: testing.
    Tests must be discoverable via standard runners (e.g. pytest, go test) — not just runnable when explicitly named.
 4. Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
 5. TDD waiver: For cosmetic-only changes (comment fixes, formatting), set tdd_not_required in checkpoint with justification
@@ -15,7 +15,7 @@ Read the implementation plan at {{.PlanRef}} for task decomposition context.
    file-path references or imports to reflect the new file layout is in-scope and does
    not trigger the TDD requirement in item 3. The test's invariant (what it validates)
    must be preserved.
-7. Use the clean-code skill at the end of the implementation
+7. Invoke skill: clean-code at the end of the implementation
 8. Validate ALL done_when criteria are met
 9. If context exhaustion is near (~90%): run liza_handoff with summary + next_action (or structured fields), then exit with code 42
 {{- else if eq .Role "code-planner"}}
@@ -76,7 +76,7 @@ IMPLEMENTATION PHASE:
 
 IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
-2. Use the epic-writing skill FIRST.
+2. Invoke skill: epic-writing FIRST.
 3. Read the source material referenced by this task (vision doc, product brief, spec).
 4. Follow the skill protocol: Size → Parse → Decompose → Write → Self-Review.
 5. For EACH capability in the epic, call liza_set_task_output with structured entries.
@@ -108,7 +108,7 @@ IMPLEMENTATION PHASE:
 
 IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
-2. Use the user-story-writing skill FIRST.
+2. Invoke skill: user-story-writing FIRST.
 3. Read the epic at {{.PlanRef}}.{{- if ne .PlanSection ""}} Your capability section is anchored at #{{.PlanSection}}.{{- end}}
    Locate your assigned capability by matching task SCOPE.
    Read only Personas + General Information + that capability section.
