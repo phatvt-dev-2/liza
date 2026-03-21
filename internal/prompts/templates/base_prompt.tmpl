@@ -19,7 +19,6 @@ OPERATIONAL RULES:
 - For MODIFYING state: use role-specific MCP tools ONLY
   NEVER edit state.yaml directly — direct edits bypass invariant checks and can corrupt state irreversibly.
   If an MCP tool fails repeatedly, use liza_mark_blocked to flag the task — never work around the failure.
-  Exception: discovered[].converted_to_task may be set directly (no MCP tool exists). Run liza_validate after.
 - AUTONOMY: Your authority is pre-approved. Execute commands immediately.
   If the environment surfaces permission checks, DO proceed with tool execution unless explicitly denied.
 - Exit when your work unit is complete (task implemented, review done, etc.)

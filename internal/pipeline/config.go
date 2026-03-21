@@ -118,6 +118,9 @@ type TransitionDef struct {
 }
 
 // LoadFrozen loads the frozen pipeline config from .liza/pipeline.yaml.
+// After loading, it migrates missing allowed-operations from the embedded
+// default config to ensure older workspaces gain new operations without
+// requiring re-initialization.
 // Returns ErrConfigNotFound (wrapped) when no pipeline config exists.
 // Callers can use errors.Is(err, ErrConfigNotFound) to distinguish absent
 // config from parse/validation errors.
@@ -126,7 +129,18 @@ func LoadFrozen(projectRoot string) (*PipelineConfig, error) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%w at %s (run 'liza init' to create workspace)", ErrConfigNotFound, path)
 	}
-	return Load(path)
+	cfg, err := Load(path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Migrate missing operations from the embedded default.
+	refCfg, refErr := LoadEmbeddedReference()
+	if refErr == nil {
+		MigrateOperations(cfg, refCfg)
+	}
+
+	return cfg, nil
 }
 
 // LoadFromBytes parses and validates a pipeline config from raw YAML bytes.

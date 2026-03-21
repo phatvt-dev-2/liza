@@ -399,3 +399,22 @@ func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {
 
 	return textResult(fmt.Sprintf("Agent %s deleted", result.AgentID))
 }
+
+// handleSetDiscoveryDisposition implements the liza_set_discovery_disposition tool.
+func (s *Server) handleSetDiscoveryDisposition(params map[string]any) (any, error) {
+	discoveryID, err := requireString(params, "discovery_id")
+	if err != nil {
+		return nil, err
+	}
+
+	disposition, err := requireString(params, "disposition")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := ops.SetDiscoveryDisposition(s.projectRoot, discoveryID, disposition); err != nil {
+		return nil, fmt.Errorf("set discovery disposition failed: %w", err)
+	}
+
+	return textResult(fmt.Sprintf("Discovery %s disposition set to %q", discoveryID, disposition))
+}

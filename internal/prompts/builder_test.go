@@ -502,7 +502,6 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		"NEVER read state.yaml directly",
 		"liza_get returns only the requested slice",
 		"NEVER edit state.yaml directly",
-		"converted_to_task may be set directly",
 	})
 
 	// --- AUTONOMY: agents must not hesitate ---
@@ -665,7 +664,7 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 				"Urgent discoveries need immediate action",
 				"execute decision NOW",
 				"execute liza_add_tasks tool NOW",
-				"converted_to_task is the ONLY field you may edit directly",
+				"liza_set_discovery_disposition",
 				"All tools must be executed in this session",
 				"Do NOT call liza_sprint_checkpoint",
 			},

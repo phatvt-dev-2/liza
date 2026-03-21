@@ -18,6 +18,7 @@ pipeline:
         - delete-agent
         - clear-stale-review-claims
         - update-sprint-metrics
+        - set-discovery-disposition
       context-sections:
         - orchestrator-dashboard
         - wake-instructions

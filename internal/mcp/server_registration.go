@@ -568,6 +568,34 @@ func (s *Server) registerComplexOperations() {
 			roleChecker: typeChecker(s.resolver, s.pipelineLoadErr, "reviewer"),
 		},
 
+		// liza_set_discovery_disposition tool
+		{
+			tool: protocol.Tool{
+				Name:        "liza_set_discovery_disposition",
+				Description: "Set the disposition of a discovery entry (converted_to_task field). Use after converting a discovery to a task, deferring it, or dismissing it. Requires orchestrator role.",
+				InputSchema: protocol.InputSchema{
+					Type: "object",
+					Properties: map[string]protocol.Property{
+						"discovery_id": {
+							Type:        "string",
+							Description: "Discovery ID to update",
+						},
+						"disposition": {
+							Type:        "string",
+							Description: "Disposition value: a task ID (e.g. 'task-5'), 'deferred', or 'dismissed'",
+						},
+						"agent_id": {
+							Type:        "string",
+							Description: "Agent ID performing the action",
+						},
+					},
+					Required: []string{"discovery_id", "disposition", "agent_id"},
+				},
+			},
+			handler:     s.handleSetDiscoveryDisposition,
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_set_discovery_disposition"),
+		},
+
 		// liza_analyze tool
 		{
 			tool: protocol.Tool{
