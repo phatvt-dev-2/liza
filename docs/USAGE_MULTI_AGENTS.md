@@ -87,6 +87,10 @@ liza init "[Goal description]" --spec [spec_ref]
 #     --post-worktree-cmd "make sync-embedded" \
 #     --spec specs/build/2\ -\ Sub-pipelines\ and\ spec\ writing.md
 #
+# Worktree setup: If package.json is detected and --post-worktree-cmd is not set,
+# liza init auto-suggests the right install command (npm/yarn/pnpm/bun).
+# See docs/CONFIGURATION.md § "Worktree Setup" for details.
+#
 # Entry points (--entry-point selects which sub-pipeline to start from):
 #   liza init "Build auth system" --entry-point general-objective   # full pipeline: epic → US → code-plan → code
 #   liza init "Implement from spec" --entry-point detailed-spec     # coding pipeline only: code-plan → code

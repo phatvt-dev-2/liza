@@ -1204,6 +1204,258 @@ func TestInitPairingCommand_ClaudeBothPromptsSharedReader(t *testing.T) {
 	}
 }
 
+func TestDetectPostWorktreeCmd(t *testing.T) {
+	tests := []struct {
+		name    string
+		files   []string // files to create in tmpDir
+		wantCmd string
+		wantCtx string // expected detectPkgManagerContext output
+	}{
+		{
+			name:    "no package.json",
+			files:   nil,
+			wantCmd: "",
+		},
+		{
+			name:    "package.json only — defaults to npm",
+			files:   []string{"package.json"},
+			wantCmd: "npm install",
+			wantCtx: "package.json",
+		},
+		{
+			name:    "package.json + package-lock.json",
+			files:   []string{"package.json", "package-lock.json"},
+			wantCmd: "npm install",
+			wantCtx: "package.json + package-lock.json",
+		},
+		{
+			name:    "package.json + yarn.lock",
+			files:   []string{"package.json", "yarn.lock"},
+			wantCmd: "yarn install",
+			wantCtx: "package.json + yarn.lock",
+		},
+		{
+			name:    "package.json + pnpm-lock.yaml",
+			files:   []string{"package.json", "pnpm-lock.yaml"},
+			wantCmd: "pnpm install",
+			wantCtx: "package.json + pnpm-lock.yaml",
+		},
+		{
+			name:    "package.json + bun.lockb",
+			files:   []string{"package.json", "bun.lockb"},
+			wantCmd: "bun install",
+			wantCtx: "package.json + bun.lockb",
+		},
+		{
+			name:    "package.json + bun.lock",
+			files:   []string{"package.json", "bun.lock"},
+			wantCmd: "bun install",
+			wantCtx: "package.json + bun.lock",
+		},
+		{
+			name:    "pnpm takes precedence over npm",
+			files:   []string{"package.json", "pnpm-lock.yaml", "package-lock.json"},
+			wantCmd: "pnpm install",
+			wantCtx: "package.json + pnpm-lock.yaml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			for _, f := range tt.files {
+				if err := os.WriteFile(filepath.Join(tmpDir, f), []byte("{}"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got := detectPostWorktreeCmd(tmpDir)
+			if got != tt.wantCmd {
+				t.Errorf("detectPostWorktreeCmd() = %q, want %q", got, tt.wantCmd)
+			}
+
+			if tt.wantCtx != "" {
+				gotCtx := detectPkgManagerContext(tmpDir)
+				if gotCtx != tt.wantCtx {
+					t.Errorf("detectPkgManagerContext() = %q, want %q", gotCtx, tt.wantCtx)
+				}
+			}
+		})
+	}
+}
+
+func TestInitCommandWithConfig_AutoSuggestsPostWorktreeCmd(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Create package.json + yarn.lock to trigger suggestion
+	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name":"test"}`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "yarn.lock"), []byte(""), 0644)
+
+	// Accept the suggestion (y) — ForceInteractive bypasses TTY check for testing
+	err = InitCommandWithConfig(InitParams{
+		Description:      "Goal with auto-detected post-worktree-cmd",
+		SpecRef:          "specs/vision.md",
+		Stdin:            strings.NewReader("y\n"),
+		ForceInteractive: true,
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	// Verify post_worktree_cmd is set to "yarn install"
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.PostWorktreeCmd == nil {
+		t.Fatal("state.Config.PostWorktreeCmd is nil, want non-nil")
+	}
+	if *state.Config.PostWorktreeCmd != "yarn install" {
+		t.Errorf("state.Config.PostWorktreeCmd = %q, want %q", *state.Config.PostWorktreeCmd, "yarn install")
+	}
+}
+
+func TestInitCommandWithConfig_AutoSuggestDeclined(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Create package.json to trigger suggestion
+	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name":"test"}`), 0644)
+
+	// Decline the suggestion — ForceInteractive bypasses TTY check for testing
+	err = InitCommandWithConfig(InitParams{
+		Description:      "Goal declining suggestion",
+		SpecRef:          "specs/vision.md",
+		Stdin:            strings.NewReader("n\n"),
+		ForceInteractive: true,
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	// Verify post_worktree_cmd is nil
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.PostWorktreeCmd != nil {
+		t.Errorf("state.Config.PostWorktreeCmd = %q, want nil", *state.Config.PostWorktreeCmd)
+	}
+}
+
+func TestInitCommandWithConfig_NonInteractiveSkipsAutoDetect(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Create package.json + yarn.lock — would trigger prompt in interactive mode
+	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name":"test"}`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "yarn.lock"), []byte(""), 0644)
+
+	// Non-interactive (strings.Reader, no ForceInteractive) — should NOT prompt
+	err = InitCommandWithConfig(InitParams{
+		Description: "Goal in non-interactive mode",
+		SpecRef:     "specs/vision.md",
+		Stdin:       strings.NewReader(""),
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	// Verify post_worktree_cmd is nil (no prompt was shown)
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.PostWorktreeCmd != nil {
+		t.Errorf("state.Config.PostWorktreeCmd = %q, want nil (non-interactive should skip)", *state.Config.PostWorktreeCmd)
+	}
+}
+
+func TestInitCommandWithConfig_ExplicitFlagSkipsAutoDetect(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Create package.json + yarn.lock
+	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name":"test"}`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "yarn.lock"), []byte(""), 0644)
+
+	// Explicit flag should take precedence — no prompt expected
+	err = InitCommandWithConfig(InitParams{
+		Description:     "Goal with explicit cmd",
+		SpecRef:         "specs/vision.md",
+		PostWorktreeCmd: "make setup",
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	// Verify the explicit value was used, not the auto-detected one
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.PostWorktreeCmd == nil {
+		t.Fatal("state.Config.PostWorktreeCmd is nil, want non-nil")
+	}
+	if *state.Config.PostWorktreeCmd != "make setup" {
+		t.Errorf("state.Config.PostWorktreeCmd = %q, want %q", *state.Config.PostWorktreeCmd, "make setup")
+	}
+}
+
 func TestInitCommandWithConfig_EntryPointWithoutConfig(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)

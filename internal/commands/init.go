@@ -20,12 +20,13 @@ import (
 
 // InitParams holds the parameters for InitCommand.
 type InitParams struct {
-	Description     string
-	SpecRef         string
-	ConfigPath      string // --config: path to pipeline YAML
-	EntryPoint      string // --entry-point: name of entry-point in config
-	PostWorktreeCmd string // --post-worktree-cmd: shell command to run after worktree creation
-	Stdin           io.Reader
+	Description      string
+	SpecRef          string
+	ConfigPath       string // --config: path to pipeline YAML
+	EntryPoint       string // --entry-point: name of entry-point in config
+	PostWorktreeCmd  string // --post-worktree-cmd: shell command to run after worktree creation
+	Stdin            io.Reader
+	ForceInteractive bool // bypass TTY check (for testing)
 }
 
 // initAgentRepoSymlinks maps agent flag names to the repo-root symlink filename.
@@ -408,6 +409,22 @@ func InitCommandWithConfig(params InitParams) error {
 		}
 	}
 
+	// Auto-suggest post_worktree_cmd if not explicitly set and stdin is a terminal
+	postWorktreeCmd := params.PostWorktreeCmd
+	if postWorktreeCmd == "" && (params.ForceInteractive || isInteractive(rawStdin)) {
+		if suggested := detectPostWorktreeCmd(lizaPaths.ProjectRoot()); suggested != "" {
+			fmt.Fprintf(os.Stderr, "Detected %s — set post_worktree_cmd to %q?\n", detectPkgManagerContext(lizaPaths.ProjectRoot()), suggested)
+			fmt.Fprintf(os.Stderr, "This runs after every worktree creation so agents have dependencies. (y/n): ")
+			response, err := stdin.ReadString('\n')
+			if err == nil {
+				response = strings.TrimSpace(strings.ToLower(response))
+				if response == "y" || response == "yes" {
+					postWorktreeCmd = suggested
+				}
+			}
+		}
+	}
+
 	// Generate IDs and timestamps
 	timestamp := time.Now().UTC()
 	goalID := fmt.Sprintf("goal-%d", timestamp.Unix())
@@ -484,7 +501,7 @@ func InitCommandWithConfig(params InitParams) error {
 			IntegrationBranch:        "integration",
 			EscalationWebhook:        nil,
 			Mode:                     models.SystemModeRunning,
-			PostWorktreeCmd:          stringPtrOrNil(params.PostWorktreeCmd),
+			PostWorktreeCmd:          stringPtrOrNil(postWorktreeCmd),
 		},
 	}
 
@@ -565,6 +582,62 @@ func stringPtrOrNil(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// isInteractive returns true if r is connected to a terminal.
+// Returns false for pipes, redirected input, or non-file readers (e.g. strings.Reader in tests).
+func isInteractive(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+// detectPostWorktreeCmd checks the project root for package.json and returns
+// the appropriate install command based on which lockfile is present.
+// Returns "" if no package.json is found.
+func detectPostWorktreeCmd(projectRoot string) string {
+	if _, err := os.Stat(filepath.Join(projectRoot, "package.json")); os.IsNotExist(err) {
+		return ""
+	}
+
+	// Check lockfiles in specificity order (most specific first)
+	lockfiles := []struct {
+		file string
+		cmd  string
+	}{
+		{"pnpm-lock.yaml", "pnpm install"},
+		{"yarn.lock", "yarn install"},
+		{"bun.lockb", "bun install"},
+		{"bun.lock", "bun install"},
+		{"package-lock.json", "npm install"},
+	}
+
+	for _, lf := range lockfiles {
+		if _, err := os.Stat(filepath.Join(projectRoot, lf.file)); err == nil {
+			return lf.cmd
+		}
+	}
+
+	// package.json exists but no lockfile — default to npm
+	return "npm install"
+}
+
+// detectPkgManagerContext returns a human-readable description of what was detected
+// (e.g. "package.json + yarn.lock") for the suggestion prompt.
+func detectPkgManagerContext(projectRoot string) string {
+	lockfiles := []string{"pnpm-lock.yaml", "yarn.lock", "bun.lockb", "bun.lock", "package-lock.json"}
+	for _, lf := range lockfiles {
+		if _, err := os.Stat(filepath.Join(projectRoot, lf)); err == nil {
+			return "package.json + " + lf
+		}
+	}
+	return "package.json"
 }
 
 func entryPointNames(cfg *pipeline.PipelineConfig) string {

@@ -86,6 +86,7 @@ All configuration lives in `.liza/state.yaml` under the `config` section.
 | `planner_max_wait` | 7200 | — | — | seconds | Max planner idle before exit |
 | `reviewer_poll_interval` | 30 | — | — | seconds | Reviewer polling interval |
 | `reviewer_max_wait` | 7200 | — | — | seconds | Max reviewer idle before exit |
+| `post_worktree_cmd` | (none) | — | — | shell cmd | Command run after worktree creation (e.g. `npm install`) |
 
 ### Agent Execution Timeouts
 
@@ -134,6 +135,26 @@ config:
   max_review_cycles: 3      # Fewer rejection cycles
   heartbeat_interval: 30    # Faster crash detection
 ```
+
+### Worktree Setup (`post_worktree_cmd`)
+
+Worktrees are bare checkouts — they lack build artifacts like `node_modules/`, `vendor/`, or compiled outputs. The `post_worktree_cmd` config field specifies a shell command that runs after every worktree creation, ensuring agents have a build-ready workspace.
+
+**Setting it:**
+
+- **At init time:** `liza init "Goal" --post-worktree-cmd "npm install"`
+- **Auto-detection:** When `--post-worktree-cmd` is not provided, `liza init` checks for `package.json` in the project root and suggests the appropriate install command based on the lockfile:
+
+  | Lockfile detected | Suggested command |
+  |-------------------|-------------------|
+  | `pnpm-lock.yaml` | `pnpm install` |
+  | `yarn.lock` | `yarn install` |
+  | `bun.lockb` / `bun.lock` | `bun install` |
+  | `package-lock.json` (or none) | `npm install` |
+
+- **After init:** Add `post_worktree_cmd: "your command"` to the `config` section of `.liza/state.yaml`.
+
+**Behavior:** The command runs via `sh -c` in the worktree directory. It is non-fatal — warnings are emitted but worktree creation succeeds even if the command fails.
 
 ## System Modes
 
