@@ -37,6 +37,9 @@ var claudeSettingsContent []byte
 //go:embed "mcp.json"
 var mcpSettingsContent []byte
 
+//go:embed "hooks/enforce-init.sh"
+var enforceInitHookContent []byte
+
 //go:embed "console.sh"
 var consoleScriptContent []byte
 
@@ -287,7 +290,8 @@ func confirmMerge(prompt string, reader *bufio.Reader) (bool, error) {
 	return response == "y" || response == "yes", nil
 }
 
-// WriteClaudeSettings writes the embedded claude-settings.json to .claude/settings.json.
+// WriteClaudeSettings writes the embedded claude-settings.json to .claude/settings.json
+// and deploys hooks referenced by the settings.
 // If the file already exists, prompts the user to merge settings.
 // Returns nil on success or if user declines merge.
 // The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
@@ -336,20 +340,26 @@ func WriteClaudeSettings(projectRoot string, reader *bufio.Reader) error {
 		return fmt.Errorf("failed to write claude-settings.json: %w", err)
 	}
 
+	// Deploy hooks referenced by the settings file.
+	if err := WriteHooks(projectRoot); err != nil {
+		return fmt.Errorf("failed to write hooks: %w", err)
+	}
+
 	return nil
 }
 
 // mergeSettings merges liza settings into existing settings.
 // Existing settings take precedence (user customizations preserved).
-// Special handling for permissions.allow array (union of both).
+// Special handling for permissions.allow (union) and hooks.PreToolUse (union).
 func mergeSettings(liza, existing map[string]any) map[string]any {
 	result := make(map[string]any)
 	maps.Copy(result, liza)
 
 	// Existing settings override liza defaults (preserve user customizations),
-	// except "permissions" which gets deep-merged to union allow lists.
+	// except "permissions" and "hooks" which get deep-merged.
 	for k, v := range existing {
-		if k == "permissions" {
+		switch k {
+		case "permissions":
 			lizaPerms, lizaOk := liza[k].(map[string]any)
 			existingPerms, existingOk := v.(map[string]any)
 			if lizaOk && existingOk {
@@ -357,7 +367,15 @@ func mergeSettings(liza, existing map[string]any) map[string]any {
 			} else {
 				result[k] = v
 			}
-		} else {
+		case "hooks":
+			lizaHooks, lizaOk := liza[k].(map[string]any)
+			existingHooks, existingOk := v.(map[string]any)
+			if lizaOk && existingOk {
+				result[k] = mergeHooks(lizaHooks, existingHooks)
+			} else {
+				result[k] = v
+			}
+		default:
 			result[k] = v
 		}
 	}
@@ -384,6 +402,87 @@ func mergePermissions(liza, existing map[string]any) map[string]any {
 			result[k] = v
 		}
 	}
+
+	return result
+}
+
+// mergeHooks merges hook configurations.
+// For each hook event (e.g. "PreToolUse"), the entry arrays are concatenated.
+// Duplicate entries (same command string) are deduplicated.
+func mergeHooks(liza, existing map[string]any) map[string]any {
+	result := make(map[string]any)
+	maps.Copy(result, liza)
+	maps.Copy(result, existing)
+
+	// For events present in both, concatenate and deduplicate entry arrays.
+	for event, lizaVal := range liza {
+		existingVal, ok := existing[event]
+		if !ok {
+			continue
+		}
+		lizaEntries, lizaOk := lizaVal.([]any)
+		existingEntries, existingOk := existingVal.([]any)
+		if !lizaOk || !existingOk {
+			continue
+		}
+		result[event] = unionHookEntries(lizaEntries, existingEntries)
+	}
+
+	return result
+}
+
+// unionHookEntries deduplicates hook entries by the command string inside
+// each entry's hooks array. Existing entries (b) take precedence on command
+// collision — preserving user customizations (e.g. different timeout).
+func unionHookEntries(a, b []any) []any {
+	commandsOf := func(entry any) []string {
+		entryMap, ok := entry.(map[string]any)
+		if !ok {
+			return nil
+		}
+		hooks, ok := entryMap["hooks"].([]any)
+		if !ok {
+			return nil
+		}
+		var cmds []string
+		for _, h := range hooks {
+			hm, ok := h.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := hm["command"].(string); ok {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return cmds
+	}
+
+	// Index existing (b) commands — these win on collision.
+	existingCmds := make(map[string]bool)
+	for _, entry := range b {
+		for _, cmd := range commandsOf(entry) {
+			existingCmds[cmd] = true
+		}
+	}
+
+	// Add liza entries whose commands don't collide with existing.
+	var result []any
+	for _, entry := range a {
+		cmds := commandsOf(entry)
+		collides := false
+		for _, cmd := range cmds {
+			if existingCmds[cmd] {
+				collides = true
+				break
+			}
+		}
+		if !collides {
+			result = append(result, entry)
+		}
+	}
+
+	// Add all existing entries (they win on collision).
+	result = append(result, b...)
 
 	return result
 }
@@ -516,6 +615,22 @@ func WriteConsoleScript(projectRoot string) error {
 	if err := os.WriteFile(consolePath, consoleScriptContent, 0755); err != nil {
 		return fmt.Errorf("failed to write console.sh: %w", err)
 	}
+	return nil
+}
+
+// WriteHooks writes embedded hook scripts to .claude/hooks/ in the project root.
+// Always overwrites — hooks are Liza infrastructure, not user-customizable.
+func WriteHooks(projectRoot string) error {
+	hooksDir := filepath.Join(projectRoot, ".claude", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .claude/hooks directory: %w", err)
+	}
+
+	hookPath := filepath.Join(hooksDir, "enforce-init.sh")
+	if err := os.WriteFile(hookPath, enforceInitHookContent, 0755); err != nil {
+		return fmt.Errorf("failed to write enforce-init.sh: %w", err)
+	}
+
 	return nil
 }
 

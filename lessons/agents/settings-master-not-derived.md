@@ -1,17 +1,18 @@
 ---
 title: "Update master files, not derived copies"
-trigger: "When modifying claude-settings.json, .mcp.json, or any file that has a master/embedded source and derived copies"
-keywords: [claude-settings.json, .claude/settings.json, embedded, liza init, permissions, MCP tools]
+trigger: "When modifying claude-settings.json, .mcp.json, hooks, or any file that has a master/embedded source and derived copies"
+keywords: [claude-settings.json, .claude/settings.json, embedded, liza init, permissions, MCP tools, hooks]
 date: 2026-03-06
 ---
 
 ## Context
 
-Configuration files like `claude-settings.json` exist in three places:
+Configuration files like `claude-settings.json` exist in two places:
 
-1. **Master**: `claude-settings.json` (repo root) — human-editable reference
-2. **Embedded**: `internal/embedded/claude-settings.json` — compiled into the binary, written by `liza init`
-3. **Derived**: `.claude/settings.json` — project-active copy, created by `liza init`
+1. **Master**: `internal/embedded/claude-settings.json` — source of truth, compiled into the binary via `go:embed`
+2. **Derived**: `.claude/settings.json` — project-active copy, created by `liza init`
+
+Similarly: `internal/embedded/mcp.json` → `.mcp.json`, and `internal/embedded/hooks/enforce-init.sh` → `.claude/hooks/enforce-init.sh`.
 
 ## Failure Mode
 
@@ -22,16 +23,12 @@ Editing only the derived copy (`.claude/settings.json`) fixes the immediate prob
 
 ## Solution
 
-Always update the master first, then propagate to derived copies:
-
-1. `claude-settings.json` (repo root master)
-2. `internal/embedded/claude-settings.json` (embedded template)
-3. `.claude/settings.json` (active project copy — or re-run `liza init`)
-
-Verify sync: `diff <(grep 'mcp__liza' claude-settings.json | sort) <(grep 'mcp__liza' internal/embedded/claude-settings.json | sort)`
+Always update the master in `internal/embedded/`, then re-run `liza init` or manually copy to the derived location.
 
 ## References
 
-- `claude-settings.json` — master
-- `internal/embedded/claude-settings.json` — embedded template
-- `internal/embedded/embedded.go:WriteClaudeSettings()` — merge logic
+- `internal/embedded/claude-settings.json` — master
+- `internal/embedded/mcp.json` — master
+- `internal/embedded/hooks/enforce-init.sh` — master
+- `internal/embedded/embedded.go:WriteClaudeSettings()` — settings merge logic
+- `internal/embedded/embedded.go:WriteHooks()` — hook deployment

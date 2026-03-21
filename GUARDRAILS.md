@@ -34,7 +34,7 @@ Operational lessons from project experience. Read when a trigger matches.
 |---------|---------------------------------------------------------------------------------|
 | Editing files under `~/.liza/` or symlink paths | [edit-tool-destroys-symlinks.md](lessons/agents/edit-tool-destroys-symlinks.md) |
 | Modifying CLI commands, flags, validation, or vocabulary that MCP handlers also expose | [cli-mcp-surface-sync.md](lessons/agents/cli-mcp-surface-sync.md)                              |
-| Modifying `claude-settings.json`, `.mcp.json`, or any file with master/embedded/derived copies | [settings-master-not-derived.md](lessons/agents/settings-master-not-derived.md)                |
+| Modifying `internal/embedded/claude-settings.json`, `internal/embedded/mcp.json`, `internal/embedded/hooks/`, or any file with master/derived copies | [settings-master-not-derived.md](lessons/agents/settings-master-not-derived.md)                |
 | Reading, editing, or creating files in a worktree | [worktree-file-path-consistency.md](lessons/agents/worktree-file-path-consistency.md) |
 
 ## Tier 3 (Preferences)

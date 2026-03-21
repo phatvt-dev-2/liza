@@ -587,6 +587,15 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 	if !foundLizaMCP {
 		t.Errorf("Expected liza MCP tools in allow array (e.g., mcp__liza__liza_add_tasks)")
 	}
+
+	// Verify .claude/hooks/enforce-init.sh was deployed
+	hookPath := filepath.Join(claudeDir, "hooks", "enforce-init.sh")
+	hookInfo, hookErr := os.Stat(hookPath)
+	if os.IsNotExist(hookErr) {
+		t.Error(".claude/hooks/enforce-init.sh not created during workspace init")
+	} else if hookErr == nil && hookInfo.Mode()&0111 == 0 {
+		t.Errorf("enforce-init.sh should be executable, got %o", hookInfo.Mode())
+	}
 }
 
 // validPipelineYAML is a minimal valid pipeline config for testing.
@@ -962,6 +971,15 @@ func TestInitPairingCommand_Claude(t *testing.T) {
 	settingsPath := filepath.Join(gitDir, ".claude", "settings.json")
 	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
 		t.Error(".claude/settings.json should be created for --claude pairing")
+	}
+
+	// .claude/hooks/enforce-init.sh should be deployed
+	hookPath := filepath.Join(gitDir, ".claude", "hooks", "enforce-init.sh")
+	hookInfo, err := os.Stat(hookPath)
+	if os.IsNotExist(err) {
+		t.Error(".claude/hooks/enforce-init.sh should be created for --claude pairing")
+	} else if err == nil && hookInfo.Mode()&0111 == 0 {
+		t.Errorf("enforce-init.sh should be executable, got %o", hookInfo.Mode())
 	}
 
 	// AGENTS.md and GEMINI.md should NOT exist (only --claude)

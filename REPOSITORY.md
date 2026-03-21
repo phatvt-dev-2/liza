@@ -25,8 +25,6 @@ This document is a navigation aid: where to find things and why they're organize
 ├── LICENSE                 # Apache 2.0
 ├── go.mod                  # Go module definition
 ├── Makefile                # Build system (build, test, lint, install, release)
-├── claude-settings.json    # Claude Code project settings (master for go:embed)
-├── mcp.json                # MCP server configuration (master for go:embed)
 ├── install.sh              # Installation script
 ├── .goreleaser.yaml        # Release automation
 ├── .pre-commit-config.yaml # Pre-commit hooks
@@ -126,7 +124,7 @@ Skills execute within contract constraints — contract gates are non-negotiable
 
 All Liza system mechanics are provided by the `liza` Go binary (assumed in PATH). See [ADR-0012](specs/architecture/ADR/0012-go-cli-replaces-bash-scripts.md).
 
-**Build requirement:** The Go binary embeds contracts, skills, specs, and config files via `//go:embed`. These are copied from the repo root by `make sync-embedded` (a prerequisite of `make build` and `make test`). Always use `make test` instead of bare `go test ./...` — without the sync step, the `internal/embedded` package fails to compile.
+**Build requirement:** The Go binary embeds contracts, skills, and config files via `//go:embed`. Contracts and skills are copied from the repo root by `make sync-embedded` (a prerequisite of `make build` and `make test`). Config files (`claude-settings.json`, `mcp.json`) and hooks are mastered directly in `internal/embedded/`. Always use `make test` instead of bare `go test ./...` — without the sync step, the `internal/embedded` package fails to compile.
 
 Key command groups:
 

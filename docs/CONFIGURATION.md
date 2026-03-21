@@ -23,7 +23,7 @@ Liza provides an MCP server (`liza-mcp`) for Claude Code integration. `liza init
 
 **`.claude/settings.json`** — project-level permissions for Liza MCP tools, skills, git operations, and build commands.
 
-`liza init` writes this file automatically from the master [`claude-settings.json`](../claude-settings.json). The master defines all Liza MCP tools, skills, and the full set of bash permissions agents need. **Do not hand-craft a subset** — agents will be blocked on any missing permission.
+`liza init` writes this file automatically from the embedded [`claude-settings.json`](../internal/embedded/claude-settings.json). The master defines all Liza MCP tools, skills, and the full set of bash permissions agents need. **Do not hand-craft a subset** — agents will be blocked on any missing permission.
 
 **Key elements:**
 - **`enableAllProjectMcpServers`** / **`enabledMcpjsonServers`** — enables the Liza MCP server defined in `.mcp.json`

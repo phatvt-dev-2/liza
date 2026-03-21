@@ -68,17 +68,6 @@ func TestArtifactConsistency(t *testing.T) {
 		}
 	})
 
-	t.Run("claude-settings.json", func(t *testing.T) {
-		compareMasterToEmbedded(t,
-			filepath.Join(repoRoot, "claude-settings.json"),
-			filepath.Join(embeddedDir, "claude-settings.json"))
-	})
-
-	t.Run("mcp.json", func(t *testing.T) {
-		compareMasterToEmbedded(t,
-			filepath.Join(repoRoot, "mcp.json"),
-			filepath.Join(embeddedDir, "mcp.json"))
-	})
 }
 
 // compareMasterToEmbedded reads both files and reports a test error if they differ.

@@ -97,7 +97,7 @@ func InitPairingCommand(params InitPairingParams) error {
 		createContractSymlinksFiltered(projectRoot, coreFile, repoRootNames, stdin)
 	}
 
-	// Write/merge .claude/settings.json so agents get required permissions
+	// Write/merge .claude/settings.json and deploy hooks
 	if hasClaude {
 		if err := embedded.WriteClaudeSettings(projectRoot, stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
@@ -370,7 +370,7 @@ func InitCommandWithConfig(params InitParams) error {
 		return fmt.Errorf("failed to freeze pipeline config: %w", err)
 	}
 
-	// Write/merge Claude Code settings to .claude/
+	// Write/merge Claude Code settings and deploy hooks to .claude/
 	// This is non-fatal - if it fails, just warn
 	// Note: This may prompt user for input if settings file exists
 	if err := embedded.WriteClaudeSettings(lizaPaths.ProjectRoot(), stdin); err != nil {

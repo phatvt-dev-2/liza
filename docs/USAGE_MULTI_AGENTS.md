@@ -372,7 +372,7 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
 }
 ```
 
-**`claude-settings.json`** — Permissions for Claude Code agents (MCP tools shown in full, other categories truncated):
+**`.claude/settings.json`** — Permissions for Claude Code agents (MCP tools shown in full, other categories truncated):
 ```json
 {
   "enableAllProjectMcpServers": true,

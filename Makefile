@@ -18,13 +18,10 @@ LDFLAGS=-ldflags "-X 'github.com/liza-mas/liza/internal/embedded.Version=$(VERSI
 sync-embedded:
 	@echo "Syncing files to internal/embedded/..."
 	@rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/docs internal/embedded/specs
-	@rm -f internal/embedded/claude-settings.json internal/embedded/mcp.json
 	@mkdir -p internal/embedded/contracts internal/embedded/skills
 	@cp contracts/*.md internal/embedded/contracts/
 	@cp -r skills/* internal/embedded/skills/
 	@find internal/embedded/skills/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-	@cp claude-settings.json internal/embedded/
-	@cp mcp.json internal/embedded/
 	@echo "Files synced successfully"
 
 # Build the binaries
@@ -36,8 +33,8 @@ build: sync-embedded
 
 # Run tests
 # IMPORTANT: Always use `make test`, not bare `go test ./...`.
-# The sync-embedded step copies contracts/, skills/, claude-settings.json, and mcp.json
-# into internal/embedded/ for go:embed. Without these files the embedded package fails to compile.
+# The sync-embedded step copies contracts/ and skills/ into internal/embedded/ for go:embed.
+# claude-settings.json, mcp.json, and hooks/ are mastered directly in internal/embedded/.
 test: sync-embedded check-testhelpers
 	go test -v -race -coverprofile=coverage.out ./...
 
@@ -58,7 +55,6 @@ clean:
 	rm -f coverage.out
 	rm -rf dist
 	rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/docs internal/embedded/specs
-	rm -f internal/embedded/claude-settings.json internal/embedded/mcp.json
 	go clean
 
 # Install the binaries to /usr/local/bin

@@ -646,6 +646,84 @@ func TestMergeSettings(t *testing.T) {
 			},
 		},
 		{
+			name: "hooks are deep-merged",
+			liza: map[string]any{
+				"hooks": map[string]any{
+					"PreToolUse": []any{
+						map[string]any{
+							"hooks": []any{
+								map[string]any{"command": "bash enforce-init.sh", "type": "command"},
+							},
+						},
+					},
+				},
+			},
+			existing: map[string]any{
+				"hooks": map[string]any{
+					"PreToolUse": []any{
+						map[string]any{
+							"hooks": []any{
+								map[string]any{"command": "bash my-custom-hook.sh", "type": "command"},
+							},
+						},
+					},
+				},
+			},
+			checks: func(t *testing.T, result map[string]any) {
+				hooks, ok := result["hooks"].(map[string]any)
+				if !ok {
+					t.Fatalf("hooks is not map[string]any")
+				}
+				entries, ok := hooks["PreToolUse"].([]any)
+				if !ok {
+					t.Fatalf("PreToolUse is not []any")
+				}
+				// Both liza and existing hooks should be present
+				if len(entries) != 2 {
+					t.Errorf("Expected 2 PreToolUse entries, got %d", len(entries))
+				}
+			},
+		},
+		{
+			name: "hooks collision preserves existing customizations",
+			liza: map[string]any{
+				"hooks": map[string]any{
+					"PreToolUse": []any{
+						map[string]any{
+							"hooks": []any{
+								map[string]any{"command": "bash enforce-init.sh", "type": "command", "timeout": float64(5)},
+							},
+						},
+					},
+				},
+			},
+			existing: map[string]any{
+				"hooks": map[string]any{
+					"PreToolUse": []any{
+						map[string]any{
+							"hooks": []any{
+								map[string]any{"command": "bash enforce-init.sh", "type": "command", "timeout": float64(30)},
+							},
+						},
+					},
+				},
+			},
+			checks: func(t *testing.T, result map[string]any) {
+				hooks := result["hooks"].(map[string]any)
+				entries := hooks["PreToolUse"].([]any)
+				if len(entries) != 1 {
+					t.Errorf("Expected 1 deduplicated entry, got %d", len(entries))
+				}
+				// Existing entry (timeout=30) should win over liza (timeout=5)
+				entry := entries[0].(map[string]any)
+				hooksList := entry["hooks"].([]any)
+				hook := hooksList[0].(map[string]any)
+				if hook["timeout"] != float64(30) {
+					t.Errorf("Expected existing timeout=30 to win, got %v", hook["timeout"])
+				}
+			},
+		},
+		{
 			name: "additionalDirectories preserved from existing",
 			liza: map[string]any{
 				"additionalDirectories": []any{},
@@ -934,5 +1012,59 @@ func TestWriteClaudeSettings_JSONValidity(t *testing.T) {
 	_, err = json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		t.Errorf("Generated JSON cannot be re-marshaled: %v", err)
+	}
+}
+
+func TestWriteHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	if err := WriteHooks(tmpDir); err != nil {
+		t.Fatalf("WriteHooks failed: %v", err)
+	}
+
+	hookPath := filepath.Join(tmpDir, ".claude", "hooks", "enforce-init.sh")
+	info, err := os.Stat(hookPath)
+	if err != nil {
+		t.Fatalf("hook file not found: %v", err)
+	}
+
+	// Verify executable permission
+	if info.Mode()&0111 == 0 {
+		t.Errorf("hook file is not executable: %v", info.Mode())
+	}
+
+	// Verify content matches embedded source
+	content, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatalf("failed to read hook: %v", err)
+	}
+	if !bytes.Equal(content, enforceInitHookContent) {
+		t.Error("hook content does not match embedded source")
+	}
+}
+
+func TestWriteHooks_Overwrites(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write a stale hook
+	hooksDir := filepath.Join(tmpDir, ".claude", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hooksDir, "enforce-init.sh"), []byte("old"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// WriteHooks should overwrite
+	if err := WriteHooks(tmpDir); err != nil {
+		t.Fatalf("WriteHooks failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(hooksDir, "enforce-init.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) == "old" {
+		t.Error("hook was not overwritten")
 	}
 }

@@ -34,6 +34,9 @@ internal/embedded/*
 !internal/embedded/console.sh
 !internal/embedded/guardrails-template.md
 !internal/embedded/pipeline.yaml
+!internal/embedded/claude-settings.json
+!internal/embedded/mcp.json
+!internal/embedded/hooks/
 /liza
 /liza-mcp
 dist/
