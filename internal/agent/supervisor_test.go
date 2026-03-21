@@ -453,6 +453,26 @@ func BenchmarkResumeHandoff(b *testing.B) {
 	}
 }
 
+func TestCLISupportsStdin(t *testing.T) {
+	tests := []struct {
+		cli  string
+		want bool
+	}{
+		{"claude", true},
+		{"kimi", true},
+		{"codex", true},
+		{"gemini", true},
+		{"vibe", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.cli, func(t *testing.T) {
+			if got := cliSupportsStdin(tc.cli); got != tc.want {
+				t.Errorf("cliSupportsStdin(%q) = %v, want %v", tc.cli, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestNewDefaultCLIExecutor(t *testing.T) {
 	t.Run("empty outputsDir disables logging", func(t *testing.T) {
 		e := NewDefaultCLIExecutor("")

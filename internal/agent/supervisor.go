@@ -231,6 +231,13 @@ func exit42TaskProgressSignature(task *models.Task) string {
 	return string(payload)
 }
 
+// cliSupportsStdin returns true if the CLI can read the prompt from stdin
+// instead of requiring it as a command-line argument. This avoids platform
+// ARG_MAX limits (e.g. 32,767 chars on Windows).
+func cliSupportsStdin(cliName string) bool {
+	return cliName != "vibe"
+}
+
 // CLIExecutor interface for testing (mock vs real CLI)
 type CLIExecutor interface {
 	Execute(ctx context.Context, cliName string, agentID string, prompt string, projectRoot string) (exitCode int, err error)
@@ -257,10 +264,18 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 	// Build command based on CLI.
 	// Structured output flags (stream-json, --json, etc.) are only added when --log is
 	// active (outputsDir != ""), so normal runs keep human-readable terminal output.
+	//
+	// For CLIs that support stdin (all except vibe), the prompt is piped via stdin
+	// instead of passed as a CLI argument. This avoids platform ARG_MAX limits
+	// (e.g. 32,767 chars on Windows with CreateProcess).
+	useStdin := cliSupportsStdin(actualCLI)
 	var cmd *exec.Cmd
 	switch actualCLI {
 	case "claude":
-		args := []string{"-p", prompt}
+		args := []string{"-p"}
+		if !useStdin {
+			args = append(args, prompt)
+		}
 		if d.outputsDir != "" {
 			args = append(args, "--verbose", "--output-format", "stream-json")
 		}
@@ -269,14 +284,21 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 		args := []string{
 			"-c", fmt.Sprintf("mcp_servers.liza.command=%q", "liza-mcp"),
 			"-c", fmt.Sprintf("mcp_servers.liza.args=[%q,%q]", "--project-root", projectRoot),
-			"exec", prompt,
+		}
+		if useStdin {
+			args = append(args, "exec", "-")
+		} else {
+			args = append(args, "exec", prompt)
 		}
 		if d.outputsDir != "" {
 			args = append(args, "--json")
 		}
 		cmd = exec.CommandContext(ctx, "codex", args...)
 	case "gemini":
-		args := []string{"-p", prompt}
+		args := []string{"-p"}
+		if !useStdin {
+			args = append(args, prompt)
+		}
 		if d.outputsDir != "" {
 			args = append(args, "--output-format", "stream-json")
 		}
@@ -288,7 +310,10 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 		}
 		cmd = exec.CommandContext(ctx, "vibe", args...)
 	case "kimi":
-		args := []string{"-p", prompt}
+		args := []string{"-p"}
+		if !useStdin {
+			args = append(args, prompt)
+		}
 		if d.outputsDir != "" {
 			args = append(args, "--verbose", "--output-format", "stream-json")
 		}
@@ -300,10 +325,14 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 	// Set working directory to project root so claude can find .mcp.json and .claude/settings.json
 	cmd.Dir = projectRoot
 
-	// Don't inherit stdin - agents are autonomous and don't require input.
-	// Inheriting stdin causes the subprocess to block indefinitely waiting for EOF,
-	// preventing clean exit after work completion.
-	cmd.Stdin = nil
+	// When the CLI supports stdin, pipe the prompt through it. Otherwise, don't
+	// inherit stdin — agents are autonomous and inheriting stdin causes the
+	// subprocess to block indefinitely waiting for EOF.
+	if useStdin {
+		cmd.Stdin = strings.NewReader(prompt)
+	} else {
+		cmd.Stdin = nil
+	}
 
 	// Ensure LIZA_AGENT_ID is available to child processes (hooks, MCP servers).
 	// The agent ID may have been resolved from --agent-id flag rather than the
