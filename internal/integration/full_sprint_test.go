@@ -372,38 +372,45 @@ func TestFullSprintSequence(t *testing.T) {
 		t.Logf("  ✓ %s exited normally", agentID)
 	}
 
-	// simulateOrchestratorTransitions mimics the orchestrator checkpoint-resume
-	// cycle that fires pipeline transitions after planning work is merged.
-	// Since fdcb19a, transitions are gated on checkpoint acknowledgment in
-	// orchestrator PreWork rather than firing automatically in reviewer PreWork.
+	// simulateOrchestratorTransitions drives the real checkpoint-resume-advance
+	// cycle that production uses to fire pipeline transitions after planning
+	// work is merged. When all planned tasks are terminal (the typical case
+	// after a planning phase completes), the production sequence is:
+	//   1. SprintCheckpoint — auto-detects PLANNING_COMPLETE trigger
+	//   2. Resume (1st) — CHECKPOINT → COMPLETED (all planned tasks terminal)
+	//   3. Resume (2nd) — advance sprint + ExecuteAvailableTransitions
 	simulateOrchestratorTransitions := func(phase string) {
 		t.Helper()
-		t.Logf("▶ Simulating orchestrator transition gate (%s)", phase)
+		t.Logf("▶ Running checkpoint-resume-advance cycle (%s)", phase)
 
-		// Set the checkpoint trigger to PLANNING_COMPLETE (orchestrator would do this).
-		if err := bb.Modify(func(s *models.State) error {
-			s.Sprint.CheckpointTrigger = models.CheckpointTriggerPlanningComplete
-			return nil
-		}); err != nil {
-			t.Fatalf("Failed to set checkpoint trigger: %v", err)
-		}
-
-		// Execute available transitions (orchestrator PreWork does this after resume).
-		results, err := ops.ExecuteAvailableTransitions(projectDir)
+		// 1. Create a real checkpoint. Auto-detection finds merged planning
+		//    tasks with unconsumed output[] and sets trigger=PLANNING_COMPLETE.
+		cpResult, err := ops.SprintCheckpoint(projectDir, "")
 		if err != nil {
-			t.Fatalf("ExecuteAvailableTransitions failed: %v", err)
+			t.Fatalf("SprintCheckpoint(%s) failed: %v", phase, err)
 		}
-		for _, r := range results {
-			t.Logf("  Transition: %s → %d children from %s", r.TransitionName, len(r.ChildTaskIDs), r.SourceTaskID)
-		}
+		t.Logf("  Checkpoint created at %s", cpResult.CheckpointAt.Format(time.RFC3339))
 
-		// Clear the trigger (orchestrator PreWork does this after firing).
-		if err := bb.Modify(func(s *models.State) error {
-			s.Sprint.CheckpointTrigger = ""
-			return nil
-		}); err != nil {
-			t.Fatalf("Failed to clear checkpoint trigger: %v", err)
+		// 2. First resume: CHECKPOINT → COMPLETED (all planned tasks terminal).
+		res1, err := ops.Resume(projectDir, "test-human")
+		if err != nil {
+			t.Fatalf("Resume[1](%s) failed: %v", phase, err)
 		}
+		t.Logf("  Resumed from: %s", res1.ResumedFrom)
+
+		// 3. Second resume: COMPLETED → advance sprint + fire transitions.
+		res2, err := ops.Resume(projectDir, "test-human")
+		if err != nil {
+			t.Fatalf("Resume[2](%s) failed: %v", phase, err)
+		}
+		if res2.SprintAdvanced == nil {
+			t.Fatalf("Resume[2](%s): expected sprint advance, got nil", phase)
+		}
+		t.Logf("  Sprint advanced: %s → %s (carried %d tasks, %d transitions)",
+			res2.SprintAdvanced.ArchivedSprintID,
+			res2.SprintAdvanced.NewSprintID,
+			len(res2.SprintAdvanced.CarriedTasks),
+			res2.TransitionsExecuted)
 	}
 
 	// ── Phase 1: Epic Planning ─────────────────────────────────────────
