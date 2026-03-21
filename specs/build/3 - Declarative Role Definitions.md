@@ -282,15 +282,18 @@ decides how many approvals are needed.
       reviewer: code-reviewer
       review-policy:
         quorum: 1                    # default: 1 approval sufficient for merge
+        provider-diversity: preferred  # base-level: blocks same-provider-as-doer claims
         significant-change:          # override for significant changes
           quorum: 2
-          provider-diversity: preferred  # prefer approvals from different providers
+          provider-diversity: preferred  # override takes precedence over base
         architecture-impact:         # override for architecture-impacting changes
           quorum: 2
           provider-diversity: preferred
       states:
         # ...
 ```
+
+`provider-diversity` is supported at the base review-policy level (works with quorum: 1) and at impact override levels. Override values take precedence; when absent, the base-level value applies.
 
 **Quorum mechanics:**
 
@@ -299,17 +302,21 @@ decides how many approvals are needed.
 - When a reviewer approves, the approval is recorded with the reviewer's provider metadata.
 - The reviewer strategy's `PreWork` merge handler checks: (1) approval count >= quorum,
   (2) provider diversity satisfied if achievable. Only then does it proceed to merge.
-- **Provider diversity is best-effort, not blocking.** If all registered reviewers share the
-  same provider, the system proceeds with the configured quorum — it does not deadlock waiting
-  for a reviewer that doesn't exist. Diversity is applied when the reviewer pool can satisfy it.
-  When diversity is satisfied, the merge log records it; when not, it records why (e.g.,
-  "all reviewers use claude").
+- **Doer-provider diversity (claim-time blocking).** When `provider-diversity: preferred` is
+  configured, a reviewer sharing the doer's provider is **blocked** from claiming the task if
+  a reviewer from a different provider is registered (even if busy). Fallback: if no
+  different-provider reviewer is registered, or the doer's agent is no longer in state, the
+  block is skipped — the same-provider reviewer may claim. This applies at all quorum levels
+  (including quorum: 1).
+- **Provider diversity at merge time is best-effort.** If diversity is not satisfied in
+  approvals (e.g., only one provider available), the merge proceeds with a warning in merge
+  history. The merge gate also verifies `ApprovalCount >= effective quorum`.
 - **Reviewer claim priority.** When multiple tasks are claimable, reviewers prioritize:
   (1) `PARTIALLY_APPROVED` tasks over fresh submissions — completing a quorum is higher
   value than starting a new review.
-  (2) Among fresh submissions, tasks where provider diversity can be satisfied (i.e., the
-  reviewer's provider differs from existing approvals or from the only other registered
-  reviewer's provider) are preferred.
+  (2) Among candidates that survive doer-diversity blocking, tasks where provider diversity
+  can be satisfied (i.e., the reviewer's provider differs from existing approvals or from the
+  only other registered reviewer's provider) are preferred as a soft preference.
 
 **Quorum state machine (quorum > 1):**
 
@@ -358,9 +365,10 @@ Key rules:
   doer. Both reviewers must review the revised submission from scratch. Rationale: the
   revision may have broken what the first reviewer approved, and from experience, the first
   reviewer often finds new issues when re-reviewing after a second reviewer's rejection.
-- The first reviewer MAY re-claim the task at `partially_approved` — provider diversity is
-  preferred, not enforced. But if a different-provider reviewer is available, they are
-  preferred in claim priority.
+- The first reviewer MAY re-claim the task at `partially_approved`, but when
+  `provider-diversity: preferred` is configured, a same-provider-as-doer reviewer is blocked
+  from claiming if a different-provider reviewer is registered. Among non-blocked candidates,
+  different-provider reviewers are preferred as a soft preference.
 
 **Role-pair states extension for quorum > 1:**
 

@@ -28,6 +28,7 @@ role-pairs:
   coding-pair:
     review-policy:
       quorum: 1                    # default: single reviewer
+      provider-diversity: preferred # base-level: applies at all impact levels
       significant-change:
         quorum: 2                  # override for significant changes
         provider-diversity: preferred
@@ -35,6 +36,8 @@ role-pairs:
         quorum: 2
         provider-diversity: preferred
 ```
+
+`provider-diversity` is supported at the base level (works with quorum: 1) and at override levels. Override values take precedence; when absent, the base-level value applies.
 
 **Impact classification:**
 - Three levels: `standard` (default) < `significant` < `architecture`
@@ -66,9 +69,14 @@ submitted → reviewing → approved (quorum=1)
 - Best-effort: if diversity is not satisfied (e.g., only one provider available), merge proceeds with a warning in merge history
 - Defense-in-depth: merge gate also verifies `ApprovalCount >= effective quorum`
 
+**Doer-provider diversity (claim-time blocking):**
+- When `provider-diversity: preferred` is configured, a reviewer sharing the doer's provider is **blocked** from claiming the task if a reviewer from a different provider is registered (even if busy)
+- Fallback: if no different-provider reviewer is registered, or the doer's agent is no longer in state, the block is skipped — the same-provider reviewer may claim
+- This applies at all quorum levels (including quorum: 1) and to both first and second reviews
+
 **Reviewer claim priority:**
 - `PARTIALLY_APPROVED` tasks claimed before `SUBMITTED` tasks (second review shouldn't wait)
-- When provider-diversity is configured, prefer reviewers from a different provider than first approver
+- When provider-diversity is configured, prefer reviewers from a different provider than first approver (soft preference within the candidates that survive doer-diversity blocking)
 
 **Resolver methods added:**
 - `ReviewPolicy(rolePair)` — returns policy config
@@ -90,7 +98,7 @@ Multi-reviewer approval with provider diversity replicates the human practice of
 - Backward compatible — quorum defaults to 1, existing workflows unchanged
 
 **Limitations accepted:**
-- Provider diversity is best-effort, not blocking — environments with a single provider still function
+- Provider diversity at claim time is blocking when alternatives exist, but falls back gracefully when no different-provider reviewer is registered — environments with a single provider still function
 - Impact classification relies on reviewer judgment — no automated heuristics
 - Rejection clears all approvals — conservative but simple; partial re-review would add complexity
 

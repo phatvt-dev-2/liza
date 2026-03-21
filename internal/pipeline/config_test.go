@@ -1065,6 +1065,30 @@ pipeline:
 		}
 	})
 
+	t.Run("valid_base_level_provider_diversity", func(t *testing.T) {
+		yaml := base(`      review-policy:
+        quorum: 1
+        provider-diversity: preferred`)
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects_invalid_base_level_provider_diversity", func(t *testing.T) {
+		yaml := base(`      review-policy:
+        quorum: 1
+        provider-diversity: required`)
+		cfg := writeTemp(t, yaml)
+		_, err := Load(cfg)
+		if err == nil {
+			t.Fatal("expected error for invalid base-level provider-diversity")
+		}
+		assertContains(t, err.Error(), "provider-diversity")
+		assertContains(t, err.Error(), "required")
+	})
+
 	t.Run("valid_no_review_policy", func(t *testing.T) {
 		// review-policy is optional — omitting it is valid.
 		yaml := base("")

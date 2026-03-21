@@ -1161,3 +1161,285 @@ func TestClaimReviewerTask_ReviewClaimCooldown(t *testing.T) {
 		}
 	})
 }
+
+// doerDiversityResolver is a mock for testing doer-provider diversity filtering.
+// It implements the interface required by filterDoerProviderDiversity.
+type doerDiversityResolver struct {
+	diversity      string            // default value returned by ProviderDiversity
+	impactOverride map[string]string // impact → diversity override (optional)
+	reviewerRole   string
+}
+
+func (r *doerDiversityResolver) ProviderDiversity(_ string, impact string) (string, error) {
+	if r.impactOverride != nil {
+		if v, ok := r.impactOverride[impact]; ok {
+			return v, nil
+		}
+	}
+	return r.diversity, nil
+}
+
+func (r *doerDiversityResolver) ReviewerRole(string) (string, error) {
+	return r.reviewerRole, nil
+}
+
+func TestIsBlockedByDoerDiversity(t *testing.T) {
+	doerID := "coder-1"
+
+	t.Run("blocked when claimer shares doer provider and diverse reviewer exists", func(t *testing.T) {
+		task := &models.Task{ID: "task-1", RolePair: "coding-pair", AssignedTo: &doerID}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"}, // claimer
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google"},    // diverse
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
+
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		if !blocked {
+			t.Error("expected blocked: claimer shares doer provider and diverse reviewer exists")
+		}
+	})
+
+	t.Run("not blocked when claimer has different provider than doer", func(t *testing.T) {
+		task := &models.Task{ID: "task-1", RolePair: "coding-pair", AssignedTo: &doerID}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "google"}, // different from doer
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
+
+		blocked := isBlockedByDoerDiversity(task, "google", "code-reviewer-1", state, resolver)
+		if blocked {
+			t.Error("should not block: claimer has different provider than doer")
+		}
+	})
+
+	t.Run("not blocked when no diverse reviewer registered", func(t *testing.T) {
+		task := &models.Task{ID: "task-1", RolePair: "coding-pair", AssignedTo: &doerID}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"}, // same as doer
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
+
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		if blocked {
+			t.Error("should not block: no diverse reviewer registered (fallback)")
+		}
+	})
+
+	t.Run("not blocked when diversity not configured", func(t *testing.T) {
+		task := &models.Task{ID: "task-1", RolePair: "coding-pair", AssignedTo: &doerID}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"},
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google"},
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "", reviewerRole: "code-reviewer"}
+
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		if blocked {
+			t.Error("should not block: provider-diversity not configured")
+		}
+	})
+
+	t.Run("not blocked when doer agent not in state", func(t *testing.T) {
+		missingDoer := "coder-gone"
+		task := &models.Task{ID: "task-1", RolePair: "coding-pair", AssignedTo: &missingDoer}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"},
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google"},
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
+
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		if blocked {
+			t.Error("should not block: doer agent not in state (skip filter)")
+		}
+	})
+
+	t.Run("not blocked when task has no AssignedTo", func(t *testing.T) {
+		task := &models.Task{ID: "task-1", RolePair: "coding-pair", AssignedTo: nil}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"},
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google"},
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
+
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		if blocked {
+			t.Error("should not block: task has no AssignedTo")
+		}
+	})
+
+	t.Run("blocked even when diverse reviewer is busy", func(t *testing.T) {
+		task := &models.Task{ID: "task-1", RolePair: "coding-pair", AssignedTo: &doerID}
+		busyTask := "other-task"
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"},
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google", Status: models.AgentStatusReviewing, CurrentTask: &busyTask},
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
+
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		if !blocked {
+			t.Error("expected blocked: diverse reviewer is registered (even if busy)")
+		}
+	})
+}
+
+func TestFilterDoerProviderDiversity(t *testing.T) {
+	doerID := "coder-1"
+
+	t.Run("filters all candidates when all share doer provider", func(t *testing.T) {
+		tasks := []*models.Task{
+			{ID: "task-1", RolePair: "coding-pair", AssignedTo: &doerID},
+			{ID: "task-2", RolePair: "coding-pair", AssignedTo: &doerID},
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"},
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google"},
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
+
+		filtered := filterDoerProviderDiversity(tasks, "anthropic", "code-reviewer-1", state, resolver)
+		if len(filtered) != 0 {
+			t.Errorf("expected 0 candidates (all blocked), got %d", len(filtered))
+		}
+	})
+
+	t.Run("keeps candidates with different doer provider", func(t *testing.T) {
+		doer2 := "coder-2"
+		tasks := []*models.Task{
+			{ID: "task-blocked", RolePair: "coding-pair", AssignedTo: &doerID}, // doer is anthropic
+			{ID: "task-ok", RolePair: "coding-pair", AssignedTo: &doer2},       // doer is google
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"coder-2":         {Role: "coder", Provider: "google"},
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"},
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google"},
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
+
+		filtered := filterDoerProviderDiversity(tasks, "anthropic", "code-reviewer-1", state, resolver)
+		if len(filtered) != 1 {
+			t.Fatalf("expected 1 candidate, got %d", len(filtered))
+		}
+		if filtered[0].ID != "task-ok" {
+			t.Errorf("expected task-ok to survive, got %s", filtered[0].ID)
+		}
+	})
+
+	t.Run("skips filter when claimer has no provider", func(t *testing.T) {
+		tasks := []*models.Task{
+			{ID: "task-1", RolePair: "coding-pair", AssignedTo: &doerID},
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google"},
+			},
+		}
+		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
+
+		filtered := filterDoerProviderDiversity(tasks, "", "code-reviewer-1", state, resolver)
+		if len(filtered) != 1 {
+			t.Errorf("expected all candidates kept (no claimer provider), got %d", len(filtered))
+		}
+	})
+
+	t.Run("uses effective impact from task history", func(t *testing.T) {
+		// Diversity is configured only for "significant" impact (not at base level).
+		// Task has a checkpoint history entry declaring "significant" impact.
+		// The filter should resolve effective impact and block accordingly.
+		doer := "coder-1"
+		task := &models.Task{
+			ID:         "task-sig",
+			RolePair:   "coding-pair",
+			AssignedTo: &doer,
+			Status:     models.TaskStatusPartiallyApproved,
+			Approvals: []models.Approval{
+				{Agent: "code-reviewer-3", Provider: "openai"},
+			},
+			History: []models.TaskHistoryEntry{
+				{
+					Event: models.TaskEventPreExecutionCheckpoint,
+					Extra: map[string]any{"impact": "significant"},
+				},
+			},
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"},
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google"},
+			},
+		}
+		// No base-level diversity; only "significant" has it.
+		resolver := &doerDiversityResolver{
+			diversity:      "",
+			impactOverride: map[string]string{"significant": "preferred"},
+			reviewerRole:   "code-reviewer",
+		}
+
+		filtered := filterDoerProviderDiversity(
+			[]*models.Task{task}, "anthropic", "code-reviewer-1", state, resolver,
+		)
+		if len(filtered) != 0 {
+			t.Error("expected blocked: significant impact activates diversity from override")
+		}
+	})
+
+	t.Run("standard impact not blocked when diversity only on override", func(t *testing.T) {
+		// Diversity is configured only for "significant" impact.
+		// Task has no impact history (standard). Should NOT be blocked.
+		doer := "coder-1"
+		task := &models.Task{
+			ID:         "task-std",
+			RolePair:   "coding-pair",
+			AssignedTo: &doer,
+			History:    []models.TaskHistoryEntry{},
+		}
+		state := &models.State{
+			Agents: map[string]models.Agent{
+				"coder-1":         {Role: "coder", Provider: "anthropic"},
+				"code-reviewer-1": {Role: "code-reviewer", Provider: "anthropic"},
+				"code-reviewer-2": {Role: "code-reviewer", Provider: "google"},
+			},
+		}
+		resolver := &doerDiversityResolver{
+			diversity:      "",
+			impactOverride: map[string]string{"significant": "preferred"},
+			reviewerRole:   "code-reviewer",
+		}
+
+		filtered := filterDoerProviderDiversity(
+			[]*models.Task{task}, "anthropic", "code-reviewer-1", state, resolver,
+		)
+		if len(filtered) != 1 {
+			t.Error("should not block: standard impact has no diversity configured")
+		}
+	})
+}

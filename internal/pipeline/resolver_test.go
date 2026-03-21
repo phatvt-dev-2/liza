@@ -834,3 +834,176 @@ func TestResolver_FixtureMatchesEmbeddedPipeline(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderDiversity_BaseLevelFallthrough(t *testing.T) {
+	yamlData := []byte(`
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      review-policy:
+        quorum: 1
+        provider-diversity: preferred
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := LoadFromBytes(yamlData)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	r := NewResolver(cfg)
+
+	tests := []struct {
+		name   string
+		impact string
+		want   string
+	}{
+		{"standard returns base-level", "", "preferred"},
+		{"standard explicit returns base-level", "standard", "preferred"},
+		{"significant falls through to base-level", "significant", "preferred"},
+		{"architecture falls through to base-level", "architecture", "preferred"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := r.ProviderDiversity("coding-pair", tt.impact)
+			if err != nil {
+				t.Fatalf("ProviderDiversity(%q): %v", tt.impact, err)
+			}
+			if got != tt.want {
+				t.Errorf("ProviderDiversity(%q) = %q, want %q", tt.impact, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProviderDiversity_OverrideTakesPrecedence(t *testing.T) {
+	// Base-level has no diversity; significant-change override has "preferred".
+	yamlData := []byte(`
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      review-policy:
+        quorum: 1
+        significant-change:
+          quorum: 2
+          provider-diversity: preferred
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+        partially-approved: CODE_PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_CODE_2
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := LoadFromBytes(yamlData)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	r := NewResolver(cfg)
+
+	// Standard impact: no diversity (base has none).
+	got, err := r.ProviderDiversity("coding-pair", "")
+	if err != nil {
+		t.Fatalf("ProviderDiversity(standard): %v", err)
+	}
+	if got != "" {
+		t.Errorf("ProviderDiversity(standard) = %q, want empty", got)
+	}
+
+	// Significant: override returns "preferred".
+	got, err = r.ProviderDiversity("coding-pair", "significant")
+	if err != nil {
+		t.Fatalf("ProviderDiversity(significant): %v", err)
+	}
+	if got != "preferred" {
+		t.Errorf("ProviderDiversity(significant) = %q, want %q", got, "preferred")
+	}
+}
+
+func TestProviderDiversity_OverrideOmittedFallsToBase(t *testing.T) {
+	// Base has "preferred"; significant-change overrides only quorum (no provider-diversity).
+	// ProviderDiversity("significant") should fall through to the base-level "preferred".
+	yamlData := []byte(`
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      review-policy:
+        quorum: 1
+        provider-diversity: preferred
+        significant-change:
+          quorum: 2
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+        partially-approved: CODE_PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_CODE_2
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`)
+	cfg, err := LoadFromBytes(yamlData)
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	r := NewResolver(cfg)
+
+	got, err := r.ProviderDiversity("coding-pair", "significant")
+	if err != nil {
+		t.Fatalf("ProviderDiversity(significant): %v", err)
+	}
+	if got != "preferred" {
+		t.Errorf("ProviderDiversity(significant) = %q, want %q (fall through to base)", got, "preferred")
+	}
+}

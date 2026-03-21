@@ -69,6 +69,7 @@ type ReviewPolicyOverrideDef struct {
 // ReviewPolicyDef defines the review quorum policy for a role-pair.
 type ReviewPolicyDef struct {
 	Quorum             int                      `yaml:"quorum"`
+	ProviderDiversity  string                   `yaml:"provider-diversity,omitempty"`
 	SignificantChange  *ReviewPolicyOverrideDef `yaml:"significant-change,omitempty"`
 	ArchitectureImpact *ReviewPolicyOverrideDef `yaml:"architecture-impact,omitempty"`
 }
@@ -277,6 +278,9 @@ func validateReviewPolicy(rpName string, rp *ReviewPolicyDef) error {
 	}
 	if rp.Quorum < 1 {
 		return fmt.Errorf("role-pair %q: review-policy quorum must be >= 1, got %d", rpName, rp.Quorum)
+	}
+	if !validProviderDiversity[rp.ProviderDiversity] {
+		return fmt.Errorf("role-pair %q: review-policy provider-diversity %q is invalid (must be \"preferred\" or omitted)", rpName, rp.ProviderDiversity)
 	}
 	if err := validateReviewPolicyOverride(rpName, "significant-change", rp.SignificantChange); err != nil {
 		return err

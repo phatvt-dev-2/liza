@@ -174,6 +174,7 @@ func LoadResolverForModels(projectRoot string) (models.PipelineResolver, error) 
 // Used to avoid double-parsing pipeline.yaml within a single operation.
 type pipelineBundle struct {
 	pr          models.PipelineResolver
+	resolver    *pipeline.Resolver // concrete resolver for policy queries (ProviderDiversity, etc.)
 	transitions map[models.TaskStatus][]models.TaskStatus
 }
 
@@ -186,6 +187,7 @@ func loadPipelineBundle(projectRoot string) (*pipelineBundle, error) {
 	}
 	return &pipelineBundle{
 		pr:          resolver,
+		resolver:    resolver,
 		transitions: BuildPipelineTransitions(resolver),
 	}, nil
 }

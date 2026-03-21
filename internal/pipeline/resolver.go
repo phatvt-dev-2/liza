@@ -281,7 +281,9 @@ func (r *Resolver) EffectiveQuorum(rolePair, impact string) (int, error) {
 
 // ProviderDiversity returns the provider-diversity setting for the given
 // role-pair at the specified impact level.
-// Returns "" when no diversity is configured for that impact level.
+// Override levels ("significant", "architecture") take precedence when configured;
+// otherwise falls through to the base-level review-policy value.
+// Returns "" when no diversity is configured.
 func (r *Resolver) ProviderDiversity(rolePair, impact string) (string, error) {
 	rp, ok := r.config.Pipeline.RolePairs[rolePair]
 	if !ok {
@@ -292,15 +294,15 @@ func (r *Resolver) ProviderDiversity(rolePair, impact string) (string, error) {
 	}
 	switch impact {
 	case "significant":
-		if rp.ReviewPolicy.SignificantChange != nil {
+		if rp.ReviewPolicy.SignificantChange != nil && rp.ReviewPolicy.SignificantChange.ProviderDiversity != "" {
 			return rp.ReviewPolicy.SignificantChange.ProviderDiversity, nil
 		}
 	case "architecture":
-		if rp.ReviewPolicy.ArchitectureImpact != nil {
+		if rp.ReviewPolicy.ArchitectureImpact != nil && rp.ReviewPolicy.ArchitectureImpact.ProviderDiversity != "" {
 			return rp.ReviewPolicy.ArchitectureImpact.ProviderDiversity, nil
 		}
 	}
-	return "", nil
+	return rp.ReviewPolicy.ProviderDiversity, nil
 }
 
 // TransitionMap generates the intra-pair transition map for all role-pairs.

@@ -101,6 +101,14 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 			claimerProvider = agent.Provider
 		}
 
+		// Filter by doer-provider diversity: when provider-diversity is configured,
+		// block reviewers that share the doer's provider if a different-provider
+		// reviewer is registered (even if busy).
+		candidates = filterDoerProviderDiversity(candidates, claimerProvider, input.AgentID, state, pb.resolver)
+		if len(candidates) == 0 {
+			return &PreconditionError{Reason: "no reviewable tasks found"}
+		}
+
 		task := selectBestCandidate(candidates, pr, claimerProvider, input.AgentID, state)
 
 		// Invariant: task must have review_commit before it can be claimed for review
@@ -330,6 +338,91 @@ func isInReviewClaimCooldown(task *models.Task, agentID string, cutoff time.Time
 		}
 		if h.Agent != nil && *h.Agent == agentID &&
 			(h.Event == models.TaskEventClaimReleased || h.Event == models.TaskEventReviewClaimReleased) {
+			return true
+		}
+	}
+	return false
+}
+
+// filterDoerProviderDiversity removes candidates where the claiming reviewer
+// shares the doer's provider and a different-provider reviewer is registered.
+// When provider-diversity is not configured for a task's role-pair, the task
+// is always kept. When the doer's agent is no longer in state, the filter
+// is skipped for that task.
+func filterDoerProviderDiversity(
+	candidates []*models.Task,
+	claimerProvider string,
+	claimerAgentID string,
+	state *models.State,
+	resolver interface {
+		ProviderDiversity(string, string) (string, error)
+		ReviewerRole(string) (string, error)
+	},
+) []*models.Task {
+	if claimerProvider == "" {
+		return candidates
+	}
+
+	var filtered []*models.Task
+	for _, t := range candidates {
+		if isBlockedByDoerDiversity(t, claimerProvider, claimerAgentID, state, resolver) {
+			continue
+		}
+		filtered = append(filtered, t)
+	}
+	return filtered
+}
+
+// isBlockedByDoerDiversity returns true when all of the following hold:
+//  1. provider-diversity: preferred is configured for the task's effective impact level
+//  2. the claiming reviewer's provider matches the doer's provider
+//  3. at least one registered reviewer (for the role-pair) has a different provider
+func isBlockedByDoerDiversity(
+	task *models.Task,
+	claimerProvider string,
+	claimerAgentID string,
+	state *models.State,
+	resolver interface {
+		ProviderDiversity(string, string) (string, error)
+		ReviewerRole(string) (string, error)
+	},
+) bool {
+	// Resolve effective impact from task history, then check if provider-diversity
+	// is configured at that impact level (with base-level fallthrough).
+	effectiveImpact := ResolveEffectiveImpact(task.History)
+	diversity, err := resolver.ProviderDiversity(task.RolePair, effectiveImpact)
+	if err != nil || diversity != "preferred" {
+		return false
+	}
+
+	// Look up the doer's provider. Skip filter if doer is not in state.
+	if task.AssignedTo == nil {
+		return false
+	}
+	doerAgent, ok := state.Agents[*task.AssignedTo]
+	if !ok || doerAgent.Provider == "" {
+		return false
+	}
+
+	// Claimer has a different provider than the doer — no block.
+	if claimerProvider != doerAgent.Provider {
+		return false
+	}
+
+	// Claimer shares the doer's provider. Block only if a different-provider
+	// reviewer is registered for this role-pair (even if busy).
+	reviewerRole, err := resolver.ReviewerRole(task.RolePair)
+	if err != nil {
+		return false
+	}
+	for agentID, agent := range state.Agents {
+		if agentID == claimerAgentID {
+			continue
+		}
+		if agent.Role != reviewerRole {
+			continue
+		}
+		if agent.Provider != doerAgent.Provider {
 			return true
 		}
 	}
