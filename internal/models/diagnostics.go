@@ -168,7 +168,7 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 			reviewing2, errR2 := pr.Reviewing2Status(task.RolePair)
 
 			switch {
-			case task.Status == submitted:
+			case task.Status == submitted && task.ReviewCommit != nil:
 				unassigned++
 			case task.Status == reviewing:
 				if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
@@ -176,7 +176,7 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 				} else {
 					activelyReviewing++
 				}
-			case errPA == nil && task.Status == partiallyApproved:
+			case errPA == nil && task.Status == partiallyApproved && task.ReviewCommit != nil:
 				awaitingSecondReview++
 			case errR2 == nil && task.Status == reviewing2:
 				if task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.Before(now) {
@@ -189,7 +189,7 @@ func GetReviewerWorkDiagnostics(state *State, pr PipelineResolver) string {
 		}
 
 		// Fallback: hardcoded status checks when resolver is unavailable.
-		if task.Status == TaskStatusReadyForReview && task.EffectiveType().HasRole(RoleCodeReviewer) {
+		if task.Status == TaskStatusReadyForReview && task.EffectiveType().HasRole(RoleCodeReviewer) && task.ReviewCommit != nil {
 			unassigned++
 		}
 		if task.Status == TaskStatusReviewing && task.EffectiveType().HasRole(RoleCodeReviewer) {

@@ -344,6 +344,11 @@ func (t *Task) isClaimablePipeline(role string, pr PipelineResolver) bool {
 		return t.Status == initial || t.Status == rejected || t.Status == TaskStatusIntegrationFailed
 
 	case reviewerRole:
+		// Defense-in-depth: tasks in review-eligible states must have review_commit.
+		// Without it, the task is corrupted and should not be claimable.
+		if t.ReviewCommit == nil {
+			return false
+		}
 		submitted, err := pr.SubmittedStatus(t.RolePair)
 		if err != nil {
 			return false

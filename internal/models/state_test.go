@@ -433,7 +433,7 @@ func TestIsClaimableWithRole(t *testing.T) {
 		},
 		{
 			name:      "code_reviewer can claim READY_FOR_REVIEW coding task",
-			task:      Task{Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+			task:      Task{Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("abc123")},
 			role:      "code-reviewer", // runtime form — matches pipeline resolver
 			claimable: true,
 		},
@@ -1292,7 +1292,7 @@ func TestIsClaimable_CodePlanningRoles(t *testing.T) {
 		},
 		{
 			name:      "code_plan_reviewer can claim CODING_PLAN_TO_REVIEW",
-			task:      Task{Status: TaskStatusCodingPlanToReview, RolePair: "code-planning-pair"},
+			task:      Task{Status: TaskStatusCodingPlanToReview, RolePair: "code-planning-pair", ReviewCommit: strPtr("abc123")},
 			role:      "code-plan-reviewer", // runtime form
 			claimable: true,
 		},
@@ -1410,7 +1410,7 @@ func TestIsClaimable_Pipeline(t *testing.T) {
 		},
 		{
 			name:      "reviewer can claim pipeline submitted status",
-			task:      Task{Status: "CODE_READY_FOR_REVIEW", RolePair: "coding-pair"},
+			task:      Task{Status: "CODE_READY_FOR_REVIEW", RolePair: "coding-pair", ReviewCommit: strPtr("abc123")},
 			role:      "code-reviewer",
 			claimable: true,
 		},

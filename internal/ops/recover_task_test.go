@@ -441,3 +441,64 @@ func TestRecoverTask_DefaultReason(t *testing.T) {
 		t.Errorf("Note message = %q, want to contain default reason 'task recovery'", lastNote.Message)
 	}
 }
+
+func TestRecoverTask_MissingReviewCommitCorruption(t *testing.T) {
+	// Task is CODE_READY_FOR_REVIEW but ReviewCommit is nil (corrupted state).
+	// recover-task should detect this and reset to initial status.
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:           "task-corrupted",
+			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
+			Priority:     1,
+			Created:      now,
+			ReviewCommit: nil, // corrupted: missing review_commit
+			History:      []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := RecoverTask(tmpDir, "task-corrupted", true, "fix corruption")
+	if err != nil {
+		t.Fatalf("RecoverTask() error: %v", err)
+	}
+
+	// Should have a warning about the reset
+	foundWarning := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "missing review_commit") && strings.Contains(w, "DRAFT_CODE") {
+			foundWarning = true
+		}
+	}
+	if !foundWarning {
+		t.Errorf("expected warning about missing review_commit reset, got: %v", result.Warnings)
+	}
+
+	// Verify task was reset to initial status
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	task := readState.FindTask("task-corrupted")
+	if task == nil {
+		t.Fatal("task not found in state")
+	}
+	if task.Status != models.TaskStatusReady {
+		t.Errorf("Status = %q, want %q (reset to initial)", task.Status, models.TaskStatusReady)
+	}
+	if task.ReviewingBy != nil {
+		t.Error("ReviewingBy should be nil after reset")
+	}
+	if task.ReviewLeaseExpires != nil {
+		t.Error("ReviewLeaseExpires should be nil after reset")
+	}
+	if task.Approvals != nil {
+		t.Error("Approvals should be nil after reset")
+	}
+}

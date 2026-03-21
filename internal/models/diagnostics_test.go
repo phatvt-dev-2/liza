@@ -67,8 +67,8 @@ func TestCountClaimableTasks(t *testing.T) {
 			name: "READY_FOR_REVIEW claimable by reviewer",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
-					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
+					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 				},
 			},
 			role: "code-reviewer",
@@ -136,7 +136,7 @@ func TestCountReviewableTasks(t *testing.T) {
 			name: "one READY_FOR_REVIEW coding task",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 				},
 			},
 			role: "code-reviewer",
@@ -156,7 +156,7 @@ func TestCountReviewableTasks(t *testing.T) {
 			name: "wrong role not counted",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 				},
 			},
 			role: "orchestrator",
@@ -166,8 +166,8 @@ func TestCountReviewableTasks(t *testing.T) {
 			name: "multiple reviewable tasks",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
-					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
+					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 					{ID: "t3", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
@@ -293,8 +293,8 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			name: "unassigned reviewable tasks",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
-					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
+					{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 				},
 			},
 			wantContains: []string{"Found 2 reviewable task(s)"},
@@ -303,7 +303,7 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 			name: "expired lease reported alongside reviewable",
 			state: &State{
 				Tasks: []Task{
-					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 					{ID: "t2", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &pastTime},
 				},
 			},
@@ -372,8 +372,8 @@ func TestDiagnosticsQuorumStates(t *testing.T) {
 	t.Run("CountReviewableTasks counts partially_approved", func(t *testing.T) {
 		state := &State{
 			Tasks: []Task{
-				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},
-				{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
+				{ID: "t2", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 				{ID: "t3", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair"},
 			},
 		}
@@ -386,7 +386,7 @@ func TestDiagnosticsQuorumStates(t *testing.T) {
 	t.Run("CountReviewableTasks partially_approved only", func(t *testing.T) {
 		state := &State{
 			Tasks: []Task{
-				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},
+				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 			},
 		}
 		got := CountReviewableTasks(state, "code-reviewer", pr)
@@ -398,7 +398,7 @@ func TestDiagnosticsQuorumStates(t *testing.T) {
 	t.Run("diagnostics reports partially_approved as awaiting second review", func(t *testing.T) {
 		state := &State{
 			Tasks: []Task{
-				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},
+				{ID: "t1", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 			},
 		}
 		got := GetReviewerWorkDiagnostics(state, pr)
@@ -434,8 +434,8 @@ func TestDiagnosticsQuorumStates(t *testing.T) {
 	t.Run("diagnostics mixed quorum and regular states", func(t *testing.T) {
 		state := &State{
 			Tasks: []Task{
-				{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
-				{ID: "t2", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},
+				{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
+				{ID: "t2", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 				{ID: "t3", Status: "REVIEWING_CODE_2", Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &futureTime},
 				{ID: "t4", Status: TaskStatusReviewing, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewLeaseExpires: &futureTime},
 			},
@@ -450,6 +450,24 @@ func TestDiagnosticsQuorumStates(t *testing.T) {
 		}
 		if !strings.Contains(got, "in second review") {
 			t.Errorf("GetReviewerWorkDiagnostics() = %q, want it to contain 'in second review'", got)
+		}
+	})
+
+	t.Run("corrupted tasks without review_commit excluded from diagnostics", func(t *testing.T) {
+		state := &State{
+			Tasks: []Task{
+				{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},                                // no ReviewCommit
+				{ID: "t2", Status: "CODE_PARTIALLY_APPROVED", Type: TaskTypeCoding, RolePair: "coding-pair"},                               // no ReviewCommit
+				{ID: "t3", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("valid")}, // valid
+			},
+		}
+		got := GetReviewerWorkDiagnostics(state, pr)
+		// Only t3 should be counted as reviewable
+		if !strings.Contains(got, "1 reviewable") {
+			t.Errorf("GetReviewerWorkDiagnostics() = %q, want '1 reviewable' (corrupted tasks excluded)", got)
+		}
+		if strings.Contains(got, "awaiting second review") {
+			t.Errorf("GetReviewerWorkDiagnostics() = %q, corrupted partially_approved should not appear", got)
 		}
 	})
 
@@ -468,7 +486,7 @@ func TestDiagnosticsQuorumStates(t *testing.T) {
 		}
 		state := &State{
 			Tasks: []Task{
-				{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+				{ID: "t1", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair", ReviewCommit: strPtr("rc")},
 			},
 		}
 		got := GetReviewerWorkDiagnostics(state, prNoQuorum)

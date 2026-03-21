@@ -257,9 +257,12 @@ func TestWaitForCodePlanReviewerWork(t *testing.T) {
 	}{
 		{
 			name: "coding plan to review task available",
-			tasks: []models.Task{
-				testhelpers.BuildTaskByStatus("task-1", models.TaskStatusCodingPlanToReview, now),
-			},
+			tasks: func() []models.Task {
+				t := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusCodingPlanToReview, now)
+				rc := "review123"
+				t.ReviewCommit = &rc
+				return []models.Task{t}
+			}(),
 			wantWork: true,
 		},
 		{
@@ -967,19 +970,23 @@ func TestWaitForEpicPlanReviewerWork(t *testing.T) {
 	}{
 		{
 			name: "epic plan to review task available",
-			tasks: []models.Task{
-				{
-					ID:       "task-1",
-					Status:   "EPIC_PLAN_TO_REVIEW",
-					RolePair: "epic-planning-pair",
-					Priority: 1,
-					Created:  now,
-					SpecRef:  "README.md",
-					DoneWhen: "Done",
-					Scope:    "Test",
-					History:  []models.TaskHistoryEntry{},
-				},
-			},
+			tasks: func() []models.Task {
+				rc := "review123"
+				return []models.Task{
+					{
+						ID:           "task-1",
+						Status:       "EPIC_PLAN_TO_REVIEW",
+						RolePair:     "epic-planning-pair",
+						Priority:     1,
+						Created:      now,
+						SpecRef:      "README.md",
+						DoneWhen:     "Done",
+						Scope:        "Test",
+						History:      []models.TaskHistoryEntry{},
+						ReviewCommit: &rc,
+					},
+				}
+			}(),
 			wantWork: true,
 		},
 		{
@@ -1111,19 +1118,23 @@ func TestWaitForUSReviewerWork(t *testing.T) {
 	}{
 		{
 			name: "US ready for review task available",
-			tasks: []models.Task{
-				{
-					ID:       "task-1",
-					Status:   "US_READY_FOR_REVIEW",
-					RolePair: "us-writing-pair",
-					Priority: 1,
-					Created:  now,
-					SpecRef:  "README.md",
-					DoneWhen: "Done",
-					Scope:    "Test",
-					History:  []models.TaskHistoryEntry{},
-				},
-			},
+			tasks: func() []models.Task {
+				rc := "review123"
+				return []models.Task{
+					{
+						ID:           "task-1",
+						Status:       "US_READY_FOR_REVIEW",
+						RolePair:     "us-writing-pair",
+						Priority:     1,
+						Created:      now,
+						SpecRef:      "README.md",
+						DoneWhen:     "Done",
+						Scope:        "Test",
+						History:      []models.TaskHistoryEntry{},
+						ReviewCommit: &rc,
+					},
+				}
+			}(),
 			wantWork: true,
 		},
 		{

@@ -98,9 +98,11 @@ func TestIsClaimable(t *testing.T) {
 	})
 
 	t.Run("reviewer claimable at submitted status", func(t *testing.T) {
+		rc := "abc123"
 		task := &Task{
-			RolePair: "coding-pair",
-			Status:   "CODE_READY_FOR_REVIEW",
+			RolePair:     "coding-pair",
+			Status:       "CODE_READY_FOR_REVIEW",
+			ReviewCommit: &rc,
 		}
 		if !task.IsClaimable("code-reviewer", nil, pr) {
 			t.Error("reviewer should be claimable at submitted status")
@@ -108,12 +110,24 @@ func TestIsClaimable(t *testing.T) {
 	})
 
 	t.Run("reviewer claimable at partially approved", func(t *testing.T) {
+		rc := "abc123"
 		task := &Task{
-			RolePair: "coding-pair",
-			Status:   "CODE_PARTIALLY_APPROVED",
+			RolePair:     "coding-pair",
+			Status:       "CODE_PARTIALLY_APPROVED",
+			ReviewCommit: &rc,
 		}
 		if !task.IsClaimable("code-reviewer", nil, pr) {
 			t.Error("reviewer should be claimable at partially approved status")
+		}
+	})
+
+	t.Run("reviewer not claimable without review_commit", func(t *testing.T) {
+		task := &Task{
+			RolePair: "coding-pair",
+			Status:   "CODE_READY_FOR_REVIEW",
+		}
+		if task.IsClaimable("code-reviewer", nil, pr) {
+			t.Error("reviewer should not be claimable without review_commit (corrupted state)")
 		}
 	})
 

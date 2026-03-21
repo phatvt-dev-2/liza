@@ -186,6 +186,32 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 
 		task.Worktree = nil
 
+		// Detect and fix review_commit corruption: tasks in submitted/reviewing/approved
+		// states without review_commit are unclaimable and stuck. Reset to initial status.
+		if resolver != nil && task.ReviewCommit == nil {
+			submitted, _ := resolver.SubmittedStatus(task.RolePair)
+			reviewing, _ := resolver.ReviewingStatus(task.RolePair)
+			approved, _ := resolver.ApprovedStatus(task.RolePair)
+			pa, _ := resolver.PartiallyApprovedStatus(task.RolePair)
+			r2, _ := resolver.Reviewing2Status(task.RolePair)
+			needsReset := task.Status == submitted || task.Status == reviewing ||
+				task.Status == approved ||
+				(pa != "" && task.Status == pa) ||
+				(r2 != "" && task.Status == r2)
+			if needsReset {
+				initial, initErr := resolver.InitialStatus(task.RolePair)
+				if initErr == nil {
+					task.Status = initial
+					task.ReviewingBy = nil
+					task.ReviewLeaseExpires = nil
+					task.Approvals = nil
+					task.ApprovedBy = nil
+					result.Warnings = append(result.Warnings,
+						fmt.Sprintf("reset %s to %s: missing review_commit", taskID, initial))
+				}
+			}
+		}
+
 		for agentID := range agentsToRecover {
 			if _, exists := state.Agents[agentID]; exists {
 				delete(state.Agents, agentID)

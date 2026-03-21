@@ -317,8 +317,10 @@ func TestClaimReviewerTask_MissingReviewCommit(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for missing review_commit, got nil")
 	}
-	if !strings.Contains(err.Error(), "no review_commit") {
-		t.Errorf("Error = %q, want to contain 'no review_commit'", err.Error())
+	// Task is filtered out by IsClaimable (review_commit nil → not claimable),
+	// so the error is "no reviewable tasks found" rather than "no review_commit".
+	if !strings.Contains(err.Error(), "no reviewable tasks found") {
+		t.Errorf("Error = %q, want to contain 'no reviewable tasks found'", err.Error())
 	}
 }
 
