@@ -225,7 +225,7 @@ func collectSiblingTasks(state *models.State, currentTaskID string) ([]prompts.S
 		if task != nil {
 			siblings = append(siblings, prompts.SiblingTaskSummary{
 				ID:          task.ID,
-				Description: task.Description,
+				Description: truncateDescription(task.Description, 200),
 				Status:      string(task.Status),
 			})
 		}
@@ -254,6 +254,14 @@ func splitPlanRefSection(planRef string) string {
 		return planRef[i+1:]
 	}
 	return ""
+}
+
+// truncateDescription shortens s to maxLen characters, appending "…" if truncated.
+func truncateDescription(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "…"
 }
 
 func savePrompt(promptDir, agentID, prompt string) (string, error) {

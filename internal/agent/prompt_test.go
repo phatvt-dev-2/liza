@@ -577,6 +577,79 @@ func TestSplitPlanRef(t *testing.T) {
 	}
 }
 
+func TestTruncateDescription(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		maxLen int
+		want   string
+	}{
+		{"short", "hello", 100, "hello"},
+		{"exact", strings.Repeat("a", 100), 100, strings.Repeat("a", 100)},
+		{"long", strings.Repeat("b", 200), 100, strings.Repeat("b", 100) + "…"},
+		{"empty", "", 100, ""},
+		{"unicode preserved when under limit", "héllo wörld", 100, "héllo wörld"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := truncateDescription(tc.input, tc.maxLen)
+			if got != tc.want {
+				t.Errorf("truncateDescription(%q, %d) = %q, want %q", tc.input, tc.maxLen, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCollectSiblingTasks_TruncatesLongDescriptions(t *testing.T) {
+	now := time.Now().UTC()
+	longDesc := strings.Repeat("x", 400)
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Current task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Created:     now,
+			},
+			{
+				ID:          "task-2",
+				Description: longDesc,
+				Status:      models.TaskStatusReady,
+				Priority:    2,
+				Created:     now,
+			},
+		},
+		Sprint: models.Sprint{
+			Scope: models.SprintScope{
+				Planned: []string{"task-1", "task-2"},
+			},
+		},
+		Agents: make(map[string]models.Agent),
+	}
+
+	siblings, total, ordinal := collectSiblingTasks(state, "task-1")
+	if total != 2 || ordinal != 1 {
+		t.Fatalf("total=%d ordinal=%d, want 2, 1", total, ordinal)
+	}
+	if len(siblings) != 1 {
+		t.Fatalf("len(siblings) = %d, want 1", len(siblings))
+	}
+	if len(siblings[0].Description) > 203 { // 200 + len("…") which is 3 bytes in UTF-8
+		t.Errorf("sibling description not truncated: len=%d", len(siblings[0].Description))
+	}
+	if !strings.HasSuffix(siblings[0].Description, "…") {
+		t.Error("truncated description should end with ellipsis")
+	}
+}
+
 // TestPromptSaving tests prompt file creation
 func TestPromptSaving(t *testing.T) {
 	tmpDir := t.TempDir()
