@@ -87,6 +87,9 @@ The blackboard (`state.yaml`) is the coordination mechanism.
 
 **History is Immutable:** Never delete history entries. Append only.
 
+**Do NOT edit state.yaml directly.** All state transitions MUST go through Liza MCP tools (`liza_submit_for_review`, `liza_claim_task`, etc.). Direct edits bypass invariant checks and can corrupt state irreversibly. If an MCP tool fails repeatedly, set the task BLOCKED via `liza_mark_blocked` — never work around the failure by editing state.yaml.
+Exception: `discovered[].converted_to_task` may be set directly (no MCP tool exists yet). Always run `liza_validate` immediately after.
+
 **Do NOT use TodoWrite.** The blackboard already tracks task state and checkpoints.
 
 ---

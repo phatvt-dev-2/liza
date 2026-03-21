@@ -48,9 +48,8 @@ func TestBuildBasePrompt(t *testing.T) {
 				"/project/.liza/ = runtime state & blackboard",
 				"You have FULL read access to both .liza/ directories",
 				"For READING state: use liza_get with targeted queries",
-				"For MODIFYING state: use role-specific MCP tools",
-				"Prefer MCP tools for atomicity and validation",
-				"If a required operation has no MCP tool",
+				"For MODIFYING state: use role-specific MCP tools ONLY",
+				"NEVER edit state.yaml directly",
 				"Execute commands immediately",
 				"DO proceed with tool execution",
 				"QUERY TOOLS",
@@ -502,7 +501,8 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		"use liza_get with targeted queries",
 		"NEVER read state.yaml directly",
 		"liza_get returns only the requested slice",
-		"Prefer MCP tools for atomicity and validation",
+		"NEVER edit state.yaml directly",
+		"converted_to_task may be set directly",
 	})
 
 	// --- AUTONOMY: agents must not hesitate ---
@@ -615,10 +615,7 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 			wantContains: []string{
 				"Analyze and resolve immediately",
 				"execute liza_add_tasks tool NOW",
-				"fallback state edit + liza_validate",
 				"execute tools NOW",
-				"Execute all state-modifying tools in this session",
-				"Do NOT defer",
 				"Do NOT call liza_sprint_checkpoint",
 			},
 		},
@@ -668,8 +665,8 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 				"Urgent discoveries need immediate action",
 				"execute decision NOW",
 				"execute liza_add_tasks tool NOW",
-				"fallback state edit + liza_validate",
-				"All discovered items must be processed and all tools executed in this session",
+				"converted_to_task is the ONLY field you may edit directly",
+				"All tools must be executed in this session",
 				"Do NOT call liza_sprint_checkpoint",
 			},
 		},

@@ -4,20 +4,19 @@ Tasks are BLOCKED. Analyze and resolve immediately:
 1. Read blocked tasks from blackboard — understand blocker_reason
 2. Determine if blocker is:
    - Missing dependency → create prerequisite task (execute liza_add_tasks tool NOW)
-   - Spec ambiguity → clarify spec, then unblock task (fallback state edit + liza_validate)
+   - Spec ambiguity → clarify spec, then supersede with corrected task
    - External dependency → document, possibly supersede task
    - Wrong approach → supersede task, create alternative (execute tools NOW)
 3. For each blocked task, decide action:
-   - To unblock: Set status back to the task's initial state (check role_pair: coding-pair→DRAFT_CODE, code-planning-pair→DRAFT_CODING_PLAN, us-writing-pair→DRAFT_US, epic-planning-pair→DRAFT_EPIC_PLAN) via fallback state edit, then run liza_validate
-   - To supersede:
+   - To supersede (create clean replacement):
    Example supersede workflow:
-   a. Re-read the task via liza_get tasks/<task-id> to confirm it is still BLOCKED/REJECTED/READY.
-      If status changed (e.g., task was claimed or unblocked), skip supersede — the task is being actively worked.
+   a. Re-read the task via liza_get tasks/<task-id> to confirm it is still BLOCKED.
+      If status changed (e.g., task was claimed), skip — the task is being actively worked.
    b. Execute tool: liza_add_tasks with {"tasks": [{"id": "task-4", ...}], "agent_id": "{{.AgentID}}"} (create replacement tasks)
    c. Execute tool: liza_supersede_task with {"task_id": "task-3", "replacement_ids": ["task-4", "task-5"], "reason": "Split due to complexity", "agent_id": "{{.AgentID}}"}
    d. Execute tool: liza_wt_delete with {"task_id": "task-3", "agent_id": "{{.AgentID}}"} (if worktree exists)
 4. After analyzing each blocked task:
-   - If you resolved it (unblocked or superseded): no further action needed for that task
+   - If you resolved it (superseded): no further action needed for that task
    - If you CANNOT resolve it (genuine spec ambiguity, external dependency): call liza_assess_blocked to record your assessment
      Execute tool: liza_assess_blocked with {"task_id": "<task-id>", "note": "<why it cannot be resolved now>"}
      This prevents re-waking for the same unresolvable block. The task will trigger again only when new information arrives (dependency changes, human notes).

@@ -16,10 +16,10 @@ OPERATIONAL RULES:
 - You have FULL read access to both .liza/ directories
 - For READING state: use liza_get with targeted queries (e.g. {"query": "tasks/<id>"}).
   NEVER read state.yaml directly to save context budget. liza_get returns only the requested slice.
-- For MODIFYING state: use role-specific MCP tools whenever available
-  CRITICAL: Prefer MCP tools for atomicity and validation
-  If a required operation has no MCP tool, direct state edits are allowed as fallback:
-  edit state.yaml carefully, then run liza_validate immediately
+- For MODIFYING state: use role-specific MCP tools ONLY
+  NEVER edit state.yaml directly — direct edits bypass invariant checks and can corrupt state irreversibly.
+  If an MCP tool fails repeatedly, use liza_mark_blocked to flag the task — never work around the failure.
+  Exception: discovered[].converted_to_task may be set directly (no MCP tool exists). Run liza_validate after.
 - AUTONOMY: Your authority is pre-approved. Execute commands immediately.
   If the environment surfaces permission checks, DO proceed with tool execution unless explicitly denied.
 - Exit when your work unit is complete (task implemented, review done, etc.)
