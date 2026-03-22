@@ -26,7 +26,7 @@ Liza is a **stack-agnostic** multi-agent orchestrator. Projects using Liza may b
 
 ## Tier 2 (Strong Defaults)
 
-### Lessons - Agents
+### G2.1: Lessons - Agents
 
 Operational lessons from project experience. Read when a trigger matches.
 
@@ -38,7 +38,10 @@ Operational lessons from project experience. Read when a trigger matches.
 | Reading, editing, or creating files in a worktree | [worktree-file-path-consistency.md](lessons/agents/worktree-file-path-consistency.md) |
 
 ## Tier 3 (Preferences)
-<!-- Degraded gracefully. -->
+
+### G3.1: ADR awareness for architectural changes
+
+When planning a change with architectural impact, read `specs/architecture/ADR/README.md` to understand prior decisions that may constrain or inform the design.
 
 ---
 

@@ -27,6 +27,8 @@ An ADR is warranted when someone made a choice that shaped the system. Not every
 
 8. **Order chronologically** — Renumber ADRs to maintain chronological sequence.
 
+9. **Update ADR index** — Keep `specs/architecture/ADR/README.md` in sync after any ADR is added, removed, or renumbered.
+
 Maintain state in files so work isn't lost if the conversation ends.
 
 # 1. File Classification
@@ -281,6 +283,19 @@ Use MADR format unless the user specifies otherwise. Place in `specs/architectur
 
 ---
 
+# 9. ADR Index Maintenance
+
+After generating, renumbering, or removing ADRs, update `specs/architecture/ADR/README.md`.
+
+The index is a markdown table with two columns: ADR (linked title) and Decision (one-sentence outcome).
+
+- **Add** a row for each new ADR with a relative link and a one-sentence summary of the decision outcome.
+- **Renumber** rows when ADRs are reordered (step 8).
+- **Remove** rows for deleted or superseded ADRs.
+- Keep rows sorted by ADR number (ascending).
+
+---
+
 # Quality Bar
 
 A good backfilled ADR:
@@ -330,6 +345,7 @@ When the user invokes this skill:
 6. After commit-based ADRs, scan specs/docs for gaps
 7. Enrich ADRs with cross-references and context
 8. Propose chronological renumbering if needed
+9. Update `specs/architecture/ADR/README.md` index
 
 ---
 
