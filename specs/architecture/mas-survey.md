@@ -3,7 +3,7 @@
 ## Landscape Overview
 
 The multi-agent coding space has evolved rapidly since Liza's first release. The field now splits into
-four distinct categories, each solving a different problem. Liza sits in a category of one.
+five distinct categories, each solving a different problem. Liza sits in a category of one.
 
 **General-purpose agent orchestration frameworks** (CrewAI, LangGraph, AutoGen, Semantic Kernel) provide
 building blocks for assembling multi-agent workflows across any domain. They optimize for flexibility and
@@ -17,11 +17,19 @@ Trust is assumed through process compliance.
 isolation, and project-level orchestration. They optimize for operational coordination. Trust is delegated
 to whatever happens inside each agent session.
 
+**Context-engineered development systems** (GSD) treat context window management as the primary engineering
+challenge. Thin orchestrators spawn fresh subagents for every operation, plans are sized to context budgets
+before execution, and state lives in human-readable files. Trust derives from process structure
+(spec → plan → execute → verify) and context freshness, not behavioral enforcement.
+
 **Behavioral enforcement systems** (Liza). One entry. A hybrid hardened architecture: deterministic
 Go supervisors enforce state transitions, role boundaries, merge authority, and TDD gates mechanically,
 while LLM agents handle judgment under a behavioral contract addressing 55+ failure modes. Nine roles
-across two pipeline phases (specification → coding), each organized as adversarial doer/reviewer pairs.
-Optimizes for trust through mechanical constraint of agent failure modes.
+across two pipeline phases (specification → coding), each organized as adversarial doer/reviewer pairs
+with configurable review quorum and provider-diversity enforcement. Declarative YAML pipeline schema
+drives role context, skills, permissions, and prompt construction. Checkpoint-gated phase transitions
+ensure human review of planning output before coding begins. Optimizes for trust through mechanical
+constraint of agent failure modes.
 
 ---
 
@@ -210,12 +218,15 @@ rather than structural (enforced constraints).
 - Swarm topologies, Byzantine consensus, Q-learning routers solve coordination problems
   that Liza's blackboard architecture doesn't have
 
+**Ideas adopted:**
+- Planner hints (skills, docs per task) — implemented via declarative pipeline schema
+  (`skills-affinity`, `mandatory-docs`, `context-sections` per role-pair)
+
 **Ideas worth adopting** (not yet implemented):
-- Planner hints (model, skills, docs per task) — planner judgment over Q-table routing
+- Per-task model selection — planner assigns models by complexity, better than static tier routing
 - Mechanical pre-review linting — deterministic checks before reviewer spawns (generalized
   beyond Claude-specific hooks to model-agnostic shell scripts)
 - Sprint Analyzer concept — capitalizing on patterns at sprint boundaries via lesson-capture
-- Per-task model selection — planner assigns models by complexity, better than static tier routing
 
 **What Liza skipped:** Swarm topologies, Byzantine consensus, Q-learning routers, HNSW indexing,
 agent-writes-tracker pattern. Adding infrastructure complexity to a system whose core bet is
@@ -228,6 +239,75 @@ reliable output on real codebases.
 
 ---
 
+### GSD (Get Shit Done)
+
+**What it is**: Context engineering and spec-driven development system for AI coding assistants
+(37k+ stars, v1.25+). 15 specialized agents across research, planning, execution, checking, and
+verification phases. Node.js CLI (`gsd-tools.cjs`) for deterministic operations. File-based state
+in `.planning/` directory. Multi-runtime: Claude Code, OpenCode, Gemini CLI, Codex, GitHub Copilot,
+Antigravity. MIT licensed.
+
+**Current state (March 2026)**: Mature and actively maintained — version 1.25.1 with frequent
+releases. Strong community (37k stars, 3k forks). Claims adoption by engineers at Amazon, Google,
+Shopify, Webflow. Active Discord. npm distribution (`get-shit-done-cc`).
+
+**Philosophy**: Context engineering solves quality. "Context rot" — quality degradation as context
+windows fill — is the primary enemy. Thin orchestrators (10-15% context usage) spawn fresh subagents
+(clean 200K windows) for every significant operation. Crucially, "orchestrators" are themselves LLM
+agents with focused prompts — not deterministic supervisors. The entire stack is LLM-on-LLM:
+orchestrator agents delegate to subagents. This contrasts with Liza's Go-on-LLM architecture where
+deterministic supervisors mechanically enforce guarantees that agents cannot bypass. (File-path
+passing and plan-to-context sizing are standard practice shared by both systems, not GSD
+innovations.)
+
+**Trust model**: Spec-driven with deviation rules. Executor has 4 auto-correction rules (auto-fix
+bugs, auto-add missing critical functionality, auto-fix blocking issues, stop for architectural
+decisions). 3 attempts per task before documenting and moving on. Pre-execution plan verification
+(`gsd-plan-checker`), post-execution goal-backward verification (`gsd-verifier` checks outcomes
+exist, not just tasks completed). Analysis paralysis guard (>5 consecutive reads without edits =
+stop). No behavioral contract or failure mode catalog — trust is structural (fresh contexts prevent
+degradation) and procedural (spec → plan → execute → verify).
+
+**Where it falls short vs Liza**:
+- No behavioral contract or failure mode catalog
+- No code-enforced role boundaries (agent roles are prompt-level)
+- No adversarial doer/reviewer pairs (checker/verifier are separate agents, not adversarial pairs
+  reviewing the same work)
+- LLM-on-LLM architecture — orchestrators are LLM agents, not deterministic supervisors.
+  No hard trust boundary between orchestrator and subagent. Orchestrator can hallucinate,
+  lose track, or deviate from its own coordination protocol
+- Deviation rules are execution-time heuristics, not structural prevention
+- No provider compliance testing (supports many runtimes but doesn't test behavioral compliance)
+- "3 attempts then document and move on" — retry-based, not escalation-based
+- No multi-sprint continuity (session-scoped, not sprint-scoped)
+- Context engineering prevents degradation but doesn't prevent behavioral failure modes
+  (scope creep, test mutation, authority violation) that occur with fresh context
+
+**Ideas worth adopting** (not yet implemented):
+- Multi-runtime transformation engine — single source definition automatically transformed for
+  each runtime. Liza's `liza init` already adapts to runtimes but could learn from GSD's
+  transformation approach
+
+**What Liza skipped:** Developer profiling, automatic deviation rules. (GSD's "analysis paralysis
+guard" — stop after >5 reads without edits — is a prompt-level heuristic. Liza's equivalent is
+mechanical: the supervisor counts exit-42 restarts without progress, and hypothesis exhaustion
+triggers planner rescoping after two coders fail the same task.) GSD adds orchestrator-level
+context management (thin orchestrators, context budgets,
+subagent spawning within workflows). Liza's single-task agents already get fresh context
+by design — the problem GSD solves at the orchestrator layer doesn't arise.
+Both are valid — but behavioral failures occur with fresh context too.
+
+**Market position**: Highest-traction direct competitor (37k stars vs Liza's early stage). Same
+domain (multi-agent software engineering), complementary core bet. GSD solves "context degrades
+within long sessions" (context engineering for orchestrators and multi-step workflows). Liza
+solves "agents misbehave even when fresh" (behavioral enforcement) — and Liza agents are already
+short-lived (single task), so the context rot problem GSD targets is less acute. GSD's multi-runtime
+support and npm distribution give it strong developer reach. The competitive risk is GSD adding
+behavioral enforcement on top of context engineering. The opportunity is that GSD's architecture
+(thin orchestrators, file-based state) would make it a natural consumer of Liza's supervision layer.
+
+---
+
 ## Adjacent Frameworks (Not Direct Competitors)
 
 ### LangGraph
@@ -237,6 +317,22 @@ states, transitions, conditional routing). Production-grade, model-agnostic. But
 no software engineering domain expertise, no behavioral contracts. Used as infrastructure by teams
 building custom agent systems. No threat as a product competitor; potential as infrastructure
 Liza could build on (but Liza's Go CLI approach is deliberately simpler).
+
+### AWF (AI Workflow Framework)
+
+Go CLI for declarative YAML workflow orchestration. State-machine execution with conditional
+transitions, parallel steps, loops, retries, and sub-workflow composition. Provider-agnostic
+(Claude CLI, Gemini, Codex, OpenAI-compatible, Ollama). RPC-based plugin system. EUPL-1.2.
+8 stars, single maintainer, early stage.
+
+Audit-first trust model — dry-run preview, interactive step-by-step approval, JSONL audit trails
+with secret masking. No sandbox, no behavioral enforcement. Agents execute shell commands with
+user privileges; workflows are deterministic orchestration, not autonomous collaboration.
+
+Architectural DNA shared with Liza (Go CLI, YAML-driven, state machines, provider-agnostic) but
+different domain. AWF orchestrates arbitrary AI workflows; Liza enforces behavioral trust in
+software engineering. AWF's workflow-as-state-machine pattern validates the approach but applies it
+to task automation, not agent governance. No direct competitive overlap.
 
 ### AutoGen (Microsoft)
 
@@ -269,21 +365,21 @@ operates at architecture-selection level, not behavioral enforcement level. The 
 
 ## Competitive Dimensions Matrix
 
-| Dimension | Liza | CrewAI | Ruflo | Symphony | Paperclip |
-|-----------|------|--------|-------|----------|-----------|
-| **Domain** | Software engineering (9 roles, 2 phases) | General-purpose | Software engineering (60+ agent types) | Task scheduling | Business operations |
-| **Trust approach** | Behavioral contract (55+ failure modes) | Post-hoc output validation | Track-record based (Q-learning) | Implementation-dependent | Budget/approval governance |
-| **Role enforcement** | Code-enforced (MCP handler) | Prompt suggestion | Claude hooks (provider-specific) | None (single-agent) | Org chart hierarchy |
-| **Review loop** | Adversarial doer/reviewer pairs | Optional manager mode (broken) | None (single-pass) | None | None |
-| **Failure handling** | Structural prevention + escalation | Retry on output failure | Pattern matching from past successes | Implementation-dependent | Budget auto-pause |
-| **Provider compliance** | Empirical matrix (5 providers) | None published | Claude-only | Codex-only | Agent-agnostic (no testing) |
-| **Context management** | Tiered degradation, handoff protocol | Memory (short/long/entity) | HNSW-indexed persistent memory | Per-issue workspace | Persistent sessions |
-| **Crash recovery** | recover-agent, recover-task | None | None | BEAM supervision trees | Session persistence |
-| **Cost tracking** | Planned (token-level) | None native | None | None | Per-agent/task/project budgets |
-| **Multi-sprint** | Yes (numbering, checkpoints, archive) | No | No | Per-issue runs | Heartbeat-based scheduling |
-| **Maturity** | Alpha MAS (spec phase shipped), battle-tested pairing | Production (v1.9.0) | Active development | Engineering preview | Just launched |
-| **Stars** | Early | 45k | Growing | New | 14k |
-| **License** | Apache 2.0 | MIT | MIT | Apache 2.0 | MIT |
+| Dimension | Liza | CrewAI | Ruflo | GSD | Symphony | Paperclip |
+|-----------|------|--------|-------|-----|----------|-----------|
+| **Domain** | Software engineering (9 roles, 2 phases, declarative pipeline) | General-purpose | Software engineering (60+ agent types) | Software engineering (15 agents, 4 phases) | Task scheduling | Business operations |
+| **Trust approach** | Behavioral contract (55+ failure modes) + review quorum + provider diversity | Post-hoc output validation | Track-record based (Q-learning) | Spec-driven + deviation rules | Implementation-dependent | Budget/approval governance |
+| **Role enforcement** | Code-enforced (MCP handler, YAML-driven permissions) | Prompt suggestion | Claude hooks (provider-specific) | Prompt-level (least-privilege tooling) | None (single-agent) | Org chart hierarchy |
+| **Review loop** | Adversarial doer/reviewer pairs with quorum + provider diversity gate | Optional manager mode (broken) | None (single-pass) | Checker + verifier (separate, not adversarial) | None | None |
+| **Failure handling** | Structural prevention + escalation + checkpoint-gated transitions | Retry on output failure | Pattern matching from past successes | 3 retries + document + move on | Implementation-dependent | Budget auto-pause |
+| **Provider compliance** | Empirical matrix (5 providers), provider-diversity enforcement | None published | Claude-only | Multi-runtime (6), no compliance testing | Codex-only | Agent-agnostic (no testing) |
+| **Context management** | Tiered degradation, structured HandoffEvents, prompt templates | Memory (short/long/entity) | HNSW-indexed persistent memory | Fresh subagent contexts, context budget enforcement | Per-issue workspace | Persistent sessions |
+| **Crash recovery** | recover-agent, recover-task | None | None | File-based state, session resume, state reconstruction | BEAM supervision trees | Session persistence |
+| **Cost tracking** | Planned (token-level) | None native | None | Model profiles (quality/balanced/budget), proxy metrics | None | Per-agent/task/project budgets |
+| **Multi-sprint** | Yes (numbering, checkpoints, archive, replan) | No | No | No (session/phase-scoped) | Per-issue runs | Heartbeat-based scheduling |
+| **Maturity** | Alpha MAS (both phases shipped), battle-tested pairing | Production (v1.9.0) | Active development | Production (v1.25+) | Engineering preview | Just launched |
+| **Stars** | Early | 45k | Growing | 37k | New | 14k |
+| **License** | Apache 2.0 | MIT | MIT | MIT | Apache 2.0 | MIT |
 
 ---
 
@@ -307,10 +403,18 @@ governance intrinsically — not through external scaffolding as Harness Enginee
 engineering is necessary but insufficient — a legible codebase doesn't prevent an agent from modifying
 tests to make broken code pass. The constraint must be in the system, not in the codebase.
 
+**Context engineering is becoming a discipline.** GSD's 37k stars prove that "prevent context rot"
+resonates with developers. The insight is real — agent quality does degrade with context accumulation.
+But context engineering and behavioral enforcement solve different problems. A fresh-context agent can
+still mutate tests, violate scope, or skip review. The complete solution needs both.
+
 **Enterprise trust remains unsolved by everyone except Liza.** Every framework survey and comparison
 article mentions guardrails as a desirable feature. Nobody has what Liza has — 55+ documented failure
-modes with mechanical countermeasures, code-enforced role boundaries, adversarial review, provider
-compliance testing. This gap remains Liza's core differentiator.
+modes with mechanical countermeasures, code-enforced role boundaries, adversarial review with
+configurable quorum, provider-diversity enforcement, and checkpoint-gated phase transitions.
+Recent additions (review quorum, provider diversity blocking, structured handoff events, declarative
+pipeline schema) widen this gap further — these are trust mechanisms that require deep architectural
+commitment, not features that can be bolted on.
 
 ---
 
@@ -321,14 +425,15 @@ Claude Code Opus 4.6 produced a [code quality assessment](code_quality_assessmen
 
 **Overall Rating: A (Excellent)**
 
-**Metrics:**
-- 23,424 lines of Go across 138 production files
-- 56,430 lines of tests across 120 test files (2.41:1 test-to-production ratio)
-- 997+ test cases with table-driven subtests
+**Metrics (updated March 22, 2026 — commit 54efbf2):**
+- 27,926 lines of Go across 178 production files
+- 71,839 lines of tests across 147 test files (2.57:1 test-to-production ratio)
+- 1,247 test functions with table-driven subtests
 - 4 direct dependencies (cobra, yaml.v3, flock, fsnotify) — radically minimal
 - Zero TODOs in production Go code
-- 41 Architecture Decision Records
-- 98 specification files (13,824 lines)
+- 50 Architecture Decision Records
+- 115 specification files (16,425 lines)
+- 21 skills (debugging, testing, code-review, epic-writing, etc.)
 - 21 pre-commit hooks, E2E tests in CI, race detection enabled by default
 
 **Subsystem ratings:**
@@ -347,7 +452,7 @@ Claude Code Opus 4.6 produced a [code quality assessment](code_quality_assessmen
 preaches. The behavioral contracts that govern LLM agents are themselves enforced by well-tested
 Go code with atomic state management, comprehensive validation, and race-free concurrency patterns."
 
-**Primary challenge identified**: Not code quality but cognitive surface area — 31,000+ lines of
+**Primary challenge identified**: Not code quality but cognitive surface area — 35,000+ lines of
 specifications, contracts, and skills create an extraordinary knowledge base that also presents
 a steep learning curve for maintainers. This is the "easy to maintain, easy to onboard" claim that needs to be
 backed by the convention-over-code pattern holding as the system grows.
