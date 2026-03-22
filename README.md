@@ -81,6 +81,9 @@ This won't self-correct. Sycophancy drives engagement — that's what gets optim
 
 Ten months of pairing under this contract, and the vigilance tax dropped to near zero. I can mostly focus on the architecture.
 
+[Here](https://drive.google.com/drive/folders/1Iea-nNxAazBHeLXL7IElXnG5r1i1E-Ha?usp=sharing) is a demo video of an implement of a basic Todo CLI
+using Liza in Multi-agent mode - spec-driven with intermediate epic and User Story creation, fully autonomous agent within sprints, human reviews between sprints.
+
 ## How Liza Compares
 
 The multi-agent coding space splits into four categories:
