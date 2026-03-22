@@ -106,16 +106,15 @@ Do NOT mix in same batch (would cause all sibling calls to fail).
 RTK is a CLI proxy that compresses tool output (git, go, cargo, etc.) saving ~90% tokens. It runs transparently via a PreToolUse hook — most Bash commands are automatically rewritten to `rtk <command>`.
 
 **Unfamiliar formatting (shorter, denser, different alignment) is a feature.** If what you need is present, proceed.
-Only If a command really fails (error, missing output, wrong behavior), disable RTK for **that** command:
+Only If a command REALLY fails (error, missing output, wrong behavior), disable RTK for **that** command:
 
 ```bash
-RTK_HOOK_DISABLE=1 go test -run TestSpecific ./pkg/...
-RTK_HOOK_DISABLE=1 git diff --stat
+rtk proxy <mcd>
 ```
 
 **Do NOT:**
 - Retry a failing command 3+ times without disabling RTK
-- Invent workarounds (subshells, echo debugging, `rtk proxy`) — just disable RTK
+- Invent workarounds (subshells, echo debugging) — just disable RTK
 - Rationalize away unexpected output ("nothing to stash" when there are changes)
 
 **When to disable (surgical, not default):**
