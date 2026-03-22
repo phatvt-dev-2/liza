@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -387,8 +388,12 @@ func TestInitCommand_CreatesContractSymlinks(t *testing.T) {
 	// Setup
 	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
 
-	// Run init
-	err = InitCommand("Test goal", "specs/vision.md", nil)
+	// Run init with explicit agent flags
+	err = InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Agents:      []string{"claude", "codex", "gemini"},
+	})
 	if err != nil {
 		t.Fatalf("InitCommand failed: %v", err)
 	}
@@ -449,11 +454,11 @@ func TestInitCommand_SkipsCorrectSymlinks(t *testing.T) {
 	}
 }
 
-func TestInitCommand_DoesNotOverwriteWithoutConsent(t *testing.T) {
+func TestInitCommand_BrownfieldFallsBackToGlobal(t *testing.T) {
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
-	setupGlobalLiza(t)
+	fakeHome := setupGlobalLiza(t)
 
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -466,34 +471,193 @@ func TestInitCommand_DoesNotOverwriteWithoutConsent(t *testing.T) {
 
 	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
 
-	// Pre-create CLAUDE.md as a regular file
+	// Pre-create CLAUDE.md as a regular file (brownfield project)
 	existingContent := "# Custom contract\n"
 	claudePath := filepath.Join(gitDir, "CLAUDE.md")
 	if err := os.WriteFile(claudePath, []byte(existingContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Run init — stdin is not interactive in tests, so the prompt
-	// will fail to read and the file should be left untouched.
-	if err := InitCommand("Test goal", "specs/vision.md", nil); err != nil {
+	err = InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Agents:      []string{"claude", "codex", "gemini"},
+	})
+	if err != nil {
 		t.Fatalf("InitCommand failed: %v", err)
 	}
 
-	// CLAUDE.md should be untouched (no consent given)
+	// CLAUDE.md at repo root should be untouched
 	content, err := os.ReadFile(claudePath)
 	if err != nil {
 		t.Fatalf("Failed to read CLAUDE.md: %v", err)
 	}
 	if string(content) != existingContent {
-		t.Errorf("CLAUDE.md was modified without consent; got %q, want %q", string(content), existingContent)
+		t.Errorf("CLAUDE.md was modified; got %q, want %q", string(content), existingContent)
 	}
 
-	// AGENTS.md and GEMINI.md should still be created as symlinks
+	// CLAUDE.md should have been placed at global fallback (~/.claude/CLAUDE.md)
+	globalClaude := filepath.Join(fakeHome, ".claude", "CLAUDE.md")
+	target, err := os.Readlink(globalClaude)
+	if err != nil {
+		t.Fatalf("Global fallback symlink not created at %s: %v", globalClaude, err)
+	}
+	coreFile := filepath.Join(fakeHome, ".liza", "CORE.md")
+	if target != coreFile {
+		t.Errorf("Global fallback → %q, want %q", target, coreFile)
+	}
+
+	// AGENTS.md and GEMINI.md should still be created at repo root (no conflict)
 	for _, name := range []string{"AGENTS.md", "GEMINI.md"} {
 		linkPath := filepath.Join(gitDir, name)
 		if _, err := os.Readlink(linkPath); err != nil {
 			t.Errorf("Symlink %s not created: %v", name, err)
 		}
+	}
+}
+
+func TestInitCommand_BrownfieldExistingLizaAtGlobalSkipsCreation(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	os.Chdir(gitDir)
+
+	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
+
+	coreFile := filepath.Join(fakeHome, ".liza", "CORE.md")
+
+	// Pre-create Liza symlink at global fallback
+	globalClaude := filepath.Join(fakeHome, ".claude", "CLAUDE.md")
+	os.MkdirAll(filepath.Dir(globalClaude), 0755)
+	os.Symlink(coreFile, globalClaude)
+
+	err := InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Agents:      []string{"claude", "codex", "gemini"},
+	})
+	if err != nil {
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+
+	// Repo root should NOT have a CLAUDE.md (global already has it)
+	repoClaudePath := filepath.Join(gitDir, "CLAUDE.md")
+	if _, err := os.Lstat(repoClaudePath); !os.IsNotExist(err) {
+		t.Error("CLAUDE.md should not be created at repo root when global fallback already has Liza symlink")
+	}
+
+	// AGENTS.md and GEMINI.md should be created at repo root (no global fallback for them)
+	for _, name := range []string{"AGENTS.md", "GEMINI.md"} {
+		linkPath := filepath.Join(gitDir, name)
+		if _, err := os.Readlink(linkPath); err != nil {
+			t.Errorf("Symlink %s not created: %v", name, err)
+		}
+	}
+}
+
+func TestInitCommand_BrownfieldBothOccupiedWarns(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	os.Chdir(gitDir)
+
+	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
+
+	// CLAUDE.md at repo root (non-Liza)
+	os.WriteFile(filepath.Join(gitDir, "CLAUDE.md"), []byte("project"), 0644)
+
+	// CLAUDE.md at global fallback (also non-Liza)
+	globalClaude := filepath.Join(fakeHome, ".claude", "CLAUDE.md")
+	os.MkdirAll(filepath.Dir(globalClaude), 0755)
+	os.WriteFile(globalClaude, []byte("user config"), 0644)
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Agents:      []string{"claude"},
+	})
+	if err != nil {
+		w.Close()
+		os.Stderr = oldStderr
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+	w.Close()
+	stderrBytes, _ := io.ReadAll(r)
+	os.Stderr = oldStderr
+
+	// Should warn about both locations being occupied
+	stderr := string(stderrBytes)
+	if !strings.Contains(stderr, "CLAUDE.md exists at both repo root and") {
+		t.Errorf("Expected 'both occupied' warning in stderr, got: %s", stderr)
+	}
+
+	// Neither file should be modified
+	repoContent, _ := os.ReadFile(filepath.Join(gitDir, "CLAUDE.md"))
+	if string(repoContent) != "project" {
+		t.Error("Repo root CLAUDE.md was modified")
+	}
+	globalContent, _ := os.ReadFile(globalClaude)
+	if string(globalContent) != "user config" {
+		t.Error("Global CLAUDE.md was modified")
+	}
+}
+
+func TestInitCommand_BrownfieldDuplicateLizaWarns(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	os.Chdir(gitDir)
+
+	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
+
+	coreFile := filepath.Join(fakeHome, ".liza", "CORE.md")
+
+	// Liza symlink at both repo root and global
+	os.Symlink(coreFile, filepath.Join(gitDir, "CLAUDE.md"))
+	globalClaude := filepath.Join(fakeHome, ".claude", "CLAUDE.md")
+	os.MkdirAll(filepath.Dir(globalClaude), 0755)
+	os.Symlink(coreFile, globalClaude)
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Agents:      []string{"claude"},
+	})
+	if err != nil {
+		w.Close()
+		os.Stderr = oldStderr
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+	w.Close()
+	stderrBytes, _ := io.ReadAll(r)
+	os.Stderr = oldStderr
+
+	// Should warn about duplicate Liza symlinks
+	stderr := string(stderrBytes)
+	if !strings.Contains(stderr, "Liza symlinks at both") {
+		t.Errorf("Expected 'duplicate Liza' warning in stderr, got: %s", stderr)
 	}
 }
 
@@ -1149,10 +1313,9 @@ func TestInitPairingCommand_MistralDeclinesOverwrite(t *testing.T) {
 	}
 }
 
-// TestInitPairingCommand_ClaudeBothPromptsSharedReader verifies that when both
-// CLAUDE.md and .claude/settings.json already exist, both prompts are answered
-// from the same stdin stream (no EOF from multiple bufio.NewReader instances).
-func TestInitPairingCommand_ClaudeBothPromptsSharedReader(t *testing.T) {
+// TestInitPairingCommand_ClaudeBrownfieldUsesGlobalFallback verifies that when
+// CLAUDE.md already exists at repo root, the Liza symlink goes to ~/.claude/CLAUDE.md.
+func TestInitPairingCommand_ClaudeBrownfieldUsesGlobalFallback(t *testing.T) {
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	fakeHome := setupGlobalLiza(t)
@@ -1163,33 +1326,43 @@ func TestInitPairingCommand_ClaudeBothPromptsSharedReader(t *testing.T) {
 
 	coreFile := filepath.Join(fakeHome, ".liza", "CORE.md")
 
-	// Pre-create CLAUDE.md as a regular file (not symlink) to trigger first prompt
+	// Pre-create CLAUDE.md as a regular file (brownfield project)
 	os.WriteFile(filepath.Join(gitDir, "CLAUDE.md"), []byte("existing"), 0644)
 
-	// Pre-create .claude/settings.json to trigger second prompt (merge confirmation)
+	// Pre-create .claude/settings.json to trigger merge prompt
 	claudeDir := filepath.Join(gitDir, ".claude")
 	os.MkdirAll(claudeDir, 0755)
 	os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(`{"existing": true}`), 0644)
 
-	// Two "y\n" answers: first for CLAUDE.md overwrite, second for settings merge
+	// One "y\n" answer for settings merge (CLAUDE.md no longer prompts)
 	err := InitPairingCommand(InitPairingParams{
 		Agents: []string{"claude"},
-		Stdin:  strings.NewReader("y\ny\n"),
+		Stdin:  strings.NewReader("y\n"),
 	})
 	if err != nil {
 		t.Fatalf("InitPairingCommand failed: %v", err)
 	}
 
-	// CLAUDE.md should now be a symlink to ~/.liza/CORE.md
-	target, err := os.Readlink(filepath.Join(gitDir, "CLAUDE.md"))
+	// Repo root CLAUDE.md should be untouched
+	content, err := os.ReadFile(filepath.Join(gitDir, "CLAUDE.md"))
 	if err != nil {
-		t.Fatalf("CLAUDE.md should be a symlink after accepting overwrite: %v", err)
+		t.Fatal(err)
 	}
-	if target != coreFile {
-		t.Errorf("CLAUDE.md → %q, want %q", target, coreFile)
+	if string(content) != "existing" {
+		t.Errorf("repo root CLAUDE.md was modified; got %q", string(content))
 	}
 
-	// settings.json should have been merged (contains both existing and liza keys)
+	// Liza symlink should be at global fallback (~/.claude/CLAUDE.md)
+	globalClaude := filepath.Join(fakeHome, ".claude", "CLAUDE.md")
+	target, err := os.Readlink(globalClaude)
+	if err != nil {
+		t.Fatalf("Global fallback symlink not created at %s: %v", globalClaude, err)
+	}
+	if target != coreFile {
+		t.Errorf("Global fallback → %q, want %q", target, coreFile)
+	}
+
+	// settings.json should have been merged
 	settingsData, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
 	if err != nil {
 		t.Fatalf("failed to read settings.json: %v", err)
@@ -1198,7 +1371,6 @@ func TestInitPairingCommand_ClaudeBothPromptsSharedReader(t *testing.T) {
 	if err := json.Unmarshal(settingsData, &settings); err != nil {
 		t.Fatalf("settings.json is not valid JSON: %v", err)
 	}
-	// Should contain existing user key (preserved during merge)
 	if _, ok := settings["existing"]; !ok {
 		t.Error("settings.json lost existing user key during merge")
 	}

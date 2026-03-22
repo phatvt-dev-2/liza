@@ -101,3 +101,19 @@ EOF
 Then run `kimi`
 
 Kimi uses Claude's config automatically.
+
+## Brownfield Projects
+
+When a project already has its own `CLAUDE.md`, `AGENTS.md`, or `GEMINI.md` at the repo root, `liza init` will not overwrite it. Instead, Liza places its contract symlink in the CLI's global config directory:
+
+| Repo root file | Global fallback |
+|---------------|-----------------|
+| `CLAUDE.md` | `~/.claude/CLAUDE.md` |
+| `AGENTS.md` | `~/.codex/AGENTS.md` |
+| `GEMINI.md` | `~/.gemini/GEMINI.md` |
+
+All three CLIs read instruction files from their global config directory, so the contract is still discovered. The project's existing file at the repo root is left untouched.
+
+If both the repo root and the global fallback already have non-Liza files, `liza init` warns and skips — you must remove or rename one manually.
+
+If a Liza symlink already exists at either location, `liza init` reports it and does not create a duplicate.

@@ -103,6 +103,7 @@ symlinks needed for pairing (no .liza/ workspace):
 			ConfigPath:      configPath,
 			EntryPoint:      entryPoint,
 			PostWorktreeCmd: postCreateCmd,
+			Agents:          agents,
 			Stdin:           os.Stdin,
 		})
 	},

@@ -22,9 +22,10 @@ import (
 type InitParams struct {
 	Description      string
 	SpecRef          string
-	ConfigPath       string // --config: path to pipeline YAML
-	EntryPoint       string // --entry-point: name of entry-point in config
-	PostWorktreeCmd  string // --post-worktree-cmd: shell command to run after worktree creation
+	ConfigPath       string   // --config: path to pipeline YAML
+	EntryPoint       string   // --entry-point: name of entry-point in config
+	PostWorktreeCmd  string   // --post-worktree-cmd: shell command to run after worktree creation
+	Agents           []string // --claude, --codex, --gemini, --mistral
 	Stdin            io.Reader
 	ForceInteractive bool // bypass TTY check (for testing)
 }
@@ -35,6 +36,14 @@ var initAgentRepoSymlinks = map[string]string{
 	"claude": "CLAUDE.md",
 	"codex":  "AGENTS.md",
 	"gemini": "GEMINI.md",
+}
+
+// globalFallbacks maps repo-root filenames to their CLI global fallback paths
+// (relative to home directory). Used when the repo root already has a non-Liza file.
+var globalFallbacks = map[string]string{
+	"CLAUDE.md": filepath.Join(".claude", "CLAUDE.md"),
+	"AGENTS.md": filepath.Join(".codex", "AGENTS.md"),
+	"GEMINI.md": filepath.Join(".gemini", "GEMINI.md"),
 }
 
 // InitPairingParams holds the parameters for InitPairingCommand.
@@ -95,7 +104,7 @@ func InitPairingCommand(params InitPairingParams) error {
 	}
 
 	if len(repoRootNames) > 0 {
-		createContractSymlinksFiltered(projectRoot, coreFile, repoRootNames, stdin)
+		createContractSymlinksFiltered(projectRoot, coreFile, repoRootNames)
 	}
 
 	// Write/merge .claude/settings.json and deploy hooks
@@ -114,56 +123,144 @@ func InitPairingCommand(params InitPairingParams) error {
 	return nil
 }
 
-// createContractSymlinksFiltered creates specific repo-root symlinks to the contract.
-func createContractSymlinksFiltered(projectRoot, contractTarget string, names []string, reader *bufio.Reader) {
-	for _, name := range names {
-		linkPath := filepath.Join(projectRoot, name)
+// isLizaSymlink returns true if path exists, is a symlink, and points to contractTarget.
+func isLizaSymlink(path, contractTarget string) bool {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	if fi.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+	target, err := os.Readlink(path)
+	return err == nil && target == contractTarget
+}
 
-		fi, lstatErr := os.Lstat(linkPath)
-		if lstatErr != nil {
-			if !os.IsNotExist(lstatErr) {
-				fmt.Fprintf(os.Stderr, "Warning: cannot stat %s: %v\n", name, lstatErr)
-				continue
-			}
-		} else {
-			if fi.Mode()&os.ModeSymlink != 0 {
-				target, err := os.Readlink(linkPath)
-				if err == nil && target == contractTarget {
-					fmt.Printf("%s: already correct\n", name)
-					continue
-				}
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: cannot read symlink %s: %v\n", name, err)
-				}
-			}
+// CheckContractConfigured checks whether a Liza contract symlink exists for the
+// given CLI name, at either the repo root or the CLI's global config directory.
+// Returns the path where it was found, or "" if not found.
+func CheckContractConfigured(projectRoot, cliName string) string {
+	// Map CLI name to expected filename (kimi uses claude's config)
+	effectiveCLI := cliName
+	if cliName == "kimi" {
+		effectiveCLI = "claude"
+	}
 
-			fmt.Fprintf(os.Stderr, "Warning: %s already exists but does not point to %s.\n", name, contractTarget)
-			fmt.Fprintf(os.Stderr, "Without this symlink, liza agents will not use liza's contracts.\n")
-			fmt.Fprintf(os.Stderr, "Overwrite %s with symlink to %s? (y/n): ", name, contractTarget)
-
-			response, err := reader.ReadString('\n')
+	fileName, ok := initAgentRepoSymlinks[effectiveCLI]
+	if !ok {
+		// Mistral uses ~/.vibe/prompts/liza.md instead of a repo-root symlink
+		if effectiveCLI == "mistral" {
+			homeDir, err := os.UserHomeDir()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", name)
-				continue
+				return ""
 			}
-			response = strings.TrimSpace(strings.ToLower(response))
-			if response != "y" && response != "yes" {
-				continue
-			}
-
-			if err := os.Remove(linkPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to remove existing %s: %v\n", name, err)
-				continue
+			contractTarget := filepath.Join(homeDir, ".liza", "CORE.md")
+			mistralPath := filepath.Join(homeDir, ".vibe", "prompts", "liza.md")
+			if isLizaSymlink(mistralPath, contractTarget) {
+				return mistralPath
 			}
 		}
+		return ""
+	}
 
-		if err := os.Symlink(contractTarget, linkPath); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", name, err)
-			fmt.Fprintf(os.Stderr, "  On Windows: enable Developer Mode (Settings > System > For developers) or run the shell as Administrator, then retry.\n")
-			fmt.Fprintf(os.Stderr, "  Without this symlink, agents cannot find the behavioral contract from the project directory.\n")
-		} else {
-			fmt.Printf("%s → %s\n", name, contractTarget)
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	contractTarget := filepath.Join(homeDir, ".liza", "CORE.md")
+
+	// Check repo root
+	repoPath := filepath.Join(projectRoot, fileName)
+	if isLizaSymlink(repoPath, contractTarget) {
+		return repoPath
+	}
+
+	// Check global fallback
+	if globalRel, ok := globalFallbacks[fileName]; ok {
+		globalPath := filepath.Join(homeDir, globalRel)
+		if isLizaSymlink(globalPath, contractTarget) {
+			return globalPath
 		}
+	}
+
+	return ""
+}
+
+// createContractSymlinksFiltered creates repo-root symlinks to the contract.
+// When a non-Liza file already exists at the repo root, it falls back to the
+// CLI's global config directory (e.g. ~/.claude/CLAUDE.md).
+func createContractSymlinksFiltered(projectRoot, contractTarget string, names []string) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: cannot determine home directory: %v\n", err)
+		return
+	}
+
+	for _, name := range names {
+		repoPath := filepath.Join(projectRoot, name)
+		globalRel, hasGlobal := globalFallbacks[name]
+		globalPath := filepath.Join(homeDir, globalRel)
+
+		// Step 1: Liza symlink already exists at either location?
+		repoIsLiza := isLizaSymlink(repoPath, contractTarget)
+		globalIsLiza := hasGlobal && isLizaSymlink(globalPath, contractTarget)
+
+		if repoIsLiza && globalIsLiza {
+			fmt.Fprintf(os.Stderr, "Warning: %s has Liza symlinks at both %s and %s — remove one to avoid confusion.\n", name, repoPath, globalPath)
+			continue
+		}
+		if repoIsLiza {
+			fmt.Printf("%s: already correct\n", name)
+			continue
+		}
+		if globalIsLiza {
+			fmt.Printf("%s: skipping — Liza symlink already exists at %s\n", name, globalPath)
+			continue
+		}
+
+		// Step 2: repo root free → create there (happy path)
+		_, repoErr := os.Lstat(repoPath)
+		if repoErr != nil && !os.IsNotExist(repoErr) {
+			fmt.Fprintf(os.Stderr, "Warning: cannot stat %s: %v\n", repoPath, repoErr)
+			continue
+		}
+		if os.IsNotExist(repoErr) {
+			if err := os.Symlink(contractTarget, repoPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", name, err)
+				fmt.Fprintf(os.Stderr, "  On Windows: enable Developer Mode (Settings > System > For developers) or run the shell as Administrator, then retry.\n")
+			} else {
+				fmt.Printf("%s → %s\n", name, contractTarget)
+			}
+			continue
+		}
+
+		// Step 3: repo root occupied by non-Liza file → try global fallback
+		if !hasGlobal {
+			fmt.Fprintf(os.Stderr, "Warning: %s already exists and no global fallback configured.\n", name)
+			continue
+		}
+
+		_, globalErr := os.Lstat(globalPath)
+		if globalErr != nil && !os.IsNotExist(globalErr) {
+			fmt.Fprintf(os.Stderr, "Warning: cannot stat %s: %v\n", globalPath, globalErr)
+			continue
+		}
+		if os.IsNotExist(globalErr) {
+			if err := os.MkdirAll(filepath.Dir(globalPath), 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to create directory %s: %v\n", filepath.Dir(globalPath), err)
+				continue
+			}
+			if err := os.Symlink(contractTarget, globalPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", globalPath, err)
+				fmt.Fprintf(os.Stderr, "  On Windows: enable Developer Mode (Settings > System > For developers) or run the shell as Administrator, then retry.\n")
+			} else {
+				fmt.Printf("%s → %s (repo root has existing %s)\n", globalPath, contractTarget, name)
+			}
+			continue
+		}
+
+		// Both locations occupied by non-Liza files
+		fmt.Fprintf(os.Stderr, "Warning: %s exists at both repo root and %s — cannot place Liza contract. Remove or rename one, then re-run.\n", name, globalPath)
 	}
 }
 
@@ -387,7 +484,18 @@ func InitCommandWithConfig(params InitParams) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write .mcp.json: %v\n", err)
 	}
 
-	createContractSymlinks(lizaPaths.ProjectRoot(), filepath.Join(globalDir, "CORE.md"), stdin)
+	// Create contract symlinks only for explicitly requested providers
+	if len(params.Agents) > 0 {
+		var names []string
+		for _, agent := range params.Agents {
+			if name, ok := initAgentRepoSymlinks[agent]; ok {
+				names = append(names, name)
+			}
+		}
+		if len(names) > 0 {
+			createContractSymlinksFiltered(lizaPaths.ProjectRoot(), filepath.Join(globalDir, "CORE.md"), names)
+		}
+	}
 
 	// Write GUARDRAILS.md template to project root (non-fatal, like claude-settings)
 	if err := embedded.WriteGuardrails(lizaPaths.ProjectRoot()); err != nil {
@@ -554,13 +662,6 @@ func InitCommandWithConfig(params InitParams) error {
 	fmt.Println("See: contracts/contract-activation.md § Global settings")
 
 	return nil
-}
-
-// createContractSymlinks creates CLAUDE.md, AGENTS.md, and GEMINI.md symlinks
-// pointing to the global CORE.md contract. Prompts via stdin when an existing
-// non-symlink file would be overwritten.
-func createContractSymlinks(projectRoot, contractTarget string, reader *bufio.Reader) {
-	createContractSymlinksFiltered(projectRoot, contractTarget, []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"}, reader)
 }
 
 func createIntegrationBranch() error {

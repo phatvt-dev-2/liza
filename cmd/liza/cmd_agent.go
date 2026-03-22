@@ -113,6 +113,16 @@ Example:
 			return fmt.Errorf("--log is incompatible with -i (interactive mode)")
 		}
 
+		// Warn if no Liza contract symlink is configured for this CLI
+		if commands.CheckContractConfigured(projectRoot, cliName) == "" {
+			initFlag := cliName
+			if cliName == "kimi" {
+				initFlag = "claude" // kimi uses Claude's config
+			}
+			fmt.Fprintf(os.Stderr, "Warning: no Liza contract symlink found for %s. Agents may not find the behavioral contract.\n", cliName)
+			fmt.Fprintf(os.Stderr, "  Run 'liza init --%s' to create one.\n", initFlag)
+		}
+
 		specsDir := os.Getenv("LIZA_SPECS")
 		if specsDir == "" {
 			specsDir = filepath.Join(projectRoot, "specs")
