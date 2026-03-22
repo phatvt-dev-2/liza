@@ -377,7 +377,10 @@ func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, prom
 		}
 	}
 
-	return os.Symlink(target, linkPath)
+	if err := os.Symlink(target, linkPath); err != nil {
+		return fmt.Errorf("failed to create symlink %s → %s: %w\n  On Windows: enable Developer Mode (Settings > System > For developers) or run the shell as Administrator, then retry", linkPath, target, err)
+	}
+	return nil
 }
 
 // relDisplay returns a display path like "~/.liza/CORE.md" using the targetDir as prefix.

@@ -159,6 +159,8 @@ func createContractSymlinksFiltered(projectRoot, contractTarget string, names []
 
 		if err := os.Symlink(contractTarget, linkPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", name, err)
+			fmt.Fprintf(os.Stderr, "  On Windows: enable Developer Mode (Settings > System > For developers) or run the shell as Administrator, then retry.\n")
+			fmt.Fprintf(os.Stderr, "  Without this symlink, agents cannot find the behavioral contract from the project directory.\n")
 		} else {
 			fmt.Printf("%s → %s\n", name, contractTarget)
 		}

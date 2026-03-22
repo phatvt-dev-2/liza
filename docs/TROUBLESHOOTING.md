@@ -322,6 +322,27 @@ Either way: claim the task, fix in worktree, resubmit for review. The resolution
 1. **Continue with existing state** — just start the agents.
 2. **Reset completely:** `rm -rf .liza .worktrees && liza init "New goal"` (requires prior `liza setup`)
 
+### Symlink creation fails on Windows
+
+**Error:**
+```
+Warning: failed to create CLAUDE.md symlink: symlink ... A required privilege is not held by the client.
+```
+
+**Cause:** Windows requires either Developer Mode or Administrator privileges to create symbolic links. Liza uses symlinks in several places, and the impact depends on which link failed:
+
+| Command | Links created | Impact if missing |
+|---------|--------------|-------------------|
+| `liza init` | Repo-root contract files (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md` → `~/.liza/CORE.md`) | Agents cannot find the behavioral contract from the project directory |
+| `liza setup` | Skill links in CLI config dirs (`~/.claude/skills/`, `~/.codex/skills/`, etc.) → `~/.liza/skills/` | Agents cannot load skills (debugging, testing, code review, etc.) |
+| `liza setup` | CLI-specific prompt files (e.g. `~/.vibe/prompts/liza.md`) | CLI prompt activation fails for the affected CLI |
+
+**Solutions (pick one):**
+
+1. **Enable Developer Mode** (recommended): Settings → System → For developers → toggle Developer Mode on. Then re-run `liza setup` and `liza init`.
+
+2. **Run elevated**: Open your terminal as Administrator, then re-run the command.
+
 ### Error: specs/vision.md required
 
 Create the vision spec first:
