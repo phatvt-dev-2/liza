@@ -70,7 +70,7 @@ date: YYYY-MM-DD
 
 
 ```markdown
-### Lessons — [Agents|Humans]
+### G2.x: Lessons — [Agents|Humans]
 
 Operational lessons from project experience. Read when a trigger matches.
 
