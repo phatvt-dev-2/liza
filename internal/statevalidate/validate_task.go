@@ -247,6 +247,21 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		if err := validateTaskOutput(&task); err != nil {
 			return err
 		}
+
+		// Attempt must be 0 (unset/legacy), 1, or 2
+		if task.Attempt < 0 || task.Attempt > 2 {
+			return fmt.Errorf("task %s has invalid attempt value %d", task.ID, task.Attempt)
+		}
+
+		// Cross-check: attempt 2 in initial status must have reset counters
+		if task.Attempt == 2 && sc.IsInitial(task.Status) {
+			if task.Iteration != 0 {
+				return fmt.Errorf("task %s at attempt 2 in initial status has non-zero iteration %d", task.ID, task.Iteration)
+			}
+			if task.ReviewCyclesCurrent != 0 {
+				return fmt.Errorf("task %s at attempt 2 in initial status has non-zero review_cycles_current %d", task.ID, task.ReviewCyclesCurrent)
+			}
+		}
 	}
 
 	// Check for duplicate assignments

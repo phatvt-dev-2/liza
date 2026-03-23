@@ -507,6 +507,113 @@ func TestValidateTaskInvariants_Reviewing2RequiresReviewMetadata(t *testing.T) {
 	}
 }
 
+func TestValidateTaskInvariants_AttemptValidation(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+
+	cases := []struct {
+		name    string
+		task    func() models.Task
+		wantErr string
+	}{
+		{
+			name: "attempt value 3 rejected",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+				task.Attempt = 3
+				return task
+			},
+			wantErr: "invalid attempt value 3",
+		},
+		{
+			name: "attempt value -1 rejected",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+				task.Attempt = -1
+				return task
+			},
+			wantErr: "invalid attempt value -1",
+		},
+		{
+			name: "attempt 0 accepted",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+				task.Attempt = 0
+				return task
+			},
+		},
+		{
+			name: "attempt 1 accepted",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+				task.Attempt = 1
+				return task
+			},
+		},
+		{
+			name: "attempt 2 accepted",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+				task.Attempt = 2
+				return task
+			},
+		},
+		{
+			name: "attempt 2 DRAFT_CODE initial status with non-zero iteration rejected",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())
+				task.Attempt = 2
+				task.Iteration = 3
+				return task
+			},
+			wantErr: "non-zero iteration 3",
+		},
+		{
+			name: "attempt 2 DRAFT_CODING_PLAN initial status with non-zero iteration rejected",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraftCodingPlan, time.Now().UTC())
+				task.Attempt = 2
+				task.Iteration = 3
+				return task
+			},
+			wantErr: "non-zero iteration 3",
+		},
+		{
+			name: "attempt 2 initial status with non-zero review_cycles_current rejected",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())
+				task.Attempt = 2
+				task.ReviewCyclesCurrent = 2
+				return task
+			},
+			wantErr: "non-zero review_cycles_current 2",
+		},
+		{
+			name: "attempt 2 initial status with zeroed counters accepted",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())
+				task.Attempt = 2
+				task.Iteration = 0
+				task.ReviewCyclesCurrent = 0
+				return task
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
+				}
+				return
+			}
+			assertErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
 func stateWithTasks(tasks ...models.Task) *models.State {
 	state := testhelpers.CreateValidState()
 	state.Tasks = tasks
