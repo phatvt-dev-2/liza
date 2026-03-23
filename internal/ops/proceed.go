@@ -444,6 +444,44 @@ func validateOutputEntry(entry models.OutputEntry, index, totalEntries int) erro
 	return models.ValidateDependsOn(entry.DependsOn, index, totalEntries)
 }
 
+// computeInheritedDeps derives phase-gate dependencies from upstream dependency tasks.
+// For each task in task.DependsOn that has executed the same transition, it collects
+// the child task IDs that were created by that transition. These become additional
+// DependsOn entries on downstream children, enforcing phase-gate ordering.
+//
+// Returns error if an upstream transition is marked executed but expected children
+// are missing (crash inconsistency that must be recovered first).
+func computeInheritedDeps(s *models.State, task *models.Task, transitionName string, resolver *pipeline.Resolver) ([]string, error) {
+	var inherited []string
+	for _, depID := range task.DependsOn {
+		depTask := s.FindTask(depID)
+		if depTask == nil || !depTask.TransitionsExecuted[transitionName] {
+			continue
+		}
+		td, err := resolver.Transition(transitionName)
+		if err != nil {
+			continue
+		}
+		switch td.Cardinality {
+		case "per-subtask":
+			for i := 0; i < len(depTask.Output); i++ {
+				childID := perSubtaskChildID(depID, transitionName, i)
+				if s.FindTask(childID) == nil {
+					return nil, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
+				}
+				inherited = append(inherited, childID)
+			}
+		case "one-to-one":
+			childID := oneToOneChildID(depID, transitionName)
+			if s.FindTask(childID) == nil {
+				return nil, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
+			}
+			inherited = append(inherited, childID)
+		}
+	}
+	return inherited, nil
+}
+
 // AvailableTransitions returns the available manual transitions for a task.
 // Transitions are read from the frozen pipeline config.
 // Returns nil if no transitions are available.

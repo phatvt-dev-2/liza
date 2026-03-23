@@ -1871,3 +1871,170 @@ func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
 		t.Errorf("Child plan_ref = %q, want %q", child.PlanRef, "specs/auth-epic.md")
 	}
 }
+
+// --- computeInheritedDeps tests ---
+
+func TestComputeInheritedDeps_UpstreamExecutedSameTransition(t *testing.T) {
+	tmpDir, _ := setupPipelineProceedTest(t)
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+
+	// Upstream plan-1 executed code-plan-to-coding with 3 output entries → 3 children exist
+	upstreamID := "plan-1"
+	transitionName := "code-plan-to-coding"
+	s := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:       upstreamID,
+				Status:   models.TaskStatusMerged,
+				RolePair: "code-planning-pair",
+				Output: []models.OutputEntry{
+					{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+					{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+					{Desc: "c", DoneWhen: "c", Scope: "c", SpecRef: "s.md"},
+				},
+				TransitionsExecuted: map[string]bool{transitionName: true},
+			},
+			// The 3 children that were created by the transition
+			{ID: perSubtaskChildID(upstreamID, transitionName, 0), Status: models.TaskStatus("DRAFT_CODE")},
+			{ID: perSubtaskChildID(upstreamID, transitionName, 1), Status: models.TaskStatus("DRAFT_CODE")},
+			{ID: perSubtaskChildID(upstreamID, transitionName, 2), Status: models.TaskStatus("DRAFT_CODE")},
+			// Downstream plan-2 depends on plan-1
+			{
+				ID:        "plan-2",
+				Status:    models.TaskStatusMerged,
+				RolePair:  "code-planning-pair",
+				DependsOn: []string{upstreamID},
+			},
+		},
+	}
+
+	downstream := s.FindTask("plan-2")
+	inherited, err := computeInheritedDeps(s, downstream, transitionName, resolver)
+	if err != nil {
+		t.Fatalf("computeInheritedDeps: %v", err)
+	}
+
+	if len(inherited) != 3 {
+		t.Fatalf("inherited count = %d, want 3", len(inherited))
+	}
+	for i := 0; i < 3; i++ {
+		expected := perSubtaskChildID(upstreamID, transitionName, i)
+		if inherited[i] != expected {
+			t.Errorf("inherited[%d] = %q, want %q", i, inherited[i], expected)
+		}
+	}
+}
+
+func TestComputeInheritedDeps_UpstreamDidNotExecuteTransition(t *testing.T) {
+	tmpDir, _ := setupPipelineProceedTest(t)
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+
+	s := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:       "plan-1",
+				Status:   models.TaskStatusMerged,
+				RolePair: "code-planning-pair",
+				// No TransitionsExecuted — hasn't been transitioned yet
+			},
+			{
+				ID:        "plan-2",
+				Status:    models.TaskStatusMerged,
+				RolePair:  "code-planning-pair",
+				DependsOn: []string{"plan-1"},
+			},
+		},
+	}
+
+	downstream := s.FindTask("plan-2")
+	inherited, err := computeInheritedDeps(s, downstream, "code-plan-to-coding", resolver)
+	if err != nil {
+		t.Fatalf("computeInheritedDeps: %v", err)
+	}
+	if len(inherited) != 0 {
+		t.Errorf("inherited count = %d, want 0 (upstream hasn't executed transition)", len(inherited))
+	}
+}
+
+func TestComputeInheritedDeps_UpstreamExecutedDifferentTransition(t *testing.T) {
+	tmpDir, _ := setupPipelineProceedTest(t)
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+
+	// Upstream executed auto-code-plan-to-coding (one-to-one), not code-plan-to-coding
+	s := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:                  "plan-1",
+				Status:              models.TaskStatusMerged,
+				RolePair:            "code-planning-pair",
+				TransitionsExecuted: map[string]bool{"auto-code-plan-to-coding": true},
+			},
+			{ID: oneToOneChildID("plan-1", "auto-code-plan-to-coding"), Status: models.TaskStatus("DRAFT_CODE")},
+			{
+				ID:        "plan-2",
+				Status:    models.TaskStatusMerged,
+				RolePair:  "code-planning-pair",
+				DependsOn: []string{"plan-1"},
+			},
+		},
+	}
+
+	downstream := s.FindTask("plan-2")
+	inherited, err := computeInheritedDeps(s, downstream, "code-plan-to-coding", resolver)
+	if err != nil {
+		t.Fatalf("computeInheritedDeps: %v", err)
+	}
+	if len(inherited) != 0 {
+		t.Errorf("inherited count = %d, want 0 (upstream executed different transition)", len(inherited))
+	}
+}
+
+func TestComputeInheritedDeps_MissingUpstreamChild_ReturnsError(t *testing.T) {
+	tmpDir, _ := setupPipelineProceedTest(t)
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+
+	// Upstream says transition executed with 2 output entries, but child-1 is missing
+	s := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:       "plan-1",
+				Status:   models.TaskStatusMerged,
+				RolePair: "code-planning-pair",
+				Output: []models.OutputEntry{
+					{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+					{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+				},
+				TransitionsExecuted: map[string]bool{"code-plan-to-coding": true},
+			},
+			// Only child-0 exists, child-1 is missing (crash)
+			{ID: perSubtaskChildID("plan-1", "code-plan-to-coding", 0), Status: models.TaskStatus("DRAFT_CODE")},
+			{
+				ID:        "plan-2",
+				Status:    models.TaskStatusMerged,
+				RolePair:  "code-planning-pair",
+				DependsOn: []string{"plan-1"},
+			},
+		},
+	}
+
+	downstream := s.FindTask("plan-2")
+	_, err = computeInheritedDeps(s, downstream, "code-plan-to-coding", resolver)
+	if err == nil {
+		t.Fatal("expected error for missing upstream child")
+	}
+	if !strings.Contains(err.Error(), "missing") {
+		t.Errorf("error = %q, want to contain 'missing'", err.Error())
+	}
+}
