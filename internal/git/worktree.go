@@ -80,25 +80,17 @@ func (g *Git) CreateWorktreeFresh(taskID, fromBranch string) (string, error) {
 	return g.CreateWorktree(taskID, fromBranch)
 }
 
-// RemoveWorktree removes a worktree and its associated branch
-func (g *Git) RemoveWorktree(taskID string) error {
+// RemoveWorktreeDir removes a worktree directory and git metadata without
+// deleting the associated branch. Use this when the branch must survive
+// (e.g. superseded tasks whose branch successors still need).
+func (g *Git) RemoveWorktreeDir(taskID string) error {
 	if err := paths.ValidateTaskID(taskID); err != nil {
 		return fmt.Errorf("invalid task ID: %w", err)
 	}
-	worktreeRel := filepath.Join(paths.WorktreesDirName, taskID)
-	worktreePath := filepath.Join(g.projectRoot, worktreeRel)
-	branchName := paths.TaskBranchPrefix + taskID
+	worktreePath := filepath.Join(g.projectRoot, paths.WorktreesDirName, taskID)
 
-	// Check if worktree exists
+	// Nothing to do if worktree directory doesn't exist
 	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
-		// Worktree doesn't exist, clean up branch if it exists
-		exists, err := g.BranchExists(branchName)
-		if err != nil {
-			return err
-		}
-		if exists {
-			return g.DeleteBranch(branchName)
-		}
 		return nil
 	}
 
@@ -117,9 +109,23 @@ func (g *Git) RemoveWorktree(taskID string) error {
 		_ = os.RemoveAll(metadataDir)
 	}
 
-	// Delete the branch (may not exist, so ignore errors)
-	_ = g.DeleteBranch(branchName)
+	return nil
+}
 
+// RemoveWorktree removes a worktree and its associated branch.
+func (g *Git) RemoveWorktree(taskID string) error {
+	if err := g.RemoveWorktreeDir(taskID); err != nil {
+		return err
+	}
+
+	branchName := paths.TaskBranchPrefix + taskID
+	exists, err := g.BranchExists(branchName)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return g.DeleteBranch(branchName)
+	}
 	return nil
 }
 

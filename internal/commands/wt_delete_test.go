@@ -233,14 +233,20 @@ func TestWtDeleteCommand(t *testing.T) {
 					t.Errorf("Worktree directory still exists: %s", wtDir)
 				}
 
-				// Verify branch was deleted
+				// Verify branch handling
 				branchName := "task/" + tt.taskID
 				cmd := exec.Command("git", "-C", tmpDir, "branch", "--list", branchName)
 				output, err := cmd.Output()
 				if err != nil {
 					t.Errorf("Failed to check branch: %v", err)
 				}
-				if strings.Contains(string(output), branchName) {
+				branchExists := strings.Contains(string(output), branchName)
+				if tt.taskStatus == models.TaskStatusSuperseded {
+					// Superseded tasks preserve their branch for successors
+					if !branchExists {
+						t.Errorf("Branch %s should be preserved for SUPERSEDED task", branchName)
+					}
+				} else if branchExists {
 					t.Errorf("Branch %s still exists", branchName)
 				}
 			}

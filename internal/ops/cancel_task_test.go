@@ -302,4 +302,47 @@ func TestCancelTask_CleansUpWorktree(t *testing.T) {
 	if updatedTask.Worktree != nil {
 		t.Error("Worktree should be nil in state after cancel")
 	}
+
+	// Verify own branch deleted
+	exists, brErr := gw.BranchExists("task/task-1")
+	if brErr != nil {
+		t.Fatalf("BranchExists error: %v", brErr)
+	}
+	if exists {
+		t.Error("task branch should be deleted after cancel")
+	}
+}
+
+func TestCancelTask_DeletesBranchEvenWithoutWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create a branch but no worktree (simulating recovery/manual cleanup)
+	testhelpers.MustGit(t, tmpDir, "branch", "task/task-1")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+	// Worktree is nil — already cleaned up
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := CancelTask(tmpDir, "task-1", "No longer needed", "orchestrator-1")
+	if err != nil {
+		t.Fatalf("CancelTask() error: %v", err)
+	}
+	if len(result.Warnings) > 0 {
+		t.Errorf("unexpected warnings: %v", result.Warnings)
+	}
+
+	// Branch should still be deleted even though Worktree was nil
+	gw := git.New(tmpDir)
+	exists, brErr := gw.BranchExists("task/task-1")
+	if brErr != nil {
+		t.Fatalf("BranchExists error: %v", brErr)
+	}
+	if exists {
+		t.Error("task branch should be deleted after cancel even when Worktree was nil")
+	}
 }

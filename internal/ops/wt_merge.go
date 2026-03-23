@@ -485,12 +485,11 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 		return nil, fmt.Errorf("failed to update state to MERGED: %w", err)
 	}
 
-	// Cleanup: Remove worktree (after state commit — safe to lose worktree now)
-	// Errors are non-fatal — state is already committed, collect as warnings
-	if err := gitWrapper.RemoveWorktree(taskID); err != nil {
-		warnings = append(warnings, fmt.Sprintf("failed to remove worktree: %v", err))
+	// Cleanup: Remove worktree directory and branch (after state commit — safe now).
+	// Errors are non-fatal — state is already committed, collect as warnings.
+	if err := gitWrapper.RemoveWorktreeDir(taskID); err != nil {
+		warnings = append(warnings, fmt.Sprintf("failed to remove worktree directory: %v", err))
 	}
-	// Delete the task branch (idempotent — may already be gone via RemoveWorktree or manual cleanup)
 	taskBranch := paths.TaskBranchPrefix + taskID
 	if exists, err := gitWrapper.BranchExists(taskBranch); err != nil {
 		warnings = append(warnings, fmt.Sprintf("failed to check branch %s: %v", taskBranch, err))
@@ -499,6 +498,10 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 			warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", taskBranch, err))
 		}
 	}
+
+	// Check if this merged task was the last active successor of a
+	// superseded predecessor — if so, clean up the predecessor's branch.
+	warnings = append(warnings, cleanupPredecessorBranches(bb, gitWrapper, taskID)...)
 
 	// Update sprint metrics — non-fatal
 	if _, err := UpdateSprintMetrics(projectRoot); err != nil {

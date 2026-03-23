@@ -18,8 +18,10 @@ type DeleteWorktreeResult struct {
 	Warnings       []string
 }
 
-// DeleteWorktree removes a task's git worktree and branch. For safety, only
-// BLOCKED, ABANDONED, SUPERSEDED, or MERGED tasks are eligible. No terminal I/O.
+// DeleteWorktree removes a task's git worktree. For SUPERSEDED tasks, the branch
+// is preserved (successors may need it); for other statuses, both worktree and
+// branch are deleted. Only BLOCKED, ABANDONED, SUPERSEDED, or MERGED tasks are
+// eligible. No terminal I/O.
 func DeleteWorktree(projectRoot, taskID string) (*DeleteWorktreeResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
@@ -53,12 +55,17 @@ func DeleteWorktree(projectRoot, taskID string) (*DeleteWorktreeResult, error) {
 
 	gitWrapper := git.New(projectRoot)
 
-	if err := gitWrapper.RemoveWorktree(taskID); err != nil {
-		warnings = append(warnings, fmt.Sprintf("failed to remove worktree: %v", err))
+	if task.Status == models.TaskStatusSuperseded {
+		// Superseded tasks preserve their branch — successors may need it
+		// via git show. Branch cleanup happens when all successors are terminal.
+		if err := gitWrapper.RemoveWorktreeDir(taskID); err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to remove worktree directory: %v", err))
+		}
+	} else {
+		if err := gitWrapper.RemoveWorktree(taskID); err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to remove worktree: %v", err))
+		}
 	}
-
-	branchName := paths.TaskBranchPrefix + taskID
-	_ = gitWrapper.DeleteBranch(branchName) // Best-effort: branch may already be gone via RemoveWorktree.
 
 	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)

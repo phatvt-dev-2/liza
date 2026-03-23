@@ -47,7 +47,6 @@ func CancelTask(projectRoot, taskID, reason, agentID string) (*CancelResult, err
 	}
 
 	originalStatus := task.Status
-	hadWorktree := task.Worktree != nil
 
 	// Atomic State Update
 	err = bb.Modify(func(state *models.State) error {
@@ -85,22 +84,26 @@ func CancelTask(projectRoot, taskID, reason, agentID string) (*CancelResult, err
 		return nil, fmt.Errorf("failed to cancel task: %w", err)
 	}
 
-	// Best-effort worktree cleanup (after state commit — safe to lose worktree now)
+	// Best-effort cleanup (after state commit). Own branch is always deleted —
+	// cancelled tasks have no successors that need it. Unconditional: branch
+	// can outlive worktree directory after recovery or manual cleanup.
 	var warnings []string
-	if hadWorktree {
-		gw := git.New(projectRoot)
-		if rmErr := gw.RemoveWorktree(taskID); rmErr != nil {
-			warnings = append(warnings, fmt.Sprintf("failed to remove worktree: %v", rmErr))
-		}
-		taskBranch := paths.TaskBranchPrefix + taskID
-		if exists, brErr := gw.BranchExists(taskBranch); brErr != nil {
-			warnings = append(warnings, fmt.Sprintf("failed to check branch %s: %v", taskBranch, brErr))
-		} else if exists {
-			if delErr := gw.DeleteBranch(taskBranch); delErr != nil {
-				warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", taskBranch, delErr))
-			}
+	gw := git.New(projectRoot)
+	if rmErr := gw.RemoveWorktreeDir(taskID); rmErr != nil {
+		warnings = append(warnings, fmt.Sprintf("failed to remove worktree directory: %v", rmErr))
+	}
+	taskBranch := paths.TaskBranchPrefix + taskID
+	if exists, brErr := gw.BranchExists(taskBranch); brErr != nil {
+		warnings = append(warnings, fmt.Sprintf("failed to check branch %s: %v", taskBranch, brErr))
+	} else if exists {
+		if delErr := gw.DeleteBranch(taskBranch); delErr != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", taskBranch, delErr))
 		}
 	}
+
+	// This cancelled task may be a successor — check if its terminal
+	// transition releases an older predecessor's branch.
+	warnings = append(warnings, cleanupPredecessorBranches(bb, gw, taskID)...)
 
 	return &CancelResult{
 		TaskID:         taskID,

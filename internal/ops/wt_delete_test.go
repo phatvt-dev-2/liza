@@ -1,10 +1,13 @@
 package ops
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -113,5 +116,57 @@ func TestDeleteWorktree_MergedWithWarning(t *testing.T) {
 	}
 	if result.Existed {
 		t.Error("Existed should be false")
+	}
+}
+
+func TestDeleteWorktree_SupersededPreservesBranch(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create a real git worktree
+	gw := git.New(tmpDir)
+	_, err := gw.CreateWorktree("task-1", "main")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+
+	wtPath := filepath.Join(tmpDir, ".worktrees", "task-1")
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Fatalf("worktree directory should exist: %v", err)
+	}
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, now)
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+	task.SupersededBy = []string{"task-2"}
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := DeleteWorktree(tmpDir, "task-1")
+	if err != nil {
+		t.Fatalf("DeleteWorktree() error: %v", err)
+	}
+	if !result.Existed {
+		t.Error("Existed should be true")
+	}
+	if len(result.Warnings) > 0 {
+		t.Errorf("unexpected warnings: %v", result.Warnings)
+	}
+
+	// Worktree directory should be removed
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Error("worktree directory should be removed")
+	}
+
+	// Branch should be preserved for successors
+	exists, brErr := gw.BranchExists("task/task-1")
+	if brErr != nil {
+		t.Fatalf("BranchExists error: %v", brErr)
+	}
+	if !exists {
+		t.Error("branch should be preserved for SUPERSEDED task — successors may need it")
 	}
 }

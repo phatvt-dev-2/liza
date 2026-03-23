@@ -69,10 +69,8 @@ func TestSupersedeTask_FromBlocked(t *testing.T) {
 		t.Errorf("ReplacementIDs len = %d, want 2", len(result.ReplacementIDs))
 	}
 
-	// Worktree cleanup attempted (no git repo → warnings expected)
-	if len(result.Warnings) == 0 {
-		t.Error("expected warnings from worktree cleanup (no git repo in tmpDir)")
-	}
+	// Worktree cleanup is best-effort — directory doesn't exist so no warnings
+	// (RemoveWorktreeDir gracefully handles missing directories)
 
 	// Verify state
 	bb := db.New(stateFile)
@@ -245,5 +243,14 @@ func TestSupersedeTask_CleansUpWorktree(t *testing.T) {
 	updatedTask := readState.FindTask("task-1")
 	if updatedTask.Worktree != nil {
 		t.Error("Worktree should be nil in state after supersede")
+	}
+
+	// Verify branch preserved — successors may need it via git show
+	exists, brErr := gw.BranchExists("task/task-1")
+	if brErr != nil {
+		t.Fatalf("BranchExists error: %v", brErr)
+	}
+	if !exists {
+		t.Error("task branch should be preserved after supersede for successor access")
 	}
 }

@@ -9,7 +9,8 @@
 | Task APPROVED | Merge eligible | — |
 | Task MERGED | `liza wt-merge task-N` | Supervisor (after Code Reviewer approves) |
 | Task BLOCKED | Delete worktree: `liza wt-delete task-N` | Planner |
-| Task ABANDONED/SUPERSEDED | Delete worktree: `liza wt-delete task-N` | Planner |
+| Task ABANDONED | Delete worktree: `liza wt-delete task-N` | Planner |
+| Task SUPERSEDED | Delete worktree directory (branch preserved): `liza wt-delete task-N` | Planner |
 | Task INTEGRATION_FAILED | Worktree retained for conflict resolution | — |
 
 **Note:** Worktree creation is supervisor-only (via `liza claim-task`), not agent-callable. This ensures worktrees exist before agents are spawned.
@@ -17,6 +18,8 @@
 **Reassignment rule:** When a different coder claims a task after `REJECTED`, the worktree is deleted and recreated fresh. Same coder re-claiming keeps the existing worktree. Rationale: salvaging failed work often costs more than restarting from spec.
 
 **Blocked-task note:** In the current state machine, `BLOCKED` tasks do not transition back to `READY`. They are resolved via `SUPERSEDED` (with replacement tasks) or `ABANDONED`; any existing worktree should be cleaned up via `liza wt-delete task-N`.
+
+**Superseded branch preservation:** When a task is superseded, its worktree directory is removed but its git branch is preserved. Successor tasks may need the branch to access prior artifacts via `git show <branch>:<path>`. The branch is automatically cleaned up when **all** successor tasks listed in `superseded_by` reach terminal status (`MERGED`, `ABANDONED`, or `SUPERSEDED` per `IsTerminal()`). Cleanup is triggered by any successor terminal transition (merge, cancel, or supersede).
 
 ---
 
