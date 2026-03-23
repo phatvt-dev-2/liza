@@ -3,6 +3,7 @@ package ops
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -2281,5 +2282,194 @@ func TestEAT_CrashRecoveryThroughEAT(t *testing.T) {
 	expectedChild1 := perSubtaskChildID("plan-1", "code-plan-to-coding", 1)
 	if results[0].ChildTaskIDs[0] != expectedChild1 {
 		t.Errorf("recovered child = %q, want %q", results[0].ChildTaskIDs[0], expectedChild1)
+	}
+}
+
+// --- Phase-gate propagation tests ---
+
+func TestEAT_PhaseGatePropagation(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// plan-1: MERGED with transition already executed and 3 children
+	plan1 := testhelpers.BuildTaskByStatus("plan-1", models.TaskStatusMerged, now)
+	plan1.RolePair = "code-planning-pair"
+	plan1.Output = []models.OutputEntry{
+		{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+		{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+		{Desc: "c", DoneWhen: "c", Scope: "c", SpecRef: "s.md"},
+	}
+	plan1.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+
+	child0 := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-1", "code-plan-to-coding", 0), models.TaskStatus("DRAFT_CODE"), now)
+	child0.RolePair = "coding-pair"
+	child1 := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-1", "code-plan-to-coding", 1), models.TaskStatus("DRAFT_CODE"), now)
+	child1.RolePair = "coding-pair"
+	child2 := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-1", "code-plan-to-coding", 2), models.TaskStatus("DRAFT_CODE"), now)
+	child2.RolePair = "coding-pair"
+
+	// plan-2: MERGED depends on plan-1, with 2 output entries — NOT yet transitioned
+	plan2 := testhelpers.BuildTaskByStatus("plan-2", models.TaskStatusMerged, now)
+	plan2.RolePair = "code-planning-pair"
+	plan2.Output = []models.OutputEntry{
+		{Desc: "d", DoneWhen: "d", Scope: "d", SpecRef: "s.md"},
+		{Desc: "e", DoneWhen: "e", Scope: "e", SpecRef: "s.md"},
+	}
+	plan2.DependsOn = []string{"plan-1"}
+
+	state.Tasks = append(state.Tasks, plan1, child0, child1, child2, plan2)
+	state.Sprint.Scope.Planned = []string{"plan-1", child0.ID, child1.ID, child2.ID, "plan-2"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions: %v", err)
+	}
+
+	// Only plan-2 should produce results (plan-1 already transitioned)
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+	if results[0].SourceTaskID != "plan-2" {
+		t.Fatalf("result source = %q, want plan-2", results[0].SourceTaskID)
+	}
+	if len(results[0].ChildTaskIDs) != 2 {
+		t.Fatalf("children count = %d, want 2", len(results[0].ChildTaskIDs))
+	}
+
+	// Verify children have inherited deps from plan-1's children
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	expectedInherited := []string{child0.ID, child1.ID, child2.ID}
+	for _, childID := range results[0].ChildTaskIDs {
+		child := readState.FindTask(childID)
+		if child == nil {
+			t.Fatalf("child %s not found", childID)
+		}
+		for _, expected := range expectedInherited {
+			if !slices.Contains(child.DependsOn, expected) {
+				t.Errorf("child %s missing inherited dep %s; DependsOn = %v", childID, expected, child.DependsOn)
+			}
+		}
+	}
+}
+
+func TestProceedInner_InheritedDepsAppendedAfterSiblingDeps(t *testing.T) {
+	now := time.Now().UTC()
+
+	s := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:       "plan-1",
+				Status:   models.TaskStatusMerged,
+				RolePair: "code-planning-pair",
+				Output: []models.OutputEntry{
+					{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+					{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md", DependsOn: []string{"0"}},
+				},
+			},
+		},
+	}
+
+	tDef := transitionDef{
+		requiredStatus: models.TaskStatusMerged,
+		targetStatus:   models.TaskStatus("DRAFT_CODE"),
+		cardinality:    "per-subtask",
+		targetRolePair: "coding-pair",
+	}
+
+	inheritedDeps := []string{"upstream-child-0", "upstream-child-1"}
+	result := &ProceedResult{SourceTaskID: "plan-1", TransitionName: "code-plan-to-coding"}
+
+	err := proceedInner(s, "plan-1", "code-plan-to-coding", tDef, inheritedDeps, now, result)
+	if err != nil {
+		t.Fatalf("proceedInner: %v", err)
+	}
+
+	// Child 1 (output[1]) depends on output[0] (sibling) AND inherited deps
+	child1 := s.FindTask(result.ChildTaskIDs[1])
+	if child1 == nil {
+		t.Fatal("child 1 not found")
+	}
+
+	// First dep should be sibling (from output DependsOn)
+	siblingID := perSubtaskChildID("plan-1", "code-plan-to-coding", 0)
+	if len(child1.DependsOn) < 1 || child1.DependsOn[0] != siblingID {
+		t.Errorf("child1 DependsOn[0] = %v, want sibling %s", child1.DependsOn, siblingID)
+	}
+	// Then inherited deps
+	for _, dep := range inheritedDeps {
+		if !slices.Contains(child1.DependsOn, dep) {
+			t.Errorf("child1 missing inherited dep %s; DependsOn = %v", dep, child1.DependsOn)
+		}
+	}
+}
+
+func TestProceed_InheritedDepsViaManualPath(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	// plan-1 already transitioned with 2 children
+	plan1 := testhelpers.BuildTaskByStatus("plan-1", models.TaskStatusMerged, now)
+	plan1.RolePair = "code-planning-pair"
+	plan1.Output = []models.OutputEntry{
+		{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+		{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+	}
+	plan1.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+
+	child0 := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-1", "code-plan-to-coding", 0), models.TaskStatus("DRAFT_CODE"), now)
+	child0.RolePair = "coding-pair"
+	child1 := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-1", "code-plan-to-coding", 1), models.TaskStatus("DRAFT_CODE"), now)
+	child1.RolePair = "coding-pair"
+
+	// plan-2 depends on plan-1, at CODING_PLAN_APPROVED (manual transition source)
+	plan2 := testhelpers.BuildTaskByStatus("plan-2", models.TaskStatus("CODING_PLAN_APPROVED"), now)
+	plan2.RolePair = "code-planning-pair"
+	plan2.Output = []models.OutputEntry{
+		{Desc: "c", DoneWhen: "c", Scope: "c", SpecRef: "s.md"},
+	}
+	plan2.DependsOn = []string{"plan-1"}
+
+	state.Tasks = append(state.Tasks, plan1, child0, child1, plan2)
+	state.Sprint.Scope.Planned = []string{"plan-1", child0.ID, child1.ID, "plan-2"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, "plan-2", "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed: %v", err)
+	}
+
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("children = %d, want 1", len(result.ChildTaskIDs))
+	}
+
+	// Verify the child inherits plan-1's children as deps
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	child := readState.FindTask(result.ChildTaskIDs[0])
+	if child == nil {
+		t.Fatal("child not found")
+	}
+	for _, expectedDep := range []string{child0.ID, child1.ID} {
+		if !slices.Contains(child.DependsOn, expectedDep) {
+			t.Errorf("child missing inherited dep %s; DependsOn = %v", expectedDep, child.DependsOn)
+		}
 	}
 }

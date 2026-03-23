@@ -66,7 +66,12 @@ type transitionDef struct {
 // Crash recovery: if the transition key is already set but some children
 // are missing, only the missing children are created.
 func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error) {
-	tDef, err := resolveTransitionDef(projectRoot, transitionName)
+	resolver, cfg, err := loadResolver(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+
+	tDef, err := resolveTransitionDefFrom(resolver, cfg, transitionName)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +91,16 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 			return fmt.Errorf("sprint must be COMPLETED before proceeding (current: %s)", s.Sprint.Status)
 		}
 
-		if err := proceedInner(s, taskID, transitionName, tDef, now, result); err != nil {
+		task := s.FindTask(taskID)
+		var inheritedDeps []string
+		if task != nil {
+			inheritedDeps, err = computeInheritedDeps(s, task, transitionName, resolver)
+			if err != nil {
+				return fmt.Errorf("inherited deps: %w", err)
+			}
+		}
+
+		if err := proceedInner(s, taskID, transitionName, tDef, inheritedDeps, now, result); err != nil {
 			return err
 		}
 
@@ -109,7 +123,7 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 // ExecuteAvailableTransitions (supervisor-initiated, no sprint gate).
 //
 // The result.ChildTaskIDs slice is appended to with created child task IDs.
-func proceedInner(s *models.State, taskID, transitionName string, tDef transitionDef, now time.Time, result *ProceedResult) error {
+func proceedInner(s *models.State, taskID, transitionName string, tDef transitionDef, inheritedDeps []string, now time.Time, result *ProceedResult) error {
 	task := s.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task %q not found", taskID)
@@ -121,7 +135,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	}
 
 	if task.TransitionsExecuted[transitionName] {
-		return recoverCrashedTransition(s, task, taskID, transitionName, tDef, now, result)
+		return recoverCrashedTransition(s, task, taskID, transitionName, tDef, inheritedDeps, now, result)
 	}
 
 	switch tDef.cardinality {
@@ -157,13 +171,13 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	switch tDef.cardinality {
 	case "per-subtask":
 		for i, entry := range task.Output {
-			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, siblingIDs, now)
+			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, siblingIDs, inheritedDeps, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[i])
 		}
 	case "one-to-one":
 		childID := oneToOneChildID(taskID, transitionName)
-		child := buildOneToOneChild(childID, taskID, task, tDef, now)
+		child := buildOneToOneChild(childID, taskID, task, tDef, inheritedDeps, now)
 		s.Tasks = append(s.Tasks, child)
 		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 	}
@@ -183,7 +197,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 // recoverCrashedTransition handles crash recovery when a transition was already
 // marked as executed but some child tasks are missing. Returns
 // errTransitionAlreadyExecuted if all children already exist.
-func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transitionName string, tDef transitionDef, now time.Time, result *ProceedResult) error {
+func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transitionName string, tDef transitionDef, inheritedDeps []string, now time.Time, result *ProceedResult) error {
 	switch tDef.cardinality {
 	case "per-subtask":
 		// Pre-compute sibling IDs for DependsOn resolution.
@@ -193,15 +207,19 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		}
 		var missingChildren []int
 		for i := range task.Output {
-			if s.FindTask(siblingIDs[i]) == nil {
+			existing := s.FindTask(siblingIDs[i])
+			if existing == nil {
 				missingChildren = append(missingChildren, i)
+			} else {
+				// Patch inherited deps on existing children (created before crash, may lack inherited deps)
+				patchInheritedDeps(existing, inheritedDeps)
 			}
 		}
 		if len(missingChildren) == 0 {
 			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
 		}
 		for _, idx := range missingChildren {
-			child := buildChildTask(siblingIDs[idx], taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, siblingIDs, now)
+			child := buildChildTask(siblingIDs[idx], taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, siblingIDs, inheritedDeps, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[idx])
 		}
@@ -217,10 +235,11 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 
 	case "one-to-one":
 		childID := oneToOneChildID(taskID, transitionName)
-		if s.FindTask(childID) != nil {
+		if existing := s.FindTask(childID); existing != nil {
+			patchInheritedDeps(existing, inheritedDeps)
 			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
 		}
-		child := buildOneToOneChild(childID, taskID, task, tDef, now)
+		child := buildOneToOneChild(childID, taskID, task, tDef, inheritedDeps, now)
 		s.Tasks = append(s.Tasks, child)
 		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 		task.History = append(task.History, models.TaskHistoryEntry{
@@ -494,12 +513,23 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 
 		// Phase 3: Execute in sorted order
 		for _, p := range sorted {
+			task := s.FindTask(p.taskID)
+			var inheritedDeps []string
+			if task != nil {
+				var depErr error
+				inheritedDeps, depErr = computeInheritedDeps(s, task, p.name, resolver)
+				if depErr != nil {
+					log.Printf("WARNING: ExecuteAvailableTransitions: task %s inherited deps: %v", p.taskID, depErr)
+					continue
+				}
+			}
+
 			result := ProceedResult{
 				SourceTaskID:   p.taskID,
 				TransitionName: p.name,
 			}
 
-			if err := proceedInner(s, p.taskID, p.name, p.tDef, now, &result); err != nil {
+			if err := proceedInner(s, p.taskID, p.name, p.tDef, inheritedDeps, now, &result); err != nil {
 				if !errors.Is(err, errTransitionAlreadyExecuted) {
 					log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", p.taskID, p.name, err)
 				}
@@ -529,7 +559,7 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 }
 
 // buildTransitionDefFromPipeline resolves a transition definition from pipeline config.
-// This is the shared helper used by both resolveTransitionDef (with trigger check)
+// This is the shared helper used by both resolveTransitionDefFrom (with trigger check)
 // and ExecuteAvailableTransitions (without trigger check).
 func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName string) (transitionDef, error) {
 	td, err := resolver.Transition(transitionName)
@@ -569,12 +599,14 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 // buildChildTask creates a child task from an output entry.
 // siblingIDs maps output entry indices to their generated task IDs,
 // used to resolve DependsOn index references to actual task IDs.
-func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, siblingIDs []string, now time.Time) models.Task {
+// inheritedDeps are phase-gate dependencies from upstream tasks' children.
+func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, siblingIDs, inheritedDeps []string, now time.Time) models.Task {
 	var deps []string
 	for _, ref := range entry.DependsOn {
 		idx, _ := strconv.Atoi(ref) // validated upstream in validateOutputEntry
 		deps = append(deps, siblingIDs[idx])
 	}
+	deps = append(deps, inheritedDeps...)
 
 	return models.Task{
 		ID:          childID,
@@ -597,7 +629,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 // buildOneToOneChild creates a child task for a one-to-one transition.
 // The parent task itself is the input — no output[] needed. The child's fields
 // describe the next phase's work, with spec_ref pointing to the parent's artifact.
-func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef transitionDef, now time.Time) models.Task {
+func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef transitionDef, inheritedDeps []string, now time.Time) models.Task {
 	doerName := tDef.doerDisplayName
 	if doerName == "" {
 		doerName = tDef.targetRolePair
@@ -615,8 +647,19 @@ func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef tran
 		PlanRef:     parent.PlanRef, // inherited from parent (set from OutputEntry for per-subtask, propagated for one-to-one)
 		DoneWhen:    fmt.Sprintf("Complete %s work based on parent task %s", doerName, parentID),
 		Scope:       fmt.Sprintf("Based on parent task %s", parentID),
+		DependsOn:   inheritedDeps,
 		Created:     now,
 		History:     []models.TaskHistoryEntry{},
+	}
+}
+
+// patchInheritedDeps adds any missing inherited deps to an existing child task's DependsOn.
+// Used during crash recovery when a child was created before inherited deps were computed.
+func patchInheritedDeps(task *models.Task, inheritedDeps []string) {
+	for _, dep := range inheritedDeps {
+		if !slices.Contains(task.DependsOn, dep) {
+			task.DependsOn = append(task.DependsOn, dep)
+		}
 	}
 }
 
@@ -688,15 +731,9 @@ func AvailableTransitions(task *models.Task, projectRoot string) []string {
 	return resolver.AvailableTransitions(task.Status, task.TransitionsExecuted)
 }
 
-// resolveTransitionDef looks up a transition definition from the pipeline config.
-// Only manual transitions are allowed — auto transitions are reserved for supervisor
-// execution via ExecuteAvailableTransitions.
-func resolveTransitionDef(projectRoot, transitionName string) (transitionDef, error) {
-	resolver, cfg, err := loadResolver(projectRoot)
-	if err != nil {
-		return transitionDef{}, fmt.Errorf("failed to load pipeline config: %w", err)
-	}
-
+// resolveTransitionDefFrom validates and resolves a manual transition definition
+// from an already-loaded resolver, avoiding double-loading in Proceed.
+func resolveTransitionDefFrom(resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig, transitionName string) (transitionDef, error) {
 	td, err := resolver.Transition(transitionName)
 	if err != nil {
 		names := allTransitionNames(cfg)
