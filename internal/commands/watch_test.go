@@ -1620,6 +1620,41 @@ func TestCheckStaleSentinels(t *testing.T) {
 		}
 	})
 
+	t.Run("repeated alert on every poll", func(t *testing.T) {
+		sentinel := "$transitioning"
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+		task.AssignedTo = &sentinel
+
+		cache := map[string]time.Time{
+			"sentinel:task-1": now.Add(-3 * time.Minute),
+		}
+		state := &models.State{Tasks: []models.Task{task}}
+
+		// First poll — should alert.
+		alerts1 := checkStaleSentinels(state, cache)
+		if len(alerts1) != 1 {
+			t.Fatalf("first poll: len(alerts) = %d, want 1", len(alerts1))
+		}
+		if alerts1[0].Level != alertLevelCritical {
+			t.Errorf("first poll: level = %q, want %q", alerts1[0].Level, alertLevelCritical)
+		}
+		if alerts1[0].Category != "STALE SENTINEL" {
+			t.Errorf("first poll: category = %q, want %q", alerts1[0].Category, "STALE SENTINEL")
+		}
+
+		// Second poll with same stale sentinel — must alert again (no suppression).
+		alerts2 := checkStaleSentinels(state, cache)
+		if len(alerts2) != 1 {
+			t.Fatalf("second poll: len(alerts) = %d, want 1", len(alerts2))
+		}
+		if alerts2[0].Level != alertLevelCritical {
+			t.Errorf("second poll: level = %q, want %q", alerts2[0].Level, alertLevelCritical)
+		}
+		if alerts2[0].Category != "STALE SENTINEL" {
+			t.Errorf("second poll: category = %q, want %q", alerts2[0].Category, "STALE SENTINEL")
+		}
+	})
+
 	t.Run("no alert within threshold", func(t *testing.T) {
 		sentinel := "$transitioning"
 		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
