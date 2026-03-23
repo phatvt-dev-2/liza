@@ -38,6 +38,7 @@ scope boundary of the goal. Tasks use the same role-pair and are chained with se
 
 Planners in later phases see a PHASE CONSISTENCY RULE requiring them to mark BLOCKED
 (via `liza_mark_blocked`) if their plan cannot reconcile with prior phases' plans.
+This blocking path is orthogonal to attempt exhaustion — it does not increment the task's attempt counter.
 
 ## Iteration Protocol
 
@@ -76,9 +77,9 @@ if iterations >= max_iterations and task.state != APPROVED:
 
 | Role | Default Max | Rationale |
 |------|-------------|-----------|
-| Coder | 10 | Enough for complex tasks, bounded |
+| Coder | 10 per attempt | Enough for complex tasks, bounded |
 | Code Reviewer | 1 per review | Review should be decisive |
-| Review cycles | 5 | Coder-Code Reviewer loop cap |
+| Review cycles | 5 per attempt | Coder-Code Reviewer loop cap |
 
 ### Early Warning Thresholds
 
@@ -88,9 +89,29 @@ if iterations >= max_iterations and task.state != APPROVED:
 |--------|---------|-------|-----------|
 | Coder iterations | 8 | 10 | Always |
 | Review cycles | 3 | 5 | Always |
-| Coder failures | 1 | 2 | Only if review_cycles ≥ 3 |
+| Attempt | — | 2 | Warning at attempt 2 start |
 
-The third condition avoids noise on isolated recoverable failures — a single coder failure with few review cycles is likely recoverable.
+### Attempt Transitions
+
+Tasks have at most two attempts. Each attempt is a structural lifecycle unit
+with independent iteration and review cycle budgets.
+
+| Trigger | Attempt 1 Result | Attempt 2 Result |
+|---------|------------------|------------------|
+| Iteration cap (10) reached | New attempt: Attempt=2, counters reset, worktree deleted | BLOCKED |
+| Review cycle cap (5) reached | New attempt: Attempt=2, counters reset, worktree deleted | BLOCKED |
+
+Attempt transitions are independent of agent identity. Within an attempt, all
+claims share the same counter budget regardless of which coder is assigned.
+
+**Orthogonal to hypothesis exhaustion:** `failed_by` tracks integration failures
+(two different coders BLOCKED on the same task). Cap-triggered attempt transitions
+do not write to `failed_by`.
+
+**Orthogonal to phase-consistency blocking:** Multi-phase planning allows later
+planning phases to BLOCK immediately via PHASE CONSISTENCY RULE. That path is a
+spec conflict / planning-scope escalation, not attempt exhaustion, and does not
+increment `attempt` or trigger attempt transitions.
 
 ---
 
@@ -104,6 +125,8 @@ If same task is BLOCKED by two different coders:
 4. Planner must identify and record root cause before rescoping; include it in `rescope_reason` and the log entry.
 
 This prevents infinite polite failure.
+
+**Note:** Hypothesis exhaustion tracks integration failures via `failed_by`, orthogonal to cap-triggered attempt transitions. Cap-triggered paths (iteration or review cycle limits) do not write to `failed_by`.
 
 Tracked via:
 ```yaml
