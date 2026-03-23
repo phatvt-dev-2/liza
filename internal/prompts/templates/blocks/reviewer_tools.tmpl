@@ -1,16 +1,16 @@
 {{- define "reviewer-tools" -}}
 {{- if eq .Role "code-reviewer"}}
 
-REVIEWER TOOL:
+REVIEWER TOOL (resolve before use: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict):
 - liza_submit_verdict — Submit review verdict (see VERDICT SUBMISSION below for params)
 {{- else}}
 
 {{- if eq .Role "code-plan-reviewer"}}
-CODE PLAN REVIEWER TOOLS:
+CODE PLAN REVIEWER TOOLS (resolve before use: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict):
 {{- else if eq .Role "epic-plan-reviewer"}}
-EPIC PLAN REVIEWER TOOLS:
+EPIC PLAN REVIEWER TOOLS (resolve before use: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict):
 {{- else if eq .Role "us-reviewer"}}
-US REVIEWER TOOLS:
+US REVIEWER TOOLS (resolve before use: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict):
 {{- end}}
 - liza_get — Query task state to inspect output[] entries
   {"query": "tasks/{{.TaskID}}"}

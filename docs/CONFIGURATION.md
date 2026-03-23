@@ -27,7 +27,7 @@ Liza provides an MCP server (`liza-mcp`) for Claude Code integration. `liza init
 
 **Key elements:**
 - **`enableAllProjectMcpServers`** / **`enabledMcpjsonServers`** — enables the Liza MCP server defined in `.mcp.json`
-- **`mcp__liza__*`** — grants permission to invoke specific MCP tools (format: `mcp__<server>__<tool>`)
+- **`mcp__liza__*`** — grants permission to invoke specific MCP tools (format: `mcp__<server>__<tool>`). These are also the tool identifiers agents must resolve at runtime (e.g. via `ToolSearch select:mcp__liza__liza_get,...`) before calling Liza MCP tools.
 - **`Skill(...)`** — contract skills from `~/.liza/skills/` (installed by `liza setup`)
 - **`defaultMode: acceptEdits`** — required for headless agent operation
 
