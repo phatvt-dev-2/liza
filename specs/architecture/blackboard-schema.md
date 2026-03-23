@@ -89,8 +89,9 @@ tasks:
     worktree: .worktrees/task-2
     iteration: 3  # Current iteration within this task (Ralph loop count)
     exit42_restart_count: 0   # Consecutive exit-42 restarts without progress (reset on state change)
-    review_cycles_current: 2  # Reset to 0 on coder reassignment
+    review_cycles_current: 2  # Reset to 0 on new attempt
     review_cycles_total: 2    # Never reset (audit trail)
+    attempt: 1                # 0=unset, 1=first, 2=second
     review_commit: b2c3d4e5
     spec_ref: specs/retry-logic.md
     done_when: "OrderAPI.create_order() retries only after idempotency key validation"
@@ -199,9 +200,6 @@ tasks:
     blocked_questions:
       - "Should partial results be returned if page 3 of 5 fails?"
       - "Is retry of failed pages in scope?"
-    attempted:
-      - "Checked specs/api.md — no pagination error handling section"
-      - "Searched codebase for existing patterns — none found"
     created: 2025-01-17T15:30:00Z
 
   - id: task-8
@@ -286,7 +284,7 @@ The `iteration` field tracks coder work cycles on a task:
 | First claim (READY → IMPLEMENTING) | Set to 1 |
 | Work iteration complete | Unchanged (work within single claim) |
 | Review rejected (REJECTED → IMPLEMENTING, same coder) | Increment by 1 |
-| Task reassigned (different coder) | Reset to 1 |
+| New attempt triggered | Reset to 0 |
 | Task reaches terminal state | Preserved (audit trail) |
 
 **Semantics:**
@@ -305,14 +303,27 @@ These can differ: a coder might submit multiple reviews in one iteration (if the
 
 Tasks track two review cycle counters:
 
-| Field | Reset on Reassign | Purpose |
-|-------|-------------------|---------|
-| `review_cycles_current` | Yes (→ 0) | Limit check — new coder gets full budget |
-| `review_cycles_total` | No | Audit trail — total rejections across all coders |
+| Field | Reset on New Attempt | Purpose |
+|-------|----------------------|---------|
+| `review_cycles_current` | Yes (→ 0) | Limit check — new attempt gets full budget |
+| `review_cycles_total` | No | Audit trail — total rejections across all attempts |
 
-**Rationale:** Difficult tasks requiring coder reassignment should not penalize the replacement coder with inherited review budget. A task reassigned after 3 rejections would otherwise leave only 2 cycles before deadlock, creating a self-fulfilling prophecy that reassigned tasks require rescoping.
+**Rationale:** Budget reset is about approach exhaustion, not personnel change. When cap-triggered attempt transition occurs, counters reset so the new attempt starts with full iteration and review budget.
 
 **Limit checks use `review_cycles_current`; retrospectives use `review_cycles_total`.**
+
+### Attempt Field Lifecycle
+
+The `attempt` field tracks the structural lifecycle unit for a task:
+
+| Event | `attempt` Value |
+|-------|-----------------|
+| Task created (DRAFT/READY) | 0 (unset) |
+| First claim | Set to 1 |
+| Cap hit (iteration 10 or review_cycles 5), attempt 1 | Set to 2, counters reset, worktree deleted |
+| Cap hit, attempt 2 | BLOCKED |
+
+The `attempt` field is a structural lifecycle counter independent of agent identity. Within an attempt, all claims (same or different coder) share the same counter budget.
 
 ### Rejection Reason Format
 
