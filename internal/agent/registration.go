@@ -8,6 +8,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -60,8 +61,7 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 		if existing, exists := state.Agents[agentID]; exists {
 			// Check if lease is still valid
 			if existing.LeaseExpires != nil && existing.LeaseExpires.After(now) {
-				return fmt.Errorf("agent ID collision: %s already registered with valid lease (expires %s)",
-					agentID, existing.LeaseExpires.Format(time.RFC3339))
+				return &errors.AgentCollisionError{AgentID: agentID}
 			}
 			logger.Info("Taking over expired agent lease", "agent_id", agentID)
 		}
@@ -135,6 +135,32 @@ func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal strin
 	}
 
 	return nil
+}
+
+// AutoAssignAgentID reads state, picks the first available <role>-N, and calls
+// tryFn with the candidate ID. On AgentCollisionError, it re-reads state and
+// retries (up to maxRetries). Returns the assigned ID or the first non-collision error.
+func AutoAssignAgentID(bb *db.Blackboard, role string, maxRetries int, tryFn func(agentID string) error) (string, error) {
+	for attempt := range maxRetries {
+		state, err := bb.Read()
+		if err != nil {
+			return "", fmt.Errorf("failed to read state for agent ID auto-generation: %w", err)
+		}
+		now := time.Now()
+		var activeIDs []string
+		for id, a := range state.Agents {
+			if a.LeaseExpires != nil && a.LeaseExpires.After(now) {
+				activeIDs = append(activeIDs, id)
+			}
+		}
+		agentID := identity.NextAvailableID(role, activeIDs)
+		err = tryFn(agentID)
+		if errors.IsAgentCollision(err) && attempt < maxRetries-1 {
+			continue
+		}
+		return agentID, err
+	}
+	return "", fmt.Errorf("exhausted %d retries for agent ID auto-assignment", maxRetries)
 }
 
 // unregisterAgent releases any task claim held by the agent, then removes

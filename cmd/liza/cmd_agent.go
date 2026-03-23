@@ -12,6 +12,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -47,40 +48,28 @@ Roles:
   coder               - Claims and implements coding tasks
   code-reviewer       - Reviews coding tasks and submits verdicts
 
+Agent ID defaults to the first <role>-N not already registered with a valid lease
+(e.g. coder-1, or coder-2 if coder-1 is active). Override with --agent-id or
+LIZA_AGENT_ID.
+
 Example:
-  # Using --agent-id flag (recommended)
+  # Auto-assigned agent ID (simplest)
+  liza agent coder
+  liza agent code-reviewer --cli claude
+  liza agent orchestrator --interactive
+
+  # Explicit agent ID
   liza agent coder --agent-id coder-1
-  liza agent code-reviewer --agent-id code-reviewer-1 --cli claude
-  liza agent code-planner --agent-id code-planner-1 --cli claude
-  liza agent code-plan-reviewer --agent-id code-plan-reviewer-1 --cli claude
-  liza agent epic-planner --agent-id epic-planner-1 --cli claude
-  liza agent epic-plan-reviewer --agent-id epic-plan-reviewer-1 --cli claude
-  liza agent us-writer --agent-id us-writer-1 --cli claude
-  liza agent us-reviewer --agent-id us-reviewer-1 --cli claude
-  liza agent orchestrator --agent-id orchestrator-1 --interactive
+  liza agent code-reviewer --agent-id code-reviewer-2 --cli claude
 
   # Save agent output to .liza/agent-outputs/
-  liza agent coder --agent-id coder-1 --log
+  liza agent coder --log
 
   # Using LIZA_AGENT_ID environment variable
-  LIZA_AGENT_ID=coder-1 liza agent coder
-  LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer --cli claude
-  LIZA_AGENT_ID=code-planner-1 liza agent code-planner --cli claude
-  LIZA_AGENT_ID=code-plan-reviewer-1 liza agent code-plan-reviewer --cli claude
-  LIZA_AGENT_ID=epic-planner-1 liza agent epic-planner --cli claude
-  LIZA_AGENT_ID=us-writer-1 liza agent us-writer --cli claude`,
+  LIZA_AGENT_ID=coder-1 liza agent coder`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		role := args[0]
-
-		agentID, err := requireAgentID(cmd)
-		if err != nil {
-			return err
-		}
-
-		if err := identity.ValidateRole(agentID, role); err != nil {
-			return err
-		}
 
 		initialTask := ""
 		if len(args) == 2 {
@@ -99,6 +88,21 @@ Example:
 		validRoles := pipeline.NewResolver(pipelineCfg).AllRoleNames()
 		if !slices.Contains(validRoles, role) {
 			return fmt.Errorf("invalid role: %s (valid: %s)", role, strings.Join(validRoles, ", "))
+		}
+
+		// Resolve agent ID: flag > env var > auto-generate from state
+		flagValue, _ := cmd.Flags().GetString("agent-id")
+		agentID, err := identity.Resolve(identity.Config{
+			FlagValue: flagValue,
+			Required:  false,
+		})
+		if err != nil {
+			return err
+		}
+		autoAssigned := agentID == ""
+
+		if err := identity.ValidateRole(agentID, role); !autoAssigned && err != nil {
+			return err
 		}
 
 		cliName, _ := cmd.Flags().GetString("cli")
@@ -135,11 +139,37 @@ Example:
 			outputsDir = lizaPaths.AgentOutputsDir()
 		}
 
+		statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		if autoAssigned {
+			bb := db.For(statePath)
+			_, err = agent.AutoAssignAgentID(bb, role, 5, func(candidateID string) error {
+				fmt.Fprintf(os.Stderr, "Auto-assigned agent ID: %s\n", candidateID)
+				config := agent.SupervisorConfig{
+					AgentID:     candidateID,
+					Role:        role,
+					ProjectRoot: projectRoot,
+					StatePath:   statePath,
+					LogPath:     filepath.Join(projectRoot, ".liza", "log.yaml"),
+					SpecsDir:    specsDir,
+					CLIName:     cliName,
+					Interactive: interactive,
+					InitialTask: initialTask,
+					Executor:    agent.NewDefaultCLIExecutor(outputsDir),
+				}
+				return agent.RunSupervisor(ctx, config)
+			})
+			return err
+		}
+
 		config := agent.SupervisorConfig{
 			AgentID:     agentID,
 			Role:        role,
 			ProjectRoot: projectRoot,
-			StatePath:   filepath.Join(projectRoot, ".liza", "state.yaml"),
+			StatePath:   statePath,
 			LogPath:     filepath.Join(projectRoot, ".liza", "log.yaml"),
 			SpecsDir:    specsDir,
 			CLIName:     cliName,
@@ -148,8 +178,6 @@ Example:
 			Executor:    agent.NewDefaultCLIExecutor(outputsDir),
 		}
 
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
 		return agent.RunSupervisor(ctx, config)
 	},
 }

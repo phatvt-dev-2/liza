@@ -115,7 +115,7 @@ Operational reference content (blackboard fields, anomaly types, etc.) is inline
 
 **3. Start Agents**
 
-Agent identity is provided via the `--agent-id` flag. IDs must follow the pattern `{role}-{number}` (e.g., `coder-1`, `code-reviewer-1`, `orchestrator-1`).
+Agent identity defaults to the first `{role}-N` not already registered with a valid lease (e.g., `coder-1`, or `coder-2` if `coder-1` is active). Override with `--agent-id` or the `LIZA_AGENT_ID` environment variable.
 
 Roles are organized into two phases. Which agents you need depends on your entry point:
 
@@ -138,35 +138,36 @@ Roles:
 
 **Minimal setup (detailed-spec entry point) — 5 terminals:**
 ```bash
-liza agent orchestrator --agent-id orchestrator-1
-liza agent code-planner --agent-id code-planner-1
-liza agent code-plan-reviewer --agent-id code-plan-reviewer-1
-liza agent coder --agent-id coder-1
-liza agent code-reviewer --agent-id code-reviewer-1
+liza agent orchestrator
+liza agent code-planner
+liza agent code-plan-reviewer
+liza agent coder
+liza agent code-reviewer
 ```
 
 **Full pipeline (general-objective entry point) — 9 terminals:**
 ```bash
-liza agent orchestrator --agent-id orchestrator-1
-liza agent epic-planner --agent-id epic-planner-1
-liza agent epic-plan-reviewer --agent-id epic-plan-reviewer-1
-liza agent us-writer --agent-id us-writer-1
-liza agent us-reviewer --agent-id us-reviewer-1
-liza agent code-planner --agent-id code-planner-1
-liza agent code-plan-reviewer --agent-id code-plan-reviewer-1
-liza agent coder --agent-id coder-1
-liza agent code-reviewer --agent-id code-reviewer-1
+liza agent orchestrator
+liza agent epic-planner
+liza agent epic-plan-reviewer
+liza agent us-writer
+liza agent us-reviewer
+liza agent code-planner
+liza agent code-plan-reviewer
+liza agent coder
+liza agent code-reviewer
 ```
 
-Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --agent-id coder-1 --cli gemini`.
+Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --cli gemini`.
 
 Pass `--log` to persist the agent's output to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Incompatible with `-i`.
 See [Analyzing Agent Logs](#analyzing-agent-logs) for analysis tools.
 
-Multiple agents of the same role can run in parallel:
+Multiple agents of the same role can run in parallel (IDs auto-increment):
 ```bash
-liza agent coder --agent-id coder-1
-liza agent coder --agent-id coder-2
+liza agent coder              # auto-assigns coder-1
+liza agent coder              # auto-assigns coder-2
+liza agent coder --agent-id coder-5   # explicit ID
 ```
 
 **3. Observe**
@@ -322,7 +323,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza setup` | One-time global setup of contracts and skills to `~/.liza/` |
 | `liza init <goal> --spec <spec_ref>` | Initialize `.liza/` directory with blackboard (spec_ref defaults to specs/vision.md) |
 | **Agents & Monitoring** | |
-| `liza agent <role> --agent-id <id>` | Agent supervisor (start, restart, backoff loop) |
+| `liza agent <role> [--agent-id <id>]` | Agent supervisor (start, restart, backoff loop; ID auto-assigned if omitted) |
 | `liza watch` | Monitor blackboard, alert on anomalies, auto-checkpoint on circuit-breaker |
 | `liza status` | Show system and task status at a glance |
 | **System Control** | |

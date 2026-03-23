@@ -402,6 +402,61 @@ func TestExtractNumber(t *testing.T) {
 	}
 }
 
+func TestNextAvailableID(t *testing.T) {
+	tests := []struct {
+		name          string
+		role          string
+		registeredIDs []string
+		want          string
+	}{
+		{
+			name:          "empty registry returns 1",
+			role:          "coder",
+			registeredIDs: nil,
+			want:          "coder-1",
+		},
+		{
+			name:          "skips taken ID",
+			role:          "coder",
+			registeredIDs: []string{"coder-1"},
+			want:          "coder-2",
+		},
+		{
+			name:          "fills gap",
+			role:          "coder",
+			registeredIDs: []string{"coder-1", "coder-3"},
+			want:          "coder-2",
+		},
+		{
+			name:          "ignores other roles",
+			role:          "coder",
+			registeredIDs: []string{"code-reviewer-1", "orchestrator-1"},
+			want:          "coder-1",
+		},
+		{
+			name:          "hyphenated role",
+			role:          "code-reviewer",
+			registeredIDs: []string{"code-reviewer-1", "code-reviewer-2"},
+			want:          "code-reviewer-3",
+		},
+		{
+			name:          "consecutive taken",
+			role:          "coder",
+			registeredIDs: []string{"coder-1", "coder-2", "coder-3"},
+			want:          "coder-4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NextAvailableID(tt.role, tt.registeredIDs)
+			if got != tt.want {
+				t.Errorf("NextAvailableID(%q, %v) = %q, want %q", tt.role, tt.registeredIDs, got, tt.want)
+			}
+		})
+	}
+}
+
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||

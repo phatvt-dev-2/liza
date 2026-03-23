@@ -41,3 +41,20 @@ func IsNotFound(err error) bool {
 	var nfe *NotFoundError
 	return errors.As(err, &nfe)
 }
+
+// AgentCollisionError is returned when an agent ID is already registered
+// with a valid lease.
+type AgentCollisionError struct {
+	AgentID string
+}
+
+func (e *AgentCollisionError) Error() string {
+	return fmt.Sprintf("agent ID collision: %s already registered with valid lease", e.AgentID)
+}
+
+// IsAgentCollision checks if an error is an AgentCollisionError.
+// Supports wrapped errors (e.g. from bb.Modify).
+func IsAgentCollision(err error) bool {
+	var ace *AgentCollisionError
+	return errors.As(err, &ace)
+}

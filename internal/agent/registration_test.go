@@ -209,6 +209,134 @@ func TestRegisterAgent(t *testing.T) {
 	}
 }
 
+// TestRegisterAgentCollisionIsTyped verifies collision returns AgentCollisionError
+func TestRegisterAgentCollisionIsTyped(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Agents["coder-1"] = models.Agent{
+		Role:         "coder",
+		Status:       models.AgentStatusWorking,
+		LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(10 * time.Minute)),
+		Heartbeat:    time.Now().UTC(),
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	resolver := testResolver(t)
+	err := registerAgent(bb, tmpDir, "coder-1", "coder", "terminal-1", 1800, "claude", resolver)
+	if err == nil {
+		t.Fatal("Expected collision error, got nil")
+	}
+	if !errors.IsAgentCollision(err) {
+		t.Errorf("Expected AgentCollisionError, got %T: %v", err, err)
+	}
+}
+
+// TestAutoAssignAgentID_RetryOnCollision verifies the retry loop picks the next
+// available ID when the first candidate collides with a concurrent registration.
+func TestAutoAssignAgentID_RetryOnCollision(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	// Seed state: coder-1 has a valid lease, so NextAvailableID picks coder-2.
+	state := testhelpers.CreateValidState()
+	state.Agents["coder-1"] = models.Agent{
+		Role:         "coder",
+		Status:       models.AgentStatusWorking,
+		LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(10 * time.Minute)),
+		Heartbeat:    time.Now().UTC(),
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	// tryFn simulates a collision on the first call, then succeeds.
+	// This mimics another process registering coder-2 between Read and Register.
+	resolver := testResolver(t)
+	calls := 0
+	assignedID, err := AutoAssignAgentID(bb, "coder", 5, func(candidateID string) error {
+		calls++
+		if calls == 1 {
+			// Simulate concurrent registration: register the candidate under lock
+			// so the next retry sees it as taken.
+			regErr := registerAgent(bb, tmpDir, candidateID, "coder", "terminal-1", 1800, "claude", resolver)
+			if regErr != nil {
+				t.Fatalf("Setup: registerAgent failed: %v", regErr)
+			}
+			// Return collision as if our own registration attempt lost the race.
+			return &errors.AgentCollisionError{AgentID: candidateID}
+		}
+		// Second call: just succeed.
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("AutoAssignAgentID returned error: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("Expected 2 calls to tryFn, got %d", calls)
+	}
+	// First call got coder-2, collision. Second call should get coder-3
+	// (coder-1 has valid lease, coder-2 was registered in the collision setup).
+	if assignedID != "coder-3" {
+		t.Errorf("Expected coder-3, got %s", assignedID)
+	}
+}
+
+// TestAutoAssignAgentID_NoCollision verifies the happy path.
+func TestAutoAssignAgentID_NoCollision(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	calls := 0
+	assignedID, err := AutoAssignAgentID(bb, "coder", 5, func(candidateID string) error {
+		calls++
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("AutoAssignAgentID returned error: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("Expected 1 call, got %d", calls)
+	}
+	if assignedID != "coder-1" {
+		t.Errorf("Expected coder-1, got %s", assignedID)
+	}
+}
+
+// TestAutoAssignAgentID_ExhaustsRetries verifies that persistent collisions
+// return the last collision error.
+func TestAutoAssignAgentID_ExhaustsRetries(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	calls := 0
+	_, err := AutoAssignAgentID(bb, "coder", 3, func(candidateID string) error {
+		calls++
+		return &errors.AgentCollisionError{AgentID: candidateID}
+	})
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !errors.IsAgentCollision(err) {
+		t.Errorf("Expected AgentCollisionError, got %T: %v", err, err)
+	}
+	if calls != 3 {
+		t.Errorf("Expected 3 calls (exhausted retries), got %d", calls)
+	}
+}
+
 // TestRegisterAgentConcurrent tests concurrent registration race condition
 func TestRegisterAgentConcurrent(t *testing.T) {
 	tmpDir := t.TempDir()

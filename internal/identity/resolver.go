@@ -76,6 +76,21 @@ func parseAgentID(agentID string) (role string, number int, err error) {
 	return role, number, nil
 }
 
+// NextAvailableID returns the first <role>-N (N starting at 1) whose key
+// is not present in registeredIDs.
+func NextAvailableID(role string, registeredIDs []string) string {
+	taken := make(map[string]struct{}, len(registeredIDs))
+	for _, id := range registeredIDs {
+		taken[id] = struct{}{}
+	}
+	for n := 1; ; n++ {
+		candidate := fmt.Sprintf("%s-%d", role, n)
+		if _, exists := taken[candidate]; !exists {
+			return candidate
+		}
+	}
+}
+
 // ValidateFormat validates agent ID format: {role}-{number}
 // The role can contain hyphens (e.g., "code-reviewer"), but the number must be numeric.
 func ValidateFormat(agentID string) error {
