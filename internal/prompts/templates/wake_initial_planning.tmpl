@@ -1,5 +1,5 @@
 {{- define "wake_initial_planning" -}}
-This is initial planning. Create exactly one task for the appropriate planner.
+This is initial planning. Read the goal spec, assess complexity, and create planning task(s).
 
 ⚠️  AUTONOMY NOTICE ⚠️
 You have FULL autonomy to execute MCP tools immediately.
@@ -8,34 +8,58 @@ Do NOT wait for permission.
 --- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
 
 1. Read the goal spec ({{.GoalSpecRef}}) thoroughly.
-2. Create a single planning task that captures the full goal context.
-3. Do not decompose into downstream tasks in this phase.
+2. Assess complexity: count distinct functional areas, estimate output entries.
+3. Decide: single task (simple) or multi-phase (complex).
+
+MULTI-PHASE PLANNING:
+When a goal is complex (>3 distinct functional areas, >~8 estimated output entries,
+or cross-cutting concerns that benefit from sequential refinement):
+- Create up to ~5 planning tasks, each scoped to a natural boundary in the spec.
+- Phases must partition the goal: non-overlapping scopes that together cover the full planning scope.
+- Use the SAME role-pair for all tasks.
+- Task IDs use the role-pair-derived prefix with sequential suffixes: <prefix>-1, <prefix>-2, etc.
+- Chain with sequential depends_on: task-2 depends on task-1, task-3 on task-2, etc.
+Simple goals (default): one task, no depends_on.
 
 --- EXECUTION PHASE (MANDATORY - DO NOT SKIP) ---
 {{- if .GoalEntryPoint }}
 
 Entry-point "{{.GoalEntryPoint}}" was specified. Dispatch to {{.ResolvedDisplayName}}.
 
-Use liza_add_tasks once with:
+Use liza_add_tasks once with ALL tasks:
 {
-  "tasks": [{
-    "id": "{{.ResolvedTaskIDPrefix}}-1",
-    "desc": "Create implementation plan for goal: <goal summary>",
-    "spec": "{{.GoalSpecRef}}",
-    "done": "Implementation plan is complete, reviewable, and submitted for review",
-    "scope": "Planning only: analyze goal and produce actionable plan/output. No implementation.",
-    "priority": 1,
-    "depends": [],
-    "type": "coding",
-    "role_pair": "{{.ResolvedRolePair}}"
-  }],
+  "tasks": [
+    {
+      "id": "{{.ResolvedTaskIDPrefix}}-1",
+      "desc": "Phase 1: <boundary description>",
+      "spec": "{{.GoalSpecRef}}",
+      "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for review",
+      "scope": "Planning only: <phase 1 boundary>. No implementation.",
+      "priority": 1,
+      "depends": [],
+      "type": "coding",
+      "role_pair": "{{.ResolvedRolePair}}"
+    },
+    {
+      "id": "{{.ResolvedTaskIDPrefix}}-2",
+      "desc": "Phase 2: <boundary description>",
+      "spec": "{{.GoalSpecRef}}",
+      "done": "...",
+      "scope": "Planning only: <phase 2 boundary>. No implementation.",
+      "priority": 2,
+      "depends": ["{{.ResolvedTaskIDPrefix}}-1"],
+      "type": "coding",
+      "role_pair": "{{.ResolvedRolePair}}"
+    }
+  ],
   "agent_id": "{{.AgentID}}"
 }
+For simple goals, use a single task (omit the second entry, empty depends).
 
 SUCCESS CRITERIA:
-- Exactly one task is created.
-- Task role_pair is {{.ResolvedRolePair}}.
-- Task is claimable by the {{.ResolvedDisplayName}}.
+- All tasks use role_pair {{.ResolvedRolePair}}.
+- Tasks are claimable by the {{.ResolvedDisplayName}}.
+- Complex goals: sequential depends_on chain, each task scoped to a natural boundary.
 {{- else if .EntryPoints }}
 
 No entry-point was specified. Classify the input document and choose the appropriate entry-point.
@@ -53,53 +77,82 @@ CLASSIFICATION GUIDANCE:
 
 After classifying, use liza_add_tasks once with the chosen role_pair:
 {
-  "tasks": [{
-    "id": "<chosen-role-pair-without-pair-suffix>-1",
-    "desc": "Create implementation plan for goal: <goal summary>",
-    "spec": "{{.GoalSpecRef}}",
-    "done": "Implementation plan is complete, reviewable, and submitted for review",
-    "scope": "Planning only: analyze goal and produce actionable plan/output. No implementation.",
-    "priority": 1,
-    "depends": [],
-    "type": "coding",
-    "role_pair": "<chosen-role-pair>"
-  }],
+  "tasks": [
+    {
+      "id": "<chosen-prefix>-1",
+      "desc": "Phase 1: <boundary description>",
+      "spec": "{{.GoalSpecRef}}",
+      "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for review",
+      "scope": "Planning only: <phase 1 boundary>. No implementation.",
+      "priority": 1,
+      "depends": [],
+      "type": "coding",
+      "role_pair": "<chosen-role-pair>"
+    },
+    {
+      "id": "<chosen-prefix>-2",
+      "desc": "Phase 2: <boundary description>",
+      "spec": "{{.GoalSpecRef}}",
+      "done": "...",
+      "scope": "Planning only: <phase 2 boundary>. No implementation.",
+      "priority": 2,
+      "depends": ["<chosen-prefix>-1"],
+      "type": "coding",
+      "role_pair": "<chosen-role-pair>"
+    }
+  ],
   "agent_id": "{{.AgentID}}"
 }
+For simple goals, use a single task (omit the second entry, empty depends).
 
 SUCCESS CRITERIA:
-- Exactly one task is created.
-- Task role_pair matches the chosen entry-point.
-- Classification reasoning is stated before creating the task.
+- All tasks use the chosen role_pair matching the entry-point.
+- Classification reasoning is stated before creating the task(s).
+- Complex goals: sequential depends_on chain, each task scoped to a natural boundary.
 {{- else }}
 
 Use liza_add_tasks once with:
 {
-  "tasks": [{
-    "id": "code-planning-1",
-    "desc": "Create implementation plan for goal: <goal summary>",
-    "spec": "{{.GoalSpecRef}}",
-    "done": "Implementation plan is complete, reviewable, and submitted for code-plan-review",
-    "scope": "Planning only: analyze goal and produce actionable coding plan/output. No implementation.",
-    "priority": 1,
-    "depends": [],
-    "type": "coding",
-    "role_pair": "code-planning-pair"
-  }],
+  "tasks": [
+    {
+      "id": "code-planning-1",
+      "desc": "Phase 1: <boundary description>",
+      "spec": "{{.GoalSpecRef}}",
+      "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for code-plan-review",
+      "scope": "Planning only: <phase 1 boundary>. No implementation.",
+      "priority": 1,
+      "depends": [],
+      "type": "coding",
+      "role_pair": "code-planning-pair"
+    },
+    {
+      "id": "code-planning-2",
+      "desc": "Phase 2: <boundary description>",
+      "spec": "{{.GoalSpecRef}}",
+      "done": "...",
+      "scope": "Planning only: <phase 2 boundary>. No implementation.",
+      "priority": 2,
+      "depends": ["code-planning-1"],
+      "type": "coding",
+      "role_pair": "code-planning-pair"
+    }
+  ],
   "agent_id": "{{.AgentID}}"
 }
+For simple goals, use a single task (omit the second entry, empty depends).
 
 SUCCESS CRITERIA:
-- Exactly one task is created.
-- Task role_pair is code-planning-pair.
-- Task enters DRAFT_CODING_PLAN and is claimable by code-planner.
+- All tasks use role_pair code-planning-pair.
+- Tasks enter DRAFT_CODING_PLAN and are claimable by code-planner.
+- Complex goals: sequential depends_on chain, each task scoped to a natural boundary.
 {{- end }}
 
 EXPECTED BEHAVIOR EXAMPLES:
-✅ Analyze goal, add one planning task, confirm success, exit.
-❌ Decompose into multiple downstream tasks during initial planning.
+✅ Simple goal: one planning task, no depends_on, confirm success, exit.
+✅ Complex goal: N planning tasks with sequential depends_on chain, confirm success, exit.
 
 ❌ INCORRECT (DO NOT DO THIS):
 1. Plan but do not execute liza_add_tasks
-2. Exit without creating the task
+2. Exit without creating the task(s)
+3. Create downstream implementation tasks — only planning tasks belong here
 {{- end -}}

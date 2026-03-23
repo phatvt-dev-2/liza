@@ -186,7 +186,9 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"This is initial planning",
 				"Classify the input document and choose the appropriate entry-point",
 				"AVAILABLE ENTRY-POINTS:",
-				"Exactly one task is created",
+				"Phases must partition the goal",
+				"role-pair-derived prefix with sequential suffixes",
+				"All tasks use the chosen role_pair matching the entry-point",
 			},
 		},
 		{
