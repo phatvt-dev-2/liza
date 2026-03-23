@@ -622,6 +622,43 @@ func TestFormatTasksTable_WithDependencies(t *testing.T) {
 	}
 }
 
+func TestBuildTaskInfo_AttemptNum_UsesEffectiveAttempt(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name           string
+		attempt        int
+		wantAttemptNum int
+	}{
+		{
+			name:           "Attempt 2 returns 2",
+			attempt:        2,
+			wantAttemptNum: 2,
+		},
+		{
+			name:           "Attempt 0 (legacy/unset) returns 1 via EffectiveAttempt",
+			attempt:        0,
+			wantAttemptNum: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := &models.Task{
+				ID:        "test-task",
+				Status:    models.TaskStatusImplementing,
+				Created:   now,
+				Attempt:   tt.attempt,
+				Iteration: 3,
+			}
+			info := buildTaskInfo(task)
+			if info.AttemptNum != tt.wantAttemptNum {
+				t.Errorf("AttemptNum = %d, want %d", info.AttemptNum, tt.wantAttemptNum)
+			}
+		})
+	}
+}
+
 func TestFormatTaskValue_WithDependencies(t *testing.T) {
 	tests := []struct {
 		name             string
