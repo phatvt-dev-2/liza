@@ -1322,6 +1322,89 @@ func TestSubmitVerdict_RejectionAtReviewCap_Attempt1_TriggersNewAttempt(t *testi
 	assertReleasedAgent(t, readState, "code-reviewer-1")
 }
 
+func TestSubmitVerdict_RejectionAtReviewCap_Attempt1_TransitionFailure_PropagatesError(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	coderID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	task.AssignedTo = &coderID
+	task.Attempt = 1
+	task.Iteration = 3
+	task.ReviewCyclesCurrent = 1
+	task.ReviewCyclesTotal = 1
+
+	state := testhelpers.CreateValidState()
+	state.Config.MaxReviewCycles = 2
+	state.Tasks = []models.Task{task}
+
+	taskRef := "task-1"
+	state.Agents[coderID] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWaiting,
+		CurrentTask: &taskRef,
+	}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusReviewing,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Use testTransitionHooks to replace the sentinel between Phase 1 and Phase 3,
+	// causing Phase 3 to fail with a "sentinel replaced" error.
+	bb := db.New(stateFile)
+	testTransitionHooks = &transitionTestHooks{
+		afterPhase1: func() {
+			// Replace sentinel with a different value to simulate concurrent modification.
+			_ = bb.Modify(func(s *models.State) error {
+				t := s.FindTask("task-1")
+				if t != nil {
+					interloper := "coder-interloper"
+					t.AssignedTo = &interloper
+				}
+				return nil
+			})
+		},
+	}
+	t.Cleanup(func() { testTransitionHooks = nil })
+
+	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Approach is wrong", "code-reviewer-1", "")
+
+	// SubmitVerdict must return error (not a result) when TransitionToNewAttempt fails.
+	if err == nil {
+		t.Fatal("SubmitVerdict() returned nil error, want error propagated from TransitionToNewAttempt failure")
+	}
+	if result != nil {
+		t.Errorf("SubmitVerdict() returned non-nil result %+v, want nil on transition failure", result)
+	}
+
+	// Error should contain both the SubmitVerdict context and the phase 3 failure.
+	if !strings.Contains(err.Error(), "attempt transition failed") {
+		t.Errorf("error %q should contain 'attempt transition failed'", err.Error())
+	}
+	if !strings.Contains(err.Error(), "sentinel replaced") {
+		t.Errorf("error %q should contain 'sentinel replaced'", err.Error())
+	}
+
+	// TransitionToNewAttempt Phase 1 committed (Attempt=2, counters reset)
+	// but Phase 3 failed — task is stuck with the interloper AssignedTo.
+	readState, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("Failed to read state: %v", readErr)
+	}
+	failedTask := readState.FindTask("task-1")
+	if failedTask == nil {
+		t.Fatal("Task not found")
+	}
+	if failedTask.Attempt != 2 {
+		t.Errorf("Attempt = %d, want 2 (Phase 1 committed)", failedTask.Attempt)
+	}
+	if failedTask.AssignedTo == nil || *failedTask.AssignedTo != "coder-interloper" {
+		t.Errorf("AssignedTo = %v, want 'coder-interloper' (sentinel was replaced, Phase 3 aborted)", failedTask.AssignedTo)
+	}
+}
+
 func TestSubmitVerdict_RejectionAtReviewCap_Attempt2_TriggersBlocked(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
