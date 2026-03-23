@@ -125,9 +125,9 @@ The process — Planner creates tasks, Coder implements, Code Reviewer approves 
 
 ### Core Principles
 
-- **Work may be discarded to preserve clarity and momentum** — Salvaging flawed work often costs more than rewriting from spec. When code carries the scars of multiple failed iterations, starting fresh produces cleaner results faster than negotiating with accumulated debt. Discard is a Planner decision, only after exhausting defined limits (5 review cycles, 2 coder failures, 10 iterations total). No premature abandonment.
+- **Work may be discarded to preserve clarity and momentum** — Salvaging flawed work often costs more than rewriting from spec. When code carries the scars of multiple failed iterations, starting fresh produces cleaner results faster than negotiating with accumulated debt. Discard is a Planner decision, only after exhausting defined limits (5 review cycles, 2 attempts, 10 iterations per attempt). No premature abandonment.
 - **Corrections leave trails** — Every rescope, rejection, and spec change is logged with rationale. The activity log is append-only for audit; state uses atomic read-modify-write. No silent rewrites, no "it was always like this." Future agents (and humans) can reconstruct why.
-- **Bounded failure is preferred over prolonged negotiation** — Five review cycles, then escalate. Two coders fail, then rescope. Ten iterations, then block. Hard limits prevent polite infinite loops where agents keep trying without progress.
+- **Bounded failure is preferred over prolonged negotiation** — Five review cycles, then escalate. Two attempts exhausted, then block. Ten iterations, then block. Hard limits prevent polite infinite loops where agents keep trying without progress.
 - **Every restart is a new mind with old artifacts** — Agents don't remember previous sessions. They read specs, blackboard, and handoff notes fresh. Design for amnesia: if it's not written down, it doesn't exist for the next agent.
 
 ### Cost Gradient
