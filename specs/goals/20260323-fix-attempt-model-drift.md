@@ -12,7 +12,6 @@ Scope note: this attempt model governs the iteration/review-cycle exhaustion pat
 existing doer/reviewer loop. It is orthogonal to the multi-phase planning flow introduced in
 `20260323-multi-phase-planning.md`: a planner may BLOCK immediately on PHASE CONSISTENCY
 without consuming an attempt or triggering `new_attempt`.
-
 The specs conflate "attempt" with "coder reassignment." The code never implemented attempts at all (the `Attempted []string` field is dead code — defined but never written to). This plan realigns both.
 
 ## Design
@@ -71,7 +70,6 @@ Two trigger paths, both calling the same `TransitionToNewAttempt()`:
    phases to BLOCK immediately when they cannot reconcile with prior phases. That path is a spec
    conflict / planning-scope escalation, not attempt exhaustion, and does not increment `Attempt`
    or append `TaskEventNewAttempt`.
-
 6. **`mark_blocked` unchanged** — Manual blocks are voluntary (ambiguity, external blockers). Not affected by attempt number. Agents can block at any time. Manual blocks do not populate `failed_by` (unchanged).
 
 7. **Concurrency safety** — The sentinel `AssignedTo = "$transitioning"` blocks claims from Phase 1 through Phase 3. The task becomes claimable only after Phase 3 clears the sentinel and transitions to initial status. After the function returns, any agent can safely claim.
