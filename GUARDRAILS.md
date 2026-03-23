@@ -37,6 +37,12 @@ Operational lessons from project experience. Read when a trigger matches.
 | Modifying `internal/embedded/claude-settings.json`, `internal/embedded/mcp.json`, `internal/embedded/hooks/`, or any file with master/derived copies | [settings-master-not-derived.md](lessons/agents/settings-master-not-derived.md)                |
 | Reading, editing, or creating files in a worktree | [worktree-file-path-consistency.md](lessons/agents/worktree-file-path-consistency.md) |
 
+### G2.2: Contract and prompt conciseness
+
+Every token in `contracts/` and `internal/prompts/templates/` costs context budget across all agents and sessions. Before adding text, ask: "Can I tighten existing wording instead?" Prefer rewriting over appending.
+
+**Test:** Compare before/after byte count. Growth should not exceed semantic content added.
+
 ## Tier 3 (Preferences)
 
 ### G3.1: ADR awareness for architectural changes
