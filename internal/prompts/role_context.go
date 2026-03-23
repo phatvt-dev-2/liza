@@ -37,6 +37,8 @@ type RoleContextData struct {
 	SiblingTasks   []SiblingTaskSummary
 	TotalPlanTasks int
 	TaskOrdinal    int // 1-based position in sprint plan
+	DependsOn      []string
+	TaskRolePair   string
 
 	// Coder-specific
 	IntegrationBranch string

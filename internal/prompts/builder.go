@@ -26,6 +26,8 @@ type SiblingTaskSummary struct {
 	ID          string
 	Description string
 	Status      string
+	PlanRef     string
+	RolePair    string
 }
 
 // BuildBasePrompt creates the base bootstrap prompt for all agents

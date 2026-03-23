@@ -136,6 +136,8 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		SiblingTasks:   siblingTasks,
 		TotalPlanTasks: totalPlanTasks,
 		TaskOrdinal:    taskOrdinal,
+		DependsOn:      task.DependsOn,
+		TaskRolePair:   task.RolePair,
 
 		// Config/state
 		ProjectRoot: config.ProjectRoot,
@@ -227,6 +229,8 @@ func collectSiblingTasks(state *models.State, currentTaskID string) ([]prompts.S
 				ID:          task.ID,
 				Description: truncateDescription(task.Description, 200),
 				Status:      string(task.Status),
+				PlanRef:     task.PlanRef,
+				RolePair:    task.RolePair,
 			})
 		}
 	}

@@ -45,6 +45,7 @@ pipeline:
       context-sections:
         - assigned-task
         - worktree-rules
+        - collective-plan-scoping
         - prior-rejection
         - doer-state-transitions
         - doer-tools
@@ -70,6 +71,7 @@ pipeline:
       context-sections:
         - review-task
         - worktree-rules
+        - collective-plan-scoping
         - prior-rejection
         - reviewer-state-transitions
         - reviewer-tools

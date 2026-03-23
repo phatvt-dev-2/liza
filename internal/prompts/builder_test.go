@@ -1455,3 +1455,128 @@ func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
 		}
 	})
 }
+
+func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
+	t.Run("with DependsOn matching same-role-pair sibling → renders phase-consistency rule", func(t *testing.T) {
+		data := &RoleContextData{
+			Role:           "code-planner",
+			RoleType:       "doer",
+			TotalPlanTasks: 2,
+			TaskOrdinal:    2,
+			GoalSpecRef:    "specs/goal.md",
+			TaskRolePair:   "code-planning-pair",
+			DependsOn:      []string{"plan-1"},
+			SiblingTasks: []SiblingTaskSummary{
+				{ID: "plan-1", Description: "Phase 1 planning", Status: "MERGED", PlanRef: "specs/plan-phase1.md", RolePair: "code-planning-pair"},
+			},
+		}
+
+		output, err := BuildRoleContext("code-planner", []string{"collective-plan-scoping"}, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		if !strings.Contains(output, "PHASE CONSISTENCY RULE") {
+			t.Error("expected phase-consistency rule to render")
+		}
+		if !strings.Contains(output, "plan-1") {
+			t.Error("expected prior phase task ID in rule")
+		}
+		if !strings.Contains(output, "specs/plan-phase1.md") {
+			t.Error("expected prior phase PlanRef in rule")
+		}
+		if !strings.Contains(output, "liza_mark_blocked") {
+			t.Error("expected BLOCKED instruction in rule")
+		}
+	})
+
+	t.Run("without DependsOn → no phase-consistency rule", func(t *testing.T) {
+		data := &RoleContextData{
+			Role:           "code-planner",
+			RoleType:       "doer",
+			TotalPlanTasks: 2,
+			TaskOrdinal:    1,
+			GoalSpecRef:    "specs/goal.md",
+			SiblingTasks: []SiblingTaskSummary{
+				{ID: "plan-2", Description: "Phase 2 planning", Status: "DRAFT_CODING_PLAN"},
+			},
+		}
+
+		output, err := BuildRoleContext("code-planner", []string{"collective-plan-scoping"}, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		if strings.Contains(output, "PHASE CONSISTENCY RULE") {
+			t.Error("should NOT render phase-consistency rule without DependsOn")
+		}
+	})
+
+	t.Run("DependsOn on different-role-pair sibling → no phase-consistency rule", func(t *testing.T) {
+		data := &RoleContextData{
+			Role:           "code-planner",
+			RoleType:       "doer",
+			TotalPlanTasks: 2,
+			TaskOrdinal:    2,
+			GoalSpecRef:    "specs/goal.md",
+			TaskRolePair:   "code-planning-pair",
+			DependsOn:      []string{"coding-task-1"},
+			SiblingTasks: []SiblingTaskSummary{
+				{ID: "coding-task-1", Description: "Implement feature", Status: "MERGED", RolePair: "coding-pair"},
+			},
+		}
+
+		output, err := BuildRoleContext("code-planner", []string{"collective-plan-scoping"}, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		if strings.Contains(output, "PHASE CONSISTENCY RULE") {
+			t.Error("should NOT render phase-consistency rule for different-role-pair dependency")
+		}
+	})
+
+	t.Run("epic-planner role branch", func(t *testing.T) {
+		data := &RoleContextData{
+			Role:           "epic-planner",
+			RoleType:       "doer",
+			TotalPlanTasks: 2,
+			TaskOrdinal:    1,
+			GoalSpecRef:    "specs/goal.md",
+			SiblingTasks: []SiblingTaskSummary{
+				{ID: "plan-2", Description: "Phase 2", Status: "DRAFT_EPIC_PLAN"},
+			},
+		}
+
+		output, err := BuildRoleContext("epic-planner", []string{"collective-plan-scoping"}, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		if !strings.Contains(output, "Do NOT plan capabilities that belong to a sibling phase") {
+			t.Error("expected epic-planner scope restriction")
+		}
+	})
+
+	t.Run("epic-plan-reviewer role branch", func(t *testing.T) {
+		data := &RoleContextData{
+			Role:           "epic-plan-reviewer",
+			RoleType:       "reviewer",
+			TotalPlanTasks: 2,
+			TaskOrdinal:    1,
+			GoalSpecRef:    "specs/goal.md",
+			SiblingTasks: []SiblingTaskSummary{
+				{ID: "plan-2", Description: "Phase 2", Status: "DRAFT_EPIC_PLAN"},
+			},
+		}
+
+		output, err := BuildRoleContext("epic-plan-reviewer", []string{"collective-plan-scoping"}, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		if !strings.Contains(output, "epic stays within scope") {
+			t.Error("expected epic-plan-reviewer scope verification language")
+		}
+	})
+}
