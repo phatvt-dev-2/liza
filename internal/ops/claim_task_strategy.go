@@ -83,6 +83,9 @@ func (freshClaimStrategy) shouldRunPostWorktreeCmd(phase claimWorktreePhaseResul
 func (freshClaimStrategy) mutateTask(task *models.Task, ctx *claimContext) {
 	task.Worktree = &ctx.worktreeRel
 	task.BaseCommit = &ctx.baseCommit
+	if task.Attempt == 0 {
+		task.Attempt = 1
+	}
 }
 
 func (freshClaimStrategy) historyEntry(now time.Time, ctx *claimContext) models.TaskHistoryEntry {

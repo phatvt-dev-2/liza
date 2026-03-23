@@ -129,7 +129,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		PlanSection:  splitPlanRefSection(task.PlanRef),
 		Worktree:     resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		IterationNum: task.Iteration,
-		AttemptNum:   len(task.Attempted) + 1,
+		AttemptNum:   task.EffectiveAttempt(),
 
 		// Plan scoping
 		GoalSpecRef:    state.Goal.SpecRef,

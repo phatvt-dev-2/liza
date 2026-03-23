@@ -91,7 +91,7 @@ func buildTaskInfo(task *models.Task) taskInfo {
 		SpecRef:         task.SpecRef,
 		RejectionReason: task.RejectionReason,
 		Output:          task.Output,
-		AttemptNum:      len(task.Attempted) + 1,
+		AttemptNum:      task.EffectiveAttempt(),
 	}
 
 	info.Age = render.FormatDuration(calculateTaskAge(task))

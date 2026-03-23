@@ -199,6 +199,31 @@ func TestIsClaimable(t *testing.T) {
 	})
 }
 
+func TestEffectiveAttempt_ZeroReturnsOne(t *testing.T) {
+	task := &Task{Attempt: 0}
+	if got := task.EffectiveAttempt(); got != 1 {
+		t.Errorf("EffectiveAttempt() = %d, want 1 for Attempt=0", got)
+	}
+}
+
+func TestEffectiveAttempt_ReturnsActualValue(t *testing.T) {
+	tests := []struct {
+		attempt int
+		want    int
+	}{
+		{1, 1},
+		{2, 2},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Attempt=%d", tt.attempt), func(t *testing.T) {
+			task := &Task{Attempt: tt.attempt}
+			if got := task.EffectiveAttempt(); got != tt.want {
+				t.Errorf("EffectiveAttempt() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestApprovalHelpers(t *testing.T) {
 	t.Run("ApprovalCount", func(t *testing.T) {
 		t.Run("empty list", func(t *testing.T) {

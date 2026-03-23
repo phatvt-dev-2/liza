@@ -191,11 +191,11 @@ type Task struct {
 	RejectionReason     *string            `yaml:"rejection_reason,omitempty"`
 	BlockedReason       *string            `yaml:"blocked_reason,omitempty"`
 	BlockedQuestions    []string           `yaml:"blocked_questions,omitempty"`
-	Attempted           []string           `yaml:"attempted,omitempty"`
 	SupersededBy        []string           `yaml:"superseded_by,omitempty"`
 	Supersedes          *string            `yaml:"supersedes,omitempty"`
 	RescopeReason       *string            `yaml:"rescope_reason,omitempty"`
 	FailedBy            []string           `yaml:"failed_by,omitempty"`
+	Attempt             int                `yaml:"attempt,omitempty"`
 	DependsOn           []string           `yaml:"depends_on,omitempty"`
 	IntegrationFix      bool               `yaml:"integration_fix,omitempty"`
 	HandoffPending      bool               `yaml:"handoff_pending,omitempty"`
@@ -257,6 +257,15 @@ func (t *Task) EffectiveType() TaskType {
 		return TaskTypeCoding
 	}
 	return t.Type
+}
+
+// EffectiveAttempt returns the task's attempt number, defaulting to 1 when
+// Attempt is 0 (unset) for backward compatibility with existing tasks.
+func (t *Task) EffectiveAttempt() int {
+	if t.Attempt < 1 {
+		return 1
+	}
+	return t.Attempt
 }
 
 // ApprovalCount returns the number of approvals recorded on this task.
