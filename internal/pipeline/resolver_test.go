@@ -345,14 +345,14 @@ func TestResolver_RoleDisplayName(t *testing.T) {
 func TestResolver_ContextSections(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 
-	// Coder should have 15 context-sections.
+	// Coder should have 16 context-sections.
 	got, err := r.ContextSections("coder")
 	if err != nil {
 		t.Fatalf("ContextSections(coder): %v", err)
 	}
 	want := []string{
 		"assigned-task", "worktree-rules", "collective-plan-scoping", "handoff-resume",
-		"integration-fix", "prior-rejection", "doer-state-transitions", "doer-tools",
+		"integration-fix", "prior-rejection", "prior-attempt", "doer-state-transitions", "doer-tools",
 		"anomaly-logging", "blocking-protocol", "commit-workflow", "implementation-phase",
 		"submission-phase", "mandatory-docs", "skills-affinity",
 	}
