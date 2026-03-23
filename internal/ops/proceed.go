@@ -20,6 +20,16 @@ import (
 // condition in ExecuteAvailableTransitions, not a configuration error.
 var errTransitionAlreadyExecuted = errors.New("transition already executed")
 
+// perSubtaskChildID returns the deterministic child task ID for a per-subtask transition.
+func perSubtaskChildID(parentID, transitionName string, index int) string {
+	return fmt.Sprintf("%s-%s-%d", parentID, transitionName, index)
+}
+
+// oneToOneChildID returns the deterministic child task ID for a one-to-one transition.
+func oneToOneChildID(parentID, transitionName string) string {
+	return fmt.Sprintf("%s-%s", parentID, transitionName)
+}
+
 // ProceedResult contains the outcome of executing a manual inter-pair transition.
 type ProceedResult struct {
 	SourceTaskID   string
@@ -141,7 +151,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	// Pre-compute sibling IDs for DependsOn resolution in per-subtask transitions.
 	siblingIDs := make([]string, len(task.Output))
 	for i := range task.Output {
-		siblingIDs[i] = fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
+		siblingIDs[i] = perSubtaskChildID(taskID, transitionName, i)
 	}
 
 	switch tDef.cardinality {
@@ -152,7 +162,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[i])
 		}
 	case "one-to-one":
-		childID := fmt.Sprintf("%s-%s", taskID, transitionName)
+		childID := oneToOneChildID(taskID, transitionName)
 		child := buildOneToOneChild(childID, taskID, task, tDef, now)
 		s.Tasks = append(s.Tasks, child)
 		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
@@ -179,7 +189,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		// Pre-compute sibling IDs for DependsOn resolution.
 		siblingIDs := make([]string, len(task.Output))
 		for i := range task.Output {
-			siblingIDs[i] = fmt.Sprintf("%s-%s-%d", taskID, transitionName, i)
+			siblingIDs[i] = perSubtaskChildID(taskID, transitionName, i)
 		}
 		var missingChildren []int
 		for i := range task.Output {
@@ -206,7 +216,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		return nil
 
 	case "one-to-one":
-		childID := fmt.Sprintf("%s-%s", taskID, transitionName)
+		childID := oneToOneChildID(taskID, transitionName)
 		if s.FindTask(childID) != nil {
 			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
 		}
