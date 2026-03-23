@@ -7,7 +7,7 @@ CODER STATE TRANSITIONS:
 - CODE_REJECTED → IMPLEMENTING_CODE (address reviewer feedback, re-submit)
 - INTEGRATION_FAILED → IMPLEMENTING_CODE (fix merge conflicts, re-submit)
 Stop triggers: spec ambiguity → BLOCKED, assumption budget exceeded → BLOCKED, same rejection reason twice → BLOCKED (escalate)
-LIMITS: Iteration and review cycle limits are enforced — task escalates to BLOCKED when exceeded.
+LIMITS: Iteration and review cycle limits are enforced — task starts fresh attempt when limits reached; BLOCKED on second attempt exhaustion.
 {{- else if eq .Role "code-planner"}}
 
 CODE PLANNER STATE TRANSITIONS:

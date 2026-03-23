@@ -1241,5 +1241,54 @@ func TestPipelineConfig_PriorAttempt_DoerRolesOnly(t *testing.T) {
 	}
 }
 
+// TestBuildPrompt_LimitsLine_FreshAttempt verifies that the coder prompt contains
+// the updated LIMITS text referencing fresh attempts instead of plain BLOCKED escalation.
+func TestBuildPrompt_LimitsLine_FreshAttempt(t *testing.T) {
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				Attempt:     1,
+				DoneWhen:    "Done",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := testBuildPrompt(t, state, config, "task-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt() error: %v", err)
+	}
+
+	if !strings.Contains(prompt, "task starts fresh attempt when limits reached") {
+		t.Error("coder prompt should contain 'task starts fresh attempt when limits reached'")
+	}
+}
+
 // Ensure pipeline import is used (linter guard).
 var _ = pipeline.NewResolver
