@@ -164,6 +164,13 @@ liza setup  # initial install or liza upgrade: installs contracts + skills to ~/
 liza setup --claude --codex --gemini --mistral
 ```
 
+> **Customize your tool setup:** The installed `~/.liza/AGENT_TOOLS.md` ships with a default
+> MCP server and tool configuration. It defines which tools agents prefer (IDE integrations,
+> search providers, documentation sources, etc.) and is specific to each user's environment.
+> Edit `~/.liza/AGENT_TOOLS.md` to match your own setup — remove tools you don't have,
+> add ones you do, and adjust precedence rules accordingly.
+> Alternatively, provide your own file at install time: `liza setup --agent-tools ~/my-tools.md`.
+
 To init your project repo, do:
 ```bash
 # With: agent-specific contract activation (system prompt symlink, permissions)
