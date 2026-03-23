@@ -525,9 +525,10 @@ func TestCheckApproachingLimits(t *testing.T) {
 	now := time.Now().UTC()
 
 	tests := []struct {
-		name       string
-		tasks      []models.Task
-		wantAlerts int
+		name        string
+		tasks       []models.Task
+		wantAlerts  int
+		wantContain string // substring expected in first alert message
 	}{
 		{
 			name: "approaching iteration limit",
@@ -535,10 +536,25 @@ func TestCheckApproachingLimits(t *testing.T) {
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 					task.Iteration = 8
+					task.Attempt = 1
 					return task
 				}(),
 			},
-			wantAlerts: 1,
+			wantAlerts:  1,
+			wantContain: "attempt 1, iteration 8/10",
+		},
+		{
+			name: "approaching iteration limit attempt 2",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+					task.Iteration = 8
+					task.Attempt = 2
+					return task
+				}(),
+			},
+			wantAlerts:  1,
+			wantContain: "attempt 2 (final), iteration 8/10",
 		},
 		{
 			name: "at iteration cliff",
@@ -546,6 +562,7 @@ func TestCheckApproachingLimits(t *testing.T) {
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
 					task.Iteration = 10
+					task.Attempt = 1
 					return task
 				}(),
 			},
@@ -557,10 +574,25 @@ func TestCheckApproachingLimits(t *testing.T) {
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 					task.ReviewCyclesCurrent = 3
+					task.Attempt = 1
 					return task
 				}(),
 			},
-			wantAlerts: 1,
+			wantAlerts:  1,
+			wantContain: "attempt 1, review cycle 3/5",
+		},
+		{
+			name: "approaching review cycle limit attempt 2",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					task.ReviewCyclesCurrent = 3
+					task.Attempt = 2
+					return task
+				}(),
+			},
+			wantAlerts:  1,
+			wantContain: "attempt 2 (final), review cycle 3/5",
 		},
 		{
 			name: "one failure + high review cycles",
@@ -569,10 +601,11 @@ func TestCheckApproachingLimits(t *testing.T) {
 					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 					task.FailedBy = []string{"coder-1"}
 					task.ReviewCyclesCurrent = 3
+					task.Attempt = 1
 					return task
 				}(),
 			},
-			wantAlerts: 2, // Both review cycle and failure+cycle warnings fire
+			wantAlerts: 1, // Only review cycle alert; coder failures warning removed
 		},
 	}
 
@@ -583,6 +616,11 @@ func TestCheckApproachingLimits(t *testing.T) {
 
 			if len(alerts) != tt.wantAlerts {
 				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+			if tt.wantContain != "" && len(alerts) > 0 {
+				if !strings.Contains(alerts[0].Message, tt.wantContain) {
+					t.Errorf("alert message = %q, want containing %q", alerts[0].Message, tt.wantContain)
+				}
 			}
 		})
 	}

@@ -456,34 +456,37 @@ func checkApproachingLimits(state *models.State) []alert {
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
+		attemptNum := task.EffectiveAttempt()
+
 		// Coder iterations: warn at 8, cliff at 10
 		if task.Status == models.TaskStatusImplementing && task.Iteration >= 8 && task.Iteration < 10 {
+			var msg string
+			if attemptNum == 2 {
+				msg = fmt.Sprintf("%s — attempt 2 (final), iteration %d/10", task.ID, task.Iteration)
+			} else {
+				msg = fmt.Sprintf("%s — attempt %d, iteration %d/10", task.ID, attemptNum, task.Iteration)
+			}
 			alerts = append(alerts, alert{
 				Timestamp: now,
 				Level:     alertLevelWarning,
 				Category:  "APPROACHING LIMIT",
-				Message:   fmt.Sprintf("%s — iteration %d/10", task.ID, task.Iteration),
+				Message:   msg,
 			})
 		}
 
 		// Review cycles: warn at 3, cliff at 5
 		if task.ReviewCyclesCurrent >= 3 && task.ReviewCyclesCurrent < 5 {
+			var msg string
+			if attemptNum == 2 {
+				msg = fmt.Sprintf("%s — attempt 2 (final), review cycle %d/5", task.ID, task.ReviewCyclesCurrent)
+			} else {
+				msg = fmt.Sprintf("%s — attempt %d, review cycle %d/5", task.ID, attemptNum, task.ReviewCyclesCurrent)
+			}
 			alerts = append(alerts, alert{
 				Timestamp: now,
 				Level:     alertLevelWarning,
 				Category:  "APPROACHING LIMIT",
-				Message:   fmt.Sprintf("%s — review cycle %d/5", task.ID, task.ReviewCyclesCurrent),
-			})
-		}
-
-		// Coder failures: warn at 1 IF review_cycles_current >= 3
-		if len(task.FailedBy) == 1 && task.ReviewCyclesCurrent >= 3 {
-			alerts = append(alerts, alert{
-				Timestamp: now,
-				Level:     alertLevelWarning,
-				Category:  "APPROACHING LIMIT",
-				Message: fmt.Sprintf("%s — 1 coder failed + %d review cycles (hypothesis exhaustion risk)",
-					task.ID, task.ReviewCyclesCurrent),
+				Message:   msg,
 			})
 		}
 	}
