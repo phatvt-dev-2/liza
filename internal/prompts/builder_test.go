@@ -1413,6 +1413,10 @@ func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
 		if !strings.Contains(result, "Cycle-blocked planning: 1") {
 			t.Error("expected cycle-blocked count in dashboard")
 		}
+		// PLANNING_COMPLETE fires (normal plan counted) not SPRINT_COMPLETE
+		if strings.Contains(result, "SPRINT_COMPLETE") {
+			t.Error("should NOT trigger SPRINT_COMPLETE when normal planning output exists")
+		}
 	})
 
 	t.Run("all cycle-blocked → SPRINT_COMPLETE not PLANNING_COMPLETE", func(t *testing.T) {
@@ -1445,6 +1449,9 @@ func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
 		}
 		if strings.Contains(result, "PLANNING_COMPLETE") {
 			t.Error("should NOT trigger PLANNING_COMPLETE when all planning is cycle-blocked")
+		}
+		if !strings.Contains(result, "Cycle-blocked planning: 1") {
+			t.Error("expected cycle-blocked count in dashboard for operator visibility")
 		}
 	})
 }
