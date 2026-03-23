@@ -16,12 +16,13 @@ import (
 
 // VerdictResult contains the outcome of a successful verdict submission.
 type VerdictResult struct {
-	TaskID             string
-	Verdict            string // "APPROVED" or "REJECTED"
-	AgentID            string
-	Reason             string // non-empty for rejections
-	EscalatedToBlocked bool
-	BlockedReason      string
+	TaskID              string
+	Verdict             string // "APPROVED" or "REJECTED"
+	AgentID             string
+	Reason              string // non-empty for rejections
+	EscalatedToBlocked  bool
+	BlockedReason       string
+	NewAttemptTriggered bool
 }
 
 // impactOrder defines the ordering for impact levels.
@@ -185,6 +186,8 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 	now := time.Now().UTC()
 	escalatedToBlocked := false
 	blockedReasonOut := ""
+	newAttemptNeeded := false
+	newAttemptReason := ""
 
 	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
@@ -284,35 +287,42 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 				task.EffectiveAttempt(),
 			)
 			if shouldEscalate {
-				if err := transitionTask(models.TaskStatusBlocked); err != nil {
-					return err
-				}
+				switch escalation.action {
+				case LimitActionBlocked:
+					if err := transitionTask(models.TaskStatusBlocked); err != nil {
+						return err
+					}
 
-				blockedReason := escalation.reason
-				task.BlockedReason = &blockedReason
-				task.BlockedQuestions = escalation.questions
-				task.LeaseExpires = nil
-				escalatedToBlocked = true
-				blockedReasonOut = blockedReason
+					blockedReason := escalation.reason
+					task.BlockedReason = &blockedReason
+					task.BlockedQuestions = escalation.questions
+					task.LeaseExpires = nil
+					escalatedToBlocked = true
+					blockedReasonOut = blockedReason
 
-				if task.AssignedTo != nil {
-					assignedCoder := *task.AssignedTo
-					if assignedCoder != agentID {
-						if a, ok := state.Agents[assignedCoder]; ok {
-							if a.CurrentTask != nil && *a.CurrentTask == taskID {
-								state.ReleaseAgent(assignedCoder)
+					if task.AssignedTo != nil {
+						assignedCoder := *task.AssignedTo
+						if assignedCoder != agentID {
+							if a, ok := state.Agents[assignedCoder]; ok {
+								if a.CurrentTask != nil && *a.CurrentTask == taskID {
+									state.ReleaseAgent(assignedCoder)
+								}
 							}
 						}
 					}
-				}
-				task.AssignedTo = nil
+					task.AssignedTo = nil
 
-				task.History = append(task.History, models.TaskHistoryEntry{
-					Time:   now,
-					Event:  models.TaskEventBlocked,
-					Agent:  &agentID,
-					Reason: &blockedReason,
-				})
+					task.History = append(task.History, models.TaskHistoryEntry{
+						Time:   now,
+						Event:  models.TaskEventBlocked,
+						Agent:  &agentID,
+						Reason: &blockedReason,
+					})
+				case LimitActionNewAttempt:
+					// Capture for post-Modify call — cannot nest bb.Modify
+					newAttemptNeeded = true
+					newAttemptReason = escalation.reason
+				}
 			}
 		}
 
@@ -327,12 +337,20 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 		return nil, fmt.Errorf("failed to submit verdict: %w", err)
 	}
 
+	if newAttemptNeeded {
+		_, taErr := TransitionToNewAttempt(projectRoot, taskID, newAttemptReason)
+		if taErr != nil {
+			return nil, fmt.Errorf("submit_verdict %s: rejection committed but attempt transition failed: %w", taskID, taErr)
+		}
+	}
+
 	return &VerdictResult{
-		TaskID:             taskID,
-		Verdict:            verdict,
-		AgentID:            agentID,
-		Reason:             reason,
-		EscalatedToBlocked: escalatedToBlocked,
-		BlockedReason:      blockedReasonOut,
+		TaskID:              taskID,
+		Verdict:             verdict,
+		AgentID:             agentID,
+		Reason:              reason,
+		EscalatedToBlocked:  escalatedToBlocked,
+		BlockedReason:       blockedReasonOut,
+		NewAttemptTriggered: !escalatedToBlocked && newAttemptNeeded,
 	}, nil
 }

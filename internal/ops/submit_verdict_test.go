@@ -282,6 +282,7 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 				state.Config.MaxReviewCycles = 2
 				task.ReviewCyclesCurrent = 1
 				task.ReviewCyclesTotal = 1
+				task.Attempt = 2
 			},
 			wantReasonContains: "review budget exhausted",
 			wantQuestionHint:   "review cycle",
@@ -296,6 +297,7 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 				state.Config.MaxCoderIterations = 10
 				task.Iteration = 2
 				task.MaxIterations = 2
+				task.Attempt = 2
 			},
 			wantReasonContains: "max iterations",
 			wantQuestionHint:   "max iterations were exhausted",
@@ -312,6 +314,7 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 				task.ReviewCyclesTotal = 4
 				task.Iteration = 2
 				task.MaxIterations = 2
+				task.Attempt = 2
 			},
 			wantReasonContains: "review budget and iteration limits exhausted",
 			wantQuestionHint:   "both review cycles and iterations",
@@ -1198,6 +1201,7 @@ func TestSubmitVerdict_EscalationClearsLease(t *testing.T) {
 	task.AssignedTo = &coderID
 	task.ReviewCyclesCurrent = 1
 	task.ReviewCyclesTotal = 1
+	task.Attempt = 2
 	state := testhelpers.CreateValidState()
 	state.Config.MaxReviewCycles = 2
 	state.Tasks = []models.Task{task}
@@ -1240,4 +1244,141 @@ func TestSubmitVerdict_EscalationClearsLease(t *testing.T) {
 	if blockedTask.AssignedTo != nil {
 		t.Errorf("AssignedTo = %v, want nil after escalation", blockedTask.AssignedTo)
 	}
+}
+
+func TestSubmitVerdict_RejectionAtReviewCap_Attempt1_TriggersNewAttempt(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	coderID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	task.AssignedTo = &coderID
+	task.Attempt = 1
+	task.Iteration = 3
+	task.ReviewCyclesCurrent = 1
+	task.ReviewCyclesTotal = 1
+
+	state := testhelpers.CreateValidState()
+	state.Config.MaxReviewCycles = 2
+	state.Tasks = []models.Task{task}
+
+	taskRef := "task-1"
+	state.Agents[coderID] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWaiting,
+		CurrentTask: &taskRef,
+	}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusReviewing,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Approach is wrong", "code-reviewer-1", "")
+	if err != nil {
+		t.Fatalf("SubmitVerdict() error: %v", err)
+	}
+	if !result.NewAttemptTriggered {
+		t.Error("NewAttemptTriggered = false, want true")
+	}
+	if result.EscalatedToBlocked {
+		t.Error("EscalatedToBlocked = true, want false for new attempt")
+	}
+
+	// Verify task transitioned to initial status with attempt 2
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	transitioned := readState.FindTask("task-1")
+	if transitioned == nil {
+		t.Fatal("Task not found")
+	}
+	if transitioned.Attempt != 2 {
+		t.Errorf("Attempt = %d, want 2", transitioned.Attempt)
+	}
+	if transitioned.Status != models.TaskStatusReady {
+		t.Errorf("Status = %v, want %v (initial status)", transitioned.Status, models.TaskStatusReady)
+	}
+	if transitioned.Iteration != 0 {
+		t.Errorf("Iteration = %d, want 0", transitioned.Iteration)
+	}
+	if transitioned.ReviewCyclesCurrent != 0 {
+		t.Errorf("ReviewCyclesCurrent = %d, want 0", transitioned.ReviewCyclesCurrent)
+	}
+	if transitioned.AssignedTo != nil {
+		t.Errorf("AssignedTo = %v, want nil", transitioned.AssignedTo)
+	}
+	if transitioned.RejectionReason != nil {
+		t.Errorf("RejectionReason = %v, want nil after attempt transition", transitioned.RejectionReason)
+	}
+
+	// Coder agent should be released by TransitionToNewAttempt
+	assertReleasedAgent(t, readState, coderID)
+	// Reviewer agent released by SubmitVerdict
+	assertReleasedAgent(t, readState, "code-reviewer-1")
+}
+
+func TestSubmitVerdict_RejectionAtReviewCap_Attempt2_TriggersBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	coderID := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	task.AssignedTo = &coderID
+	task.Attempt = 2
+	task.Iteration = 3
+	task.ReviewCyclesCurrent = 1
+	task.ReviewCyclesTotal = 6
+
+	state := testhelpers.CreateValidState()
+	state.Config.MaxReviewCycles = 2
+	state.Tasks = []models.Task{task}
+
+	taskRef := "task-1"
+	state.Agents[coderID] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWaiting,
+		CurrentTask: &taskRef,
+	}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusReviewing,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "Still wrong", "code-reviewer-1", "")
+	if err != nil {
+		t.Fatalf("SubmitVerdict() error: %v", err)
+	}
+	if !result.EscalatedToBlocked {
+		t.Error("EscalatedToBlocked = false, want true")
+	}
+	if result.NewAttemptTriggered {
+		t.Error("NewAttemptTriggered = true, want false for attempt 2")
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	blockedTask := readState.FindTask("task-1")
+	if blockedTask == nil {
+		t.Fatal("Task not found")
+	}
+	if blockedTask.Status != models.TaskStatusBlocked {
+		t.Errorf("Status = %v, want BLOCKED", blockedTask.Status)
+	}
+	if blockedTask.BlockedReason == nil {
+		t.Fatal("BlockedReason is nil, want set")
+	}
+
+	assertReleasedAgent(t, readState, coderID)
+	assertReleasedAgent(t, readState, "code-reviewer-1")
 }
