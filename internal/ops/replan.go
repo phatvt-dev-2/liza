@@ -3,6 +3,7 @@ package ops
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -120,11 +121,42 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			PlanRef:     task.PlanRef,
 			DoneWhen:    task.DoneWhen,
 			Scope:       task.Scope,
+			DependsOn:   slices.Clone(task.DependsOn),
 			Supersedes:  &originalID,
 			Created:     now,
 			History:     []models.TaskHistoryEntry{},
 		}
 		state.Tasks = append(state.Tasks, newTask)
+
+		// Retarget downstream non-terminal tasks' DependsOn from old → new ID
+		for i := range state.Tasks {
+			if state.Tasks[i].Status.IsTerminal() {
+				continue
+			}
+			changed := false
+			for j := range state.Tasks[i].DependsOn {
+				if state.Tasks[i].DependsOn[j] == task.ID {
+					state.Tasks[i].DependsOn[j] = newTaskID
+					changed = true
+				}
+			}
+			if changed {
+				state.Tasks[i].DependsOn = dedupeStrings(state.Tasks[i].DependsOn)
+			}
+		}
+
+		// Warn about terminal tasks that still depend on the old ID
+		var warnings []string
+		for i := range state.Tasks {
+			if !state.Tasks[i].Status.IsTerminal() {
+				continue
+			}
+			if slices.Contains(state.Tasks[i].DependsOn, task.ID) {
+				warnings = append(warnings,
+					fmt.Sprintf("task %s is %s and depends on replanned task %s — consider replanning %s too",
+						state.Tasks[i].ID, state.Tasks[i].Status, task.ID, state.Tasks[i].ID))
+			}
+		}
 
 		// Add to sprint scope
 		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, newTaskID)
@@ -146,6 +178,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			NewTaskID:      newTaskID,
 			RolePair:       task.RolePair,
 			SpecRef:        task.SpecRef,
+			Warnings:       warnings,
 		}
 
 		return nil
@@ -209,6 +242,19 @@ func resolveReplanTarget(state *models.State, taskID string, planningPairs map[s
 		return nil, &PreconditionError{Reason: fmt.Sprintf(
 			"multiple planning tasks found — specify task ID: %s", strings.Join(ids, ", "))}
 	}
+}
+
+// dedupeStrings returns a new slice with duplicates removed, preserving order.
+func dedupeStrings(s []string) []string {
+	seen := make(map[string]bool, len(s))
+	result := make([]string, 0, len(s))
+	for _, v := range s {
+		if !seen[v] {
+			seen[v] = true
+			result = append(result, v)
+		}
+	}
+	return result
 }
 
 // computeReplanID generates <original-id>-replan-N by counting existing

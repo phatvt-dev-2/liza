@@ -3,6 +3,7 @@ package ops
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -354,4 +355,159 @@ func TestReplan_TaskNotFound(t *testing.T) {
 
 	_, err := Replan(tmpDir, &ReplanInput{TaskID: "nonexistent", ChangedBy: "human"})
 	testhelpers.RequireErrorContains(t, err, "not found")
+}
+
+func TestReplan_PreservesDependsOn(t *testing.T) {
+	tmpDir, stateFile := setupReplanTest(t)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+
+	// plan-1 is the upstream phase (already merged)
+	plan1 := buildMergedPlanningTask("plan-1", now)
+	plan1.TransitionsExecuted = map[string]bool{"replanned": true} // prevent transition check
+
+	// plan-2 depends on plan-1
+	plan2 := buildMergedPlanningTask("plan-2", now)
+	plan2.DependsOn = []string{"plan-1"}
+
+	state.Tasks = append(state.Tasks, plan1, plan2)
+	state.Sprint.Scope.Planned = []string{"plan-1", "plan-2"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Replan(tmpDir, &ReplanInput{TaskID: "plan-2", ChangedBy: "human"})
+	if err != nil {
+		t.Fatalf("Replan: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	newTask := readState.FindTask(result.NewTaskID)
+	if newTask == nil {
+		t.Fatal("new task not found")
+	}
+
+	// DependsOn should be cloned from original
+	if len(newTask.DependsOn) != 1 || newTask.DependsOn[0] != "plan-1" {
+		t.Errorf("new task DependsOn = %v, want [plan-1]", newTask.DependsOn)
+	}
+}
+
+func TestReplan_RetargetsDownstream(t *testing.T) {
+	tmpDir, stateFile := setupReplanTest(t)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+
+	plan1 := buildMergedPlanningTask("plan-1", now)
+
+	// plan-2 depends on plan-1 (non-terminal, should get retargeted)
+	plan2 := testhelpers.BuildTaskByStatus("plan-2", models.TaskStatus("DRAFT_CODING_PLAN"), now)
+	plan2.RolePair = "code-planning-pair"
+	plan2.DependsOn = []string{"plan-1"}
+
+	state.Tasks = append(state.Tasks, plan1, plan2)
+	state.Sprint.Scope.Planned = []string{"plan-1", "plan-2"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Replan(tmpDir, &ReplanInput{TaskID: "plan-1", ChangedBy: "human"})
+	if err != nil {
+		t.Fatalf("Replan: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	// plan-2 should now depend on the new task, not plan-1
+	downstream := readState.FindTask("plan-2")
+	if downstream == nil {
+		t.Fatal("plan-2 not found")
+	}
+	if len(downstream.DependsOn) != 1 || downstream.DependsOn[0] != result.NewTaskID {
+		t.Errorf("plan-2 DependsOn = %v, want [%s]", downstream.DependsOn, result.NewTaskID)
+	}
+}
+
+func TestReplan_WarnsTerminalDownstream(t *testing.T) {
+	tmpDir, stateFile := setupReplanTest(t)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+
+	plan1 := buildMergedPlanningTask("plan-1", now)
+
+	// plan-merged is MERGED and depends on plan-1 (terminal, should warn)
+	planMerged := testhelpers.BuildTaskByStatus("plan-merged", models.TaskStatusMerged, now)
+	planMerged.RolePair = "code-planning-pair"
+	planMerged.DependsOn = []string{"plan-1"}
+
+	state.Tasks = append(state.Tasks, plan1, planMerged)
+	state.Sprint.Scope.Planned = []string{"plan-1", "plan-merged"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Replan(tmpDir, &ReplanInput{TaskID: "plan-1", ChangedBy: "human"})
+	if err != nil {
+		t.Fatalf("Replan: %v", err)
+	}
+
+	if len(result.Warnings) == 0 {
+		t.Fatal("expected warning about terminal downstream task")
+	}
+	found := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "plan-merged") && strings.Contains(w, "replanned") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning mentioning plan-merged; warnings = %v", result.Warnings)
+	}
+}
+
+func TestReplan_RetargetDedupes(t *testing.T) {
+	tmpDir, stateFile := setupReplanTest(t)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+
+	plan1 := buildMergedPlanningTask("plan-1", now)
+
+	// plan-2 has duplicate DependsOn (edge case from prior replan)
+	plan2 := testhelpers.BuildTaskByStatus("plan-2", models.TaskStatus("DRAFT_CODING_PLAN"), now)
+	plan2.RolePair = "code-planning-pair"
+	plan2.DependsOn = []string{"plan-1", "plan-1"}
+
+	state.Tasks = append(state.Tasks, plan1, plan2)
+	state.Sprint.Scope.Planned = []string{"plan-1", "plan-2"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Replan(tmpDir, &ReplanInput{TaskID: "plan-1", ChangedBy: "human"})
+	if err != nil {
+		t.Fatalf("Replan: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	downstream := readState.FindTask("plan-2")
+	if len(downstream.DependsOn) != 1 {
+		t.Errorf("plan-2 DependsOn = %v, want exactly 1 entry (deduped)", downstream.DependsOn)
+	}
+	if downstream.DependsOn[0] != result.NewTaskID {
+		t.Errorf("plan-2 DependsOn[0] = %q, want %q", downstream.DependsOn[0], result.NewTaskID)
+	}
 }
