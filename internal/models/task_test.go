@@ -199,6 +199,25 @@ func TestIsClaimable(t *testing.T) {
 	})
 }
 
+func TestIsClaimable_SentinelAssignedToReturnsFalse(t *testing.T) {
+	pr := &claimTestResolver{
+		doer:      "coder",
+		reviewer:  "code-reviewer",
+		initial:   "DRAFT_CODE",
+		rejected:  "CODE_REJECTED",
+		submitted: "CODE_READY_FOR_REVIEW",
+	}
+	sentinel := "$transitioning"
+	task := &Task{
+		RolePair:   "coding-pair",
+		Status:     "DRAFT_CODE",
+		AssignedTo: &sentinel,
+	}
+	if task.IsClaimable("coder", nil, pr) {
+		t.Error("IsClaimable should return false when AssignedTo starts with '$'")
+	}
+}
+
 func TestEffectiveAttempt_ZeroReturnsOne(t *testing.T) {
 	task := &Task{Attempt: 0}
 	if got := task.EffectiveAttempt(); got != 1 {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/roles"
@@ -321,6 +322,9 @@ func (t *Task) TransitionWith(to TaskStatus, transitions map[TaskStatus][]TaskSt
 // The role parameter uses the unified hyphenated form (e.g. "code-reviewer").
 func (t *Task) IsClaimable(role string, allTasks []Task, pr PipelineResolver) bool {
 	if t.RolePair == "" || pr == nil {
+		return false
+	}
+	if t.AssignedTo != nil && strings.HasPrefix(*t.AssignedTo, "$") {
 		return false
 	}
 	if !t.isClaimablePipeline(role, pr) {

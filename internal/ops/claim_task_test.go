@@ -1,6 +1,7 @@
 package ops
 
 import (
+	stderrors "errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -812,6 +813,32 @@ func TestClaimTask_IterationLimitDoesNotReleaseCoder_WhenCoderMovedOn(t *testing
 	}
 	if agent.CurrentTask == nil || *agent.CurrentTask != task2ID {
 		t.Errorf("Agent CurrentTask = %v, want %q", agent.CurrentTask, task2ID)
+	}
+}
+
+func TestClaimTask_SentinelAssignedTo_Rejected(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	sentinel := "$transitioning"
+	task.AssignedTo = &sentinel
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err == nil {
+		t.Fatal("Expected PreconditionError for sentinel AssignedTo, got nil")
+	}
+	var precondErr *PreconditionError
+	if !stderrors.As(err, &precondErr) {
+		t.Fatalf("Expected PreconditionError, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "is in transition") {
+		t.Errorf("Error = %q, want to contain 'is in transition'", err.Error())
 	}
 }
 

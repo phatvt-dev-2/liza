@@ -107,6 +107,12 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
 	}
 
+	// Sentinel guard: reject claims on tasks in transition (e.g. "$transitioning"
+	// during TransitionToNewAttempt). Defense-in-depth — IsClaimable also checks this.
+	if task.AssignedTo != nil && strings.HasPrefix(*task.AssignedTo, "$") {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is in transition (assigned_to: %s)", taskID, *task.AssignedTo)}
+	}
+
 	switch task.Status {
 	case pipelineInitial:
 		strategy = freshClaimStrategy{}
