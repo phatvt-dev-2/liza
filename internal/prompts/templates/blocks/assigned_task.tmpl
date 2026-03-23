@@ -15,6 +15,10 @@
 TASK ID: {{.TaskID}}
 WORKTREE: {{.Worktree}}
 ITERATION: {{.IterationNum}}
+ATTEMPT: {{.AttemptNum}}
+{{- if eq .AttemptNum 2}}
+FINAL ATTEMPT — task will be BLOCKED if limits are reached.
+{{- end}}
 DESCRIPTION: {{.Description}}
 
 DONE WHEN:

@@ -772,6 +772,168 @@ func TestOutputSaving(t *testing.T) {
 	}
 }
 
+// TestBuildPrompt_CoderAttemptDisplay_Attempt2 verifies that the coder prompt
+// at attempt 2 contains "ATTEMPT: 2" and "FINAL ATTEMPT".
+func TestBuildPrompt_CoderAttemptDisplay_Attempt2(t *testing.T) {
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				Attempt:     2,
+				DoneWhen:    "Done",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := testBuildPrompt(t, state, config, "task-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt() error: %v", err)
+	}
+
+	if !strings.Contains(prompt, "ATTEMPT: 2") {
+		t.Error("coder prompt at attempt 2 should contain 'ATTEMPT: 2'")
+	}
+	if !strings.Contains(prompt, "FINAL ATTEMPT") {
+		t.Error("coder prompt at attempt 2 should contain 'FINAL ATTEMPT'")
+	}
+}
+
+// TestBuildPrompt_CoderAttemptDisplay_Attempt1 verifies that the coder prompt
+// at attempt 1 contains "ATTEMPT: 1" but not "FINAL ATTEMPT".
+func TestBuildPrompt_CoderAttemptDisplay_Attempt1(t *testing.T) {
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				Attempt:     1,
+				DoneWhen:    "Done",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := testBuildPrompt(t, state, config, "task-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt() error: %v", err)
+	}
+
+	if !strings.Contains(prompt, "ATTEMPT: 1") {
+		t.Error("coder prompt at attempt 1 should contain 'ATTEMPT: 1'")
+	}
+	if strings.Contains(prompt, "FINAL ATTEMPT") {
+		t.Error("coder prompt at attempt 1 should NOT contain 'FINAL ATTEMPT'")
+	}
+}
+
+// TestBuildPrompt_ReviewerAttemptDisplay_Attempt2 verifies that the reviewer prompt
+// at attempt 2 contains "ATTEMPT: 2" and "FINAL ATTEMPT".
+func TestBuildPrompt_ReviewerAttemptDisplay_Attempt2(t *testing.T) {
+	now := time.Now().UTC()
+	assignedTo := "coder-1"
+	baseCommit := "abc123"
+	reviewCommit := "def456"
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:           "task-1",
+				Description:  "Test task",
+				Status:       models.TaskStatusReadyForReview,
+				Priority:     1,
+				Iteration:    1,
+				Attempt:      2,
+				DoneWhen:     "Done",
+				AssignedTo:   &assignedTo,
+				BaseCommit:   &baseCommit,
+				ReviewCommit: &reviewCommit,
+				Created:      now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	config := SupervisorConfig{
+		Role:        "code-reviewer",
+		AgentID:     "code-reviewer-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := testBuildPrompt(t, state, config, "task-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt() error: %v", err)
+	}
+
+	if !strings.Contains(prompt, "ATTEMPT: 2") {
+		t.Error("reviewer prompt at attempt 2 should contain 'ATTEMPT: 2'")
+	}
+	if !strings.Contains(prompt, "FINAL ATTEMPT") {
+		t.Error("reviewer prompt at attempt 2 should contain 'FINAL ATTEMPT'")
+	}
+}
+
 // TestBuildTaskRoleContextData_AttemptNum_UsesEffectiveAttempt verifies that
 // AttemptNum is populated via task.EffectiveAttempt(), not len(task.Attempted)+1.
 func TestBuildTaskRoleContextData_AttemptNum_UsesEffectiveAttempt(t *testing.T) {
