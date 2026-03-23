@@ -247,11 +247,16 @@ type CLIExecutor interface {
 }
 
 type DefaultCLIExecutor struct {
-	outputsDir string // Directory to save agent outputs (if empty, output goes to stdout)
+	outputsDir string        // Directory to save agent outputs (if empty, output goes to stdout)
+	masker     *SecretMasker // Masks secret values in persisted output (nil when logging disabled)
 }
 
 func NewDefaultCLIExecutor(outputsDir string) *DefaultCLIExecutor {
-	return &DefaultCLIExecutor{outputsDir: outputsDir}
+	var masker *SecretMasker
+	if outputsDir != "" {
+		masker = NewSecretMasker()
+	}
+	return &DefaultCLIExecutor{outputsDir: outputsDir, masker: masker}
 }
 
 func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentID string, prompt string, projectRoot string) (int, error) {
@@ -359,7 +364,7 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 			if content == "" {
 				return
 			}
-			if _, saveErr := saveOutput(d.outputsDir, agentID, ext, content); saveErr != nil {
+			if _, saveErr := saveOutput(d.outputsDir, agentID, ext, content, d.masker); saveErr != nil {
 				GetLogger().Warn("Failed to save agent output", "error", saveErr, "agent_id", agentID, "ext", ext)
 			}
 		}

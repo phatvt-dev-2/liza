@@ -742,7 +742,7 @@ func TestOutputSaving(t *testing.T) {
 	output := "Test agent output content"
 	agentID := "claude-1"
 
-	filePath, err := saveOutput(outputsDir, agentID, "txt", output)
+	filePath, err := saveOutput(outputsDir, agentID, "txt", output, nil)
 	if err != nil {
 		t.Fatalf("saveOutput() error = %v", err)
 	}

@@ -23,6 +23,10 @@ func saveTimestampedFile(dir, agentID, ext, content string) (string, error) {
 	return filePath, nil
 }
 
-func saveOutput(outputsDir, agentID, ext, output string) (string, error) {
-	return saveTimestampedFile(outputsDir, agentID, ext, output)
+func saveOutput(outputsDir, agentID, ext, output string, masker *SecretMasker) (string, error) {
+	masked := output
+	if masker != nil {
+		masked = masker.MaskText(output)
+	}
+	return saveTimestampedFile(outputsDir, agentID, ext, masked)
 }

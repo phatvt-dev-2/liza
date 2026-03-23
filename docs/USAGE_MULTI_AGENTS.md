@@ -160,7 +160,7 @@ liza agent code-reviewer
 
 Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --cli gemini`.
 
-Pass `--log` to persist the agent's output to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Incompatible with `-i`.
+Pass `--log` to persist the agent's output to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Persisted files are automatically masked — secret values from environment variables (API keys, tokens, passwords) are replaced with `***`. Live terminal output remains unmasked. Incompatible with `-i`.
 See [Analyzing Agent Logs](#analyzing-agent-logs) for analysis tools.
 
 Multiple agents of the same role can run in parallel (IDs auto-increment):
