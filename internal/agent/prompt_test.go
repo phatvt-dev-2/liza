@@ -771,3 +771,157 @@ func TestOutputSaving(t *testing.T) {
 		t.Errorf("Filename should end with .txt, got %s", filename)
 	}
 }
+
+// TestBuildTaskRoleContextData_AttemptNum_UsesEffectiveAttempt verifies that
+// AttemptNum is populated via task.EffectiveAttempt(), not len(task.Attempted)+1.
+func TestBuildTaskRoleContextData_AttemptNum_UsesEffectiveAttempt(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := testResolver(t)
+
+	makeState := func(attempt int) *models.State {
+		return &models.State{
+			Version: 1,
+			Goal: models.Goal{
+				ID:          "goal-1",
+				Description: "Test goal",
+				SpecRef:     "spec.md",
+				Status:      models.GoalStatusInProgress,
+				Created:     now,
+			},
+			Tasks: []models.Task{
+				{
+					ID:          "task-1",
+					Description: "Test task",
+					Status:      models.TaskStatusImplementing,
+					Priority:    1,
+					Iteration:   1,
+					Attempt:     attempt,
+					DoneWhen:    "Done",
+					Created:     now,
+				},
+			},
+			Agents: make(map[string]models.Agent),
+			Config: models.Config{IntegrationBranch: "main"},
+		}
+	}
+
+	config := SupervisorConfig{
+		Role:    "coder",
+		AgentID: "coder-1",
+	}
+
+	// Attempt: 2 → AttemptNum == 2
+	state := makeState(2)
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if data.AttemptNum != 2 {
+		t.Errorf("AttemptNum = %d, want 2 (Attempt=2)", data.AttemptNum)
+	}
+
+	// Attempt: 0 → AttemptNum == 1 (backward compat via EffectiveAttempt)
+	state = makeState(0)
+	data = buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if data.AttemptNum != 1 {
+		t.Errorf("AttemptNum = %d, want 1 (Attempt=0, backward compat)", data.AttemptNum)
+	}
+}
+
+// TestBuildTaskRoleContextData_PriorAttemptOutcome_Attempt2 verifies that
+// PriorAttemptOutcome is populated from the last new_attempt history entry's Reason
+// when AttemptNum == 2, and is empty when AttemptNum == 1.
+func TestBuildTaskRoleContextData_PriorAttemptOutcome_Attempt2(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := testResolver(t)
+	reason := "review cycle limit reached after 5 rejections"
+
+	config := SupervisorConfig{
+		Role:    "coder",
+		AgentID: "coder-1",
+	}
+
+	// Attempt 2 with new_attempt history entry → PriorAttemptOutcome populated
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				Attempt:     2,
+				DoneWhen:    "Done",
+				History: []models.TaskHistoryEntry{
+					{Time: now.Add(-time.Hour), Event: models.TaskEventClaimed},
+					{Time: now.Add(-time.Minute), Event: models.TaskEventNewAttempt, Reason: &reason},
+				},
+				Created: now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if data.PriorAttemptOutcome != reason {
+		t.Errorf("PriorAttemptOutcome = %q, want %q", data.PriorAttemptOutcome, reason)
+	}
+
+	// Attempt 1 → PriorAttemptOutcome empty (even with history)
+	state.Tasks[0].Attempt = 1
+	data = buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if data.PriorAttemptOutcome != "" {
+		t.Errorf("PriorAttemptOutcome = %q, want empty for attempt 1", data.PriorAttemptOutcome)
+	}
+}
+
+// TestBuildTaskRoleContextData_PriorRejectionGate_Attempt2Iteration1_Empty verifies that
+// at attempt 2, iteration 1, PriorRejection remains empty even with a non-empty RejectionReason.
+// This confirms the task.Iteration > 1 gate is unchanged.
+func TestBuildTaskRoleContextData_PriorRejectionGate_Attempt2Iteration1_Empty(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := testResolver(t)
+	rejectionReason := "code quality issues found"
+
+	config := SupervisorConfig{
+		Role:    "coder",
+		AgentID: "coder-1",
+	}
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:              "task-1",
+				Description:     "Test task",
+				Status:          models.TaskStatusImplementing,
+				Priority:        1,
+				Iteration:       1,
+				Attempt:         2,
+				RejectionReason: &rejectionReason,
+				DoneWhen:        "Done",
+				Created:         now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if data.PriorRejection != "" {
+		t.Errorf("PriorRejection = %q, want empty at attempt 2 iteration 1", data.PriorRejection)
+	}
+}

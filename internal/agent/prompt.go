@@ -151,6 +151,16 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		data.PriorRejection = *task.RejectionReason
 	}
 
+	// Prior attempt outcome (attempt 2 only)
+	if data.AttemptNum == 2 {
+		for i := len(task.History) - 1; i >= 0; i-- {
+			if task.History[i].Event == models.TaskEventNewAttempt && task.History[i].Reason != nil {
+				data.PriorAttemptOutcome = *task.History[i].Reason
+				break
+			}
+		}
+	}
+
 	// Doer-specific: coder fields
 	if roleType == "doer" && config.Role == "coder" {
 		data.IntegrationBranch = state.Config.IntegrationBranch
