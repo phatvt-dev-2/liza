@@ -219,6 +219,24 @@ func IsUnconsumedPlanningOutput(task *models.Task, planningPairs map[string]bool
 	return IsPlanningPair(task.RolePair, planningPairs)
 }
 
+// IsTransitionCycleBlocked checks if a task has a transition_cycle_blocked history event.
+func IsTransitionCycleBlocked(task *models.Task) bool {
+	for _, h := range task.History {
+		if h.Event == models.TaskEventTransitionCycleBlocked {
+			return true
+		}
+	}
+	return false
+}
+
+// IsPlanningCompleteEligible returns true if a task has unconsumed planning output
+// AND is not cycle-blocked. Used by wake detection and prompt rendering to exclude
+// cycle-blocked tasks from PLANNING_COMPLETE triggering.
+// IsUnconsumedPlanningOutput remains unchanged for carry-forward, replan, and checkpoint.
+func IsPlanningCompleteEligible(task *models.Task, planningPairs map[string]bool) bool {
+	return IsUnconsumedPlanningOutput(task, planningPairs) && !IsTransitionCycleBlocked(task)
+}
+
 // collectMergedPlanningWithUnconsumedOutput returns IDs of planned tasks with
 // unconsumed planning output. These need to be carried into the new sprint so
 // the orchestrator can fire PLANNING_COMPLETE.

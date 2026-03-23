@@ -238,16 +238,149 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 	}
 }
 
+// pendingTx represents a transition queued for execution in ExecuteAvailableTransitions.
+type pendingTx struct {
+	taskID  string
+	taskIdx int
+	name    string
+	tDef    transitionDef
+	origIdx int // original collection index for stable topo-sort tie-breaking
+}
+
+// isTransitionIncomplete checks if an executed transition has missing children.
+// Used to detect crash recovery needs in ExecuteAvailableTransitions phase 1b.
+func isTransitionIncomplete(s *models.State, task *models.Task, transName string, resolver *pipeline.Resolver) bool {
+	td, err := resolver.Transition(transName)
+	if err != nil {
+		return false
+	}
+	switch td.Cardinality {
+	case "per-subtask":
+		for i := 0; i < len(task.Output); i++ {
+			if s.FindTask(perSubtaskChildID(task.ID, transName, i)) == nil {
+				return true
+			}
+		}
+	case "one-to-one":
+		if s.FindTask(oneToOneChildID(task.ID, transName)) == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// topoSortPending sorts pending transitions by task DependsOn relationships using
+// Kahn's algorithm. Tie-breaker is original collection index for deterministic ordering.
+// Returns (sorted, cyclic) — cyclic entries could not be ordered due to circular deps.
+func topoSortPending(pending []pendingTx, s *models.State) (sorted, cyclic []pendingTx) {
+	n := len(pending)
+	if n == 0 {
+		return nil, nil
+	}
+
+	// Build task ID → pending indices map
+	taskToPending := make(map[string][]int)
+	for i, p := range pending {
+		taskToPending[p.taskID] = append(taskToPending[p.taskID], i)
+	}
+
+	// Compute in-degrees: if pending[i]'s task depends on pending[j]'s task, j→i edge
+	inDegree := make([]int, n)
+	edges := make([][]int, n) // edges[j] = indices that j blocks
+	for i, p := range pending {
+		task := s.FindTask(p.taskID)
+		if task == nil {
+			continue
+		}
+		for _, depID := range task.DependsOn {
+			if depIndices, ok := taskToPending[depID]; ok {
+				for _, depIdx := range depIndices {
+					edges[depIdx] = append(edges[depIdx], i)
+					inDegree[i]++
+				}
+			}
+		}
+	}
+
+	// Kahn's: process zero-in-degree nodes, stable by origIdx
+	var queue []int
+	for i := range pending {
+		if inDegree[i] == 0 {
+			queue = append(queue, i)
+		}
+	}
+	slices.SortFunc(queue, func(a, b int) int {
+		return pending[a].origIdx - pending[b].origIdx
+	})
+
+	for len(queue) > 0 {
+		idx := queue[0]
+		queue = queue[1:]
+		sorted = append(sorted, pending[idx])
+		for _, blocked := range edges[idx] {
+			inDegree[blocked]--
+			if inDegree[blocked] == 0 {
+				queue = append(queue, blocked)
+				slices.SortFunc(queue, func(a, b int) int {
+					return pending[a].origIdx - pending[b].origIdx
+				})
+			}
+		}
+	}
+
+	// Remaining are cyclic
+	for i, p := range pending {
+		if inDegree[i] > 0 {
+			cyclic = append(cyclic, p)
+		}
+	}
+
+	return sorted, cyclic
+}
+
+// hasCycleBlockedEvent checks if a task already has a transition_cycle_blocked
+// history entry for the given transition and cycle members (idempotency guard).
+func hasCycleBlockedEvent(task *models.Task, transitionName string, cycleMembers []string) bool {
+	for _, h := range task.History {
+		if h.Event != models.TaskEventTransitionCycleBlocked {
+			continue
+		}
+		if trans, ok := h.Extra["transition"].(string); ok && trans == transitionName {
+			if slices.Equal(extraToStringSlice(h.Extra["cycle_members"]), cycleMembers) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// extraToStringSlice normalizes an Extra field value to []string.
+// After YAML round-trip, []string becomes []any — this handles both.
+func extraToStringSlice(v any) []string {
+	switch typed := v.(type) {
+	case []string:
+		return typed
+	case []any:
+		result := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
 // ExecuteAvailableTransitions auto-executes pipeline transitions for merged tasks.
-// Called by the supervisor after merging approved tasks. For each MERGED task with
-// available transitions (per its role-pair's approved status in the pipeline config),
-// it creates child tasks in state.Tasks and adds them to Sprint.Scope.Planned
-// (with dedup guard for crash recovery idempotency).
+// Three-phase approach:
+//  1. Collect: (a) available transitions + (b) incomplete transitions (crash recovery)
+//  2. Topological sort by DependsOn for phase-gate ordering
+//  3. Execute in sorted order — upstream transitions fire first
 //
-// This intentionally scans ALL merged tasks, not just newly-merged ones: if the
-// supervisor crashes between merge and transition, the next run will pick up the
-// pending transition. The idempotency guard in proceedInner (TransitionsExecuted map)
-// prevents duplicate child creation.
+// Cycle detection: circular dependencies get a transition_cycle_blocked history event
+// and are skipped from execution. Non-cyclic tasks proceed normally.
 func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
@@ -261,61 +394,122 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 	var results []ProceedResult
 
 	err = blackboard.Modify(func(s *models.State) error {
+		var pending []pendingTx
+		origIdx := 0
+
+		// Phase 1a: Collect available transitions (existing behavior)
 		for i := range s.Tasks {
 			task := &s.Tasks[i]
-			if task.Status != models.TaskStatusMerged {
-				continue
-			}
-			if task.RolePair == "" {
+			if task.Status != models.TaskStatusMerged || task.RolePair == "" {
 				continue
 			}
 
-			// Look up what the approved status was for this task's role-pair.
-			// The task is now MERGED, but transitions fire from the approved status.
 			approvedStatus, err := resolver.ApprovedStatus(task.RolePair)
 			if err != nil {
 				log.Printf("WARNING: ExecuteAvailableTransitions: task %s has unknown role-pair %q: %v", task.ID, task.RolePair, err)
 				continue
 			}
 
-			// Check available transitions at the approved status
 			available := resolver.AvailableTransitions(approvedStatus, task.TransitionsExecuted)
-			if len(available) == 0 {
-				continue
-			}
-
 			for _, transitionName := range available {
-				// Resolve transition def (allows both manual and auto triggers for supervisor)
 				tDef, err := buildTransitionDefFromPipeline(resolver, transitionName)
 				if err != nil {
 					log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", task.ID, transitionName, err)
 					continue
 				}
-
-				// Override requiredStatus: the task is MERGED, but the transition
-				// definition expects the approved status. We've already validated
-				// the role-pair match above, so this is a known override.
 				tDef.requiredStatus = models.TaskStatusMerged
 
-				result := ProceedResult{
-					SourceTaskID:   task.ID,
-					TransitionName: transitionName,
-				}
-
-				if err := proceedInner(s, task.ID, transitionName, tDef, now, &result); err != nil {
-					// Idempotent skip is expected — only warn on other errors
-					if !errors.Is(err, errTransitionAlreadyExecuted) {
-						log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", task.ID, transitionName, err)
-					}
-					continue
-				}
-
-				results = append(results, result)
+				pending = append(pending, pendingTx{
+					taskID: task.ID, taskIdx: i, name: transitionName,
+					tDef: tDef, origIdx: origIdx,
+				})
+				origIdx++
 			}
 		}
 
-		// Add children to sprint scope (dedup guard: defensive against pre-existing
-		// scope entries from partial prior runs)
+		// Phase 1b: Collect incomplete transitions (crash recovery)
+		for i := range s.Tasks {
+			task := &s.Tasks[i]
+			if task.Status != models.TaskStatusMerged || task.RolePair == "" {
+				continue
+			}
+			for transName := range task.TransitionsExecuted {
+				if transName == "replanned" {
+					continue // synthetic marker, not a real transition
+				}
+				if !isTransitionIncomplete(s, task, transName, resolver) {
+					continue
+				}
+				tDef, err := buildTransitionDefFromPipeline(resolver, transName)
+				if err != nil {
+					continue
+				}
+				tDef.requiredStatus = models.TaskStatusMerged
+				pending = append(pending, pendingTx{
+					taskID: task.ID, taskIdx: i, name: transName,
+					tDef: tDef, origIdx: origIdx,
+				})
+				origIdx++
+			}
+		}
+
+		// Dedup by (taskID, transitionName) — same transition may appear in both scans
+		seen := make(map[string]bool)
+		deduped := pending[:0]
+		for _, p := range pending {
+			key := p.taskID + "\x00" + p.name
+			if !seen[key] {
+				seen[key] = true
+				deduped = append(deduped, p)
+			}
+		}
+		pending = deduped
+
+		// Phase 2: Topological sort by DependsOn
+		sorted, cyclic := topoSortPending(pending, s)
+
+		// Handle cycles: add history event (idempotent), log error
+		if len(cyclic) > 0 {
+			cycleMemberIDs := make([]string, len(cyclic))
+			for i, p := range cyclic {
+				cycleMemberIDs[i] = p.taskID
+			}
+			slices.Sort(cycleMemberIDs)
+
+			for _, p := range cyclic {
+				task := &s.Tasks[p.taskIdx]
+				if !hasCycleBlockedEvent(task, p.name, cycleMemberIDs) {
+					task.History = append(task.History, models.TaskHistoryEntry{
+						Time:  now,
+						Event: models.TaskEventTransitionCycleBlocked,
+						Extra: map[string]any{
+							"transition":    p.name,
+							"cycle_members": cycleMemberIDs,
+						},
+					})
+				}
+				log.Printf("ERROR: ExecuteAvailableTransitions: cycle-blocked task %s transition %s (cycle: %v)", p.taskID, p.name, cycleMemberIDs)
+			}
+		}
+
+		// Phase 3: Execute in sorted order
+		for _, p := range sorted {
+			result := ProceedResult{
+				SourceTaskID:   p.taskID,
+				TransitionName: p.name,
+			}
+
+			if err := proceedInner(s, p.taskID, p.name, p.tDef, now, &result); err != nil {
+				if !errors.Is(err, errTransitionAlreadyExecuted) {
+					log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", p.taskID, p.name, err)
+				}
+				continue
+			}
+
+			results = append(results, result)
+		}
+
+		// Add children to sprint scope (dedup guard for crash recovery idempotency)
 		for _, r := range results {
 			for _, childID := range r.ChildTaskIDs {
 				if !slices.Contains(s.Sprint.Scope.Planned, childID) {

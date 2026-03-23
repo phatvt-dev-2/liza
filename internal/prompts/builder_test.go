@@ -1371,3 +1371,80 @@ func TestBuildRoleContext_PlanRefAndValidationPlan(t *testing.T) {
 		}
 	})
 }
+
+func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
+	now := time.Now().UTC()
+	projectRoot := setupPipelineConfig(t)
+
+	t.Run("mixed: normal + cycle-blocked planning → only normal in PLANNING_COMPLETE", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		state.Sprint.Scope.Planned = []string{"plan-normal", "plan-cycled", "code-done"}
+
+		normalPlan := testhelpers.BuildTaskByStatus("plan-normal", models.TaskStatusMerged, now)
+		normalPlan.RolePair = "code-planning-pair"
+		normalPlan.Output = []models.OutputEntry{
+			{Desc: "Normal output", DoneWhen: "done", Scope: "s"},
+		}
+
+		cycledPlan := testhelpers.BuildTaskByStatus("plan-cycled", models.TaskStatusMerged, now)
+		cycledPlan.RolePair = "code-planning-pair"
+		cycledPlan.Output = []models.OutputEntry{
+			{Desc: "Cycled output", DoneWhen: "done", Scope: "s"},
+		}
+		cycledPlan.History = append(cycledPlan.History, models.TaskHistoryEntry{
+			Time:  now,
+			Event: models.TaskEventTransitionCycleBlocked,
+			Extra: map[string]any{"transition": "code-plan-to-coding", "cycle_members": []string{"plan-cycled"}},
+		})
+
+		codeDone := testhelpers.BuildTaskByStatus("code-done", models.TaskStatusMerged, now)
+
+		state.Tasks = []models.Task{normalPlan, cycledPlan, codeDone}
+
+		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+		if err != nil {
+			t.Fatalf("RenderOrchestratorDashboard: %v", err)
+		}
+		result := dashboard + "\n" + wakeInstr
+
+		if !strings.Contains(result, "WAKE TRIGGER: PLANNING_COMPLETE") {
+			t.Error("expected PLANNING_COMPLETE trigger (normal plan has unconsumed output)")
+		}
+		if !strings.Contains(result, "Cycle-blocked planning: 1") {
+			t.Error("expected cycle-blocked count in dashboard")
+		}
+	})
+
+	t.Run("all cycle-blocked → SPRINT_COMPLETE not PLANNING_COMPLETE", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		state.Sprint.Scope.Planned = []string{"plan-cycled", "code-done"}
+
+		cycledPlan := testhelpers.BuildTaskByStatus("plan-cycled", models.TaskStatusMerged, now)
+		cycledPlan.RolePair = "code-planning-pair"
+		cycledPlan.Output = []models.OutputEntry{
+			{Desc: "Cycled output", DoneWhen: "done", Scope: "s"},
+		}
+		cycledPlan.History = append(cycledPlan.History, models.TaskHistoryEntry{
+			Time:  now,
+			Event: models.TaskEventTransitionCycleBlocked,
+			Extra: map[string]any{"transition": "code-plan-to-coding", "cycle_members": []string{"plan-cycled"}},
+		})
+
+		codeDone := testhelpers.BuildTaskByStatus("code-done", models.TaskStatusMerged, now)
+
+		state.Tasks = []models.Task{cycledPlan, codeDone}
+
+		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+		if err != nil {
+			t.Fatalf("RenderOrchestratorDashboard: %v", err)
+		}
+		result := dashboard + "\n" + wakeInstr
+
+		if !strings.Contains(result, "WAKE TRIGGER: SPRINT_COMPLETE") {
+			t.Errorf("expected SPRINT_COMPLETE (all planning is cycle-blocked), got:\n%s", result)
+		}
+		if strings.Contains(result, "PLANNING_COMPLETE") {
+			t.Error("should NOT trigger PLANNING_COMPLETE when all planning is cycle-blocked")
+		}
+	})
+}

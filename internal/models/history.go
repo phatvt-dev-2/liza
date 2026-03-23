@@ -73,6 +73,7 @@ const (
 	TaskEventReviewClaimReleased      TaskEventName = "review_claim_released"
 	TaskEventOrchestratorAssessment   TaskEventName = "orchestrator_assessment"
 	TaskEventReplanned                TaskEventName = "replanned" // rippletide-override: user approved
+	TaskEventTransitionCycleBlocked   TaskEventName = "transition_cycle_blocked"
 )
 
 // TaskHistoryEntry represents a single event in a task's history

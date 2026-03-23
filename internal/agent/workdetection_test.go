@@ -992,6 +992,51 @@ func TestDetectOrchestratorWakeTriggers_PipelineTerminals(t *testing.T) {
 			wantTrigger:   WakeTriggerSprintComplete,
 			wantCount:     1,
 		},
+		{
+			name: "cycle-blocked planning excluded from PLANNING_COMPLETE count",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				// Normal planning task → triggers PLANNING_COMPLETE
+				normal := testhelpers.BuildTaskByStatus("plan-normal", models.TaskStatusMerged, now)
+				normal.RolePair = "code-planning-pair"
+				normal.Output = []models.OutputEntry{{Desc: "a", DoneWhen: "a", Scope: "a"}}
+				// Cycle-blocked planning task → excluded
+				cycled := testhelpers.BuildTaskByStatus("plan-cycled", models.TaskStatusMerged, now)
+				cycled.RolePair = "code-planning-pair"
+				cycled.Output = []models.OutputEntry{{Desc: "b", DoneWhen: "b", Scope: "b"}}
+				cycled.History = append(cycled.History, models.TaskHistoryEntry{
+					Time:  now,
+					Event: models.TaskEventTransitionCycleBlocked,
+					Extra: map[string]any{"transition": "code-plan-to-coding"},
+				})
+				state.Tasks = []models.Task{normal, cycled}
+				state.Sprint.Scope.Planned = []string{"plan-normal", "plan-cycled"}
+				return state
+			}(),
+			planningPairs: map[string]bool{"code-planning-pair": true},
+			wantTrigger:   WakeTriggerPlanningComplete,
+			wantCount:     1, // only normal, not cycled
+		},
+		{
+			name: "all cycle-blocked → SPRINT_COMPLETE not PLANNING_COMPLETE",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				cycled := testhelpers.BuildTaskByStatus("plan-cycled", models.TaskStatusMerged, now)
+				cycled.RolePair = "code-planning-pair"
+				cycled.Output = []models.OutputEntry{{Desc: "b", DoneWhen: "b", Scope: "b"}}
+				cycled.History = append(cycled.History, models.TaskHistoryEntry{
+					Time:  now,
+					Event: models.TaskEventTransitionCycleBlocked,
+					Extra: map[string]any{"transition": "code-plan-to-coding"},
+				})
+				state.Tasks = []models.Task{cycled}
+				state.Sprint.Scope.Planned = []string{"plan-cycled"}
+				return state
+			}(),
+			planningPairs: map[string]bool{"code-planning-pair": true},
+			wantTrigger:   WakeTriggerSprintComplete,
+			wantCount:     1,
+		},
 	}
 
 	for _, tt := range tests {

@@ -213,7 +213,7 @@ func countMergedPlanningTasksWithOutput(state *models.State, planningPairs map[s
 	count := 0
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if ops.IsUnconsumedPlanningOutput(task, planningPairs) {
+		if ops.IsPlanningCompleteEligible(task, planningPairs) {
 			count++
 		}
 	}

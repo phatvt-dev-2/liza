@@ -58,6 +58,8 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 		planningPairs = detCtx.PlanningPairs
 	}
 
+	cycleBlocked := countCycleBlockedPlanning(state.Tasks, planningPairs)
+
 	sprintComplete := state.AllPlannedTasksTerminalWith(sprintTerminals)
 
 	var planningTasks []planningTaskData
@@ -99,6 +101,9 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	b.WriteString(fmt.Sprintf("- Integration failed: %d\n", integrationFailed))
 	b.WriteString(fmt.Sprintf("- Hypothesis exhausted: %d\n", hypothesisExhausted))
 	b.WriteString(fmt.Sprintf("- Immediate discoveries: %d\n", immediateDiscoveries))
+	if cycleBlocked > 0 {
+		b.WriteString(fmt.Sprintf("- Cycle-blocked planning: %d\n", cycleBlocked))
+	}
 
 	b.WriteString(fmt.Sprintf(`
 ORCHESTRATOR COMMANDS (resolve before use: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_status,mcp__liza__liza_add_tasks,mcp__liza__liza_supersede_task,mcp__liza__liza_assess_blocked,mcp__liza__liza_wt_delete,mcp__liza__liza_sprint_checkpoint,mcp__liza__liza_update_sprint_metrics):
@@ -180,6 +185,19 @@ func countImmediateDiscoveries(discovered []models.Discovery) int {
 	count := 0
 	for _, disc := range discovered {
 		if disc.Urgency == "immediate" && disc.ConvertedToTask == nil {
+			count++
+		}
+	}
+	return count
+}
+
+// countCycleBlockedPlanning counts MERGED planning tasks with a transition_cycle_blocked history event.
+func countCycleBlockedPlanning(tasks []models.Task, planningPairs map[string]bool) int {
+	count := 0
+	for i := range tasks {
+		if tasks[i].Status == models.TaskStatusMerged &&
+			ops.IsPlanningPair(tasks[i].RolePair, planningPairs) &&
+			ops.IsTransitionCycleBlocked(&tasks[i]) {
 			count++
 		}
 	}

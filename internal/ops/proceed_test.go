@@ -2038,3 +2038,248 @@ func TestComputeInheritedDeps_MissingUpstreamChild_ReturnsError(t *testing.T) {
 		t.Errorf("error = %q, want to contain 'missing'", err.Error())
 	}
 }
+
+// --- Topological ordering tests ---
+
+func TestEAT_TopoOrdering_UpstreamBeforeDownstream(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// plan-2 depends on plan-1, but plan-2 appears FIRST in state.Tasks
+	plan2 := testhelpers.BuildTaskByStatus("plan-2", models.TaskStatusMerged, now)
+	plan2.RolePair = "code-planning-pair"
+	plan2.Output = []models.OutputEntry{
+		{Desc: "d", DoneWhen: "d", Scope: "d", SpecRef: "s.md"},
+	}
+	plan2.DependsOn = []string{"plan-1"}
+
+	plan1 := testhelpers.BuildTaskByStatus("plan-1", models.TaskStatusMerged, now)
+	plan1.RolePair = "code-planning-pair"
+	plan1.Output = []models.OutputEntry{
+		{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+		{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+	}
+
+	state.Tasks = append(state.Tasks, plan2, plan1)
+	state.Sprint.Scope.Planned = []string{"plan-2", "plan-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions: %v", err)
+	}
+
+	// plan-1 should execute first despite appearing second in array
+	if len(results) < 2 {
+		t.Fatalf("results count = %d, want >= 2", len(results))
+	}
+	if results[0].SourceTaskID != "plan-1" {
+		t.Errorf("results[0].SourceTaskID = %q, want plan-1 (upstream first)", results[0].SourceTaskID)
+	}
+	if results[1].SourceTaskID != "plan-2" {
+		t.Errorf("results[1].SourceTaskID = %q, want plan-2 (downstream second)", results[1].SourceTaskID)
+	}
+}
+
+func TestEAT_StableOrdering_UnrelatedTasksPreserveArrayOrder(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// Two unrelated tasks — no dep relationship, should preserve original order
+	planA := testhelpers.BuildTaskByStatus("plan-a", models.TaskStatusMerged, now)
+	planA.RolePair = "code-planning-pair"
+	planA.Output = []models.OutputEntry{
+		{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+	}
+
+	planB := testhelpers.BuildTaskByStatus("plan-b", models.TaskStatusMerged, now)
+	planB.RolePair = "code-planning-pair"
+	planB.Output = []models.OutputEntry{
+		{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+	}
+
+	state.Tasks = append(state.Tasks, planA, planB)
+	state.Sprint.Scope.Planned = []string{"plan-a", "plan-b"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions: %v", err)
+	}
+
+	if len(results) < 2 {
+		t.Fatalf("results count = %d, want >= 2", len(results))
+	}
+	// plan-a appears first in Tasks array, should execute first
+	if results[0].SourceTaskID != "plan-a" {
+		t.Errorf("results[0].SourceTaskID = %q, want plan-a (stable order)", results[0].SourceTaskID)
+	}
+	if results[1].SourceTaskID != "plan-b" {
+		t.Errorf("results[1].SourceTaskID = %q, want plan-b (stable order)", results[1].SourceTaskID)
+	}
+}
+
+func TestEAT_CycleDetection_CyclicTasksGetHistoryEvent(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// Circular dependency: plan-a depends on plan-b, plan-b depends on plan-a
+	planA := testhelpers.BuildTaskByStatus("plan-a", models.TaskStatusMerged, now)
+	planA.RolePair = "code-planning-pair"
+	planA.Output = []models.OutputEntry{
+		{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+	}
+	planA.DependsOn = []string{"plan-b"}
+
+	planB := testhelpers.BuildTaskByStatus("plan-b", models.TaskStatusMerged, now)
+	planB.RolePair = "code-planning-pair"
+	planB.Output = []models.OutputEntry{
+		{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+	}
+	planB.DependsOn = []string{"plan-a"}
+
+	state.Tasks = append(state.Tasks, planA, planB)
+	state.Sprint.Scope.Planned = []string{"plan-a", "plan-b"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions: %v", err)
+	}
+
+	// Cyclic tasks should NOT execute
+	if len(results) != 0 {
+		t.Errorf("results count = %d, want 0 (cyclic tasks skipped)", len(results))
+	}
+
+	// Verify history events on both tasks
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for _, taskID := range []string{"plan-a", "plan-b"} {
+		task := readState.FindTask(taskID)
+		if task == nil {
+			t.Fatalf("task %s not found", taskID)
+		}
+		found := false
+		for _, h := range task.History {
+			if h.Event == models.TaskEventTransitionCycleBlocked {
+				found = true
+				if trans, ok := h.Extra["transition"].(string); !ok || trans != "code-plan-to-coding" {
+					t.Errorf("task %s cycle event transition = %v, want code-plan-to-coding", taskID, h.Extra["transition"])
+				}
+			}
+		}
+		if !found {
+			t.Errorf("task %s missing transition_cycle_blocked history event", taskID)
+		}
+	}
+}
+
+func TestEAT_CycleDetection_Idempotent(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	planA := testhelpers.BuildTaskByStatus("plan-a", models.TaskStatusMerged, now)
+	planA.RolePair = "code-planning-pair"
+	planA.Output = []models.OutputEntry{
+		{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+	}
+	planA.DependsOn = []string{"plan-b"}
+
+	planB := testhelpers.BuildTaskByStatus("plan-b", models.TaskStatusMerged, now)
+	planB.RolePair = "code-planning-pair"
+	planB.Output = []models.OutputEntry{
+		{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+	}
+	planB.DependsOn = []string{"plan-a"}
+
+	state.Tasks = append(state.Tasks, planA, planB)
+	state.Sprint.Scope.Planned = []string{"plan-a", "plan-b"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Run twice
+	_, _ = ExecuteAvailableTransitions(tmpDir)
+	_, _ = ExecuteAvailableTransitions(tmpDir)
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for _, taskID := range []string{"plan-a", "plan-b"} {
+		task := readState.FindTask(taskID)
+		count := 0
+		for _, h := range task.History {
+			if h.Event == models.TaskEventTransitionCycleBlocked {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Errorf("task %s has %d cycle-blocked events, want 1 (idempotent)", taskID, count)
+		}
+	}
+}
+
+func TestEAT_CrashRecoveryThroughEAT(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// Upstream task with TransitionsExecuted set but child-1 missing (crash)
+	plan1 := testhelpers.BuildTaskByStatus("plan-1", models.TaskStatusMerged, now)
+	plan1.RolePair = "code-planning-pair"
+	plan1.Output = []models.OutputEntry{
+		{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+		{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+	}
+	plan1.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+
+	// Only child-0 exists
+	child0 := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-1", "code-plan-to-coding", 0), models.TaskStatus("DRAFT_CODE"), now)
+	child0.RolePair = "coding-pair"
+
+	state.Tasks = append(state.Tasks, plan1, child0)
+	state.Sprint.Scope.Planned = []string{"plan-1", child0.ID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions: %v", err)
+	}
+
+	// Should recover the missing child
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1 (crash recovery)", len(results))
+	}
+	if len(results[0].ChildTaskIDs) != 1 {
+		t.Fatalf("recovered children = %d, want 1", len(results[0].ChildTaskIDs))
+	}
+	expectedChild1 := perSubtaskChildID("plan-1", "code-plan-to-coding", 1)
+	if results[0].ChildTaskIDs[0] != expectedChild1 {
+		t.Errorf("recovered child = %q, want %q", results[0].ChildTaskIDs[0], expectedChild1)
+	}
+}

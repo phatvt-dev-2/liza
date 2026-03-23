@@ -47,18 +47,13 @@ func collectMergedPlanningTasks(state *models.State, planningPairs map[string]bo
 	var result []planningTaskData
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
+		if !ops.IsPlanningCompleteEligible(task, planningPairs) {
 			continue
 		}
-		if len(task.TransitionsExecuted) > 0 {
-			continue // transitions already fired
-		}
-		if ops.IsPlanningPair(task.RolePair, planningPairs) {
-			result = append(result, planningTaskData{
-				TaskID: task.ID,
-				Output: task.Output,
-			})
-		}
+		result = append(result, planningTaskData{
+			TaskID: task.ID,
+			Output: task.Output,
+		})
 	}
 	return result
 }
