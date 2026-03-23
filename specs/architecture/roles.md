@@ -251,9 +251,8 @@ When marking a task BLOCKED, coder MUST provide:
 
 | Field | Required | Purpose |
 |-------|----------|---------|
-| `blocked_reason` | Yes | What is blocking progress (specific, not vague) |
+| `blocked_reason` | Yes | What is blocking progress (specific, not vague). Include what approaches were tried before blocking. |
 | `blocked_questions` | Yes | 1-3 specific questions that would unblock if answered |
-| `attempted` | Recommended | What approaches were tried before blocking |
 
 Example:
 ```yaml
@@ -262,9 +261,6 @@ blocked_questions:
   - "Should partial results be returned if page 3 of 5 fails?"
   - "Is retry of failed pages in scope, or should we fail the whole request?"
   - "What's the timeout budget for pagination across all pages?"
-attempted:
-  - "Checked specs/api.md — no pagination section"
-  - "Searched codebase for existing pagination patterns — none found"
 ```
 
 **Do not block for:**
