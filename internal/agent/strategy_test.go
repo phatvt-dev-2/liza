@@ -43,6 +43,7 @@ pipeline:
         - assigned-task
         - worktree-rules
         - prior-rejection
+        - prior-attempt
         - doer-state-transitions
         - doer-tools
         - capability-scoping
@@ -72,6 +73,7 @@ pipeline:
         - worktree-rules
         - collective-plan-scoping
         - prior-rejection
+        - prior-attempt
         - doer-state-transitions
         - doer-tools
         - capability-scoping
@@ -102,6 +104,7 @@ pipeline:
         - worktree-rules
         - collective-plan-scoping
         - prior-rejection
+        - prior-attempt
         - doer-state-transitions
         - doer-tools
         - task-decomposition
@@ -134,6 +137,7 @@ pipeline:
         - handoff-resume
         - integration-fix
         - prior-rejection
+        - prior-attempt
         - doer-state-transitions
         - doer-tools
         - anomaly-logging

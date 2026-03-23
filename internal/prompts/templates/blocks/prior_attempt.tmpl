@@ -1,0 +1,8 @@
+{{- define "prior-attempt" -}}
+{{- if and (eq .AttemptNum 2) (ne .PriorAttemptOutcome "")}}
+
+=== PRIOR ATTEMPT OUTCOME ===
+{{.PriorAttemptOutcome}}
+Do NOT repeat the same approach. The prior attempt was exhausted — try a fundamentally different strategy.
+{{- end}}
+{{- end -}}

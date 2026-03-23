@@ -3,12 +3,14 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -1087,3 +1089,157 @@ func TestBuildTaskRoleContextData_PriorRejectionGate_Attempt2Iteration1_Empty(t 
 		t.Errorf("PriorRejection = %q, want empty at attempt 2 iteration 1", data.PriorRejection)
 	}
 }
+
+// TestBuildPrompt_PriorAttemptOutcome_CoderAttempt2 verifies that the coder prompt
+// at attempt 2 contains PRIOR ATTEMPT OUTCOME with reason, and at attempt 1 does not.
+func TestBuildPrompt_PriorAttemptOutcome_CoderAttempt2(t *testing.T) {
+	now := time.Now().UTC()
+	reason := "review cycle limit reached"
+
+	makeState := func(attempt int) *models.State {
+		s := &models.State{
+			Version: 1,
+			Goal: models.Goal{
+				ID:          "goal-1",
+				Description: "Test goal",
+				SpecRef:     "spec.md",
+				Status:      models.GoalStatusInProgress,
+				Created:     now,
+			},
+			Tasks: []models.Task{
+				{
+					ID:          "task-1",
+					Description: "Test task",
+					Status:      models.TaskStatusImplementing,
+					Priority:    1,
+					Iteration:   1,
+					Attempt:     attempt,
+					DoneWhen:    "Done",
+					History: []models.TaskHistoryEntry{
+						{Time: now.Add(-time.Hour), Event: models.TaskEventClaimed},
+						{Time: now.Add(-time.Minute), Event: models.TaskEventNewAttempt, Reason: &reason},
+					},
+					Created: now,
+				},
+			},
+			Agents: make(map[string]models.Agent),
+			Config: models.Config{IntegrationBranch: "main"},
+		}
+		return s
+	}
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	// Attempt 2: prompt should contain PRIOR ATTEMPT OUTCOME with reason
+	prompt, err := testBuildPrompt(t, makeState(2), config, "task-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt() error: %v", err)
+	}
+	if !strings.Contains(prompt, "PRIOR ATTEMPT OUTCOME") {
+		t.Error("coder prompt at attempt 2 should contain 'PRIOR ATTEMPT OUTCOME'")
+	}
+	if !strings.Contains(prompt, reason) {
+		t.Errorf("coder prompt at attempt 2 should contain reason %q", reason)
+	}
+
+	// Attempt 1: prompt should NOT contain PRIOR ATTEMPT OUTCOME
+	prompt, err = testBuildPrompt(t, makeState(1), config, "task-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt() error: %v", err)
+	}
+	if strings.Contains(prompt, "PRIOR ATTEMPT OUTCOME") {
+		t.Error("coder prompt at attempt 1 should NOT contain 'PRIOR ATTEMPT OUTCOME'")
+	}
+}
+
+// TestBuildPrompt_PriorAttemptOutcome_CodePlannerAttempt2 verifies that the code-planner
+// prompt at attempt 2 contains PRIOR ATTEMPT OUTCOME with reason.
+func TestBuildPrompt_PriorAttemptOutcome_CodePlannerAttempt2(t *testing.T) {
+	now := time.Now().UTC()
+	reason := "iteration limit reached"
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusCodePlanning,
+				Priority:    1,
+				Iteration:   1,
+				Attempt:     2,
+				DoneWhen:    "Done",
+				History: []models.TaskHistoryEntry{
+					{Time: now.Add(-time.Hour), Event: models.TaskEventClaimed},
+					{Time: now.Add(-time.Minute), Event: models.TaskEventNewAttempt, Reason: &reason},
+				},
+				Created: now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	config := SupervisorConfig{
+		Role:        "code-planner",
+		AgentID:     "code-planner-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := testBuildPrompt(t, state, config, "task-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt() error: %v", err)
+	}
+	if !strings.Contains(prompt, "PRIOR ATTEMPT OUTCOME") {
+		t.Error("code-planner prompt at attempt 2 should contain 'PRIOR ATTEMPT OUTCOME'")
+	}
+	if !strings.Contains(prompt, reason) {
+		t.Errorf("code-planner prompt at attempt 2 should contain reason %q", reason)
+	}
+}
+
+// TestPipelineConfig_PriorAttempt_DoerRolesOnly verifies that prior-attempt
+// appears in context-sections for exactly the doer roles and no others.
+func TestPipelineConfig_PriorAttempt_DoerRolesOnly(t *testing.T) {
+	resolver := testResolver(t)
+
+	var rolesWithPriorAttempt []string
+	for _, role := range resolver.AllRoleNames() {
+		sections, err := resolver.ContextSections(role)
+		if err != nil {
+			t.Fatalf("ContextSections(%q) error: %v", role, err)
+		}
+		if slices.Contains(sections, "prior-attempt") {
+			rolesWithPriorAttempt = append(rolesWithPriorAttempt, role)
+		}
+	}
+
+	slices.Sort(rolesWithPriorAttempt)
+	doerRoles := resolver.DoerRoleNames() // already sorted
+
+	if !slices.Equal(rolesWithPriorAttempt, doerRoles) {
+		t.Errorf("roles with prior-attempt = %v, want exactly doer roles %v", rolesWithPriorAttempt, doerRoles)
+	}
+}
+
+// Ensure pipeline import is used (linter guard).
+var _ = pipeline.NewResolver
