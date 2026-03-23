@@ -133,14 +133,26 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    outbound transitions (rare but allowed) can track each independently. Auto transitions
    use the same guard.
 
+   **Phase-gate inheritance:** When a source task has `depends_on` pointing to upstream tasks
+   that have already executed the same transition, child tasks automatically inherit those
+   upstream children as dependencies. This enforces phase-gate ordering: phase-2 children
+   cannot be claimed until all phase-1 children are MERGED.
+
    **Recovery:** Child task IDs are deterministic and namespaced by transition:
    `<parent-id>-<transition-name>-<subtask-index>` for `per-subtask` (index from `output[]`
    order), `<parent-id>-<transition-name>` for `one-to-one`. The operation sequence is:
    (1) write transition key to `transitions_executed`, (2) create child tasks one by one.
    On crash recovery, the supervisor compares expected child IDs (derived from `output[]`
    length or cardinality) against existing children — only missing children are created.
+   Existing children created before crash are patched with any missing inherited deps.
    This handles both zero-child and partial-creation crashes. Not an atomic transaction;
    idempotent per child.
+
+   **Execution ordering:** `ExecuteAvailableTransitions` topologically sorts pending
+   transitions by task `depends_on` before execution (Kahn's algorithm, stable tie-breaking
+   by original array order). Upstream transitions fire first, guaranteeing upstream children
+   exist before downstream `computeInheritedDeps` runs. Circular dependencies produce a
+   `transition_cycle_blocked` history event and are skipped.
 
    **Undo:** If `liza proceed` was executed prematurely, recovery is: ABANDON child tasks,
    then remove the transition key from `transitions_executed` on the source task via

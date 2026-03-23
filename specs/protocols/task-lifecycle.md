@@ -26,6 +26,16 @@ The task type is set by the Planner during task creation (via `liza_add_tasks` o
 
 See [State Machines — Type-Aware Claimability](../architecture/state-machines.md#type-aware-claimability) for the formal claimability rule.
 
+### Multi-Phase Planning
+
+For complex goals (>3 functional areas or >~8 estimated output entries), the orchestrator
+creates multiple sequential planning tasks instead of one. Each phase covers a non-overlapping
+scope boundary of the goal. Tasks use the same role-pair and are chained with sequential
+`depends_on` (phase-2 depends on phase-1, phase-3 on phase-2, etc.).
+
+Planners in later phases see a PHASE CONSISTENCY RULE requiring them to mark BLOCKED
+(via `liza_mark_blocked`) if their plan cannot reconcile with prior phases' plans.
+
 ## Iteration Protocol
 
 ### Ralph-Style Loop

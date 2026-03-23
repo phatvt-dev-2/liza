@@ -260,7 +260,21 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
 
 **Child task ID format:** `{parent-id}-{transition-name}-{index}` (deterministic, namespaced by transition for crash recovery). Example: `task-1-code-plan-to-coding-0`.
 
-**Crash recovery:** Re-running `liza proceed` creates only missing children. If all children already exist, returns error.
+**Crash recovery:** Re-running `liza proceed` creates only missing children (with inherited deps). Existing children are patched with missing inherited deps. If all children already exist with correct deps, returns error.
+
+**Auto-inherited DependsOn:** When a source task has `depends_on` and the upstream dependency
+has already executed the same transition, child tasks inherit those upstream children as
+additional `depends_on` entries. Sibling deps (from `output[]` DependsOn indices) are resolved
+first, inherited deps appended after.
+
+**`transition_cycle_blocked` history event:** Added by `ExecuteAvailableTransitions` when
+circular `depends_on` prevents topological ordering. Semantics:
+- Does NOT modify task Status (remains MERGED)
+- Does NOT modify `transitions_executed` (no forgery)
+- Does NOT satisfy downstream dependencies
+- Suppresses PLANNING_COMPLETE auto-detection only (via `IsPlanningCompleteEligible` predicate)
+- Idempotent per (taskID, transitionName, sorted cycle member IDs)
+- Cycle members stored in `Extra["cycle_members"]` (sorted task ID list)
 
 ### Iteration Field Lifecycle
 

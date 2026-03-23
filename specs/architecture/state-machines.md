@@ -105,6 +105,13 @@ claimable(task, role) =
 > dropped or replaced. When a dependency is SUPERSEDED, the dependent task should be re-evaluated
 > against the replacement task(s) referenced in `superseded_by`.
 
+> **Phase-gate dependency propagation:** When pipeline transitions create child tasks from
+> parent tasks that have `depends_on`, the children automatically inherit dependencies on
+> upstream parents' children (from the same transition). This propagates the phase-gate
+> barrier: if plan-2 depends on plan-1, then plan-2's coding children depend on plan-1's
+> coding children. The inherited deps are appended after sibling deps (from `output[]` DependsOn
+> indices). This is transition-specific — only the same transition name contributes.
+
 When new task types are added (e.g., `specification`, `architecture`), they define their own role workflow in the registry. The supervisor and work detection derive behavior from the registry rather than hardcoding role checks.
 
 > **Note:** The `task.type` field and type registry are superseded by the `role_pair` field
