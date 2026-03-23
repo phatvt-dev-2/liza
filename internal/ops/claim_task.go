@@ -152,20 +152,39 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		return nil, err
 	}
 
-	// Enforce coder iteration limits before doing any filesystem work.
-	// A REJECTED task at/over the limit is escalated to BLOCKED for orchestrator action.
-	if strategy.enforceIterationLimit() && task.Iteration >= maxCoderIterations {
-		blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus, pipelineTransitions)
-		if err != nil {
-			return nil, fmt.Errorf("failed to enforce iteration limit: %w", err)
+	// Enforce coder iteration/review-cycle limits before doing any filesystem work.
+	// Attempt 1 cap hit → new attempt (TransitionToNewAttempt). Attempt 2 cap hit → BLOCKED.
+	if strategy.enforceIterationLimit() {
+		reviewLimit := effectiveReviewCycleLimit(state.Config)
+		escalation, shouldEscalate := classifyLimitEscalation(
+			task.ReviewCyclesCurrent,
+			reviewLimit,
+			task.Iteration,
+			maxCoderIterations,
+			task.EffectiveAttempt(),
+		)
+		if shouldEscalate {
+			switch escalation.action {
+			case LimitActionNewAttempt:
+				result, taErr := TransitionToNewAttempt(projectRoot, taskID, escalation.reason)
+				if taErr != nil {
+					return nil, fmt.Errorf("failed to transition to new attempt: %w", taErr)
+				}
+				return nil, &PreconditionError{Reason: fmt.Sprintf(
+					"task %s exhausted limits, transitioned to attempt %d — claimable on next cycle",
+					taskID, result.NewAttempt,
+				)}
+			case LimitActionBlocked:
+				blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus, pipelineTransitions)
+				if err != nil {
+					return nil, fmt.Errorf("failed to enforce iteration limit: %w", err)
+				}
+				return nil, &PreconditionError{Reason: fmt.Sprintf(
+					"task %s reached max iterations (%d/%d) and was transitioned to BLOCKED",
+					taskID, blockedIteration, blockedLimit,
+				)}
+			}
 		}
-
-		return nil, &PreconditionError{Reason: fmt.Sprintf(
-			"task %s reached max iterations (%d/%d) and was transitioned to BLOCKED",
-			taskID,
-			blockedIteration,
-			blockedLimit,
-		)}
 	}
 
 	// --- Phase 2: Handle Worktree ---

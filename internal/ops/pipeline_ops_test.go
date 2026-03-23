@@ -312,6 +312,7 @@ func TestClaimTask_PipelineRejectedIterationLimit(t *testing.T) {
 		BaseCommit:  &baseCommit,
 		Worktree:    &worktree,
 		Iteration:   3, // at limit
+		Attempt:     2, // attempt 2: iteration cap → BLOCKED
 		Created:     now,
 		SpecRef:     "README.md",
 		DoneWhen:    "done",

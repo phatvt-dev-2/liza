@@ -509,6 +509,7 @@ func TestClaimTask_RejectedAtIterationLimitTransitionsToBlocked(t *testing.T) {
 
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.Iteration = 3
+	task.Attempt = 2 // Attempt 2: iteration cap → BLOCKED (not new attempt)
 	state.Tasks = []models.Task{task}
 
 	taskRef := "task-1"
@@ -772,6 +773,7 @@ func TestClaimTask_IterationLimitDoesNotReleaseCoder_WhenCoderMovedOn(t *testing
 
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.Iteration = 3
+	task.Attempt = 2 // Attempt 2: iteration cap → BLOCKED (not new attempt)
 	// task.AssignedTo is "coder-1" (set by BuildTaskByStatus for REJECTED)
 	state.Tasks = []models.Task{task}
 
@@ -813,6 +815,107 @@ func TestClaimTask_IterationLimitDoesNotReleaseCoder_WhenCoderMovedOn(t *testing
 	}
 	if agent.CurrentTask == nil || *agent.CurrentTask != task2ID {
 		t.Errorf("Agent CurrentTask = %v, want %q", agent.CurrentTask, task2ID)
+	}
+}
+
+func TestClaimTask_IterationCapAttempt1_TriggersNewAttempt(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.MaxCoderIterations = 3
+
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	task.Iteration = 3 // at limit
+	task.Attempt = 1
+	state.Tasks = []models.Task{task}
+
+	taskRef := "task-1"
+	state.Agents["coder-1"] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: &taskRef,
+		Heartbeat:   now,
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err == nil {
+		t.Fatal("Expected PreconditionError for attempt transition")
+	}
+
+	var precondErr *PreconditionError
+	if !stderrors.As(err, &precondErr) {
+		t.Fatalf("Expected PreconditionError, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "transitioned to attempt") {
+		t.Errorf("Error = %q, want to contain 'transitioned to attempt'", err.Error())
+	}
+
+	readState := readClaimStateForTest(t, stateFile)
+	transitioned := readState.FindTask("task-1")
+	if transitioned == nil {
+		t.Fatal("Task not found in state")
+	}
+	if transitioned.Attempt != 2 {
+		t.Errorf("Attempt = %d, want 2", transitioned.Attempt)
+	}
+	if transitioned.Status != models.TaskStatusReady {
+		t.Errorf("Status = %v, want READY (initial pipeline status)", transitioned.Status)
+	}
+	if transitioned.Iteration != 0 {
+		t.Errorf("Iteration = %d, want 0 (reset)", transitioned.Iteration)
+	}
+	if transitioned.ReviewCyclesCurrent != 0 {
+		t.Errorf("ReviewCyclesCurrent = %d, want 0 (reset)", transitioned.ReviewCyclesCurrent)
+	}
+}
+
+func TestClaimTask_IterationCapAttempt2_TriggersBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.MaxCoderIterations = 3
+
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	task.Iteration = 3 // at limit
+	task.Attempt = 2
+	state.Tasks = []models.Task{task}
+
+	taskRef := "task-1"
+	state.Agents["coder-1"] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWaiting,
+		CurrentTask: &taskRef,
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err == nil {
+		t.Fatal("Expected PreconditionError for BLOCKED transition")
+	}
+
+	var precondErr *PreconditionError
+	if !stderrors.As(err, &precondErr) {
+		t.Fatalf("Expected PreconditionError, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "transitioned to BLOCKED") {
+		t.Errorf("Error = %q, want to contain 'transitioned to BLOCKED'", err.Error())
+	}
+
+	readState := readClaimStateForTest(t, stateFile)
+	blockedTask := readState.FindTask("task-1")
+	if blockedTask == nil {
+		t.Fatal("Task not found in state")
+	}
+	if blockedTask.Status != models.TaskStatusBlocked {
+		t.Errorf("Task status = %v, want BLOCKED", blockedTask.Status)
 	}
 }
 
