@@ -122,28 +122,14 @@ func (rejectedClaimStrategy) handleWorktree(
 	gitWrapper *git.Git,
 	ctx *claimContext,
 ) (claimWorktreePhaseResult, error) {
-	return handleRejectedClaimWorktree(
-		gitWrapper,
-		ctx.taskID,
-		ctx.integrationBranch,
-		ctx.previousAssignee,
-		ctx.agentID,
-		ctx.worktreeDir,
-		ctx.worktreeRel,
-	)
+	return ensureRejectedWorktreeExists(gitWrapper, ctx)
 }
 
 func (rejectedClaimStrategy) shouldRunPostWorktreeCmd(claimWorktreePhaseResult) bool {
 	return true
 }
 
-func (rejectedClaimStrategy) mutateTask(task *models.Task, ctx *claimContext) {
-	if ctx.previousAssignee != ctx.agentID {
-		task.Worktree = &ctx.worktreeRel
-		task.BaseCommit = &ctx.baseCommit
-		task.ReviewCyclesCurrent = 0
-	}
-}
+func (rejectedClaimStrategy) mutateTask(_ *models.Task, _ *claimContext) {}
 
 func (rejectedClaimStrategy) historyEntry(now time.Time, ctx *claimContext) models.TaskHistoryEntry {
 	agentPtr := &ctx.agentID

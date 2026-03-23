@@ -321,7 +321,10 @@ func TestClaimTask_IntegrationFailed(t *testing.T) {
 	}
 }
 
-func TestClaimTask_RejectedSameCoder(t *testing.T) {
+// TestClaimTask_RejectedWorktreePresent_Preserved verifies that when a REJECTED
+// task has both worktree dir and branch present, claiming preserves the worktree
+// regardless of coder identity (different coder does NOT trigger teardown+recreate).
+func TestClaimTask_RejectedWorktreePresent_Preserved(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -329,45 +332,15 @@ func TestClaimTask_RejectedSameCoder(t *testing.T) {
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
-	// task.AssignedTo is already "coder-1" from BuildTaskByStatus
+	// task.AssignedTo is "coder-1" from BuildTaskByStatus
 	state.Tasks = []models.Task{task}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	// Create the real git worktree/branch that same-coder reclaim expects.
+	// Create worktree with diverged content (simulating prior rejected work).
 	gitWrapper := git.New(tmpDir)
 	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
 		t.Fatalf("Failed to create initial rejected worktree: %v", err)
 	}
-
-	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
-	if err != nil {
-		t.Fatalf("ClaimTask() error: %v", err)
-	}
-
-	if result.PreviousAssignee != "coder-1" {
-		t.Errorf("PreviousAssignee = %q, want %q", result.PreviousAssignee, "coder-1")
-	}
-	if result.WorktreeRecreated {
-		t.Error("WorktreeRecreated should be false for same coder reclaim")
-	}
-}
-
-func TestClaimTask_RejectedDifferentCoderReassignmentRecreatesValidWorktree(t *testing.T) {
-	tmpDir := t.TempDir()
-	testhelpers.SetupTestGitRepo(t, tmpDir)
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-	now := time.Now().UTC()
-	state := testhelpers.CreateValidState()
-	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
-	state.Tasks = []models.Task{task}
-	testhelpers.WriteInitialState(t, stateFile, state)
-
-	gitWrapper := git.New(tmpDir)
-	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
-		t.Fatalf("Failed to create initial rejected worktree: %v", err)
-	}
-
 	wtDir := filepath.Join(tmpDir, ".worktrees", "task-1")
 	changesFile := filepath.Join(wtDir, "rejected-change.txt")
 	if err := os.WriteFile(changesFile, []byte("rejected change\n"), 0644); err != nil {
@@ -379,19 +352,12 @@ func TestClaimTask_RejectedDifferentCoderReassignmentRecreatesValidWorktree(t *t
 	if err := exec.Command("git", "-C", wtDir, "commit", "-m", "Rejected work").Run(); err != nil {
 		t.Fatalf("Failed to commit rejected worktree file: %v", err)
 	}
-
 	oldBranchSHA, err := gitWrapper.GetCommitSHA("task/task-1")
 	if err != nil {
 		t.Fatalf("Failed to read old task branch SHA: %v", err)
 	}
-	integrationSHA, err := gitWrapper.GetCommitSHA("integration")
-	if err != nil {
-		t.Fatalf("Failed to read integration SHA: %v", err)
-	}
-	if oldBranchSHA == integrationSHA {
-		t.Fatal("Expected rejected task branch to diverge from integration before reassignment")
-	}
 
+	// Different coder claims — worktree should be preserved (identity-free).
 	result, err := ClaimTask(tmpDir, "task-1", "coder-2")
 	if err != nil {
 		t.Fatalf("ClaimTask() error: %v", err)
@@ -400,8 +366,17 @@ func TestClaimTask_RejectedDifferentCoderReassignmentRecreatesValidWorktree(t *t
 	if result.PreviousAssignee != "coder-1" {
 		t.Errorf("PreviousAssignee = %q, want %q", result.PreviousAssignee, "coder-1")
 	}
-	if !result.WorktreeRecreated {
-		t.Error("WorktreeRecreated should be true for different coder reassignment")
+	if result.WorktreeRecreated {
+		t.Error("WorktreeRecreated should be false — worktree preserved regardless of coder identity")
+	}
+
+	// Verify the worktree retains the prior rejected work (branch SHA unchanged).
+	currentBranchSHA, err := gitWrapper.GetCommitSHA("task/task-1")
+	if err != nil {
+		t.Fatalf("Failed to read task branch SHA after claim: %v", err)
+	}
+	if currentBranchSHA != oldBranchSHA {
+		t.Errorf("Task branch SHA changed from %s to %s — worktree should be preserved", oldBranchSHA, currentBranchSHA)
 	}
 
 	readState := readClaimStateForTest(t, stateFile)
@@ -415,87 +390,159 @@ func TestClaimTask_RejectedDifferentCoderReassignmentRecreatesValidWorktree(t *t
 	if claimedTask.AssignedTo == nil || *claimedTask.AssignedTo != "coder-2" {
 		t.Errorf("AssignedTo = %v, want coder-2", claimedTask.AssignedTo)
 	}
-
-	currentTaskBranchSHA, err := gitWrapper.GetCommitSHA("task/task-1")
-	if err != nil {
-		t.Fatalf("Failed to read reassigned task branch SHA: %v", err)
-	}
-	if currentTaskBranchSHA != result.BaseCommit {
-		t.Errorf("Task branch SHA = %s, want result.BaseCommit %s", currentTaskBranchSHA, result.BaseCommit)
-	}
-	if currentTaskBranchSHA != integrationSHA {
-		t.Errorf("Task branch SHA = %s, want integration SHA %s", currentTaskBranchSHA, integrationSHA)
-	}
-	if currentTaskBranchSHA == oldBranchSHA {
-		t.Error("Task branch should not retain previous rejected coder commit after reassignment")
-	}
-
-	worktreeHead, err := gitWrapper.GetWorktreeHEAD("task-1")
-	if err != nil {
-		t.Fatalf("Expected valid reassigned worktree HEAD, got error: %v", err)
-	}
-	if worktreeHead != currentTaskBranchSHA {
-		t.Errorf("Worktree HEAD = %s, want %s", worktreeHead, currentTaskBranchSHA)
-	}
 }
 
-func TestClaimTask_RejectedDifferentCoderCreateFailureRestoresValidPreviousWorktree(t *testing.T) {
+// TestClaimTask_RejectedWorktreeMissing_Recreated verifies that when a REJECTED
+// task's worktree directory is absent, ClaimTask recreates it from integration.
+func TestClaimTask_RejectedWorktreeMissing_Recreated(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
-	// Force replacement creation to fail after teardown: this ref exists before teardown,
-	// but is deleted with the old task branch/worktree during reassignment.
-	state.Config.IntegrationBranch = "task/task-1"
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	state.Tasks = []models.Task{task}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	gitWrapper := git.New(tmpDir)
-	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
-		t.Fatalf("Failed to create initial rejected worktree: %v", err)
-	}
-	originalTaskBranchSHA, err := gitWrapper.GetCommitSHA("task/task-1")
+	// No worktree created on disk — simulates worktree lost after cleanup or crash.
+	integrationSHA, err := git.New(tmpDir).GetCommitSHA("integration")
 	if err != nil {
-		t.Fatalf("Failed to read original task branch SHA: %v", err)
+		t.Fatalf("Failed to read integration SHA: %v", err)
 	}
 
-	_, err = ClaimTask(tmpDir, "task-1", "coder-2")
-	if err == nil {
-		t.Fatal("Expected claim to fail when replacement create ref disappears")
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "failed to create replacement worktree (previous worktree restored)") {
-		t.Errorf("Error = %q, want to contain 'failed to create replacement worktree (previous worktree restored)'", err.Error())
+
+	// Worktree should be freshly created from integration.
+	wtDir := filepath.Join(tmpDir, ".worktrees", "task-1")
+	if _, err := os.Stat(wtDir); os.IsNotExist(err) {
+		t.Fatal("Worktree should exist after claim")
+	}
+
+	gitWrapper := git.New(tmpDir)
+	worktreeHead, err := gitWrapper.GetWorktreeHEAD("task-1")
+	if err != nil {
+		t.Fatalf("Expected valid worktree HEAD, got error: %v", err)
+	}
+	if worktreeHead != integrationSHA {
+		t.Errorf("Worktree HEAD = %s, want integration SHA %s", worktreeHead, integrationSHA)
+	}
+
+	if result.BaseCommit != integrationSHA {
+		t.Errorf("BaseCommit = %s, want integration SHA %s", result.BaseCommit, integrationSHA)
+	}
+}
+
+// TestClaimTask_RejectedWorktreeDirExistsBranchMissing_Recreated verifies that
+// when the worktree directory exists but the task branch is missing, the orphaned
+// directory is removed and the worktree is recreated from integration.
+func TestClaimTask_RejectedWorktreeDirExistsBranchMissing_Recreated(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Create worktree normally, then forcibly delete the branch to simulate orphan.
+	gitWrapper := git.New(tmpDir)
+	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("Failed to create initial worktree: %v", err)
+	}
+
+	// Remove the worktree tracking so we can delete the branch.
+	wtDir := filepath.Join(tmpDir, ".worktrees", "task-1")
+	if err := gitWrapper.RemoveWorktreeDir("task-1"); err != nil {
+		t.Fatalf("Failed to remove worktree dir: %v", err)
+	}
+	// Recreate the directory as a plain dir (orphaned — no .git link, no branch).
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("Failed to create orphaned worktree dir: %v", err)
+	}
+	// Delete the branch.
+	if err := gitWrapper.DeleteBranch("task/task-1"); err != nil {
+		t.Fatalf("Failed to delete task branch: %v", err)
+	}
+
+	// Verify precondition: dir exists, branch does not.
+	if _, err := os.Stat(wtDir); os.IsNotExist(err) {
+		t.Fatal("Worktree dir should exist before claim")
+	}
+	branchExists, err := gitWrapper.BranchExists("task/task-1")
+	if err != nil {
+		t.Fatalf("Failed to check branch: %v", err)
+	}
+	if branchExists {
+		t.Fatal("Branch should NOT exist before claim (orphaned dir scenario)")
+	}
+
+	integrationSHA, err := gitWrapper.GetCommitSHA("integration")
+	if err != nil {
+		t.Fatalf("Failed to read integration SHA: %v", err)
+	}
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
+	}
+
+	// Worktree should be recreated from integration.
+	worktreeHead, err := gitWrapper.GetWorktreeHEAD("task-1")
+	if err != nil {
+		t.Fatalf("Expected valid worktree HEAD after orphan recovery, got error: %v", err)
+	}
+	if worktreeHead != integrationSHA {
+		t.Errorf("Worktree HEAD = %s, want integration SHA %s", worktreeHead, integrationSHA)
+	}
+
+	if result.BaseCommit != integrationSHA {
+		t.Errorf("BaseCommit = %s, want integration SHA %s", result.BaseCommit, integrationSHA)
+	}
+}
+
+// TestClaimTask_RejectedMutateTask_NoCounterReset verifies that ReviewCyclesCurrent
+// is NOT reset when a different coder claims within the same attempt. The attempt —
+// not the agent — is the resource boundary.
+func TestClaimTask_RejectedMutateTask_NoCounterReset(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	task.ReviewCyclesCurrent = 3 // Non-zero — should be preserved on different-coder claim.
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Create worktree (required for claim to succeed).
+	gitWrapper := git.New(tmpDir)
+	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+
+	// Different coder claims — ReviewCyclesCurrent must NOT be reset.
+	result, err := ClaimTask(tmpDir, "task-1", "coder-2")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
+	}
+	if result.PreviousAssignee != "coder-1" {
+		t.Errorf("PreviousAssignee = %q, want %q", result.PreviousAssignee, "coder-1")
 	}
 
 	readState := readClaimStateForTest(t, stateFile)
-	taskAfterFailure := readState.FindTask("task-1")
-	if taskAfterFailure == nil {
+	claimedTask := readState.FindTask("task-1")
+	if claimedTask == nil {
 		t.Fatal("Task not found in state")
 	}
-	if taskAfterFailure.Status != models.TaskStatusRejected {
-		t.Errorf("Task status = %v, want REJECTED", taskAfterFailure.Status)
-	}
-	if taskAfterFailure.AssignedTo == nil || *taskAfterFailure.AssignedTo != "coder-1" {
-		t.Errorf("AssignedTo = %v, want coder-1", taskAfterFailure.AssignedTo)
-	}
-
-	restoredTaskBranchSHA, err := gitWrapper.GetCommitSHA("task/task-1")
-	if err != nil {
-		t.Fatalf("Expected task branch to be restored, got error: %v", err)
-	}
-	if restoredTaskBranchSHA != originalTaskBranchSHA {
-		t.Errorf("Restored task branch SHA = %s, want %s", restoredTaskBranchSHA, originalTaskBranchSHA)
-	}
-
-	restoredWorktreeHead, err := gitWrapper.GetWorktreeHEAD("task-1")
-	if err != nil {
-		t.Fatalf("Expected restored worktree HEAD, got error: %v", err)
-	}
-	if restoredWorktreeHead != restoredTaskBranchSHA {
-		t.Errorf("Restored worktree HEAD = %s, want %s", restoredWorktreeHead, restoredTaskBranchSHA)
+	if claimedTask.ReviewCyclesCurrent != 3 {
+		t.Errorf("ReviewCyclesCurrent = %d, want 3 (should not reset on different-coder claim within same attempt)", claimedTask.ReviewCyclesCurrent)
 	}
 }
 

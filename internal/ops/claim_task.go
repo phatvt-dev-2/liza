@@ -394,64 +394,51 @@ func readyClaimHasStaleResources(gitWrapper *git.Git, taskID, worktreeDir string
 	return branchExists, nil
 }
 
-func handleRejectedClaimWorktree(
+func ensureRejectedWorktreeExists(
 	gitWrapper *git.Git,
-	taskID, integrationBranch, previousAssignee, agentID, worktreeDir, worktreeRel string,
+	ctx *claimContext,
 ) (claimWorktreePhaseResult, error) {
 	result := claimWorktreePhaseResult{}
-	branchName := paths.TaskBranchPrefix + taskID
+	branchName := paths.TaskBranchPrefix + ctx.taskID
 
-	if previousAssignee == agentID {
-		// Same coder re-claiming - preserve and validate the existing task worktree.
-		if err := validateRejectedSameCoderWorktree(gitWrapper, taskID, worktreeDir, worktreeRel); err != nil {
+	worktreeDirExists := false
+	if _, err := os.Stat(ctx.worktreeDir); err == nil {
+		worktreeDirExists = true
+	} else if !os.IsNotExist(err) {
+		return result, fmt.Errorf("failed to stat worktree %s: %w", ctx.worktreeDir, err)
+	}
+
+	branchExists := false
+	if worktreeDirExists {
+		var err error
+		branchExists, err = gitWrapper.BranchExists(branchName)
+		if err != nil {
+			return result, fmt.Errorf("failed to check branch %s: %w", branchName, err)
+		}
+	}
+
+	if worktreeDirExists && branchExists {
+		// Both worktree and branch exist — validate and preserve.
+		if err := validateRejectedWorktree(gitWrapper, ctx.taskID, ctx.worktreeDir, ctx.worktreeRel); err != nil {
 			return result, err
 		}
 		return result, nil
 	}
 
-	// Different coder - recreate worktree. If replacement creation fails after teardown,
-	// restore the previous task worktree so REJECTED state remains recoverable.
-	var recoveryRef string
-	if _, err := os.Stat(worktreeDir); err == nil {
-		branchExists, err := gitWrapper.BranchExists(branchName)
-		if err != nil {
-			return result, fmt.Errorf("failed to check existing task branch: %w", err)
+	// Either worktree or branch (or both) missing — clean partial state and recreate.
+	if worktreeDirExists {
+		// Worktree dir exists but branch is missing — remove orphaned worktree dir.
+		if err := gitWrapper.RemoveWorktreeDir(ctx.taskID); err != nil {
+			return result, fmt.Errorf("failed to remove orphaned worktree %s (branch missing): %w", ctx.worktreeRel, err)
 		}
-		if branchExists {
-			recoveryRef, err = gitWrapper.GetCommitSHA(branchName)
-			if err != nil {
-				return result, fmt.Errorf("failed to capture existing task branch for recovery: %w", err)
-			}
-		}
-
-		if err := gitWrapper.RemoveWorktree(taskID); err != nil {
-			return result, fmt.Errorf("failed to remove existing worktree for reassignment: %w", err)
-		}
-
-		// RemoveWorktree best-effort deletes the task branch. Ensure a clean branch namespace
-		// before creating the replacement.
-		_ = gitWrapper.DeleteBranch(branchName)
-		result.deleted = true
 	}
 
-	if _, err := gitWrapper.CreateWorktree(taskID, integrationBranch); err != nil {
-		if result.deleted {
-			if recoveryErr := restoreRejectedWorktreeAfterCreateFailure(
-				gitWrapper,
-				taskID,
-				recoveryRef,
-				integrationBranch,
-			); recoveryErr != nil {
-				return result, fmt.Errorf(
-					"failed to create worktree: %w; failed to recover previous task worktree: %v",
-					err,
-					recoveryErr,
-				)
-			}
-		}
-		return result, fmt.Errorf("failed to create replacement worktree (previous worktree restored): %w", err)
-	}
+	// Cleanup stale branch if any (branch without worktree, or leftover after RemoveWorktreeDir).
+	_ = gitWrapper.DeleteBranch(branchName)
 
+	if _, err := gitWrapper.CreateWorktree(ctx.taskID, ctx.integrationBranch); err != nil {
+		return result, fmt.Errorf("failed to recreate worktree for REJECTED task from integration branch: %w", err)
+	}
 	result.created = true
 	return result, nil
 }
@@ -530,49 +517,26 @@ func enforceRejectedIterationLimit(
 	return blockedIteration, blockedLimit, nil
 }
 
-func validateRejectedSameCoderWorktree(
+func validateRejectedWorktree(
 	gitWrapper *git.Git,
 	taskID, worktreeDir, worktreeRel string,
 ) error {
 	if _, err := os.Stat(worktreeDir); os.IsNotExist(err) {
-		return fmt.Errorf("worktree %s missing for REJECTED task (same coder)", worktreeRel)
+		return fmt.Errorf("worktree %s missing for REJECTED task", worktreeRel)
 	}
 
 	branchName := paths.TaskBranchPrefix + taskID
 	branchExists, err := gitWrapper.BranchExists(branchName)
 	if err != nil {
-		return fmt.Errorf("failed to check branch %s for REJECTED task (same coder): %w", branchName, err)
+		return fmt.Errorf("failed to check branch %s for REJECTED task: %w", branchName, err)
 	}
 	if !branchExists {
-		return fmt.Errorf("branch %s missing for REJECTED task (same coder)", branchName)
+		return fmt.Errorf("branch %s missing for REJECTED task", branchName)
 	}
 
 	if _, err := gitWrapper.GetWorktreeHEAD(taskID); err != nil {
-		return fmt.Errorf("worktree %s invalid for REJECTED task (same coder): %w", worktreeRel, err)
+		return fmt.Errorf("worktree %s invalid for REJECTED task: %w", worktreeRel, err)
 	}
 
 	return nil
-}
-
-func restoreRejectedWorktreeAfterCreateFailure(
-	gitWrapper *git.Git,
-	taskID, recoveryRef, fallbackRef string,
-) error {
-	// Best-effort cleanup of partial replacement artifacts before restoring.
-	// Cleanup errors are logged but not propagated - the primary failure is the
-	// worktree creation failure that triggered this recovery.
-	if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
-		log.Printf("WARNING: claim-task recovery %s: failed to cleanup partial worktree: %v", taskID, cleanupErr)
-	}
-	if cleanupErr := gitWrapper.DeleteBranch(paths.TaskBranchPrefix + taskID); cleanupErr != nil {
-		log.Printf("WARNING: claim-task recovery %s: failed to cleanup partial branch: %v", taskID, cleanupErr)
-	}
-
-	restoreRef := recoveryRef
-	if restoreRef == "" {
-		restoreRef = fallbackRef
-	}
-
-	_, err := gitWrapper.CreateWorktree(taskID, restoreRef)
-	return err
 }
