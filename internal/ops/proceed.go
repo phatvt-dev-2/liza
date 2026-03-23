@@ -452,14 +452,15 @@ func validateOutputEntry(entry models.OutputEntry, index, totalEntries int) erro
 // Returns error if an upstream transition is marked executed but expected children
 // are missing (crash inconsistency that must be recovered first).
 func computeInheritedDeps(s *models.State, task *models.Task, transitionName string, resolver *pipeline.Resolver) ([]string, error) {
+	td, err := resolver.Transition(transitionName)
+	if err != nil {
+		return nil, fmt.Errorf("cannot compute inherited deps: unknown transition %q: %w", transitionName, err)
+	}
+
 	var inherited []string
 	for _, depID := range task.DependsOn {
 		depTask := s.FindTask(depID)
 		if depTask == nil || !depTask.TransitionsExecuted[transitionName] {
-			continue
-		}
-		td, err := resolver.Transition(transitionName)
-		if err != nil {
 			continue
 		}
 		switch td.Cardinality {
