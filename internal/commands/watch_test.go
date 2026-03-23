@@ -432,47 +432,71 @@ func TestCheckReassigned(t *testing.T) {
 		tasks      []models.Task
 		cache      map[string]time.Time
 		wantAlerts int
+		wantCat    string
+		wantMsg    string
 	}{
 		{
-			name: "task reassigned to different coder",
+			name: "attempt 2 IMPLEMENTING task alerts",
 			tasks: []models.Task{
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
-					assignee := "coder-2"
-					task.AssignedTo = &assignee
-					// Add history showing first claimer was different
-					firstClaimer := "coder-1"
-					task.History = []models.TaskHistoryEntry{
-						{
-							Time:  now.Add(-1 * time.Hour),
-							Event: models.TaskEventClaimed,
-							Agent: &firstClaimer,
-						},
-					}
+					task.Attempt = 2
 					return task
 				}(),
 			},
 			cache:      make(map[string]time.Time),
 			wantAlerts: 1,
+			wantCat:    "ATTEMPT",
+			wantMsg:    "task-1 — attempt 2 (final attempt)",
 		},
 		{
-			name: "same coder - no reassignment",
+			name: "attempt 2 REJECTED task alerts",
 			tasks: []models.Task{
 				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
-					assignee := "coder-1"
-					task.AssignedTo = &assignee
-					task.History = []models.TaskHistoryEntry{
-						{
-							Time:  now.Add(-1 * time.Hour),
-							Event: models.TaskEventClaimed,
-							Agent: &assignee,
-						},
-					}
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+					task.Attempt = 2
 					return task
 				}(),
 			},
 			cache:      make(map[string]time.Time),
+			wantAlerts: 1,
+			wantCat:    "ATTEMPT",
+			wantMsg:    "task-1 — attempt 2 (final attempt)",
+		},
+		{
+			name: "attempt 1 task no alert",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+					task.Attempt = 1
+					return task
+				}(),
+			},
+			cache:      make(map[string]time.Time),
+			wantAlerts: 0,
+		},
+		{
+			name: "attempt 0 (legacy) no alert",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+					// Attempt defaults to 0 (unset/legacy); EffectiveAttempt() returns 1
+					return task
+				}(),
+			},
+			cache:      make(map[string]time.Time),
+			wantAlerts: 0,
+		},
+		{
+			name: "attempt 2 cached suppresses duplicate",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+					task.Attempt = 2
+					return task
+				}(),
+			},
+			cache:      map[string]time.Time{"attempt2:task-1": now.Add(-1 * time.Minute)},
 			wantAlerts: 0,
 		},
 	}
@@ -484,6 +508,14 @@ func TestCheckReassigned(t *testing.T) {
 
 			if len(alerts) != tt.wantAlerts {
 				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+			if tt.wantAlerts > 0 && len(alerts) > 0 {
+				if alerts[0].Category != tt.wantCat {
+					t.Errorf("category = %q, want %q", alerts[0].Category, tt.wantCat)
+				}
+				if alerts[0].Message != tt.wantMsg {
+					t.Errorf("message = %q, want %q", alerts[0].Message, tt.wantMsg)
+				}
 			}
 		})
 	}

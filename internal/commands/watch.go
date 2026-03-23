@@ -432,33 +432,19 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []alert {
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
-		if task.Status != models.TaskStatusImplementing {
-			continue
-		}
-		if task.AssignedTo == nil {
+		if task.EffectiveAttempt() != 2 {
 			continue
 		}
 
-		var firstClaimer string
-		for _, entry := range task.History {
-			if entry.Event == models.TaskEventClaimed && entry.Agent != nil {
-				firstClaimer = *entry.Agent
-				break
-			}
-		}
-
-		if firstClaimer != "" && *task.AssignedTo != firstClaimer {
-			cacheKey := "reassigned:" + task.ID
-			if _, seen := cache[cacheKey]; !seen {
-				alerts = append(alerts, alert{
-					Timestamp: now,
-					Level:     alertLevelWarning,
-					Category:  "REASSIGNED",
-					Message: fmt.Sprintf("%s — now %s (was %s), hypothesis exhaustion risk",
-						task.ID, *task.AssignedTo, firstClaimer),
-				})
-				cache[cacheKey] = now
-			}
+		cacheKey := "attempt2:" + task.ID
+		if _, seen := cache[cacheKey]; !seen {
+			alerts = append(alerts, alert{
+				Timestamp: now,
+				Level:     alertLevelWarning,
+				Category:  "ATTEMPT",
+				Message:   fmt.Sprintf("%s — attempt 2 (final attempt)", task.ID),
+			})
+			cache[cacheKey] = now
 		}
 	}
 
