@@ -281,6 +281,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 				reviewLimit,
 				task.Iteration,
 				iterationLimit,
+				task.EffectiveAttempt(),
 			)
 			if shouldEscalate {
 				if err := transitionTask(models.TaskStatusBlocked); err != nil {

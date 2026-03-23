@@ -6,9 +6,18 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
+// LimitAction determines the response when an iteration or review cycle cap is hit.
+type LimitAction int
+
+const (
+	LimitActionBlocked LimitAction = iota
+	LimitActionNewAttempt
+)
+
 type limitEscalation struct {
 	reason    string
 	questions []string
+	action    LimitAction
 }
 
 func effectiveCoderIterationLimit(task *models.Task, config models.Config) int {
@@ -28,11 +37,16 @@ func effectiveReviewCycleLimit(config models.Config) int {
 	return models.DefaultMaxReviewCycles
 }
 
-func classifyLimitEscalation(reviewCycles, reviewLimit, iteration, iterationLimit int) (limitEscalation, bool) {
+func classifyLimitEscalation(reviewCycles, reviewLimit, iteration, iterationLimit, attempt int) (limitEscalation, bool) {
 	reviewLimitReached := reviewCycles >= reviewLimit
 	iterationLimitReached := iteration >= iterationLimit
 	if !reviewLimitReached && !iterationLimitReached {
 		return limitEscalation{}, false
+	}
+
+	action := LimitActionBlocked
+	if attempt < 2 {
+		action = LimitActionNewAttempt
 	}
 
 	switch {
@@ -40,16 +54,19 @@ func classifyLimitEscalation(reviewCycles, reviewLimit, iteration, iterationLimi
 		return limitEscalation{
 			reason:    combinedLimitBlockedReason(reviewCycles, reviewLimit, iteration, iterationLimit),
 			questions: defaultCombinedLimitBlockedQuestions(),
+			action:    action,
 		}, true
 	case reviewLimitReached:
 		return limitEscalation{
 			reason:    reviewBudgetExhaustedReason(reviewCycles, reviewLimit),
 			questions: defaultReviewBudgetExhaustedQuestions(),
+			action:    action,
 		}, true
 	default:
 		return limitEscalation{
 			reason:    iterationLimitBlockedReason(iteration, iterationLimit),
 			questions: defaultIterationLimitBlockedQuestions(),
+			action:    action,
 		}, true
 	}
 }
