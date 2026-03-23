@@ -287,6 +287,62 @@ func TestCheckOrphanedRejected(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("sentinel assigned_to not orphaned", func(t *testing.T) {
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+		sentinel := "$transitioning"
+		task.AssignedTo = &sentinel
+
+		cache := map[string]time.Time{
+			"orphaned:task-1": now.Add(-1 * time.Minute),
+		}
+		state := &models.State{
+			Tasks:  []models.Task{task},
+			Agents: map[string]models.Agent{},
+		}
+		alerts := checkOrphanedRejected(state, cache)
+
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0", len(alerts))
+		}
+		if _, exists := cache["orphaned:task-1"]; exists {
+			t.Error("cache entry 'orphaned:task-1' should have been cleared by sentinel exemption")
+		}
+	})
+
+	t.Run("sentinel clears stale cache then real orphan gets grace period", func(t *testing.T) {
+		// First call: task with sentinel AssignedTo and pre-existing cache entry.
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+		sentinel := "$transitioning"
+		task.AssignedTo = &sentinel
+
+		cache := map[string]time.Time{
+			"orphaned:task-1": now.Add(-1 * time.Minute),
+		}
+		state := &models.State{
+			Tasks:  []models.Task{task},
+			Agents: map[string]models.Agent{},
+		}
+		alerts := checkOrphanedRejected(state, cache)
+		if len(alerts) != 0 {
+			t.Fatalf("first call: len(alerts) = %d, want 0", len(alerts))
+		}
+
+		// Second call: sentinel cleared, real agent assigned but missing from state.
+		task2 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+		// BuildTaskByStatus sets AssignedTo to "coder-1" for REJECTED status.
+		state2 := &models.State{
+			Tasks:  []models.Task{task2},
+			Agents: map[string]models.Agent{}, // coder-1 not registered
+		}
+		alerts2 := checkOrphanedRejected(state2, cache)
+		if len(alerts2) != 0 {
+			t.Errorf("second call: len(alerts) = %d, want 0 (grace period should restart)", len(alerts2))
+		}
+		if _, exists := cache["orphaned:task-1"]; !exists {
+			t.Error("cache should contain fresh 'orphaned:task-1' entry after grace period restart")
+		}
+	})
 }
 
 func TestCheckReviewLoops(t *testing.T) {

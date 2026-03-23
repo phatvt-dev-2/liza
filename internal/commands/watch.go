@@ -340,6 +340,15 @@ func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []al
 			continue
 		}
 
+		// Sentinel AssignedTo (e.g. "$transitioning") is a transition in
+		// progress, not an orphaned assignment. Clear any stale cache entry
+		// from before the transition to prevent false-positive alerts when
+		// the task becomes genuinely orphaned later.
+		if strings.HasPrefix(*task.AssignedTo, "$") {
+			delete(cache, "orphaned:"+task.ID)
+			continue
+		}
+
 		assignee := *task.AssignedTo
 		agent, exists := state.Agents[assignee]
 		agentStatus := "MISSING"
