@@ -8,6 +8,11 @@ The task iteration model has drifted across intent, specs, and code. The origina
 - Hitting a cap → new attempt (worktree deleted, counters reset). Attempt #2 cap → BLOCKED
 - Agent identity is irrelevant — all agents are fresh sessions
 
+Scope note: this attempt model governs the iteration/review-cycle exhaustion path for the
+existing doer/reviewer loop. It is orthogonal to the multi-phase planning flow introduced in
+`20260323-multi-phase-planning.md`: a planner may BLOCK immediately on PHASE CONSISTENCY
+without consuming an attempt or triggering `new_attempt`.
+
 The specs conflate "attempt" with "coder reassignment." The code never implemented attempts at all (the `Attempted []string` field is dead code — defined but never written to). This plan realigns both.
 
 ## Design
@@ -61,6 +66,11 @@ Two trigger paths, both calling the same `TransitionToNewAttempt()`:
    Template: `blocks/prior_attempt.tmpl` — rendered when `AttemptNum == 2`, showing the `new_attempt` history entry's reason (e.g., "review cycle limit reached after 5 rejections").
 
 5. **Hypothesis exhaustion stays orthogonal** — `FailedBy` tracks integration failures, not cap-triggered blocks. `TransitionToNewAttempt()` and cap-triggered BLOCKED do NOT write to `failed_by`. Cap-triggered BLOCKED at attempt 2 uses standard BLOCKED machinery (blocked_reason, blocked_questions). The orchestrator detects it via normal BLOCKED task handling.
+
+   **Also orthogonal to phase-consistency blocking.** Multi-phase planning allows later planning
+   phases to BLOCK immediately when they cannot reconcile with prior phases. That path is a spec
+   conflict / planning-scope escalation, not attempt exhaustion, and does not increment `Attempt`
+   or append `TaskEventNewAttempt`.
 
 6. **`mark_blocked` unchanged** — Manual blocks are voluntary (ambiguity, external blockers). Not affected by attempt number. Agents can block at any time. Manual blocks do not populate `failed_by` (unchanged).
 
@@ -162,7 +172,7 @@ In rejection handling (around line 276):
 ### 8. Prompt building — `internal/agent/prompt.go`
 
 - **Line 132**: `AttemptNum: task.EffectiveAttempt()` (was `len(task.Attempted) + 1`)
-- **Line 148**: Prior rejection gate `task.Iteration > 1` — unchanged. At attempt 2 iteration 1, there's no within-attempt prior rejection. At iteration 2+, prior rejection from within attempt 2 is shown.
+- **Line 150**: Prior rejection gate `task.Iteration > 1` — unchanged. At attempt 2 iteration 1, there's no within-attempt prior rejection. At iteration 2+, prior rejection from within attempt 2 is shown. (Note: line shifted from 148 due to `DependsOn`/`TaskRolePair` fields added by multi-phase planning.)
 - **Add**: Extract `new_attempt` history entry reason for `PriorAttemptOutcome` field when `AttemptNum == 2`.
 
 ### 9. Prompt context — `internal/prompts/role_context.go`
@@ -210,21 +220,29 @@ Note: the current validator does NOT check `AssignedTo` → `state.Agents` refer
 
 ### `specs/architecture/blackboard-schema.md`
 
-- **Remove** `attempted: [...]` documentation (lines 202-204)
+- **Remove** `attempted: [...]` documentation
 - **Add** `attempt: int` field lifecycle section:
   - Task created: 0 (unset)
   - First claim: set to 1
   - Cap hit (iteration 10 or review_cycles 5), attempt 1: set to 2, counters reset, worktree deleted
   - Cap hit, attempt 2: BLOCKED
-- **Iteration Field Lifecycle** (line 275): Remove "Task reassigned (different coder) → Reset to 1". Replace with "New attempt triggered → Reset to 0"
-- **Review Cycles Split** (lines 290-301): Remove "Reset on Reassign". Replace with "Reset on new attempt". Update rationale — budget reset is about approach exhaustion, not personnel change.
+- **Preserve** the newer sub-pipeline documentation added by `20260323-multi-phase-planning.md`,
+  especially `Auto-inherited DependsOn` and `transition_cycle_blocked`; this plan only updates
+  the task-attempt fields and the iteration/review-cycle semantics.
+- **Iteration Field Lifecycle**: Remove "Task reassigned (different coder) → Reset to 1". Replace with "New attempt triggered → Reset to 0"
+- **Review Cycles Split**: Remove "Reset on Reassign". Replace with "Reset on new attempt". Update rationale — budget reset is about approach exhaustion, not personnel change.
 
 ### `specs/protocols/task-lifecycle.md`
 
-- **Iteration Limits** (lines 62-68): Add "per attempt" to make scope explicit
-- **Add** new section "Attempt Transitions": the two-attempt model, trigger conditions, multi-phase mechanical flow, relationship to hypothesis exhaustion (orthogonal)
-- **Early Warning** (lines 70-80): Remove "Coder failures" row. Replace with "Attempt: warning at attempt 2 start"
-- **Hypothesis Exhaustion** (lines 84-102): Add note that this tracks integration failures via `failed_by`, orthogonal to cap-triggered attempt transitions. Cap-triggered paths do not write to `failed_by`.
+- **Iteration Limits**: Add "per attempt" to make scope explicit
+- **Preserve existing Multi-Phase Planning section** added by `20260323-multi-phase-planning.md`
+  and add one explicit orthogonality note: PHASE CONSISTENCY blocking for later planning phases
+  is separate from attempt exhaustion.
+- **Add** new section "Attempt Transitions": the two-attempt model, trigger conditions, and
+  relationship to hypothesis exhaustion / phase-consistency blocking (both orthogonal)
+- **Early Warning**: Remove "Coder failures" row. Replace with "Attempt: warning at attempt 2 start"
+- **Hypothesis Exhaustion**: Add note that this tracks integration failures via `failed_by`,
+  orthogonal to cap-triggered attempt transitions. Cap-triggered paths do not write to `failed_by`.
 
 ### `specs/architecture/roles.md` (line 256)
 
@@ -263,3 +281,5 @@ Note: the current validator does NOT check `AssignedTo` → `state.Agents` refer
 5. **Watch alerts**: Verify approaching-limits shows attempt context, no identity-based reassignment warnings
 6. **Prompt content**: Attempt 2 prompt includes "Prior Attempt Outcome" block with reason
 7. **Pre-commit**: All touched files pass
+8. **Multi-phase orthogonality**: Planner BLOCKED via PHASE CONSISTENCY RULE does not increment
+   `Attempt` and does not append `new_attempt`
