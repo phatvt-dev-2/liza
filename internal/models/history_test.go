@@ -43,6 +43,8 @@ func TestTaskEventNameConstants(t *testing.T) {
 		{"DoerClaimReleased", TaskEventDoerClaimReleased, "doer_claim_released"},
 		{"ReviewClaimReleased", TaskEventReviewClaimReleased, "review_claim_released"},
 		{"OrchestratorAssessment", TaskEventOrchestratorAssessment, "orchestrator_assessment"},
+		{"Replanned", TaskEventReplanned, "replanned"},
+		{"TransitionCycleBlocked", TaskEventTransitionCycleBlocked, "transition_cycle_blocked"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -272,7 +272,7 @@ circular `depends_on` prevents topological ordering. Semantics:
 - Does NOT modify task Status (remains MERGED)
 - Does NOT modify `transitions_executed` (no forgery)
 - Does NOT satisfy downstream dependencies
-- Suppresses PLANNING_COMPLETE auto-detection only (via `IsPlanningCompleteEligible` predicate)
+- Excluded from orchestrator wake detection and planning-complete prompt rendering (via `IsPlanningCompleteEligible`). Checkpoint auto-trigger (`sprint_checkpoint.go`) still uses `IsUnconsumedPlanningOutput` today
 - Idempotent per (taskID, transitionName, sorted cycle member IDs)
 - Cycle members stored in `Extra["cycle_members"]` (sorted task ID list)
 

@@ -191,7 +191,7 @@ When planning tasks (epic-planner, code-planner) are merged, the orchestrator ch
 - Planning checkpoint not yet resumed (status `CHECKPOINT`) → gate does not fire
 - Planning checkpoint resumed (trigger + `IN_PROGRESS`) → gate fires → transitions execute
 - After transitions consumed → `countMergedPlanningTasksWithOutput` returns 0 → idempotent
-- Cycle-blocked planning tasks are excluded from PLANNING_COMPLETE detection but remain visible for carry-forward and replan
+- Cycle-blocked planning tasks are excluded from orchestrator wake detection and planning-complete rendering, but remain visible for carry-forward, replan, and checkpoint auto-trigger
 
 **Replan with multi-phase:** When replanning a task that is part of a phase chain, `liza replan`
 requires explicit task ID (auto-detect may find multiple candidates). The new task inherits

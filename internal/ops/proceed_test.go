@@ -2473,3 +2473,79 @@ func TestProceed_InheritedDepsViaManualPath(t *testing.T) {
 		}
 	}
 }
+
+func TestEAT_CrashRecovery_PatchesExistingChildrenWithInheritedDeps(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// plan-1 already transitioned with 1 child
+	plan1 := testhelpers.BuildTaskByStatus("plan-1", models.TaskStatusMerged, now)
+	plan1.RolePair = "code-planning-pair"
+	plan1.Output = []models.OutputEntry{
+		{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+	}
+	plan1.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+	upstreamChild := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-1", "code-plan-to-coding", 0), models.TaskStatus("DRAFT_CODE"), now)
+	upstreamChild.RolePair = "coding-pair"
+
+	// plan-2 depends on plan-1, transition marked but crashed mid-creation:
+	// child-0 exists WITHOUT inherited deps, child-1 is missing
+	plan2 := testhelpers.BuildTaskByStatus("plan-2", models.TaskStatusMerged, now)
+	plan2.RolePair = "code-planning-pair"
+	plan2.Output = []models.OutputEntry{
+		{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"},
+		{Desc: "c", DoneWhen: "c", Scope: "c", SpecRef: "s.md"},
+	}
+	plan2.DependsOn = []string{"plan-1"}
+	plan2.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+
+	// Existing child created before crash — no inherited deps
+	existingChild := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-2", "code-plan-to-coding", 0), models.TaskStatus("DRAFT_CODE"), now)
+	existingChild.RolePair = "coding-pair"
+	// child-1 is missing (crash)
+
+	state.Tasks = append(state.Tasks, plan1, upstreamChild, plan2, existingChild)
+	state.Sprint.Scope.Planned = []string{"plan-1", upstreamChild.ID, "plan-2", existingChild.ID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions: %v", err)
+	}
+
+	// plan-2 should recover the missing child
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+	if len(results[0].ChildTaskIDs) != 1 {
+		t.Fatalf("recovered children = %d, want 1", len(results[0].ChildTaskIDs))
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	// Existing child should be patched with inherited deps
+	patched := readState.FindTask(existingChild.ID)
+	if patched == nil {
+		t.Fatal("existing child not found")
+	}
+	if !slices.Contains(patched.DependsOn, upstreamChild.ID) {
+		t.Errorf("existing child should be patched with inherited dep %s; DependsOn = %v", upstreamChild.ID, patched.DependsOn)
+	}
+
+	// Recovered child should have inherited deps
+	recovered := readState.FindTask(results[0].ChildTaskIDs[0])
+	if recovered == nil {
+		t.Fatal("recovered child not found")
+	}
+	if !slices.Contains(recovered.DependsOn, upstreamChild.ID) {
+		t.Errorf("recovered child missing inherited dep %s; DependsOn = %v", upstreamChild.ID, recovered.DependsOn)
+	}
+}

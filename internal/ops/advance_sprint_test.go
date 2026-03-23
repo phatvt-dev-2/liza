@@ -626,3 +626,47 @@ func TestResumeWithoutSprintAdvance(t *testing.T) {
 		t.Errorf("Sprint.Status = %v, want IN_PROGRESS", readState.Sprint.Status)
 	}
 }
+
+func TestAdvanceSprint_CycleBlockedPlanningTaskCarriedForward(t *testing.T) {
+	tmpDir, stateFile := setupAdvanceTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.Number = 1
+
+	// Cycle-blocked planning task: MERGED with output, no transitions, but has cycle-blocked event
+	cycledTask := testhelpers.BuildTaskByStatus("plan-cycled", models.TaskStatusMerged, now)
+	cycledTask.RolePair = "code-planning-pair"
+	cycledTask.Output = []models.OutputEntry{
+		{Desc: "blocked work", DoneWhen: "done", Scope: "s", SpecRef: "README.md"},
+	}
+	cycledTask.History = append(cycledTask.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventTransitionCycleBlocked,
+		Extra: map[string]any{"transition": "code-plan-to-coding", "cycle_members": []string{"plan-cycled"}},
+	})
+
+	state.Tasks = []models.Task{cycledTask}
+	state.Sprint.Scope.Planned = []string{"plan-cycled"}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := AdvanceSprint(tmpDir)
+	if err != nil {
+		t.Fatalf("AdvanceSprint() error: %v", err)
+	}
+
+	// Cycle-blocked task uses IsUnconsumedPlanningOutput (not IsPlanningCompleteEligible),
+	// so it SHOULD be carried forward
+	found := false
+	for _, id := range result.CarriedTasks {
+		if id == "plan-cycled" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("CarriedTasks = %v, want to include plan-cycled (cycle-blocked should carry forward)", result.CarriedTasks)
+	}
+}
