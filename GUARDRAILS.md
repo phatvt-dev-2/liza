@@ -24,6 +24,17 @@ Liza is a **stack-agnostic** multi-agent orchestrator. Projects using Liza may b
 
 **Test:** Before adding any command, path, or tool reference that touches the user's project, ask: "Would this work for a Python project with no Makefile?" If not, it must be behind a config field.
 
+### G1.2: Invariant compliance
+
+When a change touches system state, concurrency, review flow, agent lifecycle, or integration — check the [Protection Matrix](INVARIANTS.md#cross-reference-protection-matrix) in `INVARIANTS.md` to determine whether the change's blast radius intersects a listed threat category. If it does, check the relevant invariant section.
+
+**Tier-aware response to violations:**
+- **Tier 0 invariants** (§1): Non-overridable. Halt per CORE.md — do not ask for confirmation.
+- **Tier 1 invariants** (§2): Require explicit waiver with rationale before proceeding.
+- **All other invariants**: Surface the specific invariant, explain the conflict, and ask for confirmation or an alternative direction. Do not silently proceed.
+
+**Test:** "Does this change preserve every invariant it touches?" If not, name the invariant and apply the tier-appropriate response.
+
 ## Tier 2 (Strong Defaults)
 
 ### G2.1: Lessons - Agents

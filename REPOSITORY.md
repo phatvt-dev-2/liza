@@ -22,6 +22,7 @@ This document is a navigation aid: where to find things and why they're organize
 ├── AGENTS.md               # Symlink → ~/.liza/CORE.md (for agents, e.g. Codex)
 ├── CLAUDE.md               # Symlink → ~/.liza/CORE.md (Claude Code)
 ├── GEMINI.md               # Symlink → ~/.liza/CORE.md (Gemini)
+├── INVARIANTS.md           # System invariants (cross-ref: contracts, specs, code)
 ├── LICENSE                 # Apache 2.0
 ├── go.mod                  # Go module definition
 ├── Makefile                # Build system (build, test, lint, install, release)
