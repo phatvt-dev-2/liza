@@ -40,6 +40,9 @@ var mcpSettingsContent []byte
 //go:embed "hooks/enforce-init.sh"
 var enforceInitHookContent []byte
 
+//go:embed "hooks/git-guard.sh"
+var gitGuardHookContent []byte
+
 //go:embed "console.sh"
 var consoleScriptContent []byte
 
@@ -626,9 +629,14 @@ func WriteHooks(projectRoot string) error {
 		return fmt.Errorf("failed to create .claude/hooks directory: %w", err)
 	}
 
-	hookPath := filepath.Join(hooksDir, "enforce-init.sh")
-	if err := os.WriteFile(hookPath, enforceInitHookContent, 0755); err != nil {
-		return fmt.Errorf("failed to write enforce-init.sh: %w", err)
+	for name, content := range map[string][]byte{
+		"enforce-init.sh": enforceInitHookContent,
+		"git-guard.sh":    gitGuardHookContent,
+	} {
+		hookPath := filepath.Join(hooksDir, name)
+		if err := os.WriteFile(hookPath, content, 0755); err != nil {
+			return fmt.Errorf("failed to write %s: %w", name, err)
+		}
 	}
 
 	return nil

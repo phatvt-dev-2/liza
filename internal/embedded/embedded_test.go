@@ -1022,37 +1022,44 @@ func TestWriteHooks(t *testing.T) {
 		t.Fatalf("WriteHooks failed: %v", err)
 	}
 
-	hookPath := filepath.Join(tmpDir, ".claude", "hooks", "enforce-init.sh")
-	info, err := os.Stat(hookPath)
-	if err != nil {
-		t.Fatalf("hook file not found: %v", err)
-	}
+	for name, wantContent := range map[string][]byte{
+		"enforce-init.sh": enforceInitHookContent,
+		"git-guard.sh":    gitGuardHookContent,
+	} {
+		hookPath := filepath.Join(tmpDir, ".claude", "hooks", name)
+		info, err := os.Stat(hookPath)
+		if err != nil {
+			t.Fatalf("hook file %s not found: %v", name, err)
+		}
 
-	// Verify executable permission
-	if info.Mode()&0111 == 0 {
-		t.Errorf("hook file is not executable: %v", info.Mode())
-	}
+		// Verify executable permission
+		if info.Mode()&0111 == 0 {
+			t.Errorf("hook file %s is not executable: %v", name, info.Mode())
+		}
 
-	// Verify content matches embedded source
-	content, err := os.ReadFile(hookPath)
-	if err != nil {
-		t.Fatalf("failed to read hook: %v", err)
-	}
-	if !bytes.Equal(content, enforceInitHookContent) {
-		t.Error("hook content does not match embedded source")
+		// Verify content matches embedded source
+		content, err := os.ReadFile(hookPath)
+		if err != nil {
+			t.Fatalf("failed to read hook %s: %v", name, err)
+		}
+		if !bytes.Equal(content, wantContent) {
+			t.Errorf("hook %s content does not match embedded source", name)
+		}
 	}
 }
 
 func TestWriteHooks_Overwrites(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Write a stale hook
+	// Write stale hooks
 	hooksDir := filepath.Join(tmpDir, ".claude", "hooks")
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(hooksDir, "enforce-init.sh"), []byte("old"), 0755); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"enforce-init.sh", "git-guard.sh"} {
+		if err := os.WriteFile(filepath.Join(hooksDir, name), []byte("old"), 0755); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// WriteHooks should overwrite
@@ -1060,11 +1067,13 @@ func TestWriteHooks_Overwrites(t *testing.T) {
 		t.Fatalf("WriteHooks failed: %v", err)
 	}
 
-	content, err := os.ReadFile(filepath.Join(hooksDir, "enforce-init.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) == "old" {
-		t.Error("hook was not overwritten")
+	for _, name := range []string{"enforce-init.sh", "git-guard.sh"} {
+		content, err := os.ReadFile(filepath.Join(hooksDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(content) == "old" {
+			t.Errorf("hook %s was not overwritten", name)
+		}
 	}
 }

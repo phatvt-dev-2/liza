@@ -30,5 +30,6 @@ Always update the master in `internal/embedded/`, then re-run `liza init` or man
 - `internal/embedded/claude-settings.json` — master
 - `internal/embedded/mcp.json` — master
 - `internal/embedded/hooks/enforce-init.sh` — master
+- `internal/embedded/hooks/git-guard.sh` — master
 - `internal/embedded/embedded.go:WriteClaudeSettings()` — settings merge logic
 - `internal/embedded/embedded.go:WriteHooks()` — hook deployment

@@ -9,6 +9,16 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
       }
     ]
   },
