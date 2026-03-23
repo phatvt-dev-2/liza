@@ -265,6 +265,7 @@ func init() {
 	deleteCmd.AddCommand(deleteAgentCmd)
 
 	// Agent command flags
+	addAgentIDFlag(agentCmd)
 	agentCmd.Flags().String("cli", "claude", "CLI to use (claude, codex, gemini, mistral)")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")
 	agentCmd.Flags().Bool("log", false, "Save agent output to .liza/agent-outputs/ (incompatible with -i)")

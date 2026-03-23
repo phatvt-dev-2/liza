@@ -356,6 +356,10 @@ func init() {
 	rootCmd.AddCommand(assessHypothesisExhaustedCmd)
 	deleteCmd.AddCommand(deleteTaskCmd)
 
+	addAgentIDFlag(addTaskCmd)
+	addAgentIDFlag(supersedeTaskCmd)
+	addAgentIDFlag(cancelTaskCmd)
+
 	// Mark-blocked command flags
 	markBlockedCmd.Flags().String("reason", "", "reason why the task is blocked (required)")
 	markBlockedCmd.Flags().StringSlice("questions", nil, "clarifying questions (1-3 required)")

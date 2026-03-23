@@ -10,16 +10,18 @@ import (
 )
 
 func TestResetRootCmdForTestResetsIdentityFlags(t *testing.T) {
-	if err := rootCmd.PersistentFlags().Set("agent-id", "coder-123"); err != nil {
+	// --agent-id is now a local flag on specific commands (e.g. submit-verdict)
+	if err := submitVerdictCmd.Flags().Set("agent-id", "coder-123"); err != nil {
 		t.Fatalf("set --agent-id failed: %v", err)
 	}
-	if err := rootCmd.PersistentFlags().Set("changed-by", "auditor-4"); err != nil {
+	// --changed-by is now a local flag on specific commands (e.g. pause)
+	if err := pauseCmd.Flags().Set("changed-by", "auditor-4"); err != nil {
 		t.Fatalf("set --changed-by failed: %v", err)
 	}
 
 	resetRootCmdForTest(t)
 
-	agentID, err := rootCmd.PersistentFlags().GetString("agent-id")
+	agentID, err := submitVerdictCmd.Flags().GetString("agent-id")
 	if err != nil {
 		t.Fatalf("get --agent-id failed: %v", err)
 	}
@@ -27,7 +29,7 @@ func TestResetRootCmdForTestResetsIdentityFlags(t *testing.T) {
 		t.Fatalf("--agent-id = %q, want empty", agentID)
 	}
 
-	changedBy, err := rootCmd.PersistentFlags().GetString("changed-by")
+	changedBy, err := pauseCmd.Flags().GetString("changed-by")
 	if err != nil {
 		t.Fatalf("get --changed-by failed: %v", err)
 	}
@@ -92,20 +94,24 @@ func resetRootCmdForTest(t *testing.T) {
 	db.ResetInstances()
 	t.Cleanup(db.ResetInstances)
 
-	if err := rootCmd.PersistentFlags().Set("agent-id", ""); err != nil {
-		t.Fatalf("failed to reset --agent-id: %v", err)
-	}
-	if err := rootCmd.PersistentFlags().Set("changed-by", ""); err != nil {
-		t.Fatalf("failed to reset --changed-by: %v", err)
-	}
 	resetHelpFlag(t, rootCmd)
 	for _, child := range rootCmd.Commands() {
 		resetHelpFlag(t, child)
+		resetFlagIfPresent(child, "agent-id")
+		resetFlagIfPresent(child, "changed-by")
 	}
 
 	rootCmd.SetOut(io.Discard)
 	rootCmd.SetErr(io.Discard)
 	rootCmd.SetArgs(nil)
+}
+
+func resetFlagIfPresent(cmd *cobra.Command, name string) {
+	f := cmd.Flags().Lookup(name)
+	if f != nil {
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+	}
 }
 
 func resetHelpFlag(t *testing.T, cmd *cobra.Command) {

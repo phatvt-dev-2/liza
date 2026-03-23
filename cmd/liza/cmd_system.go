@@ -510,6 +510,12 @@ func init() {
 	rootCmd.AddCommand(getCmd)
 	rootCmd.AddCommand(statusCmd)
 
+	addChangedByFlag(pauseCmd)
+	addChangedByFlag(stopCmd)
+	addChangedByFlag(startCmd)
+	addChangedByFlag(replanCmd)
+	addChangedByFlag(resumeCmd)
+
 	// Get command flags
 	getCmd.Flags().String("format", "", "output format: json, yaml, table, value (default varies by query type)")
 

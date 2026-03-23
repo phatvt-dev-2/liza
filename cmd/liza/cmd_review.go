@@ -183,6 +183,11 @@ func init() {
 	rootCmd.AddCommand(submitVerdictCmd)
 	rootCmd.AddCommand(releaseClaimCmd)
 
+	addAgentIDFlag(submitForReviewCmd)
+	addAgentIDFlag(handoffCmd)
+	addAgentIDFlag(submitVerdictCmd)
+	addChangedByFlag(releaseClaimCmd)
+
 	// Submit-verdict flags
 	submitVerdictCmd.Flags().String("impact", "", "impact classification (standard, significant, architecture)")
 

@@ -117,9 +117,16 @@ func init() {
 
 	// Global flags
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
-	rootCmd.PersistentFlags().String("state", "", "path to state.yaml (default: .liza/state.yaml)")
-	rootCmd.PersistentFlags().String("agent-id", "", "agent identifier (overrides LIZA_AGENT_ID env var)")
-	rootCmd.PersistentFlags().String("changed-by", "", "identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')")
+}
+
+// addAgentIDFlag registers --agent-id on a specific command.
+func addAgentIDFlag(cmd *cobra.Command) {
+	cmd.Flags().String("agent-id", "", "agent identifier (overrides LIZA_AGENT_ID env var)")
+}
+
+// addChangedByFlag registers --changed-by on a specific command.
+func addChangedByFlag(cmd *cobra.Command) {
+	cmd.Flags().String("changed-by", "", "identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')")
 }
 
 func main() {
