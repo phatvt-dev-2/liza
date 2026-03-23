@@ -1591,3 +1591,83 @@ func TestCheckMissingRoles(t *testing.T) {
 		}
 	})
 }
+
+func TestCheckStaleSentinels(t *testing.T) {
+	now := time.Now().UTC()
+
+	t.Run("detects stale sentinel", func(t *testing.T) {
+		sentinel := "$transitioning"
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+		task.AssignedTo = &sentinel
+
+		cache := map[string]time.Time{
+			"sentinel:task-1": now.Add(-3 * time.Minute),
+		}
+		state := &models.State{Tasks: []models.Task{task}}
+		alerts := checkStaleSentinels(state, cache)
+
+		if len(alerts) != 1 {
+			t.Fatalf("len(alerts) = %d, want 1", len(alerts))
+		}
+		if alerts[0].Level != alertLevelCritical {
+			t.Errorf("level = %q, want %q", alerts[0].Level, alertLevelCritical)
+		}
+		if alerts[0].Category != "STALE SENTINEL" {
+			t.Errorf("category = %q, want %q", alerts[0].Category, "STALE SENTINEL")
+		}
+		if !strings.Contains(alerts[0].Message, "stuck in transition") {
+			t.Errorf("message = %q, want containing %q", alerts[0].Message, "stuck in transition")
+		}
+	})
+
+	t.Run("no alert within threshold", func(t *testing.T) {
+		sentinel := "$transitioning"
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+		task.AssignedTo = &sentinel
+
+		cache := map[string]time.Time{
+			"sentinel:task-1": now.Add(-1 * time.Minute),
+		}
+		state := &models.State{Tasks: []models.Task{task}}
+		alerts := checkStaleSentinels(state, cache)
+
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0", len(alerts))
+		}
+	})
+
+	t.Run("first seen starts tracking", func(t *testing.T) {
+		sentinel := "$transitioning"
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+		task.AssignedTo = &sentinel
+
+		cache := make(map[string]time.Time)
+		state := &models.State{Tasks: []models.Task{task}}
+		alerts := checkStaleSentinels(state, cache)
+
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0", len(alerts))
+		}
+		if _, exists := cache["sentinel:task-1"]; !exists {
+			t.Error("cache should contain 'sentinel:task-1' entry after first seen")
+		}
+	})
+
+	t.Run("clears cache when sentinel resolves", func(t *testing.T) {
+		// No tasks with sentinel AssignedTo — sentinel has resolved.
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+
+		cache := map[string]time.Time{
+			"sentinel:task-1": now.Add(-3 * time.Minute),
+		}
+		state := &models.State{Tasks: []models.Task{task}}
+		alerts := checkStaleSentinels(state, cache)
+
+		if len(alerts) != 0 {
+			t.Errorf("len(alerts) = %d, want 0", len(alerts))
+		}
+		if _, exists := cache["sentinel:task-1"]; exists {
+			t.Error("cache entry 'sentinel:task-1' should have been cleared when sentinel resolved")
+		}
+	})
+}

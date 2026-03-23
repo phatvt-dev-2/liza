@@ -28,6 +28,7 @@ const (
 	PauseStaleThreshold          = 30 * time.Minute
 	PauseForgottenThreshold      = 2 * time.Hour
 	OrphanedGracePeriod          = 30 * time.Second
+	StaleSentinelThreshold       = 2 * time.Minute
 )
 
 type alertLevel string
@@ -141,6 +142,7 @@ func runChecks(_ context.Context, config WatchConfig) error {
 		func() []alert { return checkHypothesisExhaustion(state) },
 		func() []alert { return checkReassigned(state, config.StateCache) },
 		func() []alert { return checkApproachingLimits(state) },
+		func() []alert { return checkStaleSentinels(state, config.StateCache) },
 		func() []alert { return checkStalled(logPath, config.StateCache) },
 		func() []alert { return checkStaleDrafts(state) },
 		func() []alert { return checkImmediateDiscoveries(state) },
@@ -497,6 +499,48 @@ func checkApproachingLimits(state *models.State) []alert {
 				Category:  "APPROACHING LIMIT",
 				Message:   msg,
 			})
+		}
+	}
+
+	return alerts
+}
+
+func checkStaleSentinels(state *models.State, cache map[string]time.Time) []alert {
+	var alerts []alert
+	now := time.Now().UTC()
+
+	activeSentinels := make(map[string]bool)
+
+	for _, task := range state.Tasks {
+		if task.AssignedTo == nil || !strings.HasPrefix(*task.AssignedTo, "$") {
+			continue
+		}
+		activeSentinels[task.ID] = true
+
+		cacheKey := "sentinel:" + task.ID
+		firstSeen, seen := cache[cacheKey]
+		if !seen {
+			cache[cacheKey] = now
+			continue
+		}
+		if now.Sub(firstSeen) > StaleSentinelThreshold {
+			alerts = append(alerts, alert{
+				Timestamp: now,
+				Level:     alertLevelCritical,
+				Category:  "STALE SENTINEL",
+				Message:   fmt.Sprintf("%s stuck in transition — manual repair needed", task.ID),
+			})
+		}
+	}
+
+	// Clear cache entries for sentinels that resolved.
+	for key := range cache {
+		if !strings.HasPrefix(key, "sentinel:") {
+			continue
+		}
+		taskID := strings.TrimPrefix(key, "sentinel:")
+		if !activeSentinels[taskID] {
+			delete(cache, key)
 		}
 	}
 
