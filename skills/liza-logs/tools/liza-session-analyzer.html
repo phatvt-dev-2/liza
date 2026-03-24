@@ -263,7 +263,7 @@ function extractSkillFromPath(path) {
 function extractSecretWordsLines(text) {
   if (!text) return [];
   const lines = text.trim().split("\n").slice(0, 30);
-  return lines.map(l => l.trim()).filter(l => l.startsWith("Liza") || l.startsWith("Secret"));
+  return lines.map(l => l.trim().replace(/^[*_#]+\s*/, "").replace(/[*_#]+$/, "").trim()).filter(l => l.startsWith("Liza") || l.startsWith("Secret"));
 }
 
 function parseSecretWords(line) {
@@ -352,12 +352,14 @@ function analyzeCodex(parsed) {
     }
   }
 
-  // --- Secret Words (first agent_message text) ---
+  // --- Secret Words (early agent_message text blocks) ---
   let secretWordsLines = [];
+  let swBlockCount = 0;
   for (const item of items) {
     if (item.type === "agent_message" && item.text) {
-      secretWordsLines = extractSecretWordsLines(item.text);
-      break;
+      const found = extractSecretWordsLines(item.text);
+      if (found.length > 0) { secretWordsLines = found; break; }
+      if (++swBlockCount >= 5) break;
     }
   }
 
@@ -573,12 +575,14 @@ function analyzeClaudeCode(parsed) {
     }
   }
 
-  // --- Secret Words (first assistant text block, not thinking) ---
+  // --- Secret Words (early assistant text blocks, not thinking) ---
   let secretWordsLines = [];
+  let swBlockCount = 0;
   for (const ev of events) {
     if (ev.type === "assistant" && ev.contentType === "text" && ev.text) {
-      secretWordsLines = extractSecretWordsLines(ev.text);
-      break;
+      const found = extractSecretWordsLines(ev.text);
+      if (found.length > 0) { secretWordsLines = found; break; }
+      if (++swBlockCount >= 5) break;
     }
   }
 

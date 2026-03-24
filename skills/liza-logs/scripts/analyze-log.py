@@ -138,12 +138,15 @@ def _is_benign_exit(cmd_name: str, exit_code: int) -> bool:
 
 
 def _extract_secret_words_lines(text: str) -> list[str]:
-    """Extract lines starting with 'Liza' or 'Secret' from the first 30 lines."""
+    """Extract lines starting with 'Liza' or 'Secret' from the first 30 lines.
+
+    Strips leading markdown formatting (bold, italic, heading markers) before matching.
+    """
     if not text:
         return []
     result = []
     for line in text.strip().splitlines()[:30]:
-        stripped = line.strip()
+        stripped = line.strip().strip("*_#").strip()
         if stripped.startswith("Liza") or stripped.startswith("Secret"):
             result.append(stripped)
     return result
@@ -237,7 +240,7 @@ def parse_rich(lines: list[str]) -> SessionReport:
     seen_message_ids: dict[str, TurnUsage] = {}
     # For correlating tool_use → tool_result
     pending_tool_uses: dict[str, tuple[str, str, int]] = {}  # id → (name, detail, turn_num)
-    first_assistant_text = ""
+    first_assistant_texts: list[str] = []
     first_assistant_captured = False
 
     for line in lines:
@@ -284,12 +287,13 @@ def parse_rich(lines: list[str]) -> SessionReport:
                 item = _measure_content_block(block)
                 if item.chars > 0:
                     report.items.append(item)
-                # Capture first assistant text block for secret words
+                # Capture early assistant text blocks for secret words
                 if not first_assistant_captured and block.get("type") == "text":
                     raw = block.get("text", "")
                     if raw.strip():
-                        first_assistant_text = raw
-                        first_assistant_captured = True
+                        first_assistant_texts.append(raw)
+                        if _extract_secret_words_lines(raw) or len(first_assistant_texts) >= 5:
+                            first_assistant_captured = True
                 if block.get("type") == "tool_use":
                     name = block.get("name", "unknown")
                     report.tool_calls[name] = report.tool_calls.get(name, 0) + 1
@@ -393,7 +397,7 @@ def parse_rich(lines: list[str]) -> SessionReport:
         report.total_cache_read += turn.cache_read_input_tokens
         report.total_output_tokens += turn.output_tokens
 
-    report.secret_words_lines = _extract_secret_words_lines(first_assistant_text)
+    report.secret_words_lines = _extract_secret_words_lines("\n".join(first_assistant_texts))
 
     return report
 
@@ -466,7 +470,7 @@ def parse_sparse(lines: list[str]) -> SessionReport:
     """Parse a sparse-format (Format B) log file."""
     report = SessionReport()
     report.meta.format = "sparse"
-    first_assistant_text = ""
+    first_assistant_texts: list[str] = []
     first_assistant_captured = False
 
     for line in lines:
@@ -490,12 +494,13 @@ def parse_sparse(lines: list[str]) -> SessionReport:
                 ci = _measure_sparse_item(item)
                 if ci.chars > 0:
                     report.items.append(ci)
-                # Capture first agent_message for secret words
+                # Capture early agent_message blocks for secret words
                 if not first_assistant_captured and item.get("type") == "agent_message":
                     raw = item.get("text", "")
                     if raw.strip():
-                        first_assistant_text = raw
-                        first_assistant_captured = True
+                        first_assistant_texts.append(raw)
+                        if _extract_secret_words_lines(raw) or len(first_assistant_texts) >= 5:
+                            first_assistant_captured = True
                 # Track tool calls and build timeline actions
                 itype = item.get("type", "")
                 if itype == "command_execution":
@@ -577,7 +582,7 @@ def parse_sparse(lines: list[str]) -> SessionReport:
 
     report.meta.num_turns = 1  # sparse format only has one turn.completed
 
-    report.secret_words_lines = _extract_secret_words_lines(first_assistant_text)
+    report.secret_words_lines = _extract_secret_words_lines("\n".join(first_assistant_texts))
 
     return report
 
