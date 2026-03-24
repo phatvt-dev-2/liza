@@ -1,7 +1,7 @@
 # Architecture Review — Liza
 
-**Date:** 2026-03-11 (verification pass)
-**Mode:** Adversarial (after pass 17, data flow: role-pair-to-role-pair and sprint-to-sprint)
+**Date:** 2026-03-24
+**Mode:** Adversarial (after pass 17, targeted: INVARIANTS.md claims vs code reality)
 **Reviewer:** software-architecture-review skill
 
 ---
@@ -928,6 +928,67 @@ This is the concrete code-level manifestation of two existing issues in `archite
 
 **Direction:** Derive task type from the target role-pair (e.g., `us-writing-pair` → `specification` type, if added to the registry). Alternatively, accept `TaskTypeCoding` as the universal type until the registry is extended — but document this as an intentional simplification, not an oversight.
 
+#### Smell: INVARIANTS.md §7 clean worktree check not enforced at submission *(Adversarial pass, targeted: INVARIANTS.md)*
+
+**Signal:** INVARIANTS.md §7 states: "Clean sync: before READY_FOR_REVIEW, working tree must be clean (no staged, unstaged, or untracked files)." `submit_review.go` validates: commit SHA match (line 118-119), TDD enforcement (line 123-131), pre-execution checkpoint (line 89-91), rebase onto integration (line 147), and re-validates status/assignment under lock (line 189-199). But **no `git status` or working tree cleanliness check exists** in the submission path.
+
+**Impact:** Medium. A coder can submit work with uncommitted changes in the worktree — the reviewer sees only the committed code (via `review_commit`), but the coder may have relied on uncommitted files during local testing. The invariant document promises this protection but the code doesn't deliver it.
+
+**Direction:** Add a clean worktree check (no staged, unstaged, or untracked files) to `submit_review.go` before the rebase step. Alternatively, update INVARIANTS.md to remove the claim if this is intentionally deferred. The spec `worktree-management.md` should match whichever decision is made.
+
+#### Smell: INVARIANTS.md §6 provider diversity not enforced at verdict time *(Adversarial pass, targeted: INVARIANTS.md)*
+
+**Signal:** INVARIANTS.md §6 states: "Quorum enforcement: approval count tracked, provider diversity required (≥2 distinct providers for multi-reviewer quorum)" and attributes enforcement to `submit_verdict.go`. The code has all the building blocks:
+- `task.HasProviderDiversity()` (task.go:278) — checks if approvals come from ≥2 distinct providers
+- `resolver.ProviderDiversity()` (resolver.go:287) — returns the diversity setting per role-pair/impact
+- `filterDoerProviderDiversity()` (claim_reviewer_task.go:347) — filters reviewer candidates at claim time
+
+But `submit_verdict.go` **only checks `ApprovalCount() < effectiveQuorum`** (line 237) — it never calls `HasProviderDiversity()` or `ProviderDiversity()`. Provider diversity is actually enforced:
+1. At reviewer claim-filtering time (doer-vs-reviewer provider, `claim_reviewer_task.go:107`)
+2. At merge-readiness evaluation (soft "preferred" enforcement, `agent/claiming.go:151`)
+
+Neither matches the invariant's description of hard enforcement during verdict submission.
+
+**Impact:** Medium. If two reviewers from the same provider (e.g., both "claude") approve a task, the quorum count is met and the task transitions to APPROVED. The diversity check only applies to merge readiness (with "preferred" semantics that can be overridden), not to the approval itself. This is weaker than what the invariant document promises.
+
+**Direction:** Either (a) add provider diversity enforcement to `submit_verdict.go` — reject second approval from same provider when diversity is required, or (b) update INVARIANTS.md to accurately describe the current enforcement model: "provider diversity preferred at merge-readiness, not enforced at verdict time."
+
+#### Smell: INVARIANTS.md §12 system mode transition table inaccurate *(Adversarial pass, targeted: INVARIANTS.md)*
+
+**Signal:** INVARIANTS.md §12 states: "System mode transitions enforced: RUNNING↔PAUSED, any→CIRCUIT_BREAKER_TRIPPED, TRIPPED→PAUSED." The actual transition landscape:
+- RUNNING→PAUSED: ✓ via `ValidateTransition` (config.go:48)
+- PAUSED→RUNNING: via `Resume()` (mode_change.go:88-92), bypasses `ValidateTransition` — `ValidateTransition` rejects this with "use liza resume"
+- **TRIPPED→RUNNING**: via `Resume()` (mode_change.go:93-99) — invariant only lists TRIPPED→PAUSED
+- any→TRIPPED: via direct `s.Config.Mode = SystemModeCircuitBreakerTripped` (analyze.go:89) — not in transition table at all
+- RUNNING/PAUSED/TRIPPED→STOPPED: via `ValidateTransition` — not mentioned in invariant
+- STOPPED→RUNNING: via `ValidateTransition` — not mentioned in invariant
+
+The `ValidateTransition` map in config.go and the `Resume()` function in mode_change.go form a split implementation with no shared validation.
+
+**Impact:** Low. The transitions work correctly — the invariant description is simply incomplete. Operators relying on the invariant table for mode transition understanding would miss valid paths.
+
+**Direction:** Update INVARIANTS.md §12 with the complete transition graph including the Resume() path and the STOPPED mode.
+
+#### Smell: INVARIANTS.md §7 different-coder rejected worktree recreation not enforced *(Adversarial pass, targeted: INVARIANTS.md)*
+
+**Signal:** INVARIANTS.md §7 states: "Different coder reclaiming REJECTED task → delete and recreate fresh worktree." In `claim_task_strategy.go`, the `rejectedClaimStrategy.handleWorktree()` (line 120-126) delegates to `ensureRejectedWorktreeExists()` (claim_task.go:397-444), which preserves the existing worktree when both directory and branch exist — **regardless of whether the claimer is the same or a different coder**. Same-coder vs different-coder only affects the history event type (line 140-149 of claim_task_strategy.go). The worktree is recreated only when the directory or branch is missing (recovery from partial state, not policy enforcement).
+
+**Impact:** Low. The intent is to prevent "context contamination from failed work" (per the invariant). In practice, rejected tasks retain the prior coder's uncommitted state, which a different coder inherits. However, since the review process already identified the issues, and the new coder gets the rejection reason in context, the practical impact is limited.
+
+**Direction:** If the invariant is intentional, add a same-coder check to `ensureRejectedWorktreeExists()` and recreate from integration branch when a different coder claims. If the current behavior is preferred (preserve work for debugging), update INVARIANTS.md to reflect it.
+
+#### Smell: INVARIANTS.md §3.2 transition map attribution and §3.1 status naming drift *(Adversarial pass, targeted: INVARIANTS.md)*
+
+**Signal:** Two documentation drift issues in INVARIANTS.md §3:
+
+1. **§3.2** attributes the transition map to "`models/task.go` transition map." In reality, `task.go` only has `TransitionWith()` (line 309-318) which validates against a **provided** map. The actual map is built by `BuildPipelineTransitions()` in `ops/pipeline_ops.go:67-103` from pipeline config via `resolver.TransitionMap()`. No hardcoded transition map exists in task.go since commit `581d377`.
+
+2. **§3.1** uses legacy status names (DRAFT, IMPLEMENTING, READY_FOR_REVIEW, REVIEWING, APPROVED, REJECTED). The code uses pipeline-prefixed names: DRAFT_CODE, IMPLEMENTING_CODE, CODE_READY_FOR_REVIEW, REVIEWING_CODE, CODE_APPROVED, CODE_REJECTED. The coding-plan pair uses DRAFT_CODING_PLAN, CODE_PLANNING, etc. The legacy constants in `task.go:79-103` still exist but are mapped from pipeline-declared names via the resolver.
+
+**Impact:** Low. The invariants are conceptually correct — the enforcement exists, just at different locations and with different naming than documented. A developer using INVARIANTS.md to navigate the code would look in the wrong file.
+
+**Direction:** Update §3.2 enforcement to reference `ops/pipeline_ops.go:BuildPipelineTransitions` and `pipeline/resolver.go:TransitionMap`. Generalize §3.1 status names to use role-pair-qualified terminology or add a note that specific status names are pipeline-configured.
+
 ### 2.4 Patterns
 
 | Pattern | Where Used | Purpose |
@@ -1028,6 +1089,11 @@ The 24.3% uncovered code concentrates in three patterns:
 
 | Priority | Issue | Rationale | Action |
 |----------|-------|-----------|--------|
+| **Medium** | INVARIANTS.md §7 clean worktree check not enforced *(Adversarial pass, targeted: INVARIANTS.md)* | `submit_review.go` validates commit SHA, TDD, rebase, checkpoint — but never checks working tree cleanliness; invariant promises this protection | Add `git status` check to submission, or update INVARIANTS.md |
+| **Medium** | INVARIANTS.md §6 provider diversity not enforced at verdict time *(Adversarial pass, targeted: INVARIANTS.md)* | `submit_verdict.go` only checks approval count, never calls `HasProviderDiversity()`; diversity enforced at claim-filtering (hard) and merge-readiness (soft "preferred") instead | Add diversity check to verdict, or update invariant to reflect actual enforcement model |
+| **Low** | INVARIANTS.md §12 system mode transitions inaccurate *(Adversarial pass, targeted: INVARIANTS.md)* | Invariant says "TRIPPED→PAUSED" but Resume() goes TRIPPED→RUNNING; STOPPED mode transitions omitted entirely | Update §12 with complete transition graph |
+| **Low** | INVARIANTS.md §7 different-coder worktree recreation not enforced *(Adversarial pass, targeted: INVARIANTS.md)* | `ensureRejectedWorktreeExists()` preserves worktree regardless of claimer identity; invariant promises fresh worktree for different coders | Enforce same-coder check or update INVARIANTS.md |
+| **Low** | INVARIANTS.md §3 status naming and transition map attribution drift *(Adversarial pass, targeted: INVARIANTS.md)* | §3.2 cites `models/task.go transition map` but map lives in `ops/pipeline_ops.go:BuildPipelineTransitions`; §3.1 uses pre-pipeline status names | Update file references and generalize status names |
 | **Low** | Silent data drops in `extractStringSlice` *(Adversarial pass, data flow)* | Non-string array elements silently discarded; callers get shorter array with no error | Return error on type mismatch, or return warnings alongside result |
 | **Low** | `extractOutputEntries` validation gap *(Adversarial pass, data flow)* | Accepts empty required fields (`desc`, `done_when`, `scope`) unlike parallel `extractTaskInputs` which validates | Add validation consistent with `extractTaskInputs` |
 | **Low** | Timestamp `time.Now()` inconsistency in `wt_merge.go` *(Adversarial pass, data flow)* | Lines 102, 413 use `time.Now()` while all other ops files use `time.Now().UTC()` | Change to `time.Now().UTC()` — two-line fix |
@@ -1117,6 +1183,8 @@ All six primary structural concerns identified across passes 1-4 have been resol
 **Pass 15 (Coverage lens)** revisits test coverage with fresh `go tool cover` data. Statement coverage improved slightly to 75.7% (from 75.3%). LOC stable at ~23,127/~55,647. Key findings: (1) `statevalidate` is the lowest-coverage functional package at 55.1% — all entry-point validators (`ValidateStateFile`, `ValidateAgentInvariants`, `ValidateAnomalies`, `validateRequiredFields`) are at 0% while inner validators are well-covered, creating a "tested parts, untested whole" composition gap in a data-integrity package. (2) `models/state.go` governance helpers at 0% — `ValidateTransition` (system mode state machine), `IsApprovedForMerge`, `ReleaseAgent`, `NormalizeHeartbeatInterval` — these are pure functions that would be trivial to test. (3) `roles` package dropped to 60% with 4 Phase 2 role-query functions untested. (4) `embedded` installation functions (`WriteMCPSettings`, `WritePipelineConfig`, `WriteGuardrails`) remain at 0% — the user-facing `liza init` path. (5) 468 total functions at 0% coverage — trend metric for tracking. (6) Per-package coverage table added with risk classification. All 24 previously-open Low-priority recommendations verified as still present; 5 new Low-priority items added.
 
 **Verification pass (2026-03-11)** confirmed current state of all findings. 8 recommendations resolved: `cmd/liza/main.go` split into 7 files, `waitForXWork` refactored to generic callbacks, `validateTaskInvariants` decomposed with helpers, MCP dispatch layer tests added, template duplication eliminated, `derefString` consolidated, temporal test coupling at acceptable level, `validateIdentity` dead code. 4 changed: `handleApprovedMerges` nesting improved (depth 4-5, was 6), `embedded` installation partially covered (2 of 5 functions), worktree path helper sites grew from 4 to 8, raw `1800` residuals reduced from 2 to 1. ~40 issues confirmed still present. All high-priority systemic/architectural issues from `architectural-issues.md` remain.
+
+**Adversarial pass (targeted: INVARIANTS.md)** traced 10 specific invariant claims against enforcement code. Two Medium-severity gaps found: (1) **§7 clean worktree check** — `submit_review.go` does not check working tree cleanliness before submission despite the invariant promising this; the submission validates commit SHA, TDD, rebase, and checkpoint but not `git status`. (2) **§6 provider diversity** — `submit_verdict.go` checks approval count but never calls `HasProviderDiversity()`; diversity is enforced at reviewer claim-filtering (doer-vs-reviewer provider mismatch) and merge-readiness evaluation ("preferred" soft enforcement), not at verdict time as the invariant implies. Three Low-severity documentation gaps: (3) §12 system mode transitions incomplete — TRIPPED→RUNNING (via Resume) not listed, STOPPED transitions omitted, any→TRIPPED bypasses ValidateTransition entirely. (4) §7 different-coder rejected worktree recreation not enforced — `ensureRejectedWorktreeExists()` preserves worktree regardless of claimer identity. (5) §3 status naming uses pre-pipeline names and transition map attributed to `models/task.go` when it lives in `ops/pipeline_ops.go`. Additionally: §8 hypothesis exhaustion enforcement is spec-only (assess_blocked.go only records history, doesn't force rescope); §3.5 appendUniqueAgentID also called from submit_review.go, not just wt_merge.go. Overall: the invariant *concepts* are correct, but several enforcement claims are aspirational rather than implemented. The gap between documented invariants and code reality creates a false confidence surface.
 
 ---
 

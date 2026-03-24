@@ -134,6 +134,8 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | FRAGILITY | [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation) |
 | **medium** | FRAGILITY | [State Validation Composition Gap](#state-validation-composition-gap) |
 | **medium** | FRAGILITY | [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) |
+| **medium** | FRAGILITY | [INVARIANTS.md §7 Clean Worktree Not Enforced at Submission](#invariantsmd-7-clean-worktree-not-enforced-at-submission) |
+| **medium** | FRAGILITY | [INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time](#invariantsmd-6-provider-diversity-not-enforced-at-verdict-time) |
 | **medium** | BLIND SPOT | [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification) |
 | **medium** | BLIND SPOT | [Initialization Completion Unverifiable](#initialization-completion-unverifiable) |
 | **medium** | BLIND SPOT | [Sprint Metrics Lossy at Sprint Boundary](#sprint-metrics-lossy-at-sprint-boundary) |
@@ -153,7 +155,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
 | **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
 
-**Counts:** 17 high, 27 medium, 14 low — 58 open issues total. *(verification 2026-03-11: MCP Admin Handler Authorization Gap, Unbounded Integration Test Execution resolved)*
+**Counts:** 17 high, 29 medium, 14 low — 60 open issues total. *(2026-03-24: +2 INVARIANTS.md enforcement gaps; verification 2026-03-11: MCP Admin Handler Authorization Gap, Unbounded Integration Test Execution resolved)*
 
 ---
 
@@ -666,6 +668,36 @@ This is a different code path from the `extractOutputEntries` MCP handler valida
 **Implication:** The failure is delayed — by the time the human runs `liza proceed`, the agent's work is already merged and the sprint is checkpointed. Fixing requires manual state editing or re-running the planning pair. The validation asymmetry between set and consume operations creates a "write now, fail later" pattern.
 
 **Direction:** Add `spec_ref` validation to `SetTaskOutput`, consistent with `validateOutputEntry`. Alternatively, if `spec_ref` should be optional for some transition types, make `validateOutputEntry` configurable per transition.
+
+### INVARIANTS.md §7 Clean Worktree Not Enforced at Submission
+
+**Skill:** software-architecture-review
+**Category:** FRAGILITY
+**Related:** [Contract-Driven Safety vs Structural Enforcement Asymptote](#contract-driven-safety-vs-structural-enforcement-asymptote)
+
+**Issue:** INVARIANTS.md §7 states: "Clean sync: before READY_FOR_REVIEW, working tree must be clean (no staged, unstaged, or untracked files)." The `submit_review.go` submission path validates commit SHA match, TDD enforcement, pre-execution checkpoint, rebase onto integration, and re-validates status/assignment under lock — but performs no `git status` or working tree cleanliness check. The invariant is documented but not enforced.
+
+**Implication:** A coder can submit work with uncommitted changes in the worktree. The reviewer sees only the committed code (via `review_commit`), but the coder may have relied on uncommitted files during local testing. If the coder's tests passed partly due to uncommitted state, the reviewer approves code that may fail on integration. This is a concrete instance of the structural enforcement asymptote — the invariant document promises a protection the code doesn't deliver.
+
+**Direction:** Add a clean worktree check (`git status --porcelain` in the worktree) to `submit_review.go` before the rebase step. This matches the invariant's intent and catches a real failure mode. Alternatively, if clean worktree enforcement is intentionally deferred (e.g., to allow configuration files), narrow the invariant in INVARIANTS.md and the worktree-management spec.
+
+### INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time
+
+**Skill:** software-architecture-review
+**Category:** FRAGILITY
+**Related:** [Contract-Driven Safety vs Structural Enforcement Asymptote](#contract-driven-safety-vs-structural-enforcement-asymptote)
+
+**Issue:** INVARIANTS.md §6 states: "Quorum enforcement: approval count tracked, provider diversity required (≥2 distinct providers for multi-reviewer quorum)" and attributes enforcement to `submit_verdict.go`. The code has the building blocks (`task.HasProviderDiversity()` in task.go:278, `resolver.ProviderDiversity()` in resolver.go:287) but `submit_verdict.go` only checks `ApprovalCount() < effectiveQuorum` (line 237) — it never evaluates provider diversity.
+
+Provider diversity is actually enforced at two different points:
+1. Reviewer claim-filtering (`claim_reviewer_task.go:filterDoerProviderDiversity`) — prevents a reviewer with the same provider as the doer from claiming
+2. Merge-readiness evaluation (`agent/claiming.go:151`) — soft "preferred" enforcement that checks `HasProviderDiversity()` before proceeding with merge
+
+Neither matches the invariant's description of hard enforcement during verdict submission.
+
+**Implication:** If two reviewers from the same provider approve a task, the quorum count is met and the task transitions to APPROVED. The diversity check at merge-readiness uses "preferred" semantics (can be overridden if no diverse reviewers are available). The invariant document implies stronger enforcement than exists. This creates a false confidence surface for security-sensitive review workflows where provider diversity is a compliance requirement.
+
+**Direction:** Either (a) add diversity evaluation to `submit_verdict.go` — when `ProviderDiversity` is configured and quorum > 1, verify `HasProviderDiversity()` before transitioning to APPROVED, or (b) update INVARIANTS.md §6 to accurately describe the current enforcement model: diversity is ensured at claim-time (doer-reviewer) and preferred at merge-time (reviewer-reviewer), not enforced at verdict time.
 
 ---
 
