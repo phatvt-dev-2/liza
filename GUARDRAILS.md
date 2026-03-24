@@ -47,6 +47,7 @@ Operational lessons from project experience. Read when a trigger matches.
 | Modifying CLI commands, flags, validation, or vocabulary that MCP handlers also expose | [cli-mcp-surface-sync.md](lessons/agents/cli-mcp-surface-sync.md)                              |
 | Modifying `internal/embedded/claude-settings.json`, `internal/embedded/mcp.json`, `internal/embedded/hooks/`, or any file with master/derived copies | [settings-master-not-derived.md](lessons/agents/settings-master-not-derived.md)                |
 | Reading, editing, or creating files in a worktree | [worktree-file-path-consistency.md](lessons/agents/worktree-file-path-consistency.md) |
+| When reading Go test files (`*_test.go`) | [large-test-file-reads.md](lessons/agents/large-test-file-reads.md) |
 
 ### G2.2: Contract and prompt conciseness
 
