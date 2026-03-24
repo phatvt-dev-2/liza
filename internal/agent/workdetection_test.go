@@ -1037,6 +1037,51 @@ func TestDetectOrchestratorWakeTriggers_PipelineTerminals(t *testing.T) {
 			wantTrigger:   WakeTriggerSprintComplete,
 			wantCount:     1,
 		},
+		{
+			name: "transitively downstream of cycle excluded from PLANNING_COMPLETE count",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+
+				normal := testhelpers.BuildTaskByStatus("plan-normal", models.TaskStatusMerged, now)
+				normal.RolePair = "code-planning-pair"
+				normal.Output = []models.OutputEntry{{Desc: "normal", DoneWhen: "done", Scope: "s"}}
+
+				planA := testhelpers.BuildTaskByStatus("plan-a", models.TaskStatusMerged, now)
+				planA.RolePair = "code-planning-pair"
+				planA.Output = []models.OutputEntry{{Desc: "a", DoneWhen: "done", Scope: "s"}}
+				planA.History = append(planA.History, models.TaskHistoryEntry{
+					Time:  now,
+					Event: models.TaskEventTransitionCycleBlocked,
+					Extra: map[string]any{"transition": "code-plan-to-coding", "cycle_members": []string{"plan-a", "plan-b"}},
+				})
+
+				planB := testhelpers.BuildTaskByStatus("plan-b", models.TaskStatusMerged, now)
+				planB.RolePair = "code-planning-pair"
+				planB.Output = []models.OutputEntry{{Desc: "b", DoneWhen: "done", Scope: "s"}}
+				planB.History = append(planB.History, models.TaskHistoryEntry{
+					Time:  now,
+					Event: models.TaskEventTransitionCycleBlocked,
+					Extra: map[string]any{"transition": "code-plan-to-coding", "cycle_members": []string{"plan-a", "plan-b"}},
+				})
+
+				planC := testhelpers.BuildTaskByStatus("plan-c", models.TaskStatusMerged, now)
+				planC.RolePair = "code-planning-pair"
+				planC.Output = []models.OutputEntry{{Desc: "c", DoneWhen: "done", Scope: "s"}}
+				planC.DependsOn = []string{"plan-a"}
+
+				planD := testhelpers.BuildTaskByStatus("plan-d", models.TaskStatusMerged, now)
+				planD.RolePair = "code-planning-pair"
+				planD.Output = []models.OutputEntry{{Desc: "d", DoneWhen: "done", Scope: "s"}}
+				planD.DependsOn = []string{"plan-c"}
+
+				state.Tasks = []models.Task{normal, planA, planB, planC, planD}
+				state.Sprint.Scope.Planned = []string{"plan-normal", "plan-a", "plan-b", "plan-c", "plan-d"}
+				return state
+			}(),
+			planningPairs: map[string]bool{"code-planning-pair": true},
+			wantTrigger:   WakeTriggerPlanningComplete,
+			wantCount:     1,
+		},
 	}
 
 	for _, tt := range tests {

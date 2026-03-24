@@ -133,7 +133,7 @@ Skip entries where `transName == "replanned"` (special marker, not a real transi
   - Does NOT modify Status (task remains MERGED)
   - Does NOT modify TransitionsExecuted (no forgery)
   - Does NOT satisfy dependencies (downstream tasks are not unblocked)
-  - ONLY suppresses auto-detection of "unconsumed planning output" for PLANNING_COMPLETE wake purposes
+  - ONLY true cycle members get the durable event; downstream tasks blocked by those members are excluded dynamically from PLANNING_COMPLETE wake purposes
   - Idempotent per (taskID, transitionName, sorted cycle member IDs) — check existing history entries before adding
   - Cycle members stored in `TaskHistoryEntry.Extra["cycle_members"]` (sorted task ID list) for debugging
 
@@ -327,7 +327,7 @@ Full barrier = zero cross-phase parallelism. Trades parallelism for review conve
    - plan-2 appears BEFORE plan-1 in state.Tasks array
    - `ExecuteAvailableTransitions` → plan-1's children created first, plan-2's children have inherited deps
    - Stability: two unrelated tasks (no dep relationship) preserve original array order
-   - Cycle detection: circular deps → cyclic tasks get `transition_cycle_blocked` history entry (idempotent), skipped from execution, non-cyclic proceed normally
+   - Cycle detection: circular deps → true cycle members get `transition_cycle_blocked` history entry (idempotent); downstream tasks are skipped dynamically until the cycle is resolved
 
 3. **proceed_test.go — Crash recovery through EAT** (currently unreachable, now fixed):
    - Upstream task with TransitionsExecuted set + missing children
@@ -351,9 +351,9 @@ Full barrier = zero cross-phase parallelism. Trades parallelism for review conve
 7. **Wake template test**: Multi-phase guidance present in rendered output
 
 8. **advance_sprint_test.go / wake_test.go — Predicate/rendering alignment**:
-   - `IsPlanningCompleteEligible` excludes cycle-blocked tasks
+   - `IsPlanningCompleteEligible` excludes true cycle members and tasks transitively blocked by them
    - `IsUnconsumedPlanningOutput` still includes cycle-blocked tasks (carry-forward/replan unchanged)
-   - `collectMergedPlanningTasks` excludes cycle-blocked tasks from PLANNING_COMPLETE payload
+   - `collectMergedPlanningTasks` excludes those tasks from PLANNING_COMPLETE payload
    - Mixed case: one normal merged planning task + one cycle-blocked → only normal task in payload
    - Sprint advance with cycle-blocked planning task → task carried forward (not dropped)
 

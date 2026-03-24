@@ -229,12 +229,66 @@ func IsTransitionCycleBlocked(task *models.Task) bool {
 	return false
 }
 
+// HasCycleBlockedDependency checks whether any upstream dependency is
+// cycle-blocked, transitively, from the current task graph.
+func HasCycleBlockedDependency(task *models.Task, state *models.State) bool {
+	if task == nil || state == nil {
+		return false
+	}
+
+	memo := make(map[string]bool)
+	visiting := make(map[string]bool)
+
+	var blocked func(taskID string) bool
+	blocked = func(taskID string) bool {
+		if result, ok := memo[taskID]; ok {
+			return result
+		}
+		if visiting[taskID] {
+			return false
+		}
+
+		dep := state.FindTask(taskID)
+		if dep == nil {
+			memo[taskID] = false
+			return false
+		}
+		if IsTransitionCycleBlocked(dep) {
+			memo[taskID] = true
+			return true
+		}
+
+		visiting[taskID] = true
+		defer delete(visiting, taskID)
+
+		for _, upstreamID := range dep.DependsOn {
+			if blocked(upstreamID) {
+				memo[taskID] = true
+				return true
+			}
+		}
+
+		memo[taskID] = false
+		return false
+	}
+
+	for _, depID := range task.DependsOn {
+		if blocked(depID) {
+			return true
+		}
+	}
+	return false
+}
+
 // IsPlanningCompleteEligible returns true if a task has unconsumed planning output
-// AND is not cycle-blocked. Used by wake detection and prompt rendering to exclude
-// cycle-blocked tasks from PLANNING_COMPLETE triggering.
+// AND is not cycle-blocked directly or transitively via an upstream dependency.
+// Used by wake detection and prompt rendering to exclude cycle-blocked tasks from
+// PLANNING_COMPLETE triggering.
 // IsUnconsumedPlanningOutput remains unchanged for carry-forward, replan, and checkpoint.
-func IsPlanningCompleteEligible(task *models.Task, planningPairs map[string]bool) bool {
-	return IsUnconsumedPlanningOutput(task, planningPairs) && !IsTransitionCycleBlocked(task)
+func IsPlanningCompleteEligible(task *models.Task, planningPairs map[string]bool, state *models.State) bool {
+	return IsUnconsumedPlanningOutput(task, planningPairs) &&
+		!IsTransitionCycleBlocked(task) &&
+		!HasCycleBlockedDependency(task, state)
 }
 
 // collectMergedPlanningWithUnconsumedOutput returns IDs of planned tasks with

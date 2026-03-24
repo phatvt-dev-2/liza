@@ -293,11 +293,12 @@ func isTransitionIncomplete(s *models.State, task *models.Task, transName string
 
 // topoSortPending sorts pending transitions by task DependsOn relationships using
 // Kahn's algorithm. Tie-breaker is original collection index for deterministic ordering.
-// Returns (sorted, cyclic) — cyclic entries could not be ordered due to circular deps.
-func topoSortPending(pending []pendingTx, s *models.State) (sorted, cyclic []pendingTx) {
+// Returns (sorted, cycles, blocked) where cycles are true SCC members and blocked
+// are nodes downstream of those cycles.
+func topoSortPending(pending []pendingTx, s *models.State) (sorted []pendingTx, cycles [][]pendingTx, blocked []pendingTx) {
 	n := len(pending)
 	if n == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// Build task ID → pending indices map
@@ -339,10 +340,10 @@ func topoSortPending(pending []pendingTx, s *models.State) (sorted, cyclic []pen
 		idx := queue[0]
 		queue = queue[1:]
 		sorted = append(sorted, pending[idx])
-		for _, blocked := range edges[idx] {
-			inDegree[blocked]--
-			if inDegree[blocked] == 0 {
-				queue = append(queue, blocked)
+		for _, blockedIdx := range edges[idx] {
+			inDegree[blockedIdx]--
+			if inDegree[blockedIdx] == 0 {
+				queue = append(queue, blockedIdx)
 				slices.SortFunc(queue, func(a, b int) int {
 					return pending[a].origIdx - pending[b].origIdx
 				})
@@ -350,14 +351,110 @@ func topoSortPending(pending []pendingTx, s *models.State) (sorted, cyclic []pen
 		}
 	}
 
-	// Remaining are cyclic
-	for i, p := range pending {
+	// Remaining nodes have inDegree > 0. Some are in true cycles; others are
+	// merely downstream of those cycles and cannot be ordered yet.
+	var remaining []int
+	for i := range pending {
 		if inDegree[i] > 0 {
-			cyclic = append(cyclic, p)
+			remaining = append(remaining, i)
+		}
+	}
+	if len(remaining) == 0 {
+		return sorted, nil, nil
+	}
+
+	cycleIndices := make(map[int]bool)
+	for _, scc := range findSCCs(remaining, edges) {
+		if len(scc) < 2 && !hasSelfLoop(scc[0], edges) {
+			continue
+		}
+		cycle := make([]pendingTx, len(scc))
+		for i, idx := range scc {
+			cycle[i] = pending[idx]
+			cycleIndices[idx] = true
+		}
+		cycles = append(cycles, cycle)
+	}
+
+	for _, idx := range remaining {
+		if !cycleIndices[idx] {
+			blocked = append(blocked, pending[idx])
 		}
 	}
 
-	return sorted, cyclic
+	return sorted, cycles, blocked
+}
+
+// findSCCs returns strongly connected components among the given node indices
+// using Tarjan's algorithm, considering only edges within the subgraph.
+func findSCCs(indices []int, edges [][]int) [][]int {
+	inSubgraph := make(map[int]bool, len(indices))
+	for _, i := range indices {
+		inSubgraph[i] = true
+	}
+
+	var (
+		stack   []int
+		onStack = make(map[int]bool)
+		disc    = make(map[int]int)
+		low     = make(map[int]int)
+		counter int
+		sccs    [][]int
+	)
+
+	var visit func(v int)
+	visit = func(v int) {
+		disc[v] = counter
+		low[v] = counter
+		counter++
+		stack = append(stack, v)
+		onStack[v] = true
+
+		for _, w := range edges[v] {
+			if !inSubgraph[w] {
+				continue
+			}
+			if _, seen := disc[w]; !seen {
+				visit(w)
+				if low[w] < low[v] {
+					low[v] = low[w]
+				}
+			} else if onStack[w] && disc[w] < low[v] {
+				low[v] = disc[w]
+			}
+		}
+
+		if low[v] == disc[v] {
+			var scc []int
+			for {
+				w := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				onStack[w] = false
+				scc = append(scc, w)
+				if w == v {
+					break
+				}
+			}
+			sccs = append(sccs, scc)
+		}
+	}
+
+	for _, v := range indices {
+		if _, seen := disc[v]; !seen {
+			visit(v)
+		}
+	}
+
+	return sccs
+}
+
+func hasSelfLoop(idx int, edges [][]int) bool {
+	for _, next := range edges[idx] {
+		if next == idx {
+			return true
+		}
+	}
+	return false
 }
 
 // hasCycleBlockedEvent checks if a task already has a transition_cycle_blocked
@@ -401,8 +498,9 @@ func extraToStringSlice(v any) []string {
 //  2. Topological sort by DependsOn for phase-gate ordering
 //  3. Execute in sorted order — upstream transitions fire first
 //
-// Cycle detection: circular dependencies get a transition_cycle_blocked history event
-// and are skipped from execution. Non-cyclic tasks proceed normally.
+// Cycle detection: true cycle members get a transition_cycle_blocked history event
+// and are skipped from execution. Tasks downstream of those cycles are skipped
+// until the upstream cycle is resolved.
 func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
@@ -488,17 +586,17 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 		pending = deduped
 
 		// Phase 2: Topological sort by DependsOn
-		sorted, cyclic := topoSortPending(pending, s)
+		sorted, cycles, downstreamBlocked := topoSortPending(pending, s)
 
-		// Handle cycles: add history event (idempotent), log error
-		if len(cyclic) > 0 {
-			cycleMemberIDs := make([]string, len(cyclic))
-			for i, p := range cyclic {
+		// Handle true cycles: add one history event per SCC (idempotent), log error
+		for _, cycle := range cycles {
+			cycleMemberIDs := make([]string, len(cycle))
+			for i, p := range cycle {
 				cycleMemberIDs[i] = p.taskID
 			}
 			slices.Sort(cycleMemberIDs)
 
-			for _, p := range cyclic {
+			for _, p := range cycle {
 				task := &s.Tasks[p.taskIdx]
 				if !hasCycleBlockedEvent(task, p.name, cycleMemberIDs) {
 					task.History = append(task.History, models.TaskHistoryEntry{
@@ -512,6 +610,10 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 				}
 				log.Printf("ERROR: ExecuteAvailableTransitions: cycle-blocked task %s transition %s (cycle: %v)", p.taskID, p.name, cycleMemberIDs)
 			}
+		}
+
+		for _, p := range downstreamBlocked {
+			log.Printf("WARN: ExecuteAvailableTransitions: task %s transition %s blocked by upstream cycle, skipping", p.taskID, p.name)
 		}
 
 		// Phase 3: Execute in sorted order

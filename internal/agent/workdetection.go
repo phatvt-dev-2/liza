@@ -208,12 +208,12 @@ func countImmediateDiscoveries(state *models.State) int {
 
 // countMergedPlanningTasksWithOutput counts planned tasks with unconsumed
 // planning output, indicating tasks ready to be expanded into coding tasks.
-// Uses the shared predicate ops.IsUnconsumedPlanningOutput.
+// Uses the shared predicate ops.IsPlanningCompleteEligible.
 func countMergedPlanningTasksWithOutput(state *models.State, planningPairs map[string]bool) int {
 	count := 0
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if ops.IsPlanningCompleteEligible(task, planningPairs) {
+		if ops.IsPlanningCompleteEligible(task, planningPairs, state) {
 			count++
 		}
 	}

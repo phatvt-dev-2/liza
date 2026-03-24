@@ -2307,6 +2307,164 @@ func TestEAT_CycleDetection_Idempotent(t *testing.T) {
 	}
 }
 
+func TestEAT_CycleDetection_DownstreamBlockedTransitively(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// True cycle: plan-a <-> plan-b. Downstream: plan-c -> plan-a, plan-d -> plan-c.
+	planA := testhelpers.BuildTaskByStatus("plan-a", models.TaskStatusMerged, now)
+	planA.RolePair = "code-planning-pair"
+	planA.Output = []models.OutputEntry{{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"}}
+	planA.DependsOn = []string{"plan-b"}
+
+	planB := testhelpers.BuildTaskByStatus("plan-b", models.TaskStatusMerged, now)
+	planB.RolePair = "code-planning-pair"
+	planB.Output = []models.OutputEntry{{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"}}
+	planB.DependsOn = []string{"plan-a"}
+
+	planC := testhelpers.BuildTaskByStatus("plan-c", models.TaskStatusMerged, now)
+	planC.RolePair = "code-planning-pair"
+	planC.Output = []models.OutputEntry{{Desc: "c", DoneWhen: "c", Scope: "c", SpecRef: "s.md"}}
+	planC.DependsOn = []string{"plan-a"}
+
+	planD := testhelpers.BuildTaskByStatus("plan-d", models.TaskStatusMerged, now)
+	planD.RolePair = "code-planning-pair"
+	planD.Output = []models.OutputEntry{{Desc: "d", DoneWhen: "d", Scope: "d", SpecRef: "s.md"}}
+	planD.DependsOn = []string{"plan-c"}
+
+	state.Tasks = append(state.Tasks, planA, planB, planC, planD)
+	state.Sprint.Scope.Planned = []string{"plan-a", "plan-b", "plan-c", "plan-d"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("results count = %d, want 0 (cycle and downstream tasks skipped)", len(results))
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for _, taskID := range []string{"plan-a", "plan-b"} {
+		task := readState.FindTask(taskID)
+		if task == nil {
+			t.Fatalf("task %s not found", taskID)
+		}
+		found := false
+		for _, h := range task.History {
+			if h.Event == models.TaskEventTransitionCycleBlocked {
+				found = true
+				members := extraToStringSlice(h.Extra["cycle_members"])
+				wantMembers := []string{"plan-a", "plan-b"}
+				if !slices.Equal(members, wantMembers) {
+					t.Errorf("task %s cycle_members = %v, want %v", taskID, members, wantMembers)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("task %s missing transition_cycle_blocked event", taskID)
+		}
+	}
+
+	planningPairs := map[string]bool{"code-planning-pair": true}
+	for _, taskID := range []string{"plan-c", "plan-d"} {
+		task := readState.FindTask(taskID)
+		if task == nil {
+			t.Fatalf("task %s not found", taskID)
+		}
+		for _, h := range task.History {
+			if h.Event == models.TaskEventTransitionCycleBlocked {
+				t.Errorf("task %s has transition_cycle_blocked event but is only downstream of a cycle", taskID)
+			}
+		}
+		if IsPlanningCompleteEligible(task, planningPairs, readState) {
+			t.Errorf("%s should not be planning-complete eligible while upstream cycle remains unresolved", taskID)
+		}
+	}
+}
+
+func TestEAT_CycleDetection_IndependentCyclesSeparated(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// Two independent cycles: {plan-a <-> plan-b} and {plan-c <-> plan-d}.
+	planA := testhelpers.BuildTaskByStatus("plan-a", models.TaskStatusMerged, now)
+	planA.RolePair = "code-planning-pair"
+	planA.Output = []models.OutputEntry{{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"}}
+	planA.DependsOn = []string{"plan-b"}
+
+	planB := testhelpers.BuildTaskByStatus("plan-b", models.TaskStatusMerged, now)
+	planB.RolePair = "code-planning-pair"
+	planB.Output = []models.OutputEntry{{Desc: "b", DoneWhen: "b", Scope: "b", SpecRef: "s.md"}}
+	planB.DependsOn = []string{"plan-a"}
+
+	planC := testhelpers.BuildTaskByStatus("plan-c", models.TaskStatusMerged, now)
+	planC.RolePair = "code-planning-pair"
+	planC.Output = []models.OutputEntry{{Desc: "c", DoneWhen: "c", Scope: "c", SpecRef: "s.md"}}
+	planC.DependsOn = []string{"plan-d"}
+
+	planD := testhelpers.BuildTaskByStatus("plan-d", models.TaskStatusMerged, now)
+	planD.RolePair = "code-planning-pair"
+	planD.Output = []models.OutputEntry{{Desc: "d", DoneWhen: "d", Scope: "d", SpecRef: "s.md"}}
+	planD.DependsOn = []string{"plan-c"}
+
+	state.Tasks = append(state.Tasks, planA, planB, planC, planD)
+	state.Sprint.Scope.Planned = []string{"plan-a", "plan-b", "plan-c", "plan-d"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ExecuteAvailableTransitions(tmpDir)
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for _, tc := range []struct {
+		taskID      string
+		wantMembers []string
+	}{
+		{taskID: "plan-a", wantMembers: []string{"plan-a", "plan-b"}},
+		{taskID: "plan-b", wantMembers: []string{"plan-a", "plan-b"}},
+		{taskID: "plan-c", wantMembers: []string{"plan-c", "plan-d"}},
+		{taskID: "plan-d", wantMembers: []string{"plan-c", "plan-d"}},
+	} {
+		task := readState.FindTask(tc.taskID)
+		if task == nil {
+			t.Fatalf("task %s not found", tc.taskID)
+		}
+		found := false
+		for _, h := range task.History {
+			if h.Event == models.TaskEventTransitionCycleBlocked {
+				found = true
+				members := extraToStringSlice(h.Extra["cycle_members"])
+				if !slices.Equal(members, tc.wantMembers) {
+					t.Errorf("task %s cycle_members = %v, want %v", tc.taskID, members, tc.wantMembers)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("task %s missing transition_cycle_blocked event", tc.taskID)
+		}
+	}
+}
+
 func TestEAT_CrashRecoveryThroughEAT(t *testing.T) {
 	tmpDir, stateFile := setupPipelineProceedTest(t)
 
