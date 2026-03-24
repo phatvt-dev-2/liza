@@ -18,9 +18,12 @@ Each task has a `type` field that determines which roles participate in its life
 
 | Type | Workflow | Description |
 |------|----------|-------------|
-| `coding` (default) | coder → code_reviewer | Standard code implementation with review |
+| `coding` (default) | coder → code-reviewer | Standard code implementation with review |
+| `planning` | code-planner → code-plan-reviewer | Code plan creation with review. TDD gate exempt. |
 
 When the `type` field is empty, it defaults to `"coding"` for backward compatibility. Unknown types are rejected by `liza validate`.
+
+> **Limitation:** The `planning` workflow currently lists only code-planner roles. Epic-planning and us-writing pairs use `coding` as their type until the registry is extended.
 
 The task type is set by the Planner during task creation (via `liza_add_tasks` or `liza add-task --type`). Coders and Code Reviewers can only claim tasks whose type includes their role in the workflow.
 

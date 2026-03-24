@@ -302,9 +302,9 @@ func TestAddTask_RolePairValidation(t *testing.T) {
 			input: AddTaskInput{
 				ID: "t3", Description: "d", SpecRef: "specs/feature.md",
 				DoneWhen: "w", Scope: "sc", Priority: 1,
-				Type: "planning",
+				Type: "bogus",
 			},
-			errContains: []string{"unknown task type", "planning"},
+			errContains: []string{"unknown task type", "bogus"},
 		},
 	}
 

@@ -13,7 +13,8 @@ import (
 type TaskType string
 
 const (
-	TaskTypeCoding TaskType = "coding"
+	TaskTypeCoding   TaskType = "coding"
+	TaskTypePlanning TaskType = "planning"
 )
 
 // Role name constants used in task definitions.
@@ -34,7 +35,8 @@ const (
 // This is the single source of truth for which roles participate in a task type's lifecycle.
 // Access via RoleWorkflow(), HasRole(), and IsValid() — not directly.
 var taskWorkflows = map[TaskType][]string{
-	TaskTypeCoding: {RoleCoder, RoleCodeReviewer},
+	TaskTypeCoding:   {RoleCoder, RoleCodeReviewer},
+	TaskTypePlanning: {RoleCodePlanner, RoleCodePlanReviewer},
 }
 
 // IsValid checks if the task type is known.

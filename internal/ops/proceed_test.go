@@ -628,6 +628,9 @@ func TestProceed_PipelineCreatesChildTasksWithRolePair(t *testing.T) {
 	if child0.Description != "Implement login" {
 		t.Errorf("Child 0 desc = %q, want %q", child0.Description, "Implement login")
 	}
+	if child0.Type != models.TaskTypeCoding {
+		t.Errorf("Child 0 type = %q, want %q", child0.Type, models.TaskTypeCoding)
+	}
 
 	// Child task 1
 	child1 := readState.FindTask(result.ChildTaskIDs[1])
@@ -890,6 +893,10 @@ func TestProceed_OneToOne_CreatesSingleChild(t *testing.T) {
 	if !strings.Contains(child.Scope, parentID) {
 		t.Errorf("Child scope = %q, want to contain parent ID %q", child.Scope, parentID)
 	}
+	// Child type is planning (target is code-planning-pair)
+	if child.Type != models.TaskTypePlanning {
+		t.Errorf("Child type = %q, want %q", child.Type, models.TaskTypePlanning)
+	}
 
 	// Source task unchanged status, transitions_executed set
 	srcTask := readState.FindTask(parentID)
@@ -898,6 +905,64 @@ func TestProceed_OneToOne_CreatesSingleChild(t *testing.T) {
 	}
 	if !srcTask.TransitionsExecuted["us-to-coding"] {
 		t.Error("transitions_executed should contain us-to-coding")
+	}
+}
+
+func TestProceed_EpicToUS_ChildRetainsCodingType(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "epic-task-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "epic-planning-pair",
+		Description:  "Epic for auth module",
+		Status:       models.TaskStatus("EPIC_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "specs/auth.md",
+		DoneWhen:     "Epic approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Login story", DoneWhen: "Login works", Scope: "auth", SpecRef: "specs/auth.md#login"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "epic-to-us")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1", len(result.ChildTaskIDs))
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child := readState.FindTask(result.ChildTaskIDs[0])
+	if child == nil {
+		t.Fatal("Child task not found")
+	}
+	// us-writing-pair is not code-planning-pair, so child retains TaskTypeCoding
+	if child.Type != models.TaskTypeCoding {
+		t.Errorf("Child type = %q, want %q (non-code-planning pairs keep coding type)", child.Type, models.TaskTypeCoding)
+	}
+	if child.RolePair != "us-writing-pair" {
+		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "us-writing-pair")
 	}
 }
 

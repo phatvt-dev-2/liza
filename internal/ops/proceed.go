@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // errTransitionAlreadyExecuted is returned by proceedInner when the transition
@@ -50,6 +51,8 @@ type transitionDef struct {
 	// doerDisplayName is the display name of the target role-pair's doer (pipeline only).
 	// Used for generating child task descriptions in one-to-one transitions.
 	doerDisplayName string
+	// taskType is the task type for child tasks, derived from the target role-pair.
+	taskType models.TaskType
 }
 
 // Proceed executes a manual inter-pair transition on a source task.
@@ -171,7 +174,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	switch tDef.cardinality {
 	case "per-subtask":
 		for i, entry := range task.Output {
-			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, siblingIDs, inheritedDeps, now)
+			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[i])
 		}
@@ -219,7 +222,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
 		}
 		for _, idx := range missingChildren {
-			child := buildChildTask(siblingIDs[idx], taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, siblingIDs, inheritedDeps, now)
+			child := buildChildTask(siblingIDs[idx], taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[idx])
 		}
@@ -580,11 +583,18 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 		return transitionDef{}, fmt.Errorf("invalid target role-pair in transition %q: %w", transitionName, err)
 	}
 
-	// Resolve doer display name for one-to-one child task descriptions.
+	// Resolve doer display name and task type from the target role-pair.
+	// Only role-pairs with a known type mapping get a specific type;
+	// others default to TaskTypeCoding for backward compatibility until
+	// the type registry covers all workflows.
 	var doerDisplay string
+	childTaskType := models.TaskTypeCoding
 	rp, rpErr := resolver.RolePair(targetPair)
 	if rpErr == nil {
 		doerDisplay = resolver.RoleDisplayName(rp.Doer)
+		if rp.Doer == roles.CodePlanner {
+			childTaskType = models.TaskTypePlanning
+		}
 	}
 
 	return transitionDef{
@@ -593,6 +603,7 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 		cardinality:     td.Cardinality,
 		targetRolePair:  targetPair,
 		doerDisplayName: doerDisplay,
+		taskType:        childTaskType,
 	}, nil
 }
 
@@ -600,7 +611,7 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 // siblingIDs maps output entry indices to their generated task IDs,
 // used to resolve DependsOn index references to actual task IDs.
 // inheritedDeps are phase-gate dependencies from upstream tasks' children.
-func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, siblingIDs, inheritedDeps []string, now time.Time) models.Task {
+func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, taskType models.TaskType, siblingIDs, inheritedDeps []string, now time.Time) models.Task {
 	var deps []string
 	for _, ref := range entry.DependsOn {
 		idx, _ := strconv.Atoi(ref) // validated upstream in validateOutputEntry
@@ -610,7 +621,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 
 	return models.Task{
 		ID:          childID,
-		Type:        models.TaskTypeCoding,
+		Type:        taskType,
 		RolePair:    targetRolePair,
 		Description: entry.Desc,
 		Status:      targetStatus,
@@ -637,7 +648,7 @@ func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef tran
 
 	return models.Task{
 		ID:          childID,
-		Type:        models.TaskTypeCoding,
+		Type:        tDef.taskType,
 		RolePair:    tDef.targetRolePair,
 		Description: fmt.Sprintf("%s task for: %s", doerName, parent.Description),
 		Status:      tDef.targetStatus,

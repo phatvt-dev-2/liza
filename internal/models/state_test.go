@@ -360,6 +360,32 @@ func TestTaskTypeHasRole(t *testing.T) {
 	if TaskTypeCoding.HasRole(RoleOrchestrator) {
 		t.Error("coding type should not have orchestrator role")
 	}
+
+	// Planning type has code-planner roles, not coder roles
+	if !TaskTypePlanning.HasRole(RoleCodePlanner) {
+		t.Error("planning type should have code-planner role")
+	}
+	if !TaskTypePlanning.HasRole(RoleCodePlanReviewer) {
+		t.Error("planning type should have code-plan-reviewer role")
+	}
+	if TaskTypePlanning.HasRole(RoleCoder) {
+		t.Error("planning type should not have coder role")
+	}
+	if TaskTypePlanning.HasRole(RoleCodeReviewer) {
+		t.Error("planning type should not have code-reviewer role")
+	}
+}
+
+func TestTaskTypePlanningIsValid(t *testing.T) {
+	if !TaskTypePlanning.IsValid() {
+		t.Error("planning should be a valid task type")
+	}
+	if !TaskTypeCoding.IsValid() {
+		t.Error("coding should be a valid task type")
+	}
+	if TaskType("bogus").IsValid() {
+		t.Error("bogus should not be a valid task type")
+	}
 }
 
 func TestEffectiveType(t *testing.T) {
@@ -373,6 +399,12 @@ func TestEffectiveType(t *testing.T) {
 	task = Task{Type: TaskTypeCoding}
 	if task.EffectiveType() != TaskTypeCoding {
 		t.Errorf("EffectiveType() for coding = %s, want %s", task.EffectiveType(), TaskTypeCoding)
+	}
+
+	// Explicit planning type
+	task = Task{Type: TaskTypePlanning}
+	if task.EffectiveType() != TaskTypePlanning {
+		t.Errorf("EffectiveType() for planning = %s, want %s", task.EffectiveType(), TaskTypePlanning)
 	}
 }
 
