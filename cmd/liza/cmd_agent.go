@@ -62,8 +62,8 @@ Example:
   liza agent coder --agent-id coder-1
   liza agent code-reviewer --agent-id code-reviewer-2 --cli claude
 
-  # Save agent output to .liza/agent-outputs/
-  liza agent coder --log
+  # Disable saving agent output to .liza/agent-outputs/
+  liza agent coder --no-log
 
   # Using LIZA_AGENT_ID environment variable
   LIZA_AGENT_ID=coder-1 liza agent coder`,
@@ -107,15 +107,13 @@ Example:
 
 		cliName, _ := cmd.Flags().GetString("cli")
 		interactive, _ := cmd.Flags().GetBool("interactive")
-		logOutput, _ := cmd.Flags().GetBool("log")
+		noLog, _ := cmd.Flags().GetBool("no-log")
 
 		if !slices.Contains([]string{"claude", "codex", "gemini", "mistral", "kimi"}, cliName) {
 			return fmt.Errorf("invalid CLI: %s (must be claude, codex, gemini, mistral, or kimi)", cliName)
 		}
 
-		if logOutput && interactive {
-			return fmt.Errorf("--log is incompatible with -i (interactive mode)")
-		}
+		shouldLog := !noLog && !interactive
 
 		// Warn if no Liza contract symlink is configured for this CLI
 		if commands.CheckContractConfigured(projectRoot, cliName) == "" {
@@ -132,9 +130,9 @@ Example:
 			specsDir = filepath.Join(projectRoot, "specs")
 		}
 
-		// Set up paths for agent outputs if --log is enabled
+		// Set up paths for agent outputs (enabled by default, disabled by --no-log or -i)
 		var outputsDir string
-		if logOutput {
+		if shouldLog {
 			lizaPaths := paths.New(projectRoot)
 			outputsDir = lizaPaths.AgentOutputsDir()
 		}
@@ -268,7 +266,7 @@ func init() {
 	addAgentIDFlag(agentCmd)
 	agentCmd.Flags().String("cli", "claude", "CLI to use (claude, codex, gemini, mistral)")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")
-	agentCmd.Flags().Bool("log", false, "Save agent output to .liza/agent-outputs/ (incompatible with -i)")
+	agentCmd.Flags().Bool("no-log", false, "Disable saving agent output to .liza/agent-outputs/")
 
 	// Recover-task command flags
 	recoverTaskCmd.Flags().Bool("force", false, "clean up git artifacts even if task is not in state")

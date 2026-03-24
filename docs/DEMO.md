@@ -173,10 +173,10 @@ This monitors for anomalies, alerts, and auto-checkpoints on circuit-breaker tri
 
 ```bash
 cd hello-cli
-liza agent orchestrator --agent-id orchestrator-1 --log
+liza agent orchestrator --agent-id orchestrator-1
 ```
 
-Pass `--log` to persist the agent's output to `.liza/agent-outputs/` for later analysis (see [Analyzing Agent Logs](USAGE_MULTI_AGENTS.md#analyzing-agent-logs)). Each agent command also accepts a `--cli` flag to select the coding agent: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`.
+Agent output is automatically persisted to `.liza/agent-outputs/` for later analysis (see [Analyzing Agent Logs](USAGE_MULTI_AGENTS.md#analyzing-agent-logs)). Pass `--no-log` to disable. Each agent command also accepts a `--cli` flag to select the coding agent: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`.
 
 The Orchestrator will:
 1. Read `specs/vision.md`
@@ -195,12 +195,12 @@ watch -n 2 'liza get tasks --format table'
 
 ```bash
 cd hello-cli
-liza agent code-planner --agent-id code-planner-1 --log
+liza agent code-planner --agent-id code-planner-1
 ```
 
 ```bash
 cd hello-cli
-liza agent code-plan-reviewer --agent-id code-plan-reviewer-1 --log
+liza agent code-plan-reviewer --agent-id code-plan-reviewer-1
 ```
 
 The Code Planner will:
@@ -228,12 +228,12 @@ Once coding tasks appear after `proceed` + `resume`:
 
 ```bash
 cd hello-cli
-liza agent coder --agent-id coder-1 --log
+liza agent coder --agent-id coder-1
 ```
 
 ```bash
 cd hello-cli
-liza agent code-reviewer --agent-id code-reviewer-1 --log
+liza agent code-reviewer --agent-id code-reviewer-1
 ```
 
 The Coder will:

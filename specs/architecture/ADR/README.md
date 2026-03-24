@@ -30,7 +30,7 @@
 | [0026 — Role-Specific Prompt Templates](0026-role-specific-prompt-templates.md) | Per-role templates with only relevant transitions and tools, reducing prompt size by 58%. |
 | [0027 — Contract Compression for MAM Context](0027-contract-compression-for-mam-context.md) | Remove pairing-specific content from CORE.md for multi-agent use, reducing context by 9%. |
 | [0028 — Multi-Sprint Support](0028-multi-sprint-support.md) | Automatic sprint advancement with archive-before-mutate and lightweight history. |
-| [0029 — Agent Log Analysis Tools](0029-agent-log-analysis-tools.md) | Opt-in `--log` flag with Python/HTML analysis tools for token waste and struggle detection. |
+| [0029 — Agent Log Analysis Tools](0029-agent-log-analysis-tools.md) | Default-on agent output logging (`--no-log` to disable) with Python/HTML analysis tools for token waste and struggle detection. |
 | [0030 — Code-Enforced Agent Guardrails](0030-code-enforced-agent-guardrails.md) | Move role boundary, TDD, and checkpoint enforcement from prompts to Go code validation. |
 | [0031 — Configurable Post-Worktree Command](0031-configurable-post-worktree-command.md) | Replace hardcoded build setup with configurable `PostWorktreeCmd` for any stack. |
 | [0032 — Project-Specific Guardrails](0032-project-specific-guardrails.md) | GUARDRAILS.md at project root with Tier 0-3 constraints reusing CORE.md enforcement. |

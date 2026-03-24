@@ -267,8 +267,8 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 	}
 
 	// Build command based on CLI.
-	// Structured output flags (stream-json, --json, etc.) are only added when --log is
-	// active (outputsDir != ""), so normal runs keep human-readable terminal output.
+	// Structured output flags (stream-json, --json, etc.) are only added when logging is
+	// active (outputsDir != ""), so --no-log runs keep human-readable terminal output.
 	//
 	// For CLIs that support stdin (all except vibe), the prompt is piped via stdin
 	// instead of passed as a CLI argument. This avoids platform ARG_MAX limits

@@ -14,15 +14,15 @@ This also prepares the ground for a future Sprint Analyzer agent role that could
 
 ## Decision Outcome
 
-Chose **Option 2**: opt-in logging with standalone analysis tools as a rapid iteration path.
+Chose **Option 2**: logging enabled by default with standalone analysis tools as a rapid iteration path.
 
 ### Architecture
 
-**Output capture** (`--log` flag on `liza agent`):
+**Output capture** (enabled by default on `liza agent`, disable with `--no-log`):
 - Stdout saved as `{agent-id}-{timestamp}.txt`, stderr as `.err` under `.liza/agent-outputs/`
 - Separate stdout/stderr buffers — no concurrent-write race
 - Logs saved before error handling, so crashes are captured too
-- Incompatible with `-i` (interactive mode); validated at flag parse time
+- Automatically disabled in `-i` (interactive) mode
 
 **Analysis tools:**
 - **`skills/liza-logs/scripts/analyze-log.py`** — stdlib-only Python CLI for batch analysis. Auto-detects rich (Claude Code NDJSON) and sparse (Codex) log formats.
@@ -38,7 +38,7 @@ Chose **Option 2**: opt-in logging with standalone analysis tools as a rapid ite
 
 ### Rationale
 
-Observability is prerequisite to optimization. The logging infrastructure is minimal (opt-in flag, file writes before error handling) while the analysis tools extract actionable insights: which tools waste tokens, where agents struggle, how context budget is consumed. Standalone scripts (Python + HTML) enabled rapid experimentation — the Python analyzer could be integrated into the `liza` CLI later once the analysis patterns stabilize.
+Observability is prerequisite to optimization. The logging infrastructure is minimal (on by default, file writes before error handling) while the analysis tools extract actionable insights: which tools waste tokens, where agents struggle, how context budget is consumed. Standalone scripts (Python + HTML) enabled rapid experimentation — the Python analyzer could be integrated into the `liza` CLI later once the analysis patterns stabilize.
 
 ### Consequences
 

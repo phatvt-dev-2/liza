@@ -160,7 +160,7 @@ liza agent code-reviewer
 
 Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --cli gemini`.
 
-Pass `--log` to persist the agent's output to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Persisted files are automatically masked — secret values from environment variables (API keys, tokens, passwords) are replaced with `***`. Live terminal output remains unmasked. Incompatible with `-i`.
+Agent output is automatically persisted to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Pass `--no-log` to disable. Persisted files are automatically masked — secret values from environment variables (API keys, tokens, passwords) are replaced with `***`. Live terminal output remains unmasked. Logging is automatically disabled in `-i` (interactive) mode.
 See [Analyzing Agent Logs](#analyzing-agent-logs) for analysis tools.
 
 Multiple agents of the same role can run in parallel (IDs auto-increment):
@@ -421,7 +421,7 @@ The templates are embedded into the binary. `liza init` writes the active copies
 
 ### Analyzing Agent Logs
 
-Logs captured with `--log` are NDJSON files (one JSON object per line) from `claude --verbose --output-format stream-json`. Two formats exist depending on the agent role:
+Logs (captured by default, disable with `--no-log`) are NDJSON files (one JSON object per line) from `claude --verbose --output-format stream-json`. Two formats exist depending on the agent role:
 
 | Format | First event | Seen in | Token detail |
 |--------|-------------|---------|--------------|
