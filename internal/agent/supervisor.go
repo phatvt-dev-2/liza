@@ -453,6 +453,25 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
+	// Start supervisor-lifetime heartbeat to keep the lease alive across
+	// the entire loop (including IDLE wait-for-work periods, not just
+	// during CLI execution). Without this, an IDLE agent's lease can
+	// expire, causing auto-assigned ID collision with new agents.
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+
+	hb := NewHeartbeat(HeartbeatConfig{
+		AgentID:   config.AgentID,
+		StatePath: config.StatePath,
+		State:     state,
+	})
+
+	go func() {
+		if err := hb.Start(heartbeatCtx); err != nil && err != context.Canceled {
+			GetLogger().Error("Heartbeat error", "error", err, "agent_id", config.AgentID)
+		}
+	}()
+
 	pollInterval, maxWait := strategy.WaitConfig(state)
 
 	// Set execution timeout if not configured
