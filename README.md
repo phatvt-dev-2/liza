@@ -197,7 +197,7 @@ Or you may choose to make it your Socratic colleague, your rubber duck, or your 
 
 **Multi-agent mode** — autonomous spec-to-code pipeline:
 1. `liza init "[Goal description]" --spec vision.md`. Use the `--entry-point detailed-spec` option to skip the spec phase and go coding directly.
-2. Launching agents of different roles in different terminals: `liza agent <role> --agent-id <agent-id>`.
+2. Launching agents of different roles in different terminals: `liza agent <role>`.
    Check [Quick Start](docs/USAGE_MULTI_AGENTS.md#quick-start-target-usage) for list of required roles and options (using a CLI other than Claude, logging).
 3. Running `liza watch` will show alerts. Executing `watch ./console.sh` will bring you the console:
 
@@ -213,7 +213,7 @@ liza init "Goal" --spec s.md \
   --config pipeline.yaml --entry-point epic-planning # Pipeline-configured init
 liza add-task --id t1 --desc "..." --spec "..." \
   --done "..." --scope "..."                        # Add tasks
-liza agent coder --agent-id coder-1                 # Start agent supervisor
+liza agent coder                                    # Start agent supervisor
 liza validate                                       # Validate state
 liza get tasks                                      # Query tasks
 liza status                                         # Dashboard overview

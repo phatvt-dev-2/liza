@@ -173,7 +173,7 @@ This monitors for anomalies, alerts, and auto-checkpoints on circuit-breaker tri
 
 ```bash
 cd hello-cli
-liza agent orchestrator --agent-id orchestrator-1
+liza agent orchestrator
 ```
 
 Agent output is automatically persisted to `.liza/agent-outputs/` for later analysis (see [Analyzing Agent Logs](USAGE_MULTI_AGENTS.md#analyzing-agent-logs)). Pass `--no-log` to disable. Each agent command also accepts a `--cli` flag to select the coding agent: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`.
@@ -195,12 +195,12 @@ watch -n 2 'liza get tasks --format table'
 
 ```bash
 cd hello-cli
-liza agent code-planner --agent-id code-planner-1
+liza agent code-planner
 ```
 
 ```bash
 cd hello-cli
-liza agent code-plan-reviewer --agent-id code-plan-reviewer-1
+liza agent code-plan-reviewer
 ```
 
 The Code Planner will:
@@ -228,12 +228,12 @@ Once coding tasks appear after `proceed` + `resume`:
 
 ```bash
 cd hello-cli
-liza agent coder --agent-id coder-1
+liza agent coder
 ```
 
 ```bash
 cd hello-cli
-liza agent code-reviewer --agent-id code-reviewer-1
+liza agent code-reviewer
 ```
 
 The Coder will:
@@ -481,11 +481,11 @@ liza stop
 **Debug agent interactively (-i option)**
 - Terminate the agent and release the task: `liza release-claim <task-id> --role both`
 - Get its prompt from `.liza/agent-prompts/`
-- Run `liza agent <role> --agent-id <agent-id> --cli <claude|codex|gemini|mistral|kimi> -i`
+- Run `liza agent <role> --cli <claude|codex|gemini|mistral|kimi> -i`
 - Paste the prompt
 
 Codex is a nice option for debugging too because it displays everything.
-Run `liza agent coder --agent-id coder-1 --cli codex`
+Run `liza agent coder --cli codex`
 
 **Watcher alerts?**
 - `LEASE EXPIRED`: Agent crashed, supervisor will restart

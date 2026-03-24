@@ -218,18 +218,18 @@ The `--cli` flag on `liza agent` selects which coding agent to invoke:
 **Secret masking:** Persisted log files are automatically sanitized — environment variable values whose names match sensitive patterns (e.g. `*_API_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, provider-specific keys) are replaced with `***`. Live terminal output is **not** masked, so operators see full output during the session. Values shorter than 8 characters are excluded to avoid false positives.
 
 ```bash
-liza agent coder --agent-id coder-1            # logging enabled (default)
-liza agent coder --agent-id coder-1 --no-log   # logging disabled
+liza agent coder                  # logging enabled (default)
+liza agent coder --no-log         # logging disabled
 ```
 
 Logging is automatically disabled in `-i` (interactive) mode.
 
 ## Agent Identity
 
-Agent identity can be provided in two ways:
+Agent identity is auto-assigned by default (`coder-1`, or `coder-2` if `coder-1` is active). Override with:
 
-1. **CLI flag** (recommended): `liza agent coder --agent-id coder-1`
-2. **Environment variable**: `export LIZA_AGENT_ID=coder-1`
+1. **CLI flag**: `liza agent coder --agent-id coder-5`
+2. **Environment variable**: `export LIZA_AGENT_ID=coder-5`
 
 The `--agent-id` flag takes precedence over `LIZA_AGENT_ID`.
 

@@ -488,7 +488,7 @@ liza get agents --format table    # Check agent status and lease
 
 ```bash
 liza release-claim <task-id> --role coder
-liza agent coder --agent-id <agent-id>
+liza agent coder
 ```
 
 **If lease has NOT expired:**
@@ -496,7 +496,7 @@ liza agent coder --agent-id <agent-id>
 ```bash
 liza delete agent <agent-id> --force
 liza release-claim <task-id> --role coder
-liza agent coder --agent-id <agent-id>
+liza agent coder
 ```
 </details>
 
