@@ -159,6 +159,7 @@ User-facing documentation.
 | `PERFORMANCE.md`        | Performance documentation |
 | `RECIPES.md`            | Usage recipes |
 | `TROUBLESHOOTING.md`    | Common issues and fixes |
+| `liza-hardened-mas.md`  | Hardening measures inventory (defense-in-depth layers) |
 | `release_notes/`        | Version changelogs |
 | `demo-benchmark/`       | Multi-agent demo traces and comparisons |
 | `agent-testimony/`      | Agent session transcripts and observations |

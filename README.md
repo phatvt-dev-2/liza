@@ -69,6 +69,8 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
 
 The complete **[Vision](<specs/build/1 - Vision.md>)** of Liza.
 
+The complete **[inventory of hardening measures](docs/liza-hardened-mas.md)**.
+
 ### What it looks like in practice
 
 Without the contract, an agent that hits a problem it can't solve has two options: admit failure or fake progress. Its training overwhelmingly favors the second. **Faking progress feels collaborative** — *look, I'm trying things!*
