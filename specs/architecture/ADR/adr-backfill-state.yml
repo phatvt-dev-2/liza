@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-03-17T12:00:00Z"
+last_updated: "2026-03-24T12:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -667,10 +667,72 @@ clusters:
       limitations: "liza migrate needed for manually-edited state files (edge case)"
     note: "Phase 4 of Declarative Role Definitions spec. Completes ADR-0024 tech debt."
 
+  # --- Wave 6: 2026-03-16 to 2026-03-24 ---
+
+  - id: 48
+    title: "Multi-Phase Planning & Phase-Gate Dependencies"
+    commit_shas: ["1689ffb", "ef80d62", "fdcb19a", "4401474", "704afb9", "875a5dc", "2b137e2", "efe6338", "ea6604c", "1691ab2", "2ff2b16", "57e6050", "415e4eb", "c6ab59d"]
+    gap_commits: ["3881b59", "9788bd5"]
+    date_range: "2026-03-16 to 2026-03-24"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0048-multi-phase-planning.md"
+    user_context:
+      problem: "Code-planner/code-plan-reviewer weren't converging on complex specs; couldn't use epic/US sub-pipeline for technical changes"
+      alternatives: "Requirement-based specification sub-pipeline — deferred, multi-phase at detailed-spec entry point is more versatile"
+      rationale: "Generic multi-phase planning supports any entry point; phase-gate deps are automatic"
+      limitations: "Significant code complexity (topo sort, cycle detection, crash recovery, 3-phase execution)"
+    note: "Extends ADR-0035, ADR-0036. Enables ADR-0051 (attempt model spec required multi-phase planning)."
+
+  - id: 49
+    title: "Structured Handoff Events"
+    commit_shas: ["69a26d2", "8c9b7dd", "377a5a6", "894875a", "406c852", "8847e77", "0d9b6c9", "db22cfe", "ef80d62", "d684cd6"]
+    date_range: "2026-03-17"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0049-structured-handoff-events.md"
+    user_context:
+      problem: "Preparing retrospective phase — needs handoff history, liza-logs outputs, and replanned task data"
+      alternatives: "None"
+      rationale: "Append-only per-task events with three triggers (context_exhaustion, submission, completion)"
+      limitations: "None"
+    note: "Prepares future sprint retrospective phase. ef80d62 shared with cluster 48 (plan_ref propagation)."
+
+  - id: 50
+    title: "Brownfield-Safe Initialization"
+    commit_shas: ["a3d3493", "a69d2c5", "748cc21", "c5042e1"]
+    date_range: "2026-03-17 to 2026-03-22"
+    confidence: 0.85
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0050-brownfield-safe-initialization.md"
+    user_context:
+      problem: "Liza needs contract activation; brownfield projects have existing CLAUDE.md/AGENTS.md; Node.js auto-detection reduces adoption friction"
+      alternatives: "None — manual setup is a barrier to adoption"
+      rationale: "Global fallback symlinks transparent to agents; auto-detection for common stacks"
+      limitations: "None"
+    note: "Extends ADR-0018, ADR-0031."
+
+  - id: 51
+    title: "First-Class Attempt Model"
+    commit_shas: ["b1f82b5", "13e56ae", "da45254", "1e7ffe0", "a8702b1", "9e1f924", "7c30fd4", "4bb1907", "4827e87", "26d8a60", "f04fe93", "353c1c8", "a5c5f1e", "7857b33", "138d609", "a6becc0", "68c7fe4", "15d4088", "e94eb6f"]
+    gap_commits: ["0483c5c", "d26d484", "439004d", "b400eea", "ae9652f", "aeef8ed", "662927f"]
+    date_range: "2026-03-23 to 2026-03-24"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0051-first-class-attempt-model.md"
+    user_context:
+      problem: "Console showed attempts always 1.N, never 2.N — drift from vision was huge, silent, and undocumented"
+      alternatives: "None — vision still applies, implementation needed realignment"
+      rationale: "Structural lifecycle replaces identity-based heuristics that never triggered transitions"
+      limitations: "Spec was complex enough to require ADR-0048 for implementation by Liza agents"
+    note: "Vision realignment. Extends ADR-0020, ADR-0030."
+
+  # ADR-0046 extended with 1af2159 (2026-03-21) — doer-provider diversity blocking implementation
+
 processing_cursor:
   step: "cluster_analysis"
   substep: "high_confidence_complete"
-  note: "Wave 5 complete (ADR-0044 to ADR-0047). Non-ADR commits: resolver-based role dispatch (extension of ADR-0041), prompt improvements, operational fixes, CI/docs."
+  note: "Wave 6 complete (ADR-0048 to ADR-0051, ADR-0046 extended). Non-ADR commits: git-guard hook, secret masking, agent ID auto-assign, discovery disposition MCP, embedded config mastering, operational fixes."
 
 configuration:
   adr_output_dir: "specs/architecture/ADR"

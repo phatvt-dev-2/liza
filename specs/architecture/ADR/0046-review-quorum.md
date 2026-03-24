@@ -105,4 +105,4 @@ Multi-reviewer approval with provider diversity replicates the human practice of
 **Extends:** ADR-0035 (Declarative Sub-Pipelines) — new states and transitions. ADR-0045 (Declarative Role Definitions) — provider metadata enables diversity constraints.
 
 ---
-*Reconstructed from commits 8663ae3..76db525 (2026-03-16)*
+*Reconstructed from commits 8663ae3..76db525 (2026-03-16), extended with 1af2159 (2026-03-21)*

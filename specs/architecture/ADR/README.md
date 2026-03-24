@@ -49,3 +49,7 @@
 | [0045 — Declarative Role Definitions](0045-declarative-role-definitions.md) | Pipeline YAML `roles` section defining role properties declaratively instead of Go constants. |
 | [0046 — Review Quorum](0046-review-quorum.md) | Configurable multi-reviewer approval with provider-diversity and impact-based escalation. |
 | [0047 — Dual Name Elimination](0047-dual-name-elimination.md) | Unified all constants to hyphenated form with `liza migrate` as safety net. |
+| [0048 — Multi-Phase Planning](0048-multi-phase-planning.md) | Multi-phase planning with phase-gate dependency propagation, topo-sorted execution, and planning checkpoints. |
+| [0049 — Structured Handoff Events](0049-structured-handoff-events.md) | Per-task append-only HandoffEvent array replacing State.Handoff map, with three lifecycle triggers. |
+| [0050 — Brownfield-Safe Initialization](0050-brownfield-safe-initialization.md) | Global fallback symlinks for existing projects and Node.js auto-detection. |
+| [0051 — First-Class Attempt Model](0051-first-class-attempt-model.md) | Structural attempt lifecycle replacing identity-based reassignment, with 3-phase transition and sentinel guards. |
