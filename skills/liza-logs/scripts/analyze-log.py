@@ -164,6 +164,25 @@ def _extract_skill_from_path(path: str) -> str:
     return m.group(1) if m else ""
 
 
+def _parse_mcp_tool_name(tool_name: str) -> tuple[str, str] | None:
+    """Parse MCP server and tool from a tool name.
+
+    Rich format: mcp__<server>__<tool> → (server, tool)
+    Sparse format: <server>/<tool> → (server, tool)
+    Returns None if not an MCP tool.
+    """
+    if tool_name.startswith("mcp__"):
+        parts = tool_name.split("__", 2)
+        if len(parts) == 3:
+            return (parts[1], parts[2])
+        return None
+    if "/" in tool_name and tool_name[0].isalpha():
+        server, _, tool = tool_name.partition("/")
+        if server and tool:
+            return (server, tool)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Rich format parser (Format A)
 # ---------------------------------------------------------------------------
@@ -907,6 +926,92 @@ def render_mcp_status(report: SessionReport) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_mcp_usage(report: SessionReport) -> str:
+    """MCP usage: per-server call count + error rate, result volume, top tools."""
+    if not report.actions:
+        return ""
+
+    # Exclude "liza" server — those are Liza coordination calls, not MCP tool adoption.
+    mcp_actions: list[tuple[str, str, TurnAction]] = []
+    for action in report.actions:
+        parsed = _parse_mcp_tool_name(action.tool_name)
+        if parsed and parsed[0] != "liza":
+            mcp_actions.append((parsed[0], parsed[1], action))
+
+    if not mcp_actions:
+        return ""
+
+    # Per-server aggregation
+    server_stats: dict[str, dict] = {}
+    for server, tool, action in mcp_actions:
+        if server not in server_stats:
+            server_stats[server] = {
+                "calls": 0,
+                "errors": 0,
+                "total_chars": 0,
+                "max_chars": 0,
+                "tools": {},
+            }
+        s = server_stats[server]
+        s["calls"] += 1
+        if action.is_error:
+            s["errors"] += 1
+        s["total_chars"] += action.result_chars
+        s["max_chars"] = max(s["max_chars"], action.result_chars)
+        if tool not in s["tools"]:
+            s["tools"][tool] = {"calls": 0, "errors": 0, "total_chars": 0}
+        t = s["tools"][tool]
+        t["calls"] += 1
+        if action.is_error:
+            t["errors"] += 1
+        t["total_chars"] += action.result_chars
+
+    total_actions = len(report.actions)
+    total_mcp = len(mcp_actions)
+
+    lines = [
+        "",
+        "-" * 72,
+        "MCP USAGE",
+        "-" * 72,
+        f"  MCP calls: {total_mcp}/{total_actions} ({total_mcp / total_actions * 100:.0f}% of all tool calls)",
+        "",
+        f"  {'Server':<25s} {'Calls':>6s} {'Errors':>12s} {'Total':>10s} {'Avg':>8s} {'Max':>8s}",
+        f"  {'-' * 25} {'-' * 6} {'-' * 12} {'-' * 10} {'-' * 8} {'-' * 8}",
+    ]
+
+    for server in sorted(server_stats, key=lambda s: -server_stats[s]["calls"]):
+        s = server_stats[server]
+        avg = s["total_chars"] // s["calls"] if s["calls"] else 0
+        err_str = f"{s['errors']} ({s['errors'] / s['calls'] * 100:.0f}%)" if s["errors"] else "0"
+        lines.append(
+            f"  {server:<25s} {s['calls']:>6d} {err_str:>12s}"
+            f" {_fmt_tokens(s['total_chars']) + 'c':>10s}"
+            f" {_fmt_tokens(avg) + 'c':>8s}"
+            f" {_fmt_tokens(s['max_chars']) + 'c':>8s}"
+        )
+
+    # Top MCP tools across all servers
+    tool_list: list[tuple[str, str, dict]] = []
+    for server, s in server_stats.items():
+        for tool, t in s["tools"].items():
+            tool_list.append((server, tool, t))
+    tool_list.sort(key=lambda x: -x[2]["calls"])
+
+    lines.append("")
+    lines.append(f"  {'Server/Tool':<45s} {'Calls':>6s} {'Errors':>7s} {'Total':>10s}")
+    lines.append(f"  {'-' * 45} {'-' * 6} {'-' * 7} {'-' * 10}")
+
+    for server, tool, t in tool_list[:15]:
+        lines.append(
+            f"  {server + '/' + tool:<45s} {t['calls']:>6d}"
+            f" {t['errors']:>7d}"
+            f" {_fmt_tokens(t['total_chars']) + 'c':>10s}"
+        )
+
+    return "\n".join(lines) + "\n"
+
+
 def render_turn_timeline(report: SessionReport) -> str:
     """Turn-by-turn tool invocation timeline (rich format only)."""
     if not report.actions:
@@ -942,9 +1047,12 @@ def render_tool_result_breakdown(report: SessionReport) -> str:
     if not report.actions:
         return ""
 
-    # Group by tool name
+    # Group by tool name, excluding MCP tools (reported in MCP USAGE)
     groups: dict[str, list[TurnAction]] = {}
     for action in report.actions:
+        parsed = _parse_mcp_tool_name(action.tool_name)
+        if parsed and parsed[0] != "liza":
+            continue
         groups.setdefault(action.tool_name, []).append(action)
 
     lines = [
@@ -1164,6 +1272,7 @@ def render_report(report: SessionReport) -> str:
         sections.append(render_per_turn_growth(report))
         sections.append(render_turn_timeline(report))
         sections.append(render_tool_result_breakdown(report))
+        sections.append(render_mcp_usage(report))
         sections.append(render_efficiency_insights(report))
         sections.append(render_struggle_sequences(report))
         sections.append(render_cost(report))
@@ -1174,6 +1283,7 @@ def render_report(report: SessionReport) -> str:
         sections.append("")
         sections.append(render_turn_timeline(report))
         sections.append(render_tool_result_breakdown(report))
+        sections.append(render_mcp_usage(report))
         sections.append(render_efficiency_insights(report))
         sections.append(render_struggle_sequences(report))
 

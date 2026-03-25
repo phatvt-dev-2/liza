@@ -18,7 +18,7 @@ python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/code
 ```
 By default, run the analyzer per role.
 
-Report sections: session header, token summary (fresh/cached/output, cache hit rate), content breakdown by type (chars, estimated tokens, share %), top 10 items by size, tool call frequency. Rich format adds per-turn context growth and cost breakdown.
+Report sections: session header, token summary (fresh/cached/output, cache hit rate), content breakdown by type (chars, estimated tokens, share %), top 10 items by size, tool call frequency, MCP usage (per-server call count + error rate, result volume, top tools). Rich format adds per-turn context growth and cost breakdown.
 
 2. Refine the analysis using the raw logs.
 

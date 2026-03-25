@@ -260,6 +260,53 @@ function extractSkillFromPath(path) {
   return m ? m[1] : null;
 }
 
+function parseMcpToolName(toolName) {
+  if (toolName.startsWith("mcp__")) {
+    const parts = toolName.split("__");
+    if (parts.length >= 3) return { server: parts[1], tool: parts.slice(2).join("__") };
+    return null;
+  }
+  if (toolName.includes("/") && /^[a-zA-Z]/.test(toolName)) {
+    const idx = toolName.indexOf("/");
+    const server = toolName.slice(0, idx);
+    const tool = toolName.slice(idx + 1);
+    if (server && tool) return { server, tool };
+  }
+  return null;
+}
+
+function computeMcpUsage(timeline) {
+  const mcpActions = [];
+  for (const t of timeline) {
+    const parsed = parseMcpToolName(t.toolName);
+    if (parsed && parsed.server !== "liza") {
+      mcpActions.push({ ...parsed, resultChars: t.resultChars, isError: t.isError });
+    }
+  }
+  if (mcpActions.length === 0) return null;
+  const serverStats = {};
+  for (const a of mcpActions) {
+    if (!serverStats[a.server]) serverStats[a.server] = { calls: 0, errors: 0, totalChars: 0, maxChars: 0, tools: {} };
+    const s = serverStats[a.server];
+    s.calls++; if (a.isError) s.errors++;
+    s.totalChars += a.resultChars; s.maxChars = Math.max(s.maxChars, a.resultChars);
+    if (!s.tools[a.tool]) s.tools[a.tool] = { calls: 0, errors: 0, totalChars: 0 };
+    const t = s.tools[a.tool];
+    t.calls++; if (a.isError) t.errors++; t.totalChars += a.resultChars;
+  }
+  // Build sorted top-tools list across all servers
+  const topTools = [];
+  for (const [srv, s] of Object.entries(serverStats)) {
+    for (const [tool, t] of Object.entries(s.tools)) {
+      topTools.push({ server: srv, tool, ...t });
+    }
+  }
+  topTools.sort((a, b) => b.calls - a.calls);
+  return { totalMcp: mcpActions.length, totalActions: timeline.length,
+    pct: timeline.length > 0 ? Math.round(mcpActions.length / timeline.length * 100) : 0,
+    serverStats, topTools: topTools.slice(0, 15) };
+}
+
 function extractSecretWordsLines(text) {
   if (!text) return [];
   const lines = text.trim().split("\n").slice(0, 30);
@@ -363,9 +410,11 @@ function analyzeCodex(parsed) {
     }
   }
 
-  // --- Tool Result Breakdown ---
+  // --- Tool Result Breakdown (excluding MCP tools, reported separately) ---
   const toolResultBreakdown = {};
   for (const t of timeline) {
+    const p = parseMcpToolName(t.toolName);
+    if (p && p.server !== "liza") continue;
     if (!toolResultBreakdown[t.toolName]) toolResultBreakdown[t.toolName] = { calls: 0, totalChars: 0, maxChars: 0 };
     const b = toolResultBreakdown[t.toolName];
     b.calls++; b.totalChars += t.resultChars; b.maxChars = Math.max(b.maxChars, t.resultChars);
@@ -412,6 +461,7 @@ function analyzeCodex(parsed) {
     breakdown: itemsByType, totalCharsAll, topItems,
     timeline, toolResultBreakdown, efficiencyInsights,
     struggleSequences: findStruggleSequences(timeline),
+    mcpUsage: computeMcpUsage(timeline),
     skillInvocations,
     secretWordsLines,
   };
@@ -492,9 +542,11 @@ function analyzeClaudeCode(parsed) {
     }
   }
 
-  // --- Feature 2: Tool Result Breakdown ---
+  // --- Feature 2: Tool Result Breakdown (excluding MCP tools, reported separately) ---
   const toolResultBreakdown = {};
   for (const t of timeline) {
+    const p = parseMcpToolName(t.toolName);
+    if (p && p.server !== "liza") continue;
     if (!toolResultBreakdown[t.toolName]) {
       toolResultBreakdown[t.toolName] = { calls: 0, totalChars: 0, maxChars: 0 };
     }
@@ -606,6 +658,7 @@ function analyzeClaudeCode(parsed) {
     perMsgUsage: perMsgUsage || [], contentByType, totalCharsAll,
     timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate,
     struggleSequences: findStruggleSequences(timeline),
+    mcpUsage: computeMcpUsage(timeline),
     skillInvocations,
     secretWordsLines,
   };
@@ -693,9 +746,49 @@ function Table({ columns, rows }) {
   );
 }
 
+function McpUsageSection({ mcpUsage }) {
+  if (!mcpUsage) return null;
+  const { totalMcp, totalActions, pct, serverStats, topTools } = mcpUsage;
+  const servers = Object.entries(serverStats).sort((a, b) => b[1].calls - a[1].calls);
+  return (<>
+    <SectionTitle>MCP Usage</SectionTitle>
+    <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+      MCP calls: {totalMcp}/{totalActions} ({pct}% of all tool calls)
+    </div>
+    <Table columns={[
+      { label: "Server", key: "server" },
+      { label: "Calls", key: "calls", align: "right" },
+      { label: "Errors", key: "errors", align: "right", render: r => r.errors > 0
+        ? React.createElement("span", { style: { color: C.red } }, `${r.errors} (${r.errPct}%)`) : "0" },
+      { label: "Total", key: "total", align: "right" },
+      { label: "Avg", key: "avg", align: "right" },
+      { label: "Max", key: "max", align: "right" },
+    ]} rows={servers.map(([name, s]) => ({
+      server: name, calls: s.calls, errors: s.errors,
+      errPct: s.calls > 0 ? Math.round(s.errors / s.calls * 100) : 0,
+      total: s.totalChars >= 1024 ? `${(s.totalChars/1024).toFixed(1)}KB` : `${s.totalChars}`,
+      avg: s.calls > 0 ? `${Math.round(s.totalChars / s.calls)}` : "0",
+      max: s.maxChars >= 1024 ? `${(s.maxChars/1024).toFixed(1)}KB` : `${s.maxChars}`,
+    }))} />
+    {topTools.length > 0 && (<>
+      <div style={{ fontSize: 11, color: C.textDim, margin: "12px 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>Top Tools</div>
+      <Table columns={[
+        { label: "Server/Tool", key: "name" },
+        { label: "Calls", key: "calls", align: "right" },
+        { label: "Errors", key: "errors", align: "right", render: r => r.errors > 0
+          ? React.createElement("span", { style: { color: C.red } }, String(r.errors)) : "0" },
+        { label: "Total", key: "total", align: "right" },
+      ]} rows={topTools.map(t => ({
+        name: `${t.server}/${t.tool}`, calls: t.calls, errors: t.errors,
+        total: t.totalChars >= 1024 ? `${(t.totalChars/1024).toFixed(1)}KB` : `${t.totalChars}`,
+      }))} />
+    </>)}
+  </>);
+}
+
 function CodexReport({ parsed }) {
   const analysis = useMemo(() => analyzeCodex(parsed), [parsed]);
-  const { summary, breakdown, totalCharsAll, topItems, timeline, toolResultBreakdown, efficiencyInsights, struggleSequences, skillInvocations, secretWordsLines } = analysis;
+  const { summary, breakdown, totalCharsAll, topItems, timeline, toolResultBreakdown, efficiencyInsights, struggleSequences, mcpUsage, skillInvocations, secretWordsLines } = analysis;
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
@@ -797,6 +890,8 @@ function CodexReport({ parsed }) {
           }))} />
       </>)}
 
+      <McpUsageSection mcpUsage={mcpUsage} />
+
       {efficiencyInsights.length > 0 && (<>
         <SectionTitle>Efficiency Insights</SectionTitle>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -847,7 +942,7 @@ function CodexReport({ parsed }) {
 function ClaudeCodeReport({ parsed }) {
   const analysis = useMemo(() => analyzeClaudeCode(parsed), [parsed]);
   const { summary, turns, mcpStatus, perMsgUsage, contentByType, totalCharsAll,
-    timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate, struggleSequences, skillInvocations, secretWordsLines } = analysis;
+    timeline, toolResultBreakdown, efficiencyInsights, systemPromptEstimate, struggleSequences, mcpUsage, skillInvocations, secretWordsLines } = analysis;
   const toolCalls = turns.flatMap(t => t.actions.filter(a => a.contentType === "tool_use").map(a => a.toolName)).filter(Boolean);
   const toolFreq = {};
   for (const t of toolCalls) toolFreq[t] = (toolFreq[t] || 0) + 1;
@@ -1001,6 +1096,8 @@ function ClaudeCodeReport({ parsed }) {
             max: b.maxChars >= 1024 ? `${(b.maxChars/1024).toFixed(1)}KB` : `${b.maxChars}`,
           }))} />
       </>)}
+
+      <McpUsageSection mcpUsage={mcpUsage} />
 
       {efficiencyInsights.length > 0 && (<>
         <SectionTitle>Efficiency Insights</SectionTitle>
