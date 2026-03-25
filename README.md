@@ -1,6 +1,10 @@
-# Liza
+# Liza: Hardened Multi-Agent Coding
 
-A Coding Agent System that doesn't lie to you.
+> Because *"it worked in the demo"* is not what on-call engineers are looking for.
+
+The full **[hardening inventory](docs/liza-hardened-mas.md)** to push to production with peace of mind.
+
+**[Demo video](https://drive.google.com/drive/folders/1Iea-nNxAazBHeLXL7IElXnG5r1i1E-Ha?usp=sharing)** (45min).
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/liza-mas/liza)
 
@@ -68,8 +72,6 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
   - Agents don't discover work — they receive pre-claimed tasks in bootstrap prompt. Eliminates race conditions and cognitive overhead.
 
 The complete **[Vision](<specs/build/1 - Vision.md>)** of Liza.
-
-The complete **[inventory of hardening measures](docs/liza-hardened-mas.md)**.
 
 ### What it looks like in practice
 
