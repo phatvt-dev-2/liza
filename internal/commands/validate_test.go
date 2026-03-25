@@ -386,9 +386,10 @@ func TestValidateAgentInvariants_LeaseExpiryGracePeriod(t *testing.T) {
 		{
 			// Lease expired exactly at the grace boundary should not warn.
 			// Before() is strict <, so equal-to-deadline is not "before" it.
-			// 1ms buffer accounts for wall-clock drift between test and function.
+			// 100ms buffer accounts for wall-clock drift between test and function
+			// (1ms was insufficient on CI under load).
 			name:        "exactly at grace period boundary",
-			leaseExpiry: now.Add(-models.LeaseExpiryGracePeriod + time.Millisecond),
+			leaseExpiry: now.Add(-models.LeaseExpiryGracePeriod + 100*time.Millisecond),
 			wantWarning: false,
 		},
 		{

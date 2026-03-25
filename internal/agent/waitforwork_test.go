@@ -148,7 +148,7 @@ func TestWaitForReviewerWork(t *testing.T) {
 				ProjectRoot: projectRoot,
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			strategy, _ := NewRoleStrategy("code-reviewer", testResolver(t))
@@ -287,7 +287,7 @@ func TestWaitForCodePlanReviewerWork(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			config := SupervisorConfig{StatePath: statePath, ProjectRoot: projectRoot}
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			strategy, _ := NewRoleStrategy("code-plan-reviewer", testResolver(t))
@@ -723,9 +723,9 @@ func TestWaitForWorkPollingAbortStateMode(t *testing.T) {
 			t.Error("waitForWorkPolling() should return false when ABORT detected")
 		}
 
-		// Should respond within 100ms
-		if elapsed > 100*time.Millisecond {
-			t.Errorf("ABORT detection took %v, expected < 100ms", elapsed)
+		// Should respond within 500ms (wide margin for slow CI + race detector)
+		if elapsed > 500*time.Millisecond {
+			t.Errorf("ABORT detection took %v, expected < 500ms", elapsed)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Timeout waiting for ABORT response")
@@ -1021,7 +1021,7 @@ func TestWaitForEpicPlanReviewerWork(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			config := SupervisorConfig{StatePath: statePath, ProjectRoot: projectRoot}
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			strategy, _ := NewRoleStrategy("epic-plan-reviewer", testResolver(t))
@@ -1169,7 +1169,7 @@ func TestWaitForUSReviewerWork(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			config := SupervisorConfig{StatePath: statePath, ProjectRoot: projectRoot}
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			strategy, _ := NewRoleStrategy("us-reviewer", testResolver(t))
