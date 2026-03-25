@@ -670,7 +670,11 @@ func TestClaimTask_ReadyWithStaleBranchAndWorktree(t *testing.T) {
 func TestHandleReadyClaimWorktree_ConcurrentWinnerDoesNotDeleteWorktree(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
-	testhelpers.SetupLizaDir(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	testhelpers.WriteInitialState(t, stateFile, state)
+	bb := db.New(stateFile)
 
 	gitWrapper := git.New(tmpDir)
 	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
@@ -681,8 +685,10 @@ func TestHandleReadyClaimWorktree_ConcurrentWinnerDoesNotDeleteWorktree(t *testi
 	worktreeDir := filepath.Join(tmpDir, worktreeRel)
 
 	err := handleReadyClaimWorktree(
+		bb,
 		gitWrapper,
 		"task-1",
+		models.TaskStatusReady,
 		"integration",
 		worktreeDir,
 		worktreeRel,
@@ -704,6 +710,53 @@ func TestHandleReadyClaimWorktree_ConcurrentWinnerDoesNotDeleteWorktree(t *testi
 	}
 	if !branchExists {
 		t.Fatal("Winner branch should remain after race")
+	}
+}
+
+func TestHandleReadyClaimWorktree_CleanupAbortedWhenTaskClaimedConcurrently(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	// Write state with task already in IMPLEMENTING (simulates concurrent winner).
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	bb := db.New(stateFile)
+
+	gitWrapper := git.New(tmpDir)
+	// Create a worktree to simulate the concurrent winner's worktree on disk.
+	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+
+	worktreeRel := filepath.Join(paths.WorktreesDirName, "task-1")
+	worktreeDir := filepath.Join(tmpDir, worktreeRel)
+
+	// cleanupAllowed=true but task is IMPLEMENTING → guard must abort cleanup.
+	err := handleReadyClaimWorktree(
+		bb,
+		gitWrapper,
+		"task-1",
+		models.TaskStatusReady, // initial status we expected
+		"integration",
+		worktreeDir,
+		worktreeRel,
+		true, // cleanup would be allowed for stale resources
+	)
+	if err == nil {
+		t.Fatal("Expected race-condition error, got nil")
+	}
+	if !strings.Contains(err.Error(), "claimed concurrently") {
+		t.Fatalf("Error = %q, want to contain 'claimed concurrently'", err.Error())
+	}
+
+	// Worktree must NOT have been deleted.
+	if _, statErr := os.Stat(worktreeDir); os.IsNotExist(statErr) {
+		t.Fatal("Worktree should remain on disk — guard must prevent deletion")
 	}
 }
 

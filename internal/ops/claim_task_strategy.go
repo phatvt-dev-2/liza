@@ -53,7 +53,7 @@ func (freshClaimStrategy) requiresDependencyRecheck() bool {
 }
 
 func (freshClaimStrategy) handleWorktree(
-	_ *db.Blackboard,
+	bb *db.Blackboard,
 	gitWrapper *git.Git,
 	ctx *claimContext,
 ) (claimWorktreePhaseResult, error) {
@@ -63,8 +63,10 @@ func (freshClaimStrategy) handleWorktree(
 		return result, err
 	}
 	if err := handleReadyClaimWorktree(
+		bb,
 		gitWrapper,
 		ctx.taskID,
+		ctx.taskStatus,
 		ctx.integrationBranch,
 		ctx.worktreeDir,
 		ctx.worktreeRel,

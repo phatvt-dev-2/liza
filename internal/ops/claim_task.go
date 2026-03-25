@@ -333,8 +333,10 @@ func handleClaimTaskWorktreePhase(
 }
 
 func handleReadyClaimWorktree(
+	bb *db.Blackboard,
 	gitWrapper *git.Git,
-	taskID, integrationBranch, worktreeDir, worktreeRel string,
+	taskID string, initialStatus models.TaskStatus,
+	integrationBranch, worktreeDir, worktreeRel string,
 	cleanupAllowed bool,
 ) error {
 	branchName := paths.TaskBranchPrefix + taskID
@@ -345,6 +347,18 @@ func handleReadyClaimWorktree(
 	}
 	if !cleanupAllowed {
 		return fmt.Errorf("race condition: concurrent claim already provisioned worktree for READY task")
+	}
+
+	// Re-read task state before cleanup: if a concurrent claimer already won
+	// (task no longer in initial status), the worktree belongs to them.
+	_, task, readErr := readTaskState(bb, taskID)
+	if readErr != nil && !errors.IsNotFound(readErr) {
+		// I/O error — can't verify whether another agent claimed the task.
+		// Aborting cleanup is safer than deleting a potentially active worktree.
+		return fmt.Errorf("cannot verify task state before cleanup: %w", readErr)
+	}
+	if readErr == nil && task.Status != initialStatus {
+		return fmt.Errorf("race condition: task %s claimed concurrently (status: %s)", taskID, task.Status)
 	}
 
 	branchExists, err := gitWrapper.BranchExists(branchName)
