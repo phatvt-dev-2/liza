@@ -500,6 +500,11 @@ func InitCommandWithConfig(params InitParams) error {
 		os.RemoveAll(lizaPaths.LizaDir())
 	}
 
+	// Write support doc to .liza/SUPPORT.md (non-fatal)
+	if err := embedded.WriteSupportDoc(lizaPaths.LizaDir()); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write SUPPORT.md: %v\n", err)
+	}
+
 	// Freeze pipeline config into .liza/pipeline.yaml
 	frozenPath := filepath.Join(lizaPaths.LizaDir(), "pipeline.yaml")
 	if err := os.WriteFile(frozenPath, pipelineData, 0644); err != nil {

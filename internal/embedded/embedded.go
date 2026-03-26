@@ -49,6 +49,9 @@ var consoleScriptContent []byte
 //go:embed "guardrails-template.md"
 var guardrailsTemplateContent []byte
 
+//go:embed "support.md"
+var supportDocContent []byte
+
 //go:embed "pipeline.yaml"
 var pipelineConfigContent []byte
 
@@ -617,6 +620,16 @@ func WriteConsoleScript(projectRoot string) error {
 	consolePath := filepath.Join(projectRoot, "console.sh")
 	if err := os.WriteFile(consolePath, consoleScriptContent, 0755); err != nil {
 		return fmt.Errorf("failed to write console.sh: %w", err)
+	}
+	return nil
+}
+
+// WriteSupportDoc writes the embedded SUPPORT.md to the .liza/ directory.
+// Always overwrites — content tracks the Liza version.
+func WriteSupportDoc(lizaDir string) error {
+	supportPath := filepath.Join(lizaDir, "SUPPORT.md")
+	if err := os.WriteFile(supportPath, supportDocContent, 0644); err != nil {
+		return fmt.Errorf("failed to write SUPPORT.md: %w", err)
 	}
 	return nil
 }
