@@ -288,11 +288,24 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		// Cleanup errors are logged as warnings; the returned error conveys the claim failure.
 		// Material inconsistency (orphaned worktree/branch) is flagged for operator attention.
 		if worktreeCreated {
-			if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
-				log.Printf("WARNING: claim-task %s: failed to cleanup worktree after claim failure: %v", taskID, cleanupErr)
+			// Guard: if another claimer won (task status changed), the worktree
+			// belongs to them — don't remove it. This prevents a race where a
+			// losing claimer's cleanup deletes the worktree the winner depends on.
+			shouldCleanup := true
+			readState, readErr := bb.Read()
+			if readErr != nil {
+				log.Printf("WARNING: claim-task %s: cannot verify winner before cleanup: %v", taskID, readErr)
+			} else if currentTask := readState.FindTask(taskID); currentTask != nil && currentTask.Status != taskStatus {
+				shouldCleanup = false
+				log.Printf("claim-task %s: skipping worktree cleanup — another claimer won (status: %s)", taskID, currentTask.Status)
 			}
-			if cleanupErr := gitWrapper.DeleteBranch(paths.TaskBranchPrefix + taskID); cleanupErr != nil {
-				log.Printf("WARNING: claim-task %s: failed to cleanup branch after claim failure: %v", taskID, cleanupErr)
+			if shouldCleanup {
+				if cleanupErr := gitWrapper.RemoveWorktree(taskID); cleanupErr != nil {
+					log.Printf("WARNING: claim-task %s: failed to cleanup worktree after claim failure: %v", taskID, cleanupErr)
+				}
+				if cleanupErr := gitWrapper.DeleteBranch(paths.TaskBranchPrefix + taskID); cleanupErr != nil {
+					log.Printf("WARNING: claim-task %s: failed to cleanup branch after claim failure: %v", taskID, cleanupErr)
+				}
 			}
 		}
 		return nil, fmt.Errorf("failed to commit claim: %w", err)
