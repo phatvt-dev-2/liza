@@ -354,6 +354,42 @@ Academic prototype (184 stars). Planner → Coder → Debugger → Reviewer. Pyt
 lines. In-memory state. Honest about limitations. Validates the multi-role architecture thesis but
 stops at "this could work." Case study was a CLI to-do app. No ongoing development visible.
 
+### OpenSpec
+
+Spec-driven development (SDD) framework (34k stars, 30 contributors, v1.2.0, MIT). NPM package
+(`@fission-ai/openspec`) that installs slash commands into 24+ AI coding assistants (Claude Code,
+Cursor, Cline, GitHub Copilot, Gemini CLI, etc.). TypeScript. By Fission AI.
+
+**Philosophy**: "Agree on what to build before any code is written." Lightweight spec layer —
+fluid and iterative, not waterfall. Brownfield-first: targets mature codebases where understanding
+existing systems is the hard part. Specs live in the repo as version-controlled markdown, organized
+by domain (`specs/`) with changes tracked as self-contained folders (`changes/`) containing
+proposal, design, tasks, and delta-specs.
+
+**How it works**: `/opsx:propose` generates a change folder with structured artifacts.
+`/opsx:apply` implements tasks from spec. `/opsx:verify` validates completeness, correctness,
+and coherence. `/opsx:archive` merges delta-specs into main specs. The delta-spec approach
+(ADDED/MODIFIED/REMOVED relative to current specs) avoids conflicts when multiple changes coexist.
+
+**Trust model**: Advisory, not enforcing. Verify surfaces warnings but doesn't block. Dependencies
+are "enablers, not gates." Tasks are marked complete by the AI during implementation — no external
+validation. No behavioral enforcement, no role boundaries, no adversarial review. Trust derives
+from structured artifacts making intent visible, not from constraining execution.
+
+**Relationship to Liza**: Complementary, not competitive. OpenSpec is a planning layer; Liza is
+an execution system. OpenSpec solves "requirements live only in chat history" — the same problem
+Liza's spec phase solves, but as a universal tool across 24+ agents rather than an integrated
+pipeline phase. OpenSpec's specs could theoretically feed Liza's `--spec` input, though the
+formats differ. The key architectural difference: OpenSpec trusts agents to follow specs once
+written; Liza mechanically enforces that they do. OpenSpec positions against SpecKit ("thorough
+but heavyweight") and Kiro ("powerful but locked in") — Liza's spec phase is closer to SpecKit's
+thoroughness with OpenSpec's agent-agnostic reach.
+
+**Market position**: High traction (34k stars) in the "spec-first" niche. Validates the thesis
+that front-loading understanding reduces rework. No threat to Liza's multi-agent orchestration
+or behavioral enforcement. Potential overlap only with Liza's spec phase — and even there, the
+approaches differ (universal planning layer vs integrated adversarial pipeline).
+
 ### MAS²
 
 Research paper (Sept 2025). Meta-level paradigm — a MAS that generates other MAS. Tri-agent
