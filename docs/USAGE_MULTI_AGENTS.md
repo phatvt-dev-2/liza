@@ -58,7 +58,13 @@ See [DEMO](DEMO.md) for a full example.
 **Installing the Liza CLI:**
 
 ```bash
-# Build and install (defaults to ~/.local/bin)
+# Latest release (macOS/Linux)
+curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | bash
+
+# Build from main branch (requires Go and make)
+curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | BRANCH=main bash
+
+# Or from a local clone
 make install
 
 # Verify

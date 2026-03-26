@@ -126,7 +126,7 @@ Liza relies on two executables: `liza` and `liza-mcp`:
 - Set the `INSTALL_DIR` environment variable to override.
 - If upgrading from a previous install in `/usr/local/bin`, old binaries are removed automatically.
 
-**Quick install (macOS/Linux):**
+**Quick install (latest release, macOS/Linux):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | bash
@@ -138,11 +138,14 @@ curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | bas
 # Specific version
 curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | VERSION=v1.0.0 bash
 
+# Build from a branch (requires Go and make)
+curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | BRANCH=main bash
+
 # Custom directory
 curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | INSTALL_DIR=~/.local/bin bash
 ```
 
-**From source:**
+**From a local clone:**
 
 ```bash
 git clone https://github.com/liza-mas/liza.git && cd liza

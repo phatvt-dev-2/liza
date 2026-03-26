@@ -1,6 +1,6 @@
 #!/bin/bash
 # Liza installation script
-# Downloads and installs the latest release of liza
+# Downloads and installs the latest release of liza, or builds from a branch
 
 set -e
 
@@ -69,6 +69,23 @@ get_latest_version() {
     echo "$version"
 }
 
+# Remove old binaries from /usr/local/bin if installing elsewhere
+cleanup_old_binaries() {
+    if [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
+        for old_bin in liza liza-mcp; do
+            old_path="/usr/local/bin/$old_bin"
+            if [ -f "$old_path" ]; then
+                echo -e "${YELLOW}Removing old $old_bin from /usr/local/bin...${NC}"
+                if [ -w "/usr/local/bin" ]; then
+                    rm -f "$old_path"
+                else
+                    sudo rm -f "$old_path"
+                fi
+            fi
+        done
+    fi
+}
+
 # Download and install
 install_liza() {
     local platform=$1
@@ -130,24 +147,62 @@ install_liza() {
         [ -f "${tmp_dir}/liza-mcp" ] && sudo mv "${tmp_dir}/liza-mcp" "${INSTALL_DIR}/liza-mcp"
     fi
 
-    # Clean up old install from /usr/local/bin if we're now installing elsewhere
-    if [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
-        for old_bin in liza liza-mcp; do
-            old_path="/usr/local/bin/$old_bin"
-            if [ -f "$old_path" ]; then
-                echo -e "${YELLOW}Removing old $old_bin from /usr/local/bin...${NC}"
-                if [ -w "/usr/local/bin" ]; then
-                    rm -f "$old_path"
-                else
-                    sudo rm -f "$old_path"
-                fi
-            fi
-        done
-    fi
+    cleanup_old_binaries
 
     echo -e "${GREEN}✓ Installation complete!${NC}"
     echo ""
     echo "Run 'liza version' to verify installation"
+    echo "Run 'liza help' to get started"
+}
+
+# Build from source and install
+install_from_source() {
+    local branch=$1
+
+    echo -e "${GREEN}Installing liza from branch '${branch}'...${NC}"
+    echo "  Install directory: ${INSTALL_DIR}"
+    echo ""
+
+    # Check build dependencies
+    if ! command -v go >/dev/null 2>&1; then
+        echo -e "${RED}Error: go is required to build from source but not installed${NC}"
+        echo "Install Go from https://go.dev/dl/"
+        exit 1
+    fi
+    if ! command -v make >/dev/null 2>&1; then
+        echo -e "${RED}Error: make is required to build from source but not installed${NC}"
+        exit 1
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        echo -e "${RED}Error: git is required to build from source but not installed${NC}"
+        exit 1
+    fi
+
+    # Create temporary directory
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf ${tmp_dir}" EXIT
+
+    # Clone
+    echo "Cloning branch '${branch}'..."
+    if ! git clone --depth 1 --branch "$branch" -- "https://github.com/${REPO}.git" "${tmp_dir}/liza"; then
+        echo -e "${RED}Error: Failed to clone branch '${branch}'${NC}"
+        exit 1
+    fi
+
+    # Build and install via Makefile
+    echo "Building from source..."
+    if ! make -C "${tmp_dir}/liza" install INSTALL_DIR="$INSTALL_DIR"; then
+        echo -e "${RED}Error: Build failed${NC}"
+        exit 1
+    fi
+
+    cleanup_old_binaries
+
+    echo ""
+    echo -e "${GREEN}✓ Installation complete!${NC}"
+    echo ""
+    "${INSTALL_DIR}/${BINARY_NAME}" version 2>/dev/null || true
     echo "Run 'liza help' to get started"
 }
 
@@ -157,6 +212,12 @@ main() {
     echo "Liza Installer"
     echo "=============="
     echo ""
+
+    local branch="${BRANCH:-}"
+    if [ -n "$branch" ]; then
+        install_from_source "$branch"
+        return
+    fi
 
     # Check dependencies
     if ! command -v curl >/dev/null 2>&1; then
@@ -188,15 +249,19 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "  -h, --help          Show this help message"
     echo ""
     echo "Environment variables:"
-    echo "  VERSION             Specific version to install (default: latest)"
-    echo "  INSTALL_DIR         Installation directory (default: /usr/local/bin)"
+    echo "  VERSION             Specific version to install (default: latest release)"
+    echo "  BRANCH              Build and install from a git branch (e.g. main). Requires Go and make."
+    echo "  INSTALL_DIR         Installation directory (default: ~/.local/bin)"
     echo ""
     echo "Examples:"
-    echo "  # Install latest version"
+    echo "  # Install latest release"
     echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash"
     echo ""
     echo "  # Install specific version"
     echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | VERSION=v1.0.0 bash"
+    echo ""
+    echo "  # Install from main branch (build from source)"
+    echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | BRANCH=main bash"
     echo ""
     echo "  # Install to custom directory"
     echo "  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | INSTALL_DIR=~/.local/bin bash"
