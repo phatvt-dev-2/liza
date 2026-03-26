@@ -13,7 +13,13 @@ NC='\033[0m' # No Color
 # Configuration
 REPO="liza-mas/liza"
 BINARY_NAME="liza"
-INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+if [ -z "${INSTALL_DIR:-}" ]; then
+    if echo "$PATH" | tr ':' '\n' | grep -qxF "$HOME/.local/bin"; then
+        INSTALL_DIR="$HOME/.local/bin"
+    else
+        INSTALL_DIR="/usr/local/bin"
+    fi
+fi
 
 # Detect OS and architecture
 detect_platform() {

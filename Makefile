@@ -57,10 +57,13 @@ clean:
 	rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/docs internal/embedded/specs
 	go clean
 
-# Install the binaries to /usr/local/bin
+# Install the binaries
+# Prefer INSTALL_DIR env var, then ~/.local/bin if on PATH, then /usr/local/bin
+INSTALL_DIR ?= $(shell echo "$$PATH" | tr ':' '\n' | grep -qxF "$$HOME/.local/bin" && echo "$$HOME/.local/bin" || echo "/usr/local/bin")
+SUDO := $(shell test -w $(INSTALL_DIR) && echo "" || echo "sudo")
 install: build
-	sudo install -m 755 $(BINARY_NAME) /usr/local/bin/$(BINARY_NAME)
-	sudo install -m 755 $(MCP_BINARY_NAME) /usr/local/bin/$(MCP_BINARY_NAME)
+	$(SUDO) install -m 755 $(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
+	$(SUDO) install -m 755 $(MCP_BINARY_NAME) $(INSTALL_DIR)/$(MCP_BINARY_NAME)
 
 # Check that testhelpers package is not imported in production code
 # This prevents test utilities from leaking into production binaries and
