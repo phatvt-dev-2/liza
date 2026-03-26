@@ -11,24 +11,10 @@ The full **[hardening inventory](docs/liza-hardened-mas.md)** to push to product
 ## Table of Contents
 
 - [What is Liza?](#what-is-liza)
-  - [Main Characteristics](#main-characteristics)
-  - [What it looks like in practice](#what-it-looks-like-in-practice)
 - [How Liza Compares](#how-liza-compares)
 - [Getting Started](#getting-started)
-  - [Requirements](#requirements)
-  - [Installation](#installation)
-  - [Pairing and MAS Modes](#pairing-and-mas-modes)
-  - [Common Commands](#common-commands)
-- [Features](#features)
 - [Architecture](#architecture)
-  - [Task Lifecycle](#task-lifecycle)
-- [How Liza Grew Up](#how-liza-grew-up)
-  - [Why This Exists](#why-this-exists)
-  - [The Problem That Won't Fix Itself](#the-problem-that-wont-fix-itself)
-  - [A Different Starting Point](#a-different-starting-point)
-  - [From Pairing to Peer Supervision](#from-pairing-to-peer-supervision)
 - [Status](#status)
-  - [Provider Compatibility](#provider-compatibility)
 - [Naming](#naming)
 - [License](#license)
 
@@ -42,7 +28,7 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
 ### Main characteristics:
 
 - **Behavior, Posture, Know-How** — three layers that make coding agents useful:
-  - **Behavior**: A [behavioral contract](contracts/) enforces governance intrinsically — not through external scaffolding as *Harness Engineering* does.
+  - **Behavior**: A [behavioral contract](contracts/) enforces governance intrinsically — not through external scaffolding as *Harness Engineering* does. Optional project [guardrails](GUARDRAILS.md) extend the contract with project-specific constraints.
   - **Posture**: Original pairing postures (User Duck, Socratic Coach, Challenger, etc.)
   - **Know-How**: 20 composable [skills](skills/) encode methodology
   - *[Full analysis](https://medium.com/@tangi.vass/behavior-posture-know-how-the-three-layers-that-make-ai-agents-useful-d485388442eb)*
@@ -59,7 +45,7 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
 - **Hybrid hardened architecture:**
   - LLM agents wrapped by code-enforced supervisors and working on isolated git worktrees.
   - The supervisor does the **deterministic code-enforced actions** (worktree management, merges, TDD enforcement, etc),
-    leaving the **judgment to the agent**.
+    leaving the **judgment to the agent**. Strict task state machine with 43+ validation rules.
   - Agents communicate and act through Liza's **MCP tools**.
   - 20k LOC of Go (+60k of tests). Liza is not a prompt collection.
   - Agent logs recording for automatic analysis and continuous improvements (token optimization, MCP server usage analysis, ...)
@@ -67,11 +53,15 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
   - Liza wraps provider **CLIs**, not their APIs. This means your existing subscription (Claude Max, ChatGPT Pro, etc.) works — no API keys or per-token billing required — and your personal setup is used.
   - BYOM: Claude Code, Codex CLI, Kimi, Mistral, Gemini. [Not all are made equal though](docs/demo-benchmark).
 - **Structured workflow:**
-  - Defined as a composable and customizable YAML pipeline.
+  - Defined as a composable and customizable YAML pipeline with declarative sub-pipelines (e.g. specification, coding).
   - Coordination is performed via an auditable YAML **blackboard** (the Kanban board of the agents with full historized state details).
   - Agents don't discover work — they receive pre-claimed tasks in bootstrap prompt. Eliminates race conditions and cognitive overhead.
+- **Resilience:**
+  - Circuit breaker: pattern detection (loops, repeated failures) triggers automatic sprint checkpoint
+  - Crash recovery: `recover-agent` and `recover-task` commands for idempotent cleanup after hard crashes
+  - Context handoff: agents hand off with structured notes when approaching context limits
 
-The complete **[Vision](<specs/build/1 - Vision.md>)** of Liza.
+See the complete [vision](<specs/build/1 - Vision.md>) and [genesis](docs/how-liza-grew-up.md) of Liza.
 
 ### What it looks like in practice
 
@@ -85,8 +75,8 @@ This won't self-correct. Sycophancy drives engagement — that's what gets optim
 
 Ten months of pairing under this contract, and the vigilance tax dropped to near zero. I can mostly focus on the architecture.
 
-[Here](https://drive.google.com/drive/folders/1Iea-nNxAazBHeLXL7IElXnG5r1i1E-Ha?usp=sharing) is a demo video of an implement of a basic Todo CLI
-using Liza in Multi-agent mode - spec-driven with intermediate epic and User Story creation, fully autonomous agent within sprints, human reviews between sprints.
+Here is a [demo video](https://drive.google.com/drive/folders/1Iea-nNxAazBHeLXL7IElXnG5r1i1E-Ha?usp=sharing) of an implementation of a basic Todo CLI
+using Liza in Multi-agent mode - spec-driven with intermediate epic and User Story creation, fully autonomous agents within sprints, human reviews between sprints.
 
 ## How Liza Compares
 
@@ -131,13 +121,16 @@ The multi-agent coding space splits into four categories:
 
 ### Installation
 
+Liza relies on two executables: `liza` and `liza-mcp`:
+- Set the `INSTALL_DIR` environment variable to configure the target directory.
+- By default they will be installed in `~/.local/bin` if this directory is in the `$PATH`.
+- Otherwise `/usr/local/bin` will be used (requires sudo grant).
+
 **Quick install (macOS/Linux):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | bash
 ```
-
-This installs both `liza` (CLI) and `liza-mcp` (MCP server) to `/usr/local/bin`.
 
 **Options:**
 
@@ -183,6 +176,8 @@ liza init --claude --codex --gemini --mistral
 See [contract activation](contracts/contract-activation.md) for the additional required steps for other CLI than Claude.
 
 ### Pairing and MAS Modes
+
+> **New to Liza?** Start with Pairing mode — it's the fastest way to experience how the behavioral contract changes agent behavior. The trust you build watching agents pause at gates, surface assumptions, and validate before claiming done is what makes letting them run autonomously in Multi-Agent mode a comfortable next step.
 
 - **Pairing**: See [Pairing Guide](docs/USAGE_PAIRING.md) — human-agent collaboration under contract
 - **Multi-Agent (Liza)**: See [USAGE](docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
@@ -230,37 +225,6 @@ liza analyze                                        # Circuit breaker analysis
 ```
 
 ---
-
-## Features
-
-Behavior & Know-How:
-- **Behavioral Contract**: 55+ LLM [failure modes](contracts/CONTRACT_FAILURE_MODE_MAP.md) mapped to specific countermeasures, operating as an explicit state machine with tiered rules. Pairing sub-modes — Autonomous, User Duck, Agent Duck, True Pairing, Spike, Coach, Challenger.
-- **Project Guardrails**: Optional `GUARDRAILS.md` for project-specific constraints using the same Tier 0-3 system
-- **Skills System**: 20 composable skill protocols (debugging, code review, testing, architecture, spec writing, etc.) agents load on demand
-
-Methodology:
-- **Multi-Sprint Support**: Sprint numbering, checkpoint summaries, and history across sprints
-- **Specification Phase**: Six roles (epic-planner, epic-plan-reviewer, us-writer, us-reviewer, code-planner, code-plan-reviewer) for full spec elaboration before coding sprints
-
-Flexibility:
-- **Multi-Provider**: Supports Claude, Codex, Kimi, Mistral, and Gemini CLIs
-- **Declarative Sub-Pipelines**: YAML-driven pipeline configuration with auto-execute transitions, replacing hardcoded role-pair logic
-
-Reliable architecture:
-- **Blackboard Pattern**: All agents read/write to a central `state.yaml` with atomic file locking
-- **Git Worktrees**: Each task gets an isolated worktree for parallel development
-- **Agent Supervisors**: Long-running processes that claim tasks, execute work, manage worktrees, enforce guardrails and handle failures
-- **MCP Server**: Structured API access to Liza operations for agents
-
-Observability:
-- **Monitoring / Console**: Watch progress and get alerts on anomalies (expired leases, blocked tasks, etc.)
-- **Agent Log Analysis**: AI assisted analysis of the agent logs to mine token usage, context utilization, and diagnose struggle sequences
-- **Context Handoff**: Agents hand off with structured notes when approaching context limits
-
-Control:
-- **State Machine**: Strict task state transitions with 43+ validation rules
-- **Circuit Breaker**: Pattern detection (loops, repeated failures) triggers automatic sprint checkpoint
-- **Crash Recovery**: `recover-agent` and `recover-task` commands for idempotent cleanup after hard crashes
 
 ## Architecture
 
@@ -438,99 +402,6 @@ Example of a task on the blackboard:
           commit: 2fa6399223262df6a87c6b1354dfc882b73114c5
           tests_ran: false
 ```
-
----
-
-## How Liza Grew Up
-
-### Why This Exists
-
-It started with a test file that kept getting modified to pass instead of the bug getting fixed. Then the confident "Done!" claims when the verification command hadn't actually run.
-
-Over the first six months of daily pairing with coding agents, **I crafted a behavioral contract to turn them from eager yet untrustworthy assistants into reliable senior engineering peers**. The [problem and mechanism](#what-it-looks-like-in-practice) are described above. This section covers the deeper analysis.
-
-### The Problem That Won't Fix Itself
-
-Acing SWE-Bench doesn't transfer to real engineering: follow this git workflow, pause at this gate, don't guess. Many models struggle on a simple Hello World implementation if stated with an engineering frame. See [Provider Compatibility](#provider-compatibility).
-
-### A Different Starting Point
-
-Current agents are capable enough. No need to wait for the next model generation. Not out-of-the-box though.
-They need their training incentives counteracted to unleash their latent engineering capabilities.
-
-The typical approaches all treat symptoms:
-- **Prompt engineering** adds instructions agents interpret flexibly — "don't modify tests" doesn't survive the pressure to appear competent.
-- **Specification frameworks** assume a rigorous process is sufficient, but structured handoffs are still weak prompting if agents execute in bad faith.
-- **Harness engineering** makes codebases legible to agents but doesn't prevent greenwashing tests in a well-structured repo.
-- **Context engineering** gives agents better information but doesn't change what they do under pressure — a well-informed agent can still spiral, fabricate, or silently expand scope.
-
-All four assume good-faith execution.
-
-Liza starts from the opposite assumption: agents will exhibit predictable failure modes unless specifically constrained not to.
-
-Under the behavioral contract, agents cannot:
-- Act before thinking — analysis must precede execution
-- Guess when they should ask — must clarify or declare assumptions
-- Skip the gate between analysis and execution
-- Claim success without validation evidence
-- Modify tests to accept buggy behavior
-- Self-approve their own work
-
-> Structure the behavior, and the process follows.
-
-This isn't about making agents try harder like with the Ralph Wiggum technique. It's about removing the behaviors that make them unreliable. 55+ documented LLM failure modes—sycophancy, phantom fixes, scope creep, test corruption, hallucinated completions—each mapped to a specific countermeasure.
-
-The contract operates as an explicit state machine with forbidden transitions, not as suggestions the agent interprets flexibly. Tiered rules define what degrades gracefully under pressure versus what never bends.
-
-Why does this work? LLMs inherit cognitive biases from RLHF training — sycophancy, eagerness to please, premature convergence.
-The contract exploits the same malleability in reverse: the Pygmalion effect (agents rise to explicit expectations),
-anticipated embarrassment (knowing a peer will review changes' quality), and Ulysses contracts (binding commitments made
-before the temptation to cut corners).
-
-Errors caught in specs cost less than errors caught in code. The spec system front-loads understanding so agents don't discover requirements by failing tests. This reinforces the [Cost Gradient](<specs/build/1 - Vision.md>) concept from the contract.
-
-> Quality is the fastest path to real completion.
-
-Claude Opus 4.5 putting the contract philosophy in its own words in its *letter to itself* (a mechanism of the contract):
-
-> **Negative space design**: The contract defines what's forbidden; the shape that remains is where judgment lives. Strict on failure modes, silent on excellence. You can't prescribe good judgment—you can only remove the obstacles to it.
-
-For the full analysis: [Vision](<specs/build/1 - Vision.md>) and [Turning AI Coding Agents into Senior Engineering Peers](https://medium.com/@tangi.vass/turning-ai-coding-agents-into-senior-engineering-peers-c3d178621c9e).
-
-### From Pairing to Peer Supervision
-
-The contract was developed through human-agent pairing. One developer, a couple of agents living in distinct terminals, approval gates at every state change. Over months, the gates became routine. Violations disappeared. Work got delivered as expected.
-
-But the **gates are load-bearing**. Remove them and the failure modes return.
-
-Multi-agent systems inherit single-agent failure modes and add new ones: agents approve each other's mistakes, drift collectively from the goal, or converge confidently on wrong solutions.
-
-Liza delegates approval to peer agents operating under the same contract. The human observes and provides direction without bottlenecking every approval.
-
-Yes, that's vibe coding—the very thing the original contract was written against. Or more precisely, **agentic coding**. The difference is the contract makes it work.
-
-**Four pillars hold the system:**
-
-- **Behavioral contracts** discipline individual agents into senior peers. Tier 0 invariants are never violated: no unapproved state changes, no fabrication, no test corruption, no unvalidated success claims.
-
-- **Specification system** externalizes context. Agents are stateless—every restart is a new mind with old artifacts. Specs are those artifacts. Without them, agents rediscover requirements by failing. With them, they read shared understanding and execute.
-
-- **Blackboard coordination** makes state visible. A shared file tracks goals, tasks, assignments, history. Agents claim tasks, update status, hand off work through the blackboard. Humans can observe everything, intervene surgically, or pause the system.
-
-- **External validation** replaces self-certification. Coders cannot mark their own work complete. Reviewers examine and issue binding verdicts. Approval means merge eligibility. Rejection means specific feedback and another iteration.
-
-**Key Mechanisms:**
-
-- **Leases, not just heartbeats.** Agents hold time-bounded leases on tasks. Stale agents' tasks become reclaimable only after lease expires.
-- **Commit SHA verification.** Coder records commit SHA when requesting review. Reviewer verifies before examining. No reviewing stale state.
-- **Approval-gated merge.** Coders commit to their worktree. The supervisor merges to integration only after Code Reviewer approval. Authority is structural, not advisory.
-- **Merge traceability.** Task state records `approved_by` and `merge_commit`. Full audit trail.
-- **Hypothesis exhaustion.** Two coders fail the same task? The task framing is wrong—rescope, don't reassign.
-- **Rescoping audit trail.** Original task becomes SUPERSEDED with explicit reason. New tasks reference what they replace. No silent rewrites.
-
-The human owns intent and acts as circuit-breaker, not bottleneck. Authority is exercised through a kill switch, not an approval queue.
-
-More at [I Tried to Kill Vibe Coding. I Built Adversarial Vibe Coding. Without the Vibes.](https://medium.com/@tangi.vass/i-tried-to-kill-vibe-coding-i-built-adversarial-vibe-coding-without-the-vibes-bc4a63872440)
 
 ---
 
