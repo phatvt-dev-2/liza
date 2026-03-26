@@ -58,12 +58,16 @@ clean:
 	go clean
 
 # Install the binaries
-# Prefer INSTALL_DIR env var, then ~/.local/bin if on PATH, then /usr/local/bin
-INSTALL_DIR ?= $(shell echo "$$PATH" | tr ':' '\n' | grep -qxF "$$HOME/.local/bin" && echo "$$HOME/.local/bin" || echo "/usr/local/bin")
+# Prefer INSTALL_DIR env var, then ~/.local/bin (same as install.sh)
+INSTALL_DIR ?= $(HOME)/.local/bin
 SUDO := $(shell test -w $(INSTALL_DIR) && echo "" || echo "sudo")
 install: build
+	@mkdir -p $(INSTALL_DIR)
 	$(SUDO) install -m 755 $(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
 	$(SUDO) install -m 755 $(MCP_BINARY_NAME) $(INSTALL_DIR)/$(MCP_BINARY_NAME)
+	@if [ "$(INSTALL_DIR)" != "/usr/local/bin" ] && [ -f /usr/local/bin/liza ]; then \
+		echo "Warning: old liza binary found in /usr/local/bin — run 'sudo rm /usr/local/bin/liza /usr/local/bin/liza-mcp' to avoid shadowing"; \
+	fi
 
 # Check that testhelpers package is not imported in production code
 # This prevents test utilities from leaking into production binaries and

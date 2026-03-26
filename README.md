@@ -122,9 +122,9 @@ The multi-agent coding space splits into four categories:
 ### Installation
 
 Liza relies on two executables: `liza` and `liza-mcp`:
-- Set the `INSTALL_DIR` environment variable to configure the target directory.
-- By default they will be installed in `~/.local/bin` if this directory is in the `$PATH`.
-- Otherwise `/usr/local/bin` will be used (requires sudo grant).
+- By default they install to `~/.local/bin` (created automatically, no sudo needed).
+- Set the `INSTALL_DIR` environment variable to override.
+- If upgrading from a previous install in `/usr/local/bin`, old binaries are removed automatically.
 
 **Quick install (macOS/Linux):**
 
@@ -170,10 +170,13 @@ liza setup --claude --codex --gemini --mistral
 
 To init your project repo, do:
 ```bash
-# With: agent-specific contract activation (system prompt symlink, permissions)
+# Interactive wizard (recommended for first use):
+liza init
+
+# Or with explicit flags:
 liza init --claude --codex --gemini --mistral
 ```
-See [contract activation](contracts/contract-activation.md) for the additional required steps for other CLI than Claude.
+The interactive wizard walks through mode selection (pairing vs full MAS), agent selection, and handles existing `CLAUDE.md` conflicts automatically. See [contract activation](contracts/contract-activation.md) for the additional required steps for CLIs other than Claude.
 
 ### Pairing and MAS Modes
 

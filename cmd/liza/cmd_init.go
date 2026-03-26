@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/interactive"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/spf13/cobra"
 )
@@ -80,15 +81,64 @@ symlinks needed for pairing (no .liza/ workspace):
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agents := collectAgentFlags(cmd)
 
+		// Interactive wizard: no args, no flags, TTY
+		if len(args) == 0 && len(agents) == 0 {
+			if !interactive.IsInteractive() {
+				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --gemini, --mistral)\nSee: liza init --help")
+			}
+
+			// Resolve project root for conflict detection
+			var projectRoot string
+			if lizaPaths, err := paths.LizaPathsFromGit(); err == nil {
+				projectRoot = lizaPaths.ProjectRoot()
+			}
+
+			result, err := interactive.RunInitWizard(projectRoot)
+			if err != nil {
+				return err
+			}
+			if result == nil {
+				return nil // user aborted
+			}
+
+			if result.Mode == "pairing" {
+				if err := commands.InitPairingCommand(commands.InitPairingParams{
+					Agents:         result.Agents,
+					Stdin:          os.Stdin,
+					ContractAction: result.ContractAction,
+				}); err != nil {
+					return err
+				}
+				interactive.PrintPostInitSummary("pairing", result.Agents)
+				return nil
+			}
+			if err := commands.InitCommandWithConfig(commands.InitParams{
+				Description:    result.Description,
+				SpecRef:        result.SpecRef,
+				EntryPoint:     result.EntryPoint,
+				Agents:         result.Agents,
+				Stdin:          os.Stdin,
+				ContractAction: result.ContractAction,
+			}); err != nil {
+				return err
+			}
+			interactive.PrintPostInitSummary("full", result.Agents)
+			return nil
+		}
+
 		// Pairing mode: agent flags without description
 		if len(args) == 0 {
 			if len(agents) == 0 {
 				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --gemini, --mistral)\nSee: liza init --help")
 			}
-			return commands.InitPairingCommand(commands.InitPairingParams{
+			if err := commands.InitPairingCommand(commands.InitPairingParams{
 				Agents: agents,
 				Stdin:  os.Stdin,
-			})
+			}); err != nil {
+				return err
+			}
+			interactive.PrintPostInitSummary("pairing", agents)
+			return nil
 		}
 
 		// Full workspace init
@@ -97,7 +147,7 @@ symlinks needed for pairing (no .liza/ workspace):
 		configPath, _ := cmd.Flags().GetString("config")
 		entryPoint, _ := cmd.Flags().GetString("entry-point")
 		postCreateCmd, _ := cmd.Flags().GetString("post-worktree-cmd")
-		return commands.InitCommandWithConfig(commands.InitParams{
+		if err := commands.InitCommandWithConfig(commands.InitParams{
 			Description:     description,
 			SpecRef:         specRef,
 			ConfigPath:      configPath,
@@ -105,7 +155,11 @@ symlinks needed for pairing (no .liza/ workspace):
 			PostWorktreeCmd: postCreateCmd,
 			Agents:          agents,
 			Stdin:           os.Stdin,
-		})
+		}); err != nil {
+			return err
+		}
+		interactive.PrintPostInitSummary("full", agents)
+		return nil
 	},
 }
 

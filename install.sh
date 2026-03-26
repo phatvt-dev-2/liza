@@ -14,10 +14,11 @@ NC='\033[0m' # No Color
 REPO="liza-mas/liza"
 BINARY_NAME="liza"
 if [ -z "${INSTALL_DIR:-}" ]; then
-    if echo "$PATH" | tr ':' '\n' | grep -qxF "$HOME/.local/bin"; then
-        INSTALL_DIR="$HOME/.local/bin"
-    else
-        INSTALL_DIR="/usr/local/bin"
+    INSTALL_DIR="$HOME/.local/bin"
+    if ! echo "$PATH" | tr ':' '\n' | grep -qxF "$INSTALL_DIR"; then
+        echo -e "${YELLOW}Note: $INSTALL_DIR is not in your PATH${NC}"
+        echo "Add to your shell profile:  export PATH=\"\$HOME/.local/bin:\$PATH\""
+        echo ""
     fi
 fi
 
@@ -127,6 +128,21 @@ install_liza() {
         echo "Note: Sudo access required to install to ${INSTALL_DIR}"
         sudo mv "${tmp_dir}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
         [ -f "${tmp_dir}/liza-mcp" ] && sudo mv "${tmp_dir}/liza-mcp" "${INSTALL_DIR}/liza-mcp"
+    fi
+
+    # Clean up old install from /usr/local/bin if we're now installing elsewhere
+    if [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
+        for old_bin in liza liza-mcp; do
+            old_path="/usr/local/bin/$old_bin"
+            if [ -f "$old_path" ]; then
+                echo -e "${YELLOW}Removing old $old_bin from /usr/local/bin...${NC}"
+                if [ -w "/usr/local/bin" ]; then
+                    rm -f "$old_path"
+                else
+                    sudo rm -f "$old_path"
+                fi
+            fi
+        done
     fi
 
     echo -e "${GREEN}✓ Installation complete!${NC}"

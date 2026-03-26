@@ -58,7 +58,7 @@ See [DEMO](DEMO.md) for a full example.
 **Installing the Liza CLI:**
 
 ```bash
-# Build and install
+# Build and install (defaults to ~/.local/bin)
 make install
 
 # Verify
@@ -74,7 +74,11 @@ liza setup --agent-tools ~/my-agent-tools.md  # use custom AGENT_TOOLS.md
 
 **2. Initialize Project**
 ```bash
-# Create .liza/ directory with blackboard
+# Interactive wizard (recommended for first use):
+liza init
+# Walks through: mode selection → agent selection → project details → conflict resolution
+
+# Or with explicit flags:
 liza init "[Goal description]" --spec [spec_ref]
 
 # spec_ref: Path to goal specification (default: specs/vision.md)
