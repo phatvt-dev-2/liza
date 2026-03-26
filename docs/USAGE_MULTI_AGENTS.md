@@ -101,6 +101,9 @@ liza init "[Goal description]" --spec [spec_ref]
 # liza init auto-suggests the right install command (npm/yarn/pnpm/bun).
 # See docs/CONFIGURATION.md § "Worktree Setup" for details.
 #
+# Integration branch (--branch sets the branch name, default: "integration"):
+#   liza init "Build auth system" --branch develop
+#
 # Entry points (--entry-point selects which sub-pipeline to start from):
 #   liza init "Build auth system" --entry-point general-objective   # full pipeline: epic → US → code-plan → code
 #   liza init "Implement from spec" --entry-point detailed-spec     # coding pipeline only: code-plan → code
@@ -118,7 +121,7 @@ cat .liza/state.yaml
 - `.mcp.json` — MCP server configuration (tells Claude Code how to start liza-mcp)
 - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` — Symlinks to `~/.liza/CORE.md`
 - `GUARDRAILS.md` — Project-specific constraints template (if not already present)
-- `integration` branch — For merging completed work
+- Integration branch (default `integration`, configurable via `--branch`) — For merging completed work
 
 Contracts and skills live in `~/.liza/` (global, from `liza setup`), not in the project.
 Operational reference content (blackboard fields, anomaly types, etc.) is inlined directly into agent prompts.
@@ -331,7 +334,7 @@ The `liza` binary provides all system operations. Key commands:
 |---------|---------|
 | **Setup & Init** | |
 | `liza setup` | One-time global setup of contracts and skills to `~/.liza/` |
-| `liza init <goal> --spec <spec_ref>` | Initialize `.liza/` directory with blackboard (spec_ref defaults to specs/vision.md) |
+| `liza init <goal> --spec <spec_ref> [--branch <name>]` | Initialize `.liza/` directory with blackboard (spec_ref defaults to specs/vision.md, branch defaults to integration) |
 | **Agents & Monitoring** | |
 | `liza agent <role> [--agent-id <id>]` | Agent supervisor (start, restart, backoff loop; ID auto-assigned if omitted) |
 | `liza watch` | Monitor blackboard, alert on anomalies, auto-checkpoint on circuit-breaker |

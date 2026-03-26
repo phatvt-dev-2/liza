@@ -68,6 +68,9 @@ Use --config to provide a pipeline YAML file (defaults to ~/.liza/pipeline.yaml)
 The config is validated and frozen into .liza/pipeline.yaml. Use --entry-point to
 specify which entry-point to use (must be defined in the config).
 
+Use --branch to set the integration branch name (default: "integration").
+All worktrees branch from and merge back to this branch.
+
 Use --post-worktree-cmd to specify a shell command that runs after every worktree
 creation (e.g. 'make setup', 'npm install'). This ensures worktrees are
 build/test-ready without hardcoding project-specific tooling into Liza.
@@ -116,6 +119,7 @@ symlinks needed for pairing (no .liza/ workspace):
 				Description:    result.Description,
 				SpecRef:        result.SpecRef,
 				EntryPoint:     result.EntryPoint,
+				Branch:         result.Branch,
 				Agents:         result.Agents,
 				Stdin:          os.Stdin,
 				ContractAction: result.ContractAction,
@@ -146,12 +150,14 @@ symlinks needed for pairing (no .liza/ workspace):
 		specRef, _ := cmd.Flags().GetString("spec")
 		configPath, _ := cmd.Flags().GetString("config")
 		entryPoint, _ := cmd.Flags().GetString("entry-point")
+		branch, _ := cmd.Flags().GetString("branch")
 		postCreateCmd, _ := cmd.Flags().GetString("post-worktree-cmd")
 		if err := commands.InitCommandWithConfig(commands.InitParams{
 			Description:     description,
 			SpecRef:         specRef,
 			ConfigPath:      configPath,
 			EntryPoint:      entryPoint,
+			Branch:          branch,
 			PostWorktreeCmd: postCreateCmd,
 			Agents:          agents,
 			Stdin:           os.Stdin,
@@ -255,6 +261,7 @@ func init() {
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")
 	initCmd.Flags().String("config", defaultPipelineConfigPath(), "path to pipeline YAML config file")
 	initCmd.Flags().String("entry-point", "", `entry-point name: "general-objective" or "detailed-spec" in default pipeline (default: auto-classified by orchestrator)`)
+	initCmd.Flags().String("branch", "integration", "integration branch name")
 	initCmd.Flags().String("post-worktree-cmd", "", "shell command to run after worktree creation (e.g. 'make setup')")
 	initCmd.Flags().Bool("claude", false, "create CLAUDE.md symlink to ~/.liza/CORE.md")
 	initCmd.Flags().Bool("codex", false, "create AGENTS.md symlink to ~/.liza/CORE.md")

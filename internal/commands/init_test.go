@@ -217,6 +217,99 @@ func TestInitCommandIntegrationBranch(t *testing.T) {
 	}
 }
 
+func TestInitCommandCustomBranch(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	customBranch := "develop"
+
+	// Verify custom branch doesn't exist
+	cmd := exec.Command("git", "rev-parse", "--verify", customBranch)
+	if err := cmd.Run(); err == nil {
+		t.Fatalf("%s branch already exists before init", customBranch)
+	}
+
+	// Run init with custom branch
+	if err := InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Branch:      customBranch,
+	}); err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	// Verify custom branch was created
+	cmd = exec.Command("git", "rev-parse", "--verify", customBranch)
+	if err := cmd.Run(); err != nil {
+		t.Errorf("%s branch was not created", customBranch)
+	}
+
+	// Verify default "integration" branch was NOT created
+	cmd = exec.Command("git", "rev-parse", "--verify", "integration")
+	if err := cmd.Run(); err == nil {
+		t.Error("default integration branch should not exist when custom branch is used")
+	}
+
+	// Verify state.yaml has the custom branch
+	state, err := db.For(filepath.Join(".liza", "state.yaml")).Read()
+	if err != nil {
+		t.Fatalf("failed to read state: %v", err)
+	}
+	if state.Config.IntegrationBranch != customBranch {
+		t.Errorf("state.Config.IntegrationBranch = %q, want %q", state.Config.IntegrationBranch, customBranch)
+	}
+}
+
+func TestInitCommandInvalidBranchName(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	invalidNames := []string{"my branch", "..bad", "refs/heads/", "branch~1"}
+	for _, name := range invalidNames {
+		t.Run(name, func(t *testing.T) {
+			err := InitCommandWithConfig(InitParams{
+				Description: "Test goal",
+				SpecRef:     "specs/vision.md",
+				Branch:      name,
+			})
+			if err == nil {
+				t.Errorf("expected error for invalid branch name %q, got nil", name)
+				// Clean up .liza so next subtest can run
+				os.RemoveAll(filepath.Join(tmpDir, ".liza"))
+			}
+			if err != nil && !strings.Contains(err.Error(), "invalid branch name") {
+				t.Errorf("expected 'invalid branch name' error, got: %v", err)
+			}
+		})
+	}
+}
+
 // Helper functions
 
 func setupGitRepo(t *testing.T) string {

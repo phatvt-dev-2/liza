@@ -24,6 +24,7 @@ type InitParams struct {
 	SpecRef          string
 	ConfigPath       string   // --config: path to pipeline YAML
 	EntryPoint       string   // --entry-point: name of entry-point in config
+	Branch           string   // --branch: integration branch name (default: "integration")
 	PostWorktreeCmd  string   // --post-worktree-cmd: shell command to run after worktree creation
 	Agents           []string // --claude, --codex, --gemini, --mistral
 	Stdin            io.Reader
@@ -412,6 +413,15 @@ func InitCommandWithConfig(params InitParams) error {
 	rawStdin := params.Stdin
 	configPath := params.ConfigPath
 	entryPoint := params.EntryPoint
+	branch := params.Branch
+	if branch == "" {
+		branch = "integration"
+	}
+
+	// Validate branch name using git's own ref format rules
+	if err := validateBranchName(branch); err != nil {
+		return fmt.Errorf("invalid branch name %q: %w", branch, err)
+	}
 	if rawStdin == nil {
 		rawStdin = os.Stdin
 	}
@@ -650,7 +660,7 @@ func InitCommandWithConfig(params InitParams) error {
 			OrchestratorMaxWait:      7200,
 			ReviewerPollInterval:     30,
 			ReviewerMaxWait:          7200,
-			IntegrationBranch:        "integration",
+			IntegrationBranch:        branch,
 			EscalationWebhook:        nil,
 			Mode:                     models.SystemModeRunning,
 			PostWorktreeCmd:          stringPtrOrNil(postWorktreeCmd),
@@ -692,27 +702,36 @@ func InitCommandWithConfig(params InitParams) error {
 	}
 
 	// Create integration branch if it doesn't exist
-	if err := createIntegrationBranch(); err != nil {
+	if err := createIntegrationBranch(branch); err != nil {
 		// Don't fail the entire init if branch creation fails
 		// Just log the error - this is what bash version does
 		fmt.Fprintf(os.Stderr, "Warning: failed to create integration branch: %v\n", err)
 	}
 
 	fmt.Printf("Liza initialized at %s\n", lizaPaths.LizaDir())
-	fmt.Println("Integration branch: integration")
+	fmt.Printf("Integration branch: %s\n", branch)
 	fmt.Println("\nNote: MCP tools and personal permissions belong in ~/.claude/settings.json (global).")
 	fmt.Println("See: contracts/contract-activation.md § Global settings")
 
 	return nil
 }
 
-func createIntegrationBranch() error {
-	cmd := exec.Command("git", "rev-parse", "--verify", "integration")
+// validateBranchName checks that name is a valid git branch name.
+func validateBranchName(name string) error {
+	cmd := exec.Command("git", "check-ref-format", "--branch", name)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("not a valid git branch name: %s", strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func createIntegrationBranch(name string) error {
+	cmd := exec.Command("git", "rev-parse", "--verify", name)
 	if err := cmd.Run(); err == nil {
 		return nil
 	}
 
-	cmd = exec.Command("git", "branch", "integration", "HEAD")
+	cmd = exec.Command("git", "branch", name, "HEAD")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git branch failed: %w: %s", err, string(output))
