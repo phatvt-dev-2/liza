@@ -172,7 +172,7 @@ liza agent coder --agent-id coder-5   # explicit ID
 
 **3. Observe and control**
 
-`liza tui` shows live system state — agents, tasks, alerts, sprint metrics. Keyboard shortcuts: `s` spawn, `p` pause, `r` resume, `a` add task, `c` checkpoint, `Q` stop.
+`liza tui` shows live system state — agents, tasks, alerts, sprint metrics. Keyboard shortcuts: `s` spawn, `p` pause, `r` resume, `a` add task, `c` checkpoint, `y` yolo (toggle auto-resume), `Q` stop.
 
 `./console.sh` is deprecated.
 
@@ -206,6 +206,15 @@ git log integration --oneline
 
 When all tasks in a sprint reach terminal state (MERGED/ABANDONED), `liza resume` marks the sprint COMPLETED. Running `liza resume` a second time archives the completed sprint, creates a new IN_PROGRESS sprint, and executes available pipeline transitions — creating child tasks for the next role-pair.
 
+#### Auto-Resume (Yolo Mode)
+
+By default, checkpoints and sprint completions require manual `liza resume`. Enable auto-resume to skip these gates and keep the system rolling:
+
+- **At init time:** `liza init --auto-resume "Goal"`
+- **At runtime:** Press `y` in the TUI to toggle (shows "Auto-resume: ON/OFF" on the status line)
+
+When auto-resume is enabled, agents automatically call `liza resume` when they detect CHECKPOINT or COMPLETED sprint status. Use `p` (pause) for a hard stop — pause is never auto-resumed.
+
 To start a completely fresh goal, remove the blackboard and re-initialize:
 
 ```bash
@@ -216,7 +225,7 @@ liza init "<new goal>" --spec <spec_ref>
 ### Sprint Lifecycle & Human Gates
 
 Liza runs in sprints. Each sprint executes one role-pair (doer + reviewer) from the pipeline.
-Human checkpoints gate transitions between pairs.
+Human checkpoints gate transitions between pairs (unless auto-resume is enabled).
 
 #### Pipeline & Entry Points
 
@@ -230,7 +239,7 @@ detailed-spec entry point (coding only):
   code-planning-pair → coding-pair
 ```
 
-Each transition between pairs is a **human gate**: the sprint completes, the human reviews, then runs `liza proceed <task-id> <transition>` followed by `liza resume`.
+Each transition between pairs is a **human gate** (unless auto-resume is enabled): the sprint completes, the human reviews, then runs `liza proceed <task-id> <transition>` followed by `liza resume`. With auto-resume, these transitions happen automatically.
 
 #### Sprint Phases
 
@@ -241,9 +250,9 @@ Each transition between pairs is a **human gate**: the sprint completes, the hum
 │  2. Doer claims task, does work, populates output[]     │
 │  3. Reviewer approves → task merges                     │
 │  4. All tasks done → SPRINT_COMPLETE                    │
-│  5. Sprint checkpoints → HUMAN GATE                     │
+│  5. Sprint checkpoints → HUMAN GATE (or auto-resumed)   │
 │                                                         │
-│  Human reviews results, then:                           │
+│  Human reviews results, then (manual mode):             │
 │    liza resume                       (complete strint)  │
 │    liza resume                     (start next sprint)  │
 │                                                         │

@@ -26,6 +26,7 @@ type InitParams struct {
 	EntryPoint       string   // --entry-point: name of entry-point in config
 	Branch           string   // --branch: integration branch name (default: "integration")
 	PostWorktreeCmd  string   // --post-worktree-cmd: shell command to run after worktree creation
+	AutoResume       bool     // --auto-resume: automatically resume at checkpoint and sprint completion
 	Agents           []string // --claude, --codex, --gemini, --mistral
 	Stdin            io.Reader
 	ForceInteractive bool   // bypass TTY check (for testing)
@@ -663,6 +664,7 @@ func InitCommandWithConfig(params InitParams) error {
 			IntegrationBranch:        branch,
 			EscalationWebhook:        nil,
 			Mode:                     models.SystemModeRunning,
+			AutoResume:               params.AutoResume,
 			PostWorktreeCmd:          stringPtrOrNil(postWorktreeCmd),
 		},
 	}

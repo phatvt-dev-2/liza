@@ -217,6 +217,27 @@ func checkpointCmd(projectRoot string) tea.Cmd {
 	}
 }
 
+// toggleAutoResumeCmd toggles the auto_resume config flag in state.yaml.
+// Returns CmdResultMsg with the new value displayed for 3s.
+func toggleAutoResumeCmd(bb *db.Blackboard) tea.Cmd {
+	return func() tea.Msg {
+		var newVal bool
+		err := bb.Modify(func(s *models.State) error {
+			s.Config.AutoResume = !s.Config.AutoResume
+			newVal = s.Config.AutoResume
+			return nil
+		})
+		if err != nil {
+			return CmdResultMsg{Success: false, Message: fmt.Sprintf("toggle auto-resume: %v", err)}
+		}
+		label := "OFF"
+		if newVal {
+			label = "ON"
+		}
+		return CmdResultMsg{Success: true, Message: "Auto-resume: " + label}
+	}
+}
+
 // stopSystemCmd stops the system, then signals the TUI to quit.
 // Calls ops.Stop() directly.
 // Returns stopDoneMsg on success (triggers tea.Quit in Update).

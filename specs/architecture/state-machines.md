@@ -358,8 +358,8 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 | State | Description | Valid Transitions |
 |-------|-------------|-------------------|
 | IN_PROGRESS | Sprint active, work ongoing | → CHECKPOINT, COMPLETED, ABORTED |
-| CHECKPOINT | Mandatory human review | → IN_PROGRESS (continue), ABORTED |
-| COMPLETED | All planned tasks terminal | → IN_PROGRESS (via `liza resume`: archive + new sprint) |
+| CHECKPOINT | Human review (or auto-resumed if `auto_resume` enabled) | → IN_PROGRESS (continue), ABORTED |
+| COMPLETED | All planned tasks terminal | → IN_PROGRESS (via `liza resume` or auto-resume: archive + new sprint) |
 | ABORTED | Human or circuit breaker stopped | Terminal |
 
 ### Sprint Transition Triggers
@@ -376,19 +376,21 @@ Goals span sprints. Unlike sprints, goals have no CHECKPOINT state — checkpoin
 **From CHECKPOINT:**
 - `liza resume` (planned tasks NOT all terminal) → IN_PROGRESS (continue same sprint)
 - `liza resume` (all planned tasks terminal) → COMPLETED (marks sprint done for human review)
+- Auto-resume (when `auto_resume` enabled): agents call `liza resume` automatically
 - `liza stop` → ABORTED (stop)
 
 **From COMPLETED:**
 - `liza proceed <task-id> <transition>` → creates child tasks from parent task's `output[]` (manual transitions)
 - `liza resume` → archives sprint, creates new sprint (IN_PROGRESS) with child tasks
+- Auto-resume (when `auto_resume` enabled): agents call `liza resume` automatically to advance
 
 **Sprint advance flows:**
 
 *Planning tasks (automatic transitions):*
 1. Planning tasks merged → orchestrator checkpoints with `checkpoint_trigger: PLANNING_COMPLETE`
-2. Human reviews planning output → `liza resume` → IN_PROGRESS
+2. Human reviews planning output → `liza resume` → IN_PROGRESS (with auto-resume: agents resume automatically)
 3. Orchestrator PreWork detects trigger + IN_PROGRESS → executes transitions → child tasks created
-4. Sprint continues or completes → next `liza resume` archives sprint
+4. Sprint continues or completes → next `liza resume` (or auto-resume) archives sprint
 
 *Manual transitions:*
 1. CHECKPOINT + all terminal → `liza resume` → COMPLETED (human review gate)

@@ -10,6 +10,36 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+// TestAutoResumeAction tests the pure decision function for auto-resume.
+func TestAutoResumeAction(t *testing.T) {
+	tests := []struct {
+		name       string
+		autoResume bool
+		status     models.SprintStatus
+		want       models.SprintStatus
+	}{
+		{"off_checkpoint", false, models.SprintStatusCheckpoint, ""},
+		{"off_completed", false, models.SprintStatusCompleted, ""},
+		{"on_checkpoint", true, models.SprintStatusCheckpoint, models.SprintStatusCheckpoint},
+		{"on_completed", true, models.SprintStatusCompleted, models.SprintStatusCompleted},
+		{"on_in_progress", true, models.SprintStatusInProgress, ""},
+		{"on_empty", true, "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &models.State{
+				Config: models.Config{AutoResume: tt.autoResume},
+				Sprint: models.Sprint{Status: tt.status},
+			}
+			got := autoResumeAction(state)
+			if got != tt.want {
+				t.Errorf("autoResumeAction() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestIsSystemStopped tests the isSystemStopped helper function
 func TestIsSystemStopped(t *testing.T) {
 	tests := []struct {

@@ -136,6 +136,15 @@ config:
   heartbeat_interval: 30    # Faster crash detection
 ```
 
+### Auto-Resume (`auto_resume`)
+
+When enabled, agents automatically resume the system at CHECKPOINT and COMPLETED sprint states instead of blocking for manual `liza resume`. Defaults to `false`.
+
+- **At init time:** `liza init --auto-resume "Goal"`
+- **At runtime:** Press `y` in the TUI to toggle
+
+Use `liza pause` (or `p` in TUI) for a hard stop — pause is never auto-resumed.
+
 ### Worktree Setup (`post_worktree_cmd`)
 
 Worktrees are bare checkouts — they lack build artifacts like `node_modules/`, `vendor/`, or compiled outputs. The `post_worktree_cmd` config field specifies a shell command that runs after every worktree creation, ensuring agents have a build-ready workspace.

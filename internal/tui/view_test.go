@@ -1074,11 +1074,11 @@ func TestRenderFooter_FormMode_ContainsFormHints(t *testing.T) {
 
 func TestRenderFooter_ActiveCmdResult_AppearsInOutput(t *testing.T) {
 	m := Model{
-		width:     120,
+		width:     160,
 		height:    40,
 		inputMode: InputModeNormal,
 		keys:      NewKeyMap(),
-		styles:    NewStyles(120),
+		styles:    NewStyles(160),
 		cmdResult: &CmdResultMsg{Success: true, Message: "System paused successfully"},
 		cmdExpiry: time.Now().Add(3 * time.Second), // not expired
 	}

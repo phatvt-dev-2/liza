@@ -19,6 +19,7 @@ func TestNewKeyMap_BindingsMatchExpectedKeys(t *testing.T) {
 		{"Resume", km.Resume, []string{"r"}},
 		{"AddTask", km.AddTask, []string{"a"}},
 		{"Checkpoint", km.Checkpoint, []string{"c"}},
+		{"Yolo", km.Yolo, []string{"y"}},
 		{"Help", km.Help, []string{"?"}},
 		{"Quit", km.Quit, []string{"q"}},
 		{"Stop", km.Stop, []string{"Q"}},
@@ -54,6 +55,7 @@ func TestNewKeyMap_HelpTextMatchesSpec(t *testing.T) {
 		{"Resume", km.Resume, "r", "resume"},
 		{"AddTask", km.AddTask, "a", "add"},
 		{"Checkpoint", km.Checkpoint, "c", "checkpoint"},
+		{"Yolo", km.Yolo, "y", "yolo"},
 		{"Help", km.Help, "?", "help"},
 		{"Quit", km.Quit, "q", "quit"},
 		{"Stop", km.Stop, "Q", "stop"},
@@ -72,16 +74,16 @@ func TestNewKeyMap_HelpTextMatchesSpec(t *testing.T) {
 	}
 }
 
-func TestShortHelp_Returns8Bindings(t *testing.T) {
+func TestShortHelp_Returns9Bindings(t *testing.T) {
 	km := NewKeyMap()
 	bindings := km.ShortHelp()
 
-	if len(bindings) != 8 {
-		t.Fatalf("ShortHelp() returned %d bindings, want 8", len(bindings))
+	if len(bindings) != 9 {
+		t.Fatalf("ShortHelp() returned %d bindings, want 9", len(bindings))
 	}
 
-	// Verify footer order from spec: s, p, r, a, c, ?, q, Q
-	expectedKeys := []string{"s", "p", "r", "a", "c", "?", "q", "Q"}
+	// Verify footer order: s, p, r, a, c, y, ?, q, Q
+	expectedKeys := []string{"s", "p", "r", "a", "c", "y", "?", "q", "Q"}
 	for i, b := range bindings {
 		keys := b.Keys()
 		if len(keys) == 0 {
@@ -113,12 +115,12 @@ func TestFullHelp_ReturnsNonEmptyGroups(t *testing.T) {
 		t.Fatalf("FullHelp() returned %d groups, want 3 (actions, system, navigation)", len(groups))
 	}
 
-	// Count total bindings across all groups — should be 8
+	// Count total bindings across all groups — should be 9
 	total := 0
 	for _, group := range groups {
 		total += len(group)
 	}
-	if total != 8 {
-		t.Errorf("FullHelp() total bindings = %d, want 8", total)
+	if total != 9 {
+		t.Errorf("FullHelp() total bindings = %d, want 9", total)
 	}
 }

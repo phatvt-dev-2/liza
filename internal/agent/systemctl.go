@@ -8,6 +8,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -33,7 +34,22 @@ func isSystemStopped(state *models.State) (bool, string) {
 	return false, ""
 }
 
-// waitWhilePaused blocks while system is PAUSED or sprint is in CHECKPOINT status
+// autoResumeAction returns the sprint status to auto-resume, or "" if none.
+// Pure decision function — no side effects, independently testable.
+func autoResumeAction(state *models.State) models.SprintStatus {
+	if !state.Config.AutoResume {
+		return ""
+	}
+	switch state.Sprint.Status {
+	case models.SprintStatusCheckpoint, models.SprintStatusCompleted:
+		return state.Sprint.Status
+	}
+	return ""
+}
+
+// waitWhilePaused blocks while system is PAUSED, CIRCUIT_BREAKER_TRIPPED,
+// or sprint is in CHECKPOINT status. When auto-resume is enabled, CHECKPOINT
+// and COMPLETED states are automatically resumed instead of blocking.
 func waitWhilePaused(ctx context.Context, projectRoot string) error {
 	logger := GetLogger()
 	statePath := paths.New(projectRoot).StatePath()
@@ -48,15 +64,33 @@ func waitWhilePaused(ctx context.Context, projectRoot string) error {
 		if bb := db.For(statePath); bb != nil {
 			state, err := bb.Read()
 			if err == nil {
-				if state.Config.Mode == models.SystemModePaused {
+				switch {
+				case state.Config.Mode == models.SystemModePaused:
 					isPaused = true
 					pauseReason = "[PAUSED] System mode is PAUSED"
-				} else if state.Config.Mode == models.SystemModeCircuitBreakerTripped {
+				case state.Config.Mode == models.SystemModeCircuitBreakerTripped:
 					isPaused = true
 					pauseReason = "[CIRCUIT BREAKER] Circuit breaker triggered - system halted"
-				} else if state.Sprint.Status == models.SprintStatusCheckpoint {
+				case state.Sprint.Status == models.SprintStatusCheckpoint:
+					if state.Config.AutoResume {
+						logger.Info("Auto-resuming from CHECKPOINT")
+						if _, resumeErr := ops.Resume(projectRoot, "auto-resume"); resumeErr != nil {
+							logger.Warn("Auto-resume failed, waiting for next poll", "error", resumeErr)
+						} else {
+							continue // state changed, re-read immediately
+						}
+					}
 					isPaused = true
 					pauseReason = "[CHECKPOINT] Sprint is at checkpoint"
+				case state.Sprint.Status == models.SprintStatusCompleted && state.Config.AutoResume:
+					logger.Info("Auto-resuming from COMPLETED")
+					if _, resumeErr := ops.Resume(projectRoot, "auto-resume"); resumeErr != nil {
+						logger.Warn("Auto-resume from COMPLETED failed, waiting", "error", resumeErr)
+					} else {
+						continue // state changed, re-read immediately
+					}
+					isPaused = true
+					pauseReason = "[COMPLETED] Sprint completed, auto-resume pending"
 				}
 			}
 		}

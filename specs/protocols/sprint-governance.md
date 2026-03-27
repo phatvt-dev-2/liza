@@ -67,13 +67,13 @@ Sprint size is measured in **tasks, not tokens**. Token cost is observed post-ho
 
 ## Checkpoint Protocol
 
-Checkpoints are **mandatory human review points**. No work proceeds until human releases.
+Checkpoints are **mandatory human review points** unless auto-resume is enabled (`config.auto_resume: true`). No work proceeds until human releases (or auto-resume advances the sprint).
 
 ### Checkpoint Triggers
 
 | Trigger | Automatic? | `checkpoint_trigger` | Notes |
 |---------|------------|---------------------|-------|
-| Planning tasks merged with output | Yes | `PLANNING_COMPLETE` | Human reviews planning output before coding begins |
+| Planning tasks merged with output | Yes | `PLANNING_COMPLETE` | Human reviews planning output before coding begins (skipped when auto-resume enabled) |
 | Sprint tasks complete | Yes | `SPRINT_COMPLETE` | Normal completion |
 | Sprint deadline reached | Yes | _(empty)_ | Time box enforced |
 | Circuit breaker fired | Yes | _(empty)_ | Systemic issue detected |
@@ -110,11 +110,14 @@ When implemented, watcher will post to webhook at 2h and 8h thresholds:
 }
 ```
 
-**Design Principle:**
+**Design Principle (auto-resume OFF, default):**
 - Agents remain paused indefinitely — no automatic resume or abort
 - Escalation is notification only, not action
 - Human must explicitly act (`liza resume` or `liza stop`)
 - Unattended checkpoints are not errors; they're paused work awaiting decision
+
+**Auto-Resume Mode (`config.auto_resume: true`):**
+When enabled, agents automatically call `ops.Resume` when they detect CHECKPOINT or COMPLETED sprint status. Checkpoints and sprint completions are no longer human gates — the system rolls forward continuously. Use `liza pause` for a hard stop (pause is never auto-resumed). Toggle at runtime via TUI `[y] yolo`.
 
 **v1 Assumption: Human Availability**
 
@@ -176,12 +179,12 @@ This is acceptable for v1 because:
 
 ### Planning Transition Gate
 
-When planning tasks (epic-planner, code-planner) are merged, the orchestrator checkpoints the sprint with `checkpoint_trigger: PLANNING_COMPLETE` instead of immediately creating child tasks. This gives the human a chance to review planning output before coding begins.
+When planning tasks (epic-planner, code-planner) are merged, the orchestrator checkpoints the sprint with `checkpoint_trigger: PLANNING_COMPLETE` instead of immediately creating child tasks. This gives the human a chance to review planning output before coding begins (unless auto-resume is enabled, in which case agents resume automatically).
 
 **Two-wake model:**
 
-1. **Wake 1:** Orchestrator detects merged planning tasks with unconsumed `output[]` → creates checkpoint with `trigger: PLANNING_COMPLETE` → agents pause
-2. **Human reviews** planning output in the sprint summary → runs `liza resume`
+1. **Wake 1:** Orchestrator detects merged planning tasks with unconsumed `output[]` → creates checkpoint with `trigger: PLANNING_COMPLETE` → agents pause (or auto-resume)
+2. **Human reviews** planning output in the sprint summary → runs `liza resume` (skipped when auto-resume is enabled)
 3. **Wake 2 (PreWork):** Orchestrator's PreWork checks `checkpoint_trigger == "PLANNING_COMPLETE" && status == IN_PROGRESS` with unconsumed output → executes `ExecuteAvailableTransitions` → child tasks created → doers can claim
 
 **Gate correctness:**

@@ -83,6 +83,7 @@ symlinks needed for pairing (no .liza/ workspace):
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agents := collectAgentFlags(cmd)
+		autoResume, _ := cmd.Flags().GetBool("auto-resume")
 
 		// Interactive wizard: no args, no flags, TTY
 		if len(args) == 0 && len(agents) == 0 {
@@ -105,6 +106,9 @@ symlinks needed for pairing (no .liza/ workspace):
 			}
 
 			if result.Mode == "pairing" {
+				if autoResume {
+					return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
+				}
 				if err := commands.InitPairingCommand(commands.InitPairingParams{
 					Agents:         result.Agents,
 					Stdin:          os.Stdin,
@@ -120,6 +124,7 @@ symlinks needed for pairing (no .liza/ workspace):
 				SpecRef:        result.SpecRef,
 				EntryPoint:     result.EntryPoint,
 				Branch:         result.Branch,
+				AutoResume:     autoResume,
 				Agents:         result.Agents,
 				Stdin:          os.Stdin,
 				ContractAction: result.ContractAction,
@@ -134,6 +139,9 @@ symlinks needed for pairing (no .liza/ workspace):
 		if len(args) == 0 {
 			if len(agents) == 0 {
 				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --gemini, --mistral)\nSee: liza init --help")
+			}
+			if autoResume {
+				return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
 			}
 			if err := commands.InitPairingCommand(commands.InitPairingParams{
 				Agents: agents,
@@ -159,6 +167,7 @@ symlinks needed for pairing (no .liza/ workspace):
 			EntryPoint:      entryPoint,
 			Branch:          branch,
 			PostWorktreeCmd: postCreateCmd,
+			AutoResume:      autoResume,
 			Agents:          agents,
 			Stdin:           os.Stdin,
 		}); err != nil {
@@ -263,6 +272,7 @@ func init() {
 	initCmd.Flags().String("entry-point", "", `entry-point name: "general-objective" or "detailed-spec" in default pipeline (default: auto-classified by orchestrator)`)
 	initCmd.Flags().String("branch", "integration", "integration branch name")
 	initCmd.Flags().String("post-worktree-cmd", "", "shell command to run after worktree creation (e.g. 'make setup')")
+	initCmd.Flags().Bool("auto-resume", false, "automatically resume at checkpoint and sprint completion")
 	initCmd.Flags().Bool("claude", false, "create CLAUDE.md symlink to ~/.liza/CORE.md")
 	initCmd.Flags().Bool("codex", false, "create AGENTS.md symlink to ~/.liza/CORE.md")
 	initCmd.Flags().Bool("gemini", false, "create GEMINI.md symlink to ~/.liza/CORE.md")
