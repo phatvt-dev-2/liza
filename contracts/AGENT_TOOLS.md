@@ -105,7 +105,7 @@ Do NOT mix in same batch (would cause all sibling calls to fail).
 
 RTK is a CLI proxy that compresses tool output (git, go, cargo, etc.) saving ~90% tokens. It runs transparently via a PreToolUse hook — most Bash commands are automatically rewritten to `rtk <command>`.
 
-**Unfamiliar formatting (shorter, denser, different alignment) is a feature.** If what you need is present, proceed.
+**Unfamiliar formatting (shorter, denser, different alignment) is a feature.** RTK removes noise, not content — output is complete. If what you need is present, proceed.
 Only If a command REALLY fails (error, missing output, wrong behavior), disable RTK for **that** command:
 
 ```bash
