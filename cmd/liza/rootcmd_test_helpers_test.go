@@ -99,6 +99,10 @@ func resetRootCmdForTest(t *testing.T) {
 		resetHelpFlag(t, child)
 		resetFlagIfPresent(child, "agent-id")
 		resetFlagIfPresent(child, "changed-by")
+		// Init command workspace flags — must reset Changed state between tests.
+		for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "auto-resume", "claude", "codex", "gemini", "mistral"} {
+			resetFlagIfPresent(child, name)
+		}
 	}
 
 	rootCmd.SetOut(io.Discard)

@@ -85,8 +85,8 @@ symlinks needed for pairing (no .liza/ workspace):
 		agents := collectAgentFlags(cmd)
 		autoResume, _ := cmd.Flags().GetBool("auto-resume")
 
-		// Interactive wizard: no args, no flags, TTY
-		if len(args) == 0 && len(agents) == 0 {
+		// Interactive wizard: no args, no agent flags, no explicit workspace flags, TTY
+		if len(args) == 0 && len(agents) == 0 && !hasExplicitInitFlags(cmd) {
 			if !interactive.IsInteractive() {
 				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --gemini, --mistral)\nSee: liza init --help")
 			}
@@ -142,6 +142,9 @@ symlinks needed for pairing (no .liza/ workspace):
 			}
 			if autoResume {
 				return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
+			}
+			if hasExplicitInitFlags(cmd) {
+				return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd) require a description argument for full workspace init")
 			}
 			if err := commands.InitPairingCommand(commands.InitPairingParams{
 				Agents: agents,
@@ -239,6 +242,17 @@ Reports whether any changes were made.`,
 
 // agentFlagNames is the canonical list of supported agent flag names.
 var agentFlagNames = []string{"claude", "codex", "gemini", "mistral"}
+
+// hasExplicitInitFlags returns true if any workspace-specific flag was explicitly set.
+// This prevents the interactive wizard from silently swallowing CLI flags it doesn't collect.
+func hasExplicitInitFlags(cmd *cobra.Command) bool {
+	for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd"} {
+		if cmd.Flags().Changed(name) {
+			return true
+		}
+	}
+	return false
+}
 
 // collectAgentFlags returns the agent names whose boolean flags are set on cmd.
 func collectAgentFlags(cmd *cobra.Command) []string {
