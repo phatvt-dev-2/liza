@@ -82,6 +82,8 @@ using Liza in Multi-agent mode - spec-driven with intermediate epic and User Sto
 
 ## How Liza Compares
 
+### MAS Architecture
+
 The multi-agent coding space splits into four categories:
 
 - **Orchestration frameworks** (CrewAI, LangGraph, AutoGen) — general-purpose multi-agent building blocks; none address behavioral trust in software engineering.
@@ -107,6 +109,21 @@ The multi-agent coding space splits into four categories:
 - **Ecosystem**: CrewAI (45k stars, production v1.9.0, enterprise product) and MetaGPT (64k stars) have far larger communities
 - **Cost tracking**: Paperclip ships per-agent/task/project budgets today; Liza's is planned
 - **Flexibility**: CrewAI works for any domain; Liza is software-engineering-only
+
+### Spec-Driven Process
+
+Spec-driven development is becoming the standard approach for AI coding. Most tools differ in *what altitude* they expect the input at and *who owns product decisions*.
+
+| | Liza                                              | Spec Kit | OpenSpec | Kiro | GSD |
+|---|---------------------------------------------------|---|---|---|---|
+| **Input level** | High-level goal (problem, users, behavior, scope) | High-level goal → agent-generated spec | Detailed delta-specs on existing system | Interactive 3-doc generation | Detailed spec required |
+| **Who decides what to build** | Human via pairing (Coach/Challenger modes)        | Agent generates, human approves | Human (spec pre-decided) | Agent drives, human confirms | Human (pre-written) |
+| **Decomposition** | Orchestrator decomposes into adversarial tasks    | Agent decomposes spec into tasks | Slash commands structure tasks | Agent decomposes from spec | Planner sizes to context budget |
+| **Review** | Doer/reviewer pairs with quorum                   | None | Advisory (verify warns, doesn't block) | None (single-agent) | Checker + verifier (not adversarial) |
+
+Most tools either expect the detailed spec already done (OpenSpec, GSD) or have the agent write it (Spec Kit, Kiro, MetaGPT). Liza treats goal-setting as a synchronous human-agent collaboration where the human makes product decisions and the agent helps surface gaps — then enforces those decisions mechanically during execution.
+
+**Rule of thumb: agents may make implementation choices but not product decisions.** The [goal document](docs/how-to-produce-a-goal.md) is where every product decision lives. The goal-setting phase uses pairing (Coach mode for surfacing WHY, Challenger mode for stress-testing WHAT) because this phase has the highest decision density — every ambiguity resolved here prevents wrong turns downstream.
 
 [Full competitive survey →](specs/architecture/mas-survey.md)
 

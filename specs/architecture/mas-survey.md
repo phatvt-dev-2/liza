@@ -385,10 +385,46 @@ written; Liza mechanically enforces that they do. OpenSpec positions against Spe
 but heavyweight") and Kiro ("powerful but locked in") — Liza's spec phase is closer to SpecKit's
 thoroughness with OpenSpec's agent-agnostic reach.
 
+**Spec altitude comparison**: OpenSpec, like most spec-driven tools, operates at the detailed
+technical spec level — delta-specs describe precise changes to existing system specifications.
+The human or agent must have already made product decisions before OpenSpec adds value. Liza's
+goal document is deliberately higher-altitude: product decisions (what to build, for whom, how
+it behaves) without implementation detail. The orchestrator then decomposes into tasks that agents
+implement. OpenSpec's specs could feed Liza's `--spec` input, but they solve different problems:
+OpenSpec structures what's already decided; Liza's pairing modes (Coach/Challenger) help decide
+what to build in the first place.
+
 **Market position**: High traction (34k stars) in the "spec-first" niche. Validates the thesis
 that front-loading understanding reduces rework. No threat to Liza's multi-agent orchestration
 or behavioral enforcement. Potential overlap only with Liza's spec phase — and even there, the
 approaches differ (universal planning layer vs integrated adversarial pipeline).
+
+### GitHub Spec Kit
+
+Open-source toolkit (March 2026) for spec-driven development with AI coding agents. Four-stage
+workflow: Specify → Plan → Tasks → Implement. Slash commands (`/specify`, `/plan`, `/tasks`)
+steer the agent. Supports Copilot, Claude Code, Codex, Gemini CLI.
+
+Closest to Liza's spec philosophy — starts from a high-level goal, not a detailed spec. But
+it's a template/CLI toolkit, not an orchestration system. No supervision, no adversarial review,
+no crash recovery, no behavioral enforcement. The agent generates the spec *and* executes it —
+no separation between product decisions and implementation choices. Spec Kit solves "how to
+structure the input"; Liza solves "how to ensure the output is trustworthy."
+
+**Relationship to Liza**: Complementary. Spec Kit's structured goal → spec → plan → tasks
+workflow could feed Liza's `--spec` input. The gap is everything after task decomposition —
+supervision, review, enforcement, recovery — which Spec Kit doesn't address.
+
+### Kiro (Amazon)
+
+IDE-native AI agent generating a three-document specification system interactively from user
+prompts. Agent asks clarifying questions, produces requirements, design, and task documents.
+Single-agent execution from the resulting spec.
+
+**Relationship to Liza**: Similar interactive spec refinement, but agent-led rather than
+human-led. Kiro's agent drives the conversation; Liza's Coach mode has the human articulate
+intent while the agent asks Socratic questions. Different control model — Kiro inverts
+ownership of product decisions. Locked to the Kiro IDE.
 
 ### MAS²
 
@@ -403,6 +439,7 @@ operates at architecture-selection level, not behavioral enforcement level. The 
 
 | Dimension | Liza | CrewAI | Ruflo | GSD | Symphony | Paperclip |
 |-----------|------|--------|-------|-----|----------|-----------|
+| **Spec input level** | High-level goal doc (product decisions only) → orchestrator decomposes. Human owns spec via pairing (Coach/Challenger). | None (task descriptions) | None (task descriptions) | Detailed spec required → plan → execute → verify | Issue tracker (Linear) | Goal → delegated tasks |
 | **Domain** | Software engineering (9 roles, 2 phases, declarative pipeline) | General-purpose | Software engineering (60+ agent types) | Software engineering (15 agents, 4 phases) | Task scheduling | Business operations |
 | **Trust approach** | Behavioral contract (55+ failure modes) + review quorum + provider diversity | Post-hoc output validation | Track-record based (Q-learning) | Spec-driven + deviation rules | Implementation-dependent | Budget/approval governance |
 | **Role enforcement** | Code-enforced (MCP handler, YAML-driven permissions) | Prompt suggestion | Claude hooks (provider-specific) | Prompt-level (least-privilege tooling) | None (single-agent) | Org chart hierarchy |
@@ -416,6 +453,24 @@ operates at architecture-selection level, not behavioral enforcement level. The 
 | **Maturity** | Alpha MAS (both phases shipped), battle-tested pairing | Production (v1.9.0) | Active development | Production (v1.25+) | Engineering preview | Just launched |
 | **Stars** | Early | 45k | Growing | 37k | New | 14k |
 | **License** | Apache 2.0 | MIT | MIT | MIT | Apache 2.0 | MIT |
+
+---
+
+## Spec-Driven Landscape
+
+| System | Input altitude | Who owns product decisions | Decomposition | Adversarial review |
+|--------|---------------|--------------------------|---------------|-------------------|
+| **Liza** | High-level goal (problem, users, behavior, scope) | Human via pairing (Coach/Challenger) | Orchestrator decomposes into tasks | Doer/reviewer pairs with quorum |
+| **Spec Kit** | High-level goal → agent-generated spec | Agent generates, human approves | Agent decomposes spec into tasks | None |
+| **OpenSpec** | Detailed delta-specs on existing system | Human (spec assumed pre-decided) | Slash commands structure tasks | None (verify is advisory) |
+| **Kiro** | Interactive 3-doc generation | Agent drives, human confirms | Agent decomposes from spec | None (single-agent) |
+| **GSD** | Detailed spec required | Human (pre-written) | Planner sizes to context budget | Checker + verifier (not adversarial) |
+| **MetaGPT** | Natural language request | Agent (PM role generates PRD) | PM → Architect → Engineer pipeline | None (sequential, not adversarial) |
+
+The key differentiator: most tools either expect the spec already done (OpenSpec, GSD) or have the agent
+write it (Spec Kit, MetaGPT, Kiro). Liza treats goal-setting as a synchronous human-agent collaboration
+where the human makes product decisions and the agent helps surface gaps — then enforces those decisions
+mechanically during execution.
 
 ---
 
@@ -443,6 +498,18 @@ tests to make broken code pass. The constraint must be in the system, not in the
 resonates with developers. The insight is real — agent quality does degrade with context accumulation.
 But context engineering and behavioral enforcement solve different problems. A fresh-context agent can
 still mutate tests, violate scope, or skip review. The complete solution needs both.
+
+**Spec-driven development is converging — but at different altitudes.** GitHub Spec Kit, OpenSpec,
+Kiro, Intent, and BMAD-METHOD all position around "spec before code." Most expect or generate
+a detailed technical spec as input — the decomposition starts from a near-complete requirements
+document. Liza starts one level higher: a goal document capturing product decisions (problem,
+users, behavior, scope boundaries) without implementation detail. The rule is explicit: "agents
+may make implementation choices but not product decisions." The goal-setting phase uses synchronous
+human-agent pairing (Coach mode for surfacing WHY, Challenger mode for stress-testing WHAT) because
+this phase has the highest decision density — every ambiguity resolved here prevents wrong turns
+downstream. Most competitors have the agent write the spec for human approval, inverting the
+control: the human reacts instead of driving. Liza's approach is slower to start but produces
+specs where product decisions are human-owned, not agent-proposed.
 
 **Enterprise trust remains unsolved by everyone except Liza.** Every framework survey and comparison
 article mentions guardrails as a desirable feature. Nobody has what Liza has — 55+ documented failure
