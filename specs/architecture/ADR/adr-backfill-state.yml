@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-03-24T12:00:00Z"
+last_updated: "2026-03-27T16:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -729,10 +729,26 @@ clusters:
 
   # ADR-0046 extended with 1af2159 (2026-03-21) — doer-provider diversity blocking implementation
 
+  # --- Wave 7: 2026-03-27 ---
+
+  - id: 52
+    title: "Bubbletea TUI for Live Monitoring and Agent Management"
+    commit_shas: ["4313f55", "775ec63"]
+    date_range: "2026-03-27"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0052-bubbletea-tui.md"
+    user_context:
+      problem: "Adoption friction: ugly B&W console.sh, CLI-only commands, three separate monitoring surfaces"
+      alternatives: "None — Bubbletea was already an indirect dep via Huh, zero-cost promotion"
+      rationale: "Part of broader adoption push alongside interactive onboarding wizard"
+      limitations: "Phase 1: no panel navigation, item selection, mouse support; spawn lacks --cli provider selection"
+    note: "Spec-first implementation by Liza agents. 8,500 lines across 6 files in internal/tui/."
+
 processing_cursor:
   step: "cluster_analysis"
   substep: "high_confidence_complete"
-  note: "Wave 6 complete (ADR-0048 to ADR-0051, ADR-0046 extended). Non-ADR commits: git-guard hook, secret masking, agent ID auto-assign, discovery disposition MCP, embedded config mastering, operational fixes."
+  note: "Wave 7 complete (ADR-0052). Non-ADR commits since Wave 6: interactive onboarding wizard (6f30ad5), --branch flag (9aa67bf), race condition fixes (45cd029, 1f07ec5, 3cd783d, d96198d), SCC cycle detection (614f3e4), install.sh improvements, docs."
 
 configuration:
   adr_output_dir: "specs/architecture/ADR"
