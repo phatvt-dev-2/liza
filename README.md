@@ -205,6 +205,8 @@ Or you may choose to make it your Socratic colleague, your rubber duck, or your 
 2. `liza tui` — the TUI shows live system state (agents, tasks, alerts, sprint metrics). From it you can spawn agents with role autocompletion (`s`), pause/resume the system, add tasks, and trigger sprint checkpoints.
    Check [Quick Start](docs/USAGE_MULTI_AGENTS.md#quick-start-target-usage) for required roles and options (using a CLI other than Claude, logging).
 
+Refer to [How to Produce a Goal Document For Liza](docs/how-to-produce-a-goal.md) to write a good input doc to use as a `--spec` argument.
+
 ### Common Commands
 
 ```bash
