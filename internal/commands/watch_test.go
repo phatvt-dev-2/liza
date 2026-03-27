@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -24,7 +23,7 @@ func TestCheckExpiredLeases(t *testing.T) {
 		name       string
 		state      *models.State
 		wantAlerts int
-		validate   func(*testing.T, []alert)
+		validate   func(*testing.T, []Alert)
 	}{
 		{
 			name: "expired coder lease",
@@ -45,12 +44,12 @@ func TestCheckExpiredLeases(t *testing.T) {
 				},
 			},
 			wantAlerts: 1,
-			validate: func(t *testing.T, alerts []alert) {
+			validate: func(t *testing.T, alerts []Alert) {
 				if alerts[0].Category != "LEASE EXPIRED" {
 					t.Errorf("Category = %q, want %q", alerts[0].Category, "LEASE EXPIRED")
 				}
-				if alerts[0].Level != alertLevelWarning {
-					t.Errorf("Level = %q, want %q", alerts[0].Level, alertLevelWarning)
+				if alerts[0].Level != AlertLevelWarning {
+					t.Errorf("Level = %q, want %q", alerts[0].Level, AlertLevelWarning)
 				}
 			},
 		},
@@ -71,7 +70,7 @@ func TestCheckExpiredLeases(t *testing.T) {
 				Agents: map[string]models.Agent{},
 			},
 			wantAlerts: 1,
-			validate: func(t *testing.T, alerts []alert) {
+			validate: func(t *testing.T, alerts []Alert) {
 				if alerts[0].Category != "REVIEW LEASE EXPIRED" {
 					t.Errorf("Category = %q, want %q", alerts[0].Category, "REVIEW LEASE EXPIRED")
 				}
@@ -683,43 +682,32 @@ func TestCheckApproachingLimits(t *testing.T) {
 }
 
 func TestCheckStalled(t *testing.T) {
-	now := time.Now().UTC()
-
 	tests := []struct {
 		name       string
-		setupLog   func(string) error
+		setup      func(string)
 		wantAlerts int
 	}{
 		{
-			name: "stalled - no activity for 31 minutes",
-			setupLog: func(logPath string) error {
-				logger := log.New(logPath)
-				return logger.Append(log.Entry{
-					Timestamp: now.Add(-31 * time.Minute),
-					Agent:     "test-agent",
-					Action:    "test_action",
-					Detail:    "test",
-				})
+			name: "stalled - state.yaml not modified for 31 minutes",
+			setup: func(statePath string) {
+				os.WriteFile(statePath, []byte("tasks: []\n"), 0644)
+				staleTime := time.Now().Add(-31 * time.Minute)
+				os.Chtimes(statePath, staleTime, staleTime)
 			},
 			wantAlerts: 1,
 		},
 		{
-			name: "not stalled - recent activity",
-			setupLog: func(logPath string) error {
-				logger := log.New(logPath)
-				return logger.Append(log.Entry{
-					Timestamp: now.Add(-5 * time.Minute),
-					Agent:     "test-agent",
-					Action:    "test_action",
-					Detail:    "test",
-				})
+			name: "not stalled - state.yaml recently modified",
+			setup: func(statePath string) {
+				os.WriteFile(statePath, []byte("tasks: []\n"), 0644)
+				// mtime is now — no stall
 			},
 			wantAlerts: 0,
 		},
 		{
-			name: "no log file",
-			setupLog: func(logPath string) error {
-				return nil // Don't create log
+			name: "no state file",
+			setup: func(statePath string) {
+				// Don't create the file
 			},
 			wantAlerts: 0,
 		},
@@ -728,14 +716,12 @@ func TestCheckStalled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
-			logPath := filepath.Join(tmpDir, "log.yaml")
+			statePath := filepath.Join(tmpDir, "state.yaml")
 
-			if err := tt.setupLog(logPath); err != nil {
-				t.Fatalf("Failed to setup log: %v", err)
-			}
+			tt.setup(statePath)
 
 			cache := make(map[string]time.Time)
-			alerts := checkStalled(logPath, cache)
+			alerts := checkStalled(statePath, cache)
 
 			if len(alerts) != tt.wantAlerts {
 				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
@@ -747,29 +733,23 @@ func TestCheckStalled(t *testing.T) {
 func TestCheckStalledThrottling(t *testing.T) {
 	now := time.Now().UTC()
 	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "log.yaml")
+	statePath := filepath.Join(tmpDir, "state.yaml")
 
-	// Setup log with stale timestamp (31 minutes old)
-	logger := log.New(logPath)
-	if err := logger.Append(log.Entry{
-		Timestamp: now.Add(-31 * time.Minute),
-		Agent:     "test-agent",
-		Action:    "test_action",
-		Detail:    "test",
-	}); err != nil {
-		t.Fatalf("Failed to setup log: %v", err)
-	}
+	// Create state.yaml with stale mtime (31 minutes old)
+	os.WriteFile(statePath, []byte("tasks: []\n"), 0644)
+	staleTime := now.Add(-31 * time.Minute)
+	os.Chtimes(statePath, staleTime, staleTime)
 
 	cache := make(map[string]time.Time)
 
 	// First call - should generate alert
-	alerts := checkStalled(logPath, cache)
+	alerts := checkStalled(statePath, cache)
 	if len(alerts) != 1 {
 		t.Errorf("First call: len(alerts) = %d, want 1", len(alerts))
 	}
 
 	// Second call immediately after - should be throttled
-	alerts = checkStalled(logPath, cache)
+	alerts = checkStalled(statePath, cache)
 	if len(alerts) != 0 {
 		t.Errorf("Second call (throttled): len(alerts) = %d, want 0", len(alerts))
 	}
@@ -778,7 +758,7 @@ func TestCheckStalledThrottling(t *testing.T) {
 	cache["stalled:alert"] = now.Add(-6 * time.Minute)
 
 	// Third call after 5 minutes - should generate alert again
-	alerts = checkStalled(logPath, cache)
+	alerts = checkStalled(statePath, cache)
 	if len(alerts) != 1 {
 		t.Errorf("Third call (after 5 min): len(alerts) = %d, want 1", len(alerts))
 	}
@@ -972,8 +952,8 @@ func TestCheckSprintStalled(t *testing.T) {
 		if alerts[0].Category != "SPRINT STALLED" {
 			t.Errorf("alert[0].Category = %q, want %q", alerts[0].Category, "SPRINT STALLED")
 		}
-		if alerts[0].Level != alertLevelCritical {
-			t.Errorf("alert[0].Level = %q, want %q", alerts[0].Level, alertLevelCritical)
+		if alerts[0].Level != AlertLevelCritical {
+			t.Errorf("alert[0].Level = %q, want %q", alerts[0].Level, AlertLevelCritical)
 		}
 		if !strings.Contains(alerts[0].Message, "2 non-terminal planned tasks are BLOCKED") {
 			t.Errorf("alert[0].Message = %q, expected blocked count", alerts[0].Message)
@@ -1370,8 +1350,8 @@ func TestCheckMissingRoles(t *testing.T) {
 		if alerts[0].Category != "MISSING ROLE" {
 			t.Errorf("Category = %q, want %q", alerts[0].Category, "MISSING ROLE")
 		}
-		if alerts[0].Level != alertLevelWarning {
-			t.Errorf("Level = %q, want %q", alerts[0].Level, alertLevelWarning)
+		if alerts[0].Level != AlertLevelWarning {
+			t.Errorf("Level = %q, want %q", alerts[0].Level, AlertLevelWarning)
 		}
 		if !strings.Contains(alerts[0].Message, "coder") {
 			t.Errorf("Message = %q, expected to contain 'coder'", alerts[0].Message)
@@ -1609,8 +1589,8 @@ func TestCheckStaleSentinels(t *testing.T) {
 		if len(alerts) != 1 {
 			t.Fatalf("len(alerts) = %d, want 1", len(alerts))
 		}
-		if alerts[0].Level != alertLevelCritical {
-			t.Errorf("level = %q, want %q", alerts[0].Level, alertLevelCritical)
+		if alerts[0].Level != AlertLevelCritical {
+			t.Errorf("level = %q, want %q", alerts[0].Level, AlertLevelCritical)
 		}
 		if alerts[0].Category != "STALE SENTINEL" {
 			t.Errorf("category = %q, want %q", alerts[0].Category, "STALE SENTINEL")
@@ -1635,8 +1615,8 @@ func TestCheckStaleSentinels(t *testing.T) {
 		if len(alerts1) != 1 {
 			t.Fatalf("first poll: len(alerts) = %d, want 1", len(alerts1))
 		}
-		if alerts1[0].Level != alertLevelCritical {
-			t.Errorf("first poll: level = %q, want %q", alerts1[0].Level, alertLevelCritical)
+		if alerts1[0].Level != AlertLevelCritical {
+			t.Errorf("first poll: level = %q, want %q", alerts1[0].Level, AlertLevelCritical)
 		}
 		if alerts1[0].Category != "STALE SENTINEL" {
 			t.Errorf("first poll: category = %q, want %q", alerts1[0].Category, "STALE SENTINEL")
@@ -1647,8 +1627,8 @@ func TestCheckStaleSentinels(t *testing.T) {
 		if len(alerts2) != 1 {
 			t.Fatalf("second poll: len(alerts) = %d, want 1", len(alerts2))
 		}
-		if alerts2[0].Level != alertLevelCritical {
-			t.Errorf("second poll: level = %q, want %q", alerts2[0].Level, alertLevelCritical)
+		if alerts2[0].Level != AlertLevelCritical {
+			t.Errorf("second poll: level = %q, want %q", alerts2[0].Level, AlertLevelCritical)
 		}
 		if alerts2[0].Category != "STALE SENTINEL" {
 			t.Errorf("second poll: category = %q, want %q", alerts2[0].Category, "STALE SENTINEL")
@@ -1705,4 +1685,57 @@ func TestCheckStaleSentinels(t *testing.T) {
 			t.Error("cache entry 'sentinel:task-1' should have been cleared when sentinel resolved")
 		}
 	})
+}
+
+func TestRunChecksWithState_BlockedTask(t *testing.T) {
+	now := time.Now().UTC()
+
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	alertsLog := paths.New(tmpDir).AlertsLogPath()
+
+	state := testhelpers.CreateValidState()
+	blockedReason := "spec ambiguity"
+	state.Tasks = []models.Task{
+		{
+			ID:            "blocked-task-1",
+			Type:          models.TaskTypeCoding,
+			Description:   "A blocked task",
+			Status:        models.TaskStatusBlocked,
+			Priority:      1,
+			Created:       now,
+			SpecRef:       "README.md",
+			DoneWhen:      "Task is complete",
+			Scope:         "Test scope",
+			BlockedReason: &blockedReason,
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	config := WatchConfig{
+		ProjectRoot: tmpDir,
+		AlertsLog:   alertsLog,
+		StateCache:  make(map[string]time.Time),
+	}
+
+	alerts := RunChecksWithState(state, config)
+
+	// Find an alert with category "BLOCKED".
+	var found bool
+	for _, a := range alerts {
+		if a.Category == "BLOCKED" {
+			found = true
+			if a.Level != AlertLevelWarning {
+				t.Errorf("BLOCKED alert level = %q, want %q", a.Level, AlertLevelWarning)
+			}
+			if !strings.Contains(a.Message, "blocked-task-1") {
+				t.Errorf("BLOCKED alert message = %q, want containing %q", a.Message, "blocked-task-1")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected alert with category BLOCKED, got %d alerts: %v", len(alerts), alerts)
+	}
 }
