@@ -15,6 +15,7 @@ func TestNewKeyMap_BindingsMatchExpectedKeys(t *testing.T) {
 		wantKeys []string
 	}{
 		{"Spawn", km.Spawn, []string{"s"}},
+		{"SpawnWith", km.SpawnWith, []string{"S"}},
 		{"Terminate", km.Terminate, []string{"t"}},
 		{"Pause", km.Pause, []string{"p"}},
 		{"Resume", km.Resume, []string{"r"}},
@@ -52,6 +53,7 @@ func TestNewKeyMap_HelpTextMatchesSpec(t *testing.T) {
 		wantDesc string
 	}{
 		{"Spawn", km.Spawn, "s", "spawn"},
+		{"SpawnWith", km.SpawnWith, "S", "spawn+cli"},
 		{"Terminate", km.Terminate, "t", "terminate"},
 		{"Pause", km.Pause, "p", "pause"},
 		{"Resume", km.Resume, "r", "resume"},
@@ -76,16 +78,15 @@ func TestNewKeyMap_HelpTextMatchesSpec(t *testing.T) {
 	}
 }
 
-func TestShortHelp_Returns10Bindings(t *testing.T) {
+func TestShortHelp_ReturnsExpectedBindings(t *testing.T) {
 	km := NewKeyMap()
 	bindings := km.ShortHelp()
 
-	if len(bindings) != 10 {
-		t.Fatalf("ShortHelp() returned %d bindings, want 10", len(bindings))
+	// Verify footer order: s, S, t, p, r, a, c, y, ?, q, Q
+	expectedKeys := []string{"s", "S", "t", "p", "r", "a", "c", "y", "?", "q", "Q"}
+	if len(bindings) != len(expectedKeys) {
+		t.Fatalf("ShortHelp() returned %d bindings, want %d", len(bindings), len(expectedKeys))
 	}
-
-	// Verify footer order: s, t, p, r, a, c, y, ?, q, Q
-	expectedKeys := []string{"s", "t", "p", "r", "a", "c", "y", "?", "q", "Q"}
 	for i, b := range bindings {
 		keys := b.Keys()
 		if len(keys) == 0 {
@@ -117,12 +118,13 @@ func TestFullHelp_ReturnsNonEmptyGroups(t *testing.T) {
 		t.Fatalf("FullHelp() returned %d groups, want 3 (actions, system, navigation)", len(groups))
 	}
 
-	// Count total bindings across all groups — should be 10
+	// Total bindings across all groups must match ShortHelp count
 	total := 0
 	for _, group := range groups {
 		total += len(group)
 	}
-	if total != 10 {
-		t.Errorf("FullHelp() total bindings = %d, want 10", total)
+	shortCount := len(km.ShortHelp())
+	if total != shortCount {
+		t.Errorf("FullHelp() total bindings = %d, want %d (same as ShortHelp)", total, shortCount)
 	}
 }

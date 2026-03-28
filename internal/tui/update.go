@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/models"
 )
@@ -177,6 +178,20 @@ func (m Model) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 
+	case key.Matches(msg, m.keys.SpawnWith):
+		m.inputMode = InputModeInline
+		m.inlineAction = InlineActionSpawnWith
+		m.inlineLabel = "Role: "
+		m.textInput.Reset()
+		m.textInput.Focus()
+		m.completionIdx = 0
+		m.completionPrefix = ""
+		var cmd tea.Cmd
+		if len(m.roleCompletions) == 0 {
+			cmd = loadRolesCmd(m.projectRoot)
+		}
+		return m, cmd
+
 	case key.Matches(msg, m.keys.Terminate):
 		// Build agent ID completion list from current state snapshot
 		var agentIDs []string
@@ -251,6 +266,7 @@ func (m Model) handleInlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
 		m.inputMode = InputModeNormal
 		m.inlineAction = InlineActionNone
+		m.spawnRole = ""
 		m.terminateTarget = ""
 		m.textInput.Blur()
 		return m, nil
@@ -264,7 +280,8 @@ func (m Model) handleInlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.executeInlineAction(action, value)
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
-		if m.inlineAction == InlineActionSpawn || m.inlineAction == InlineActionTerminate {
+		if m.inlineAction == InlineActionSpawn || m.inlineAction == InlineActionSpawnWith ||
+			m.inlineAction == InlineActionSpawnCLI || m.inlineAction == InlineActionTerminate {
 			m = m.cycleCompletion()
 		}
 		return m, nil
@@ -290,7 +307,40 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 				return CmdResultMsg{Success: false, Message: fmt.Sprintf("unknown role %q", value)}
 			}
 		}
-		return m, spawnAgentCmd(m.projectRoot, value)
+		return m, spawnAgentCmd(m.projectRoot, value, agent.DefaultCLI)
+	case InlineActionSpawnWith:
+		if value == "" {
+			return m, nil
+		}
+		if len(m.roleCompletions) > 0 && !slices.Contains(m.roleCompletions, value) {
+			return m, func() tea.Msg {
+				return CmdResultMsg{Success: false, Message: fmt.Sprintf("unknown role %q", value)}
+			}
+		}
+		// Phase 2: ask for CLI
+		m.spawnRole = value
+		m.inputMode = InputModeInline
+		m.inlineAction = InlineActionSpawnCLI
+		m.inlineLabel = fmt.Sprintf("CLI (%s): ", agent.DefaultCLI)
+		m.textInput.Reset()
+		m.textInput.Focus()
+		m.completionIdx = 0
+		m.completionPrefix = ""
+		return m, nil
+	case InlineActionSpawnCLI:
+		cli := value
+		if cli == "" {
+			cli = agent.DefaultCLI
+		}
+		if !slices.Contains(agent.ValidCLIs(), cli) {
+			m.spawnRole = ""
+			return m, func() tea.Msg {
+				return CmdResultMsg{Success: false, Message: fmt.Sprintf("unknown CLI %q", cli)}
+			}
+		}
+		role := m.spawnRole
+		m.spawnRole = ""
+		return m, spawnAgentCmd(m.projectRoot, role, cli)
 	case InlineActionPause:
 		return m, pauseSystemCmd(m.projectRoot, value)
 	case InlineActionTerminate:
@@ -329,13 +379,15 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 }
 
 // cycleCompletion cycles through completion candidates matching the current input prefix.
-// Uses roleCompletions for spawn, agentCompletions for terminate.
+// Uses roleCompletions for spawn/spawnWith, ValidCLIs for spawnCLI, agentCompletions for terminate.
 func (m Model) cycleCompletion() Model {
 	// Select the right completion list based on active inline action
 	var candidates []string
 	switch m.inlineAction {
-	case InlineActionSpawn:
+	case InlineActionSpawn, InlineActionSpawnWith:
 		candidates = m.roleCompletions
+	case InlineActionSpawnCLI:
+		candidates = agent.ValidCLIs()
 	case InlineActionTerminate:
 		candidates = m.agentCompletions
 	}

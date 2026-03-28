@@ -181,7 +181,7 @@ func TestTickCmdReturnsNonNilCmd(t *testing.T) {
 // --- Phase 4: Action Cmd function tests ---
 
 func TestSpawnAgentCmd_ReturnsNonNilCmd(t *testing.T) {
-	cmd := spawnAgentCmd("/tmp/fake-project", "coder")
+	cmd := spawnAgentCmd("/tmp/fake-project", "coder", "claude")
 	if cmd == nil {
 		t.Fatal("spawnAgentCmd returned nil tea.Cmd")
 	}
@@ -190,7 +190,7 @@ func TestSpawnAgentCmd_ReturnsNonNilCmd(t *testing.T) {
 func TestSpawnAgentCmd_ReturnsCmdResultMsg(t *testing.T) {
 	// The "liza" binary likely doesn't exist in test; the Cmd should still
 	// return a CmdResultMsg (with Success: false).
-	cmd := spawnAgentCmd("/tmp/fake-project", "coder")
+	cmd := spawnAgentCmd("/tmp/fake-project", "coder", "claude")
 	msg := cmd()
 	_, ok := msg.(CmdResultMsg)
 	if !ok {

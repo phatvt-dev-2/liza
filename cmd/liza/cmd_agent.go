@@ -109,8 +109,8 @@ Example:
 		interactive, _ := cmd.Flags().GetBool("interactive")
 		noLog, _ := cmd.Flags().GetBool("no-log")
 
-		if !slices.Contains([]string{"claude", "codex", "gemini", "mistral", "kimi"}, cliName) {
-			return fmt.Errorf("invalid CLI: %s (must be claude, codex, gemini, mistral, or kimi)", cliName)
+		if !slices.Contains(agent.ValidCLIs(), cliName) {
+			return fmt.Errorf("invalid CLI: %s (must be %s)", cliName, strings.Join(agent.ValidCLIs(), ", "))
 		}
 
 		shouldLog := !noLog && !interactive
@@ -264,7 +264,7 @@ func init() {
 
 	// Agent command flags
 	addAgentIDFlag(agentCmd)
-	agentCmd.Flags().String("cli", "claude", "CLI to use (claude, codex, gemini, mistral)")
+	agentCmd.Flags().String("cli", agent.DefaultCLI, "CLI to use ("+strings.Join(agent.ValidCLIs(), ", ")+")")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")
 	agentCmd.Flags().Bool("no-log", false, "Disable saving agent output to .liza/agent-outputs/")
 

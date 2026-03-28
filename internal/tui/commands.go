@@ -151,13 +151,13 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-// spawnAgentCmd spawns a new agent process for the given role.
-// Uses exec.Command("liza", "agent", role).Start() per spec §Keybindings.
+// spawnAgentCmd spawns a new agent process for the given role and CLI backend.
+// Uses exec.Command("liza", "agent", role, "--cli", cli).Start().
 // The child process is detached with stdout/stderr redirected to os.DevNull.
 // Returns CmdResultMsg with success/error status.
-func spawnAgentCmd(projectRoot, role string) tea.Cmd {
+func spawnAgentCmd(projectRoot, role, cli string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("liza", "agent", role)
+		cmd := exec.Command("liza", "agent", role, "--cli", cli)
 		cmd.Dir = projectRoot
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 

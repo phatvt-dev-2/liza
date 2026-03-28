@@ -25,7 +25,9 @@ type InlineAction int
 
 const (
 	InlineActionNone             InlineAction = iota
-	InlineActionSpawn                         // s — collecting role name
+	InlineActionSpawn                         // s — collecting role name (spawns with default CLI)
+	InlineActionSpawnWith                     // S — collecting role name (transitions to CLI prompt)
+	InlineActionSpawnCLI                      // S (phase 2) — collecting CLI name
 	InlineActionPause                         // p — collecting optional reason
 	InlineActionStopConfirm                   // Q — collecting y/n confirmation
 	InlineActionTerminate                     // t — collecting agent ID
@@ -172,6 +174,7 @@ type Model struct {
 	agentCompletions []string         // snapshot of agent IDs for tab-completion (built on 't' press)
 	completionIdx    int              // current position in tab-completion cycle
 	completionPrefix string           // text prefix when Tab was first pressed (filters completions)
+	spawnRole        string           // role name pending CLI selection (S flow)
 	terminateTarget  string           // agent ID pending termination confirmation
 
 	// Visual
