@@ -146,7 +146,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case errMsg:
-		// No user-visible action for now; future: show in status bar
+		entry := ActivityEntry{
+			Timestamp: time.Now(),
+			Source:    "alert",
+			Action:    "watcher_error",
+			Level:     "⚠️",
+			Detail:    msg.Error(),
+		}
+		m.activities = appendActivity(m.activities, entry)
+		if m.watcher != nil {
+			return m, watchStateCmd(m.watcher)
+		}
 		return m, nil
 
 	case watcherClosedMsg:

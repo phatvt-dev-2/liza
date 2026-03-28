@@ -209,14 +209,53 @@ func TestUpdateWindowSizeMsgSetsColumnTier(t *testing.T) {
 	}
 }
 
-func TestUpdateErrMsgNoOp(t *testing.T) {
+func TestUpdateErrMsg_RearmsWatcher(t *testing.T) {
+	w := newStubWatcher()
 	m := testModel()
+	m.watcher = w
 
-	result, cmd := m.Update(errMsg{err: fmt.Errorf("test error")})
-	if cmd != nil {
-		t.Error("errMsg handler should return nil cmd")
+	result, cmd := m.Update(errMsg{err: fmt.Errorf("fsnotify: short read")})
+	updated := result.(Model)
+
+	if cmd == nil {
+		t.Fatal("errMsg with non-nil watcher must return a non-nil cmd (re-arm watchStateCmd)")
 	}
-	_ = result.(Model) // should not panic
+
+	// Verify activity feed contains the watcher_error entry
+	found := false
+	for _, a := range updated.activities {
+		if a.Source == "alert" && a.Action == "watcher_error" && a.Level == "⚠️" && strings.Contains(a.Detail, "fsnotify: short read") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("errMsg must append ActivityEntry with Source=alert, Action=watcher_error, Level=⚠️, Detail containing the error")
+	}
+}
+
+func TestUpdateErrMsg_NilWatcher(t *testing.T) {
+	m := testModel()
+	m.watcher = nil
+
+	result, cmd := m.Update(errMsg{err: fmt.Errorf("some error")})
+	updated := result.(Model)
+
+	if cmd != nil {
+		t.Error("errMsg with nil watcher must return nil cmd")
+	}
+
+	// Verify activity feed still contains the watcher_error entry
+	found := false
+	for _, a := range updated.activities {
+		if a.Source == "alert" && a.Action == "watcher_error" && a.Level == "⚠️" && strings.Contains(a.Detail, "some error") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("errMsg with nil watcher must still append ActivityEntry with watcher_error")
+	}
 }
 
 func TestUpdateWatcherClosedMsg(t *testing.T) {
