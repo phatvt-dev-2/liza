@@ -6,7 +6,6 @@ import (
 	"maps"
 	"os"
 	"os/exec"
-	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -162,7 +161,7 @@ func spawnAgentCmd(projectRoot, role, cli string) tea.Cmd {
 	return func() tea.Msg {
 		cmd := exec.Command("liza", "agent", role, "--cli", cli)
 		cmd.Dir = projectRoot
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		setDetachedProcessGroup(cmd)
 
 		devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 		if err != nil {
