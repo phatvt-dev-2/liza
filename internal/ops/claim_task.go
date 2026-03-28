@@ -175,13 +175,11 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 					taskID, result.NewAttempt,
 				)}
 			case LimitActionBlocked:
-				blockedIteration, blockedLimit, err := enforceRejectedIterationLimit(bb, taskID, agentID, taskStatus, pipelineTransitions)
-				if err != nil {
-					return nil, fmt.Errorf("failed to enforce iteration limit: %w", err)
+				if err := enforceBlockedEscalation(bb, taskID, agentID, taskStatus, pipelineTransitions, escalation); err != nil {
+					return nil, fmt.Errorf("failed to enforce escalation limit: %w", err)
 				}
 				return nil, &PreconditionError{Reason: fmt.Sprintf(
-					"task %s reached max iterations (%d/%d) and was transitioned to BLOCKED",
-					taskID, blockedIteration, blockedLimit,
+					"task %s transitioned to BLOCKED — %s", taskID, escalation.reason,
 				)}
 			}
 		}
@@ -477,17 +475,16 @@ func ensureIntegrationFailedWorktreeExists(worktreeDir, worktreeRel string) erro
 	return nil
 }
 
-func enforceRejectedIterationLimit(
+func enforceBlockedEscalation(
 	bb *db.Blackboard,
 	taskID, agentID string,
 	expectedStatus models.TaskStatus,
 	pipelineTransitions map[models.TaskStatus][]models.TaskStatus,
-) (int, int, error) {
+	escalation limitEscalation,
+) error {
 	now := time.Now().UTC()
-	blockedIteration := 0
-	blockedLimit := 0
 
-	err := bb.Modify(func(state *models.State) error {
+	return bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
@@ -496,18 +493,20 @@ func enforceRejectedIterationLimit(
 			return fmt.Errorf("race condition: task status changed from %s to %s", expectedStatus, task.Status)
 		}
 
-		blockedLimit = effectiveCoderIterationLimit(task, state.Config)
-		if task.Iteration < blockedLimit {
-			return fmt.Errorf(
-				"race condition: task iteration no longer at limit (%d/%d)",
-				task.Iteration,
-				blockedLimit,
-			)
+		// TOCTOU re-verification: re-classify with current state values under lock.
+		iterationLimit := effectiveCoderIterationLimit(task, state.Config)
+		reviewLimit := effectiveReviewCycleLimit(state.Config)
+		_, stillEscalated := classifyLimitEscalation(
+			task.ReviewCyclesCurrent, reviewLimit,
+			task.Iteration, iterationLimit,
+			task.EffectiveAttempt(),
+		)
+		if !stillEscalated {
+			return fmt.Errorf("race condition: escalation condition no longer holds")
 		}
 
-		blockedIteration = task.Iteration
-		blockedReason := iterationLimitBlockedReason(task.Iteration, blockedLimit)
-		questions := defaultIterationLimitBlockedQuestions()
+		blockedReason := escalation.reason
+		questions := escalation.questions
 
 		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
 			return err
@@ -537,11 +536,6 @@ func enforceRejectedIterationLimit(
 
 		return nil
 	})
-	if err != nil {
-		return 0, 0, err
-	}
-
-	return blockedIteration, blockedLimit, nil
 }
 
 func validateRejectedWorktree(
