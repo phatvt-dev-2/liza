@@ -65,12 +65,15 @@ EXIT CODES:
 TIMESTAMPS: YYYY-MM-DDTHH:MM:SSZ (ISO 8601 UTC). Generate: date -u +%Y-%m-%dT%H:%M:%SZ
 
 FIRST ACTIONS:
+1. Read these contract files before anything else:
+   a. ~/.liza/MULTI_AGENT_MODE.md
+   b. ~/.liza/AGENT_TOOLS.md
+   c. {{.ProjectRoot}}/GUARDRAILS.md (if it exists — skip if absent)
 {{- if .TaskID}}
-1. Query your assigned task: liza_get {"query": "tasks/{{.TaskID}}"}
+2. Query your assigned task: liza_get {"query": "tasks/{{.TaskID}}"}
 {{- else}}
-1. Query workspace state: liza_get {"query": "tasks"}
+2. Query workspace state: liza_get {"query": "tasks"}
 {{- end}}
-2. Read the goal spec: {{.GoalSpecRef}}
-3. Enforce GUARDRAILS.md at project root (if it exists) — project-specific mandatory constraints
+3. Read the goal spec: {{.GoalSpecRef}}
 4. Execute your role's protocol
 {{- end -}}
