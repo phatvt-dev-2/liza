@@ -35,7 +35,10 @@ func (m Model) View() string {
 		remaining = 0
 	}
 
-	// Distribute remaining height among panels
+	// Distribute remaining height among panels.
+	// Strategy: agents and tasks get content-fitting height (all rows visible),
+	// activity fills whatever remains. When space is tight, tasks are prioritised
+	// over agents, and activity gets a guaranteed minimum.
 	agentCount := 0
 	taskCount := 0
 	if m.state != nil {
@@ -43,28 +46,40 @@ func (m Model) View() string {
 		taskCount = len(m.state.Tasks)
 	}
 
-	// Agent panel: min(len(agents)+3, remaining/3) — +3 for border+title+header row
-	agentHeight := agentCount + 3
-	if maxAgent := remaining / 3; agentHeight > maxAgent {
-		agentHeight = maxAgent
-	}
-	if agentHeight < 3 {
-		agentHeight = 3
+	// Panel overhead: border(2) + title(1) + header(1) = 4
+	const panelOverhead = 4
+	const minPanel = 4    // overhead only — shows title+header, zero data rows
+	const minActivity = 5 // border(2) + title(1) + at least 2 entries
+
+	// Natural (content-fitting) heights
+	agentNatural := agentCount + panelOverhead
+	taskNatural := taskCount + panelOverhead
+
+	var agentHeight, taskHeight, activityHeight int
+
+	if agentNatural+taskNatural+minActivity <= remaining {
+		// Both fit fully with room for activity
+		agentHeight = agentNatural
+		taskHeight = taskNatural
+		activityHeight = remaining - agentHeight - taskHeight
+	} else {
+		// Tight: cap agents at 1/4, prioritise tasks, activity gets minimum
+		avail := remaining - minActivity
+		agentHeight = min(agentNatural, max(avail/4, minPanel))
+		taskHeight = min(taskNatural, max(avail-agentHeight, minPanel))
+		activityHeight = remaining - agentHeight - taskHeight
 	}
 
-	// Task panel: min(len(tasks)+3, remaining/3)
-	taskHeight := taskCount + 3
-	if maxTask := remaining / 3; taskHeight > maxTask {
-		taskHeight = maxTask
+	// Enforce minimums. On very small terminals (remaining < 12) total may
+	// exceed remaining — acceptable since the layout is already degraded.
+	if agentHeight < minPanel {
+		agentHeight = minPanel
 	}
-	if taskHeight < 3 {
-		taskHeight = 3
+	if taskHeight < minPanel {
+		taskHeight = minPanel
 	}
-
-	// Activity panel: remaining height after agents+tasks
-	activityHeight := remaining - agentHeight - taskHeight
-	if activityHeight < 3 {
-		activityHeight = 3
+	if activityHeight < minPanel {
+		activityHeight = minPanel
 	}
 
 	agents := m.renderAgentPanel(agentHeight)
@@ -137,7 +152,7 @@ func (m Model) renderAgentPanel(height int) string {
 	// Handle empty/nil state
 	if m.state == nil || len(m.state.Agents) == 0 {
 		content := title + "\n  No agents"
-		return m.styles.AgentPanel.Render(content)
+		return m.styles.AgentPanel.Height(max(height-2, 1)).Render(content)
 	}
 
 	// Sort agent IDs for stable ordering
@@ -231,8 +246,8 @@ func (m Model) renderAgentPanel(height int) string {
 	headerRow := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8")).
 		Render("  " + strings.Join(headerParts, ""))
 
-	// Build data rows
-	maxRows := max(height-3, 0) // border (2) + title (1)
+	// Build data rows — overhead: border(2) + title(1) + header(1) = 4
+	maxRows := max(height-4, 0)
 
 	var rows []string
 	for i, id := range ids {
@@ -258,7 +273,7 @@ func (m Model) renderAgentPanel(height int) string {
 	}
 
 	content := title + "\n" + headerRow + "\n" + strings.Join(rows, "\n")
-	return m.styles.AgentPanel.Render(content)
+	return m.styles.AgentPanel.Height(max(height-2, 1)).Render(content)
 }
 
 // renderTaskPanel renders the task panel as a bordered table.
@@ -297,7 +312,7 @@ func (m Model) renderTaskPanel(height int) string {
 	// Handle empty/nil state
 	if m.state == nil || len(m.state.Tasks) == 0 {
 		content := title + "\n  No tasks"
-		return m.styles.TaskPanel.Render(content)
+		return m.styles.TaskPanel.Height(max(height-2, 1)).Render(content)
 	}
 
 	// Sort tasks by created timestamp (oldest first), preserving creation order
@@ -374,8 +389,8 @@ func (m Model) renderTaskPanel(height int) string {
 
 	// Build column list based on tier
 	cols := []column{
-		{"ID", 26, func(t models.Task) string { return t.ID }},
-		{"STATUS", 26, statusVal},
+		{"ID", 40, func(t models.Task) string { return t.ID }},
+		{"STATUS", 24, statusVal},
 	}
 
 	if m.columnTier >= ColumnTierStandard {
@@ -422,8 +437,8 @@ func (m Model) renderTaskPanel(height int) string {
 	headerRow := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8")).
 		Render("  " + strings.Join(headerParts, ""))
 
-	// Build rows
-	maxRows := max(height-3, 0) // border (2) + title (1)
+	// Build rows — overhead: border(2) + title(1) + header(1) = 4
+	maxRows := max(height-4, 0)
 
 	var rows []string
 	for i, t := range tasks {
@@ -453,7 +468,7 @@ func (m Model) renderTaskPanel(height int) string {
 	}
 
 	content := title + "\n" + headerRow + "\n" + strings.Join(rows, "\n")
-	return m.styles.TaskPanel.Render(content)
+	return m.styles.TaskPanel.Height(max(height-2, 1)).Render(content)
 }
 
 // renderActivityPanel renders the activity feed as a bordered panel.
@@ -463,7 +478,7 @@ func (m Model) renderActivityPanel(height int) string {
 	title := m.styles.PanelTitle.Render("⚡ ACTIVITY")
 
 	if len(m.activities) == 0 {
-		return m.styles.ActivityPanel.Render(title)
+		return m.styles.ActivityPanel.Height(max(height-2, 1)).Render(title)
 	}
 
 	// Available content lines: height minus border (2) and title (1)
@@ -479,7 +494,7 @@ func (m Model) renderActivityPanel(height int) string {
 	}
 
 	content := title + "\n" + strings.Join(rows, "\n")
-	return m.styles.ActivityPanel.Render(content)
+	return m.styles.ActivityPanel.Height(max(height-2, 1)).Render(content)
 }
 
 // formatActivityEntry formats a single activity entry based on its source type.
