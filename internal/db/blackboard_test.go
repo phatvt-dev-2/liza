@@ -1911,3 +1911,219 @@ config:
 		t.Errorf("Modify callback: got role %q, want %q", observedRole, "code-plan-reviewer")
 	}
 }
+
+// TestRead_NormalizesLegacyAttempted verifies that Read() converts legacy
+// attempted: ["agent-1"] into Attempt == 2 and removes the Extra key.
+func TestRead_NormalizesLegacyAttempted(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	rawYAML := `version: 1
+goal:
+    id: goal-1
+    description: Test
+    spec_ref: spec.md
+    created: 2025-01-17T14:00:00Z
+    status: IN_PROGRESS
+tasks:
+    - id: task-1
+      description: Test task
+      status: IMPLEMENTING_CODE
+      priority: 1
+      created: 2025-01-17T14:00:00Z
+      attempted:
+          - agent-1
+agents: {}
+config:
+    max_coder_iterations: 5
+    max_review_cycles: 3
+    heartbeat_interval: 30
+    lease_duration: 300
+    coder_poll_interval: 10
+    coder_max_wait: 600
+    integration_branch: main
+`
+	if err := os.WriteFile(statePath, []byte(rawYAML), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+
+	if len(state.Tasks) == 0 {
+		t.Fatal("expected at least one task")
+	}
+	task := state.Tasks[0]
+	if task.Attempt != 2 {
+		t.Errorf("Read: got Attempt %d, want 2", task.Attempt)
+	}
+	if _, ok := task.Extra["attempted"]; ok {
+		t.Error("Read: Extra[\"attempted\"] should have been removed")
+	}
+}
+
+// TestReadCached_NormalizesLegacyAttempted verifies ReadCached() also normalizes.
+func TestReadCached_NormalizesLegacyAttempted(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	rawYAML := `version: 1
+goal:
+    id: goal-1
+    description: Test
+    spec_ref: spec.md
+    created: 2025-01-17T14:00:00Z
+    status: IN_PROGRESS
+tasks:
+    - id: task-1
+      description: Test task
+      status: IMPLEMENTING_CODE
+      priority: 1
+      created: 2025-01-17T14:00:00Z
+      attempted:
+          - agent-1
+agents: {}
+config:
+    max_coder_iterations: 5
+    max_review_cycles: 3
+    heartbeat_interval: 30
+    lease_duration: 300
+    coder_poll_interval: 10
+    coder_max_wait: 600
+    integration_branch: main
+`
+	if err := os.WriteFile(statePath, []byte(rawYAML), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+
+	state, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("ReadCached failed: %v", err)
+	}
+
+	if len(state.Tasks) == 0 {
+		t.Fatal("expected at least one task")
+	}
+	task := state.Tasks[0]
+	if task.Attempt != 2 {
+		t.Errorf("ReadCached: got Attempt %d, want 2", task.Attempt)
+	}
+	if _, ok := task.Extra["attempted"]; ok {
+		t.Error("ReadCached: Extra[\"attempted\"] should have been removed")
+	}
+}
+
+// TestModify_NormalizesLegacyAttempted verifies Modify() normalizes legacy
+// attempted: before passing state to the callback.
+func TestModify_NormalizesLegacyAttempted(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	rawYAML := `version: 1
+goal:
+    id: goal-1
+    description: Test
+    spec_ref: spec.md
+    created: 2025-01-17T14:00:00Z
+    status: IN_PROGRESS
+tasks:
+    - id: task-1
+      description: Test task
+      status: IMPLEMENTING_CODE
+      priority: 1
+      created: 2025-01-17T14:00:00Z
+      attempted:
+          - agent-1
+agents: {}
+config:
+    max_coder_iterations: 5
+    max_review_cycles: 3
+    heartbeat_interval: 30
+    lease_duration: 300
+    coder_poll_interval: 10
+    coder_max_wait: 600
+    integration_branch: main
+`
+	if err := os.WriteFile(statePath, []byte(rawYAML), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+
+	var observedAttempt int
+	var hasExtra bool
+	err := bb.Modify(func(state *models.State) error {
+		if len(state.Tasks) == 0 {
+			return fmt.Errorf("expected at least one task")
+		}
+		observedAttempt = state.Tasks[0].Attempt
+		_, hasExtra = state.Tasks[0].Extra["attempted"]
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Modify failed: %v", err)
+	}
+
+	if observedAttempt != 2 {
+		t.Errorf("Modify callback: got Attempt %d, want 2", observedAttempt)
+	}
+	if hasExtra {
+		t.Error("Modify callback: Extra[\"attempted\"] should have been removed")
+	}
+}
+
+// TestRead_NoLegacyField_Unchanged verifies that a task with the new-format
+// attempt: field is not modified by normalization.
+func TestRead_NoLegacyField_Unchanged(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+
+	rawYAML := `version: 1
+goal:
+    id: goal-1
+    description: Test
+    spec_ref: spec.md
+    created: 2025-01-17T14:00:00Z
+    status: IN_PROGRESS
+tasks:
+    - id: task-1
+      description: Test task
+      status: IMPLEMENTING_CODE
+      priority: 1
+      created: 2025-01-17T14:00:00Z
+      attempt: 1
+agents: {}
+config:
+    max_coder_iterations: 5
+    max_review_cycles: 3
+    heartbeat_interval: 30
+    lease_duration: 300
+    coder_poll_interval: 10
+    coder_max_wait: 600
+    integration_branch: main
+`
+	if err := os.WriteFile(statePath, []byte(rawYAML), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	bb := New(statePath)
+
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+
+	if len(state.Tasks) == 0 {
+		t.Fatal("expected at least one task")
+	}
+	task := state.Tasks[0]
+	if task.Attempt != 1 {
+		t.Errorf("Read: got Attempt %d, want 1", task.Attempt)
+	}
+}

@@ -123,6 +123,7 @@ func (bb *Blackboard) Read() (*models.State, error) {
 	}
 
 	normalizeAgentRoles(&state)
+	normalizeTaskAttempts(&state)
 	return &state, nil
 }
 
@@ -183,6 +184,7 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 	}
 
 	normalizeAgentRoles(&state)
+	normalizeTaskAttempts(&state)
 	return &state, nil
 }
 
@@ -270,6 +272,7 @@ func (bb *Blackboard) Modify(fn func(*models.State) error) error {
 		}
 
 		normalizeAgentRoles(&state)
+		normalizeTaskAttempts(&state)
 
 		if err := fn(&state); err != nil {
 			return fmt.Errorf("modification function failed: %w", err)
@@ -344,6 +347,14 @@ func (bb *Blackboard) UpdateAgent(agentID string, fn func(*models.Agent) error) 
 // GetStatePath returns the path to the state file.
 func (bb *Blackboard) GetStatePath() string {
 	return bb.statePath
+}
+
+// normalizeTaskAttempts converts the legacy attempted: list into the Attempt
+// field in-memory. Does not write back to disk — normalization is read-path only.
+func normalizeTaskAttempts(state *models.State) {
+	for i := range state.Tasks {
+		state.Tasks[i].MigrateAttemptedField()
+	}
 }
 
 // normalizeAgentRoles converts legacy underscore-form role names to hyphenated
