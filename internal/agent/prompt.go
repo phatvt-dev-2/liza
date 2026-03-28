@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/errors"
@@ -125,7 +126,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		DoneWhen:     task.DoneWhen,
 		Scope:        task.Scope,
 		SpecRef:      task.SpecRef,
-		PlanRef:      splitPlanRefFile(task.PlanRef),
+		PlanRef:      worktreeRelPath(splitPlanRefFile(task.PlanRef), resolveWorktreePath(config.ProjectRoot, task.Worktree)),
 		PlanSection:  splitPlanRefSection(task.PlanRef),
 		Worktree:     resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		IterationNum: task.Iteration,
@@ -271,6 +272,15 @@ func splitPlanRefSection(planRef string) string {
 		return planRef[i+1:]
 	}
 	return ""
+}
+
+// worktreeRelPath prefixes a relative path with the worktree path so agents
+// resolve it inside the worktree rather than the main repo.
+func worktreeRelPath(relPath, worktree string) string {
+	if worktree == "" || relPath == "" {
+		return relPath
+	}
+	return filepath.Join(worktree, relPath)
 }
 
 // truncateDescription shortens s to maxLen characters, appending "…" if truncated.
