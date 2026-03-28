@@ -43,6 +43,7 @@ and ship TUI agent-management keybindings.
 | Re-arm watcher subscription on errMsg | Reactive updates continue after transient fsnotify errors |
 | Surface log.yaml parse errors instead of swallowing | Persistent corruption visible in activity feed |
 | Surface WriteAlert errors instead of discarding | Alerts.log write failures now visible |
+| Use build tags for `SysProcAttr` in TUI spawn | **Release** — goreleaser Windows build failed, blocking all v0.5.2 binary assets |
 | Relabel TIME_ON_TASK to LAST_HEARTBEAT in agent panel | Column semantics match displayed data |
 | Eliminate wasted vertical space and widen task ID column | Content-sized panels, compound IDs fit |
 | Auto-fallback to headless mode when stdin is not a TTY | CI/cron/pipe contexts no longer crash |
