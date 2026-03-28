@@ -160,7 +160,7 @@ func RunChecksWithState(state *models.State, config WatchConfig) []Alert {
 		func() []Alert { return checkReassigned(state, config.StateCache) },
 		func() []Alert { return checkApproachingLimits(state) },
 		func() []Alert { return checkStaleSentinels(state, config.StateCache) },
-		func() []Alert { return checkStalled(lizaPaths.StatePath(), config.StateCache) },
+		func() []Alert { return checkStalled(state, config.StateCache) },
 		func() []Alert { return checkStaleDrafts(state) },
 		func() []Alert { return checkImmediateDiscoveries(state) },
 		func() []Alert { return checkMissingRoles(state, pr, config.StateCache) },
@@ -558,20 +558,49 @@ func checkStaleSentinels(state *models.State, cache map[string]time.Time) []Aler
 	return alerts
 }
 
-// checkStalled detects stalled progress by checking the state.yaml modification
-// time. Any state modification (task claims, verdicts, status transitions) updates
-// the mtime, making this more reliable than log.yaml which only captures a subset
-// of operations. Throttles alerts to once every 5 minutes.
-func checkStalled(statePath string, cache map[string]time.Time) []Alert {
+// checkStalled detects stalled progress by finding the latest task history
+// timestamp across all tasks. Heartbeat writes do not create history entries,
+// so this signal is immune to lease-renewal traffic. Falls back to the earliest
+// task Created time when no history exists. Throttles alerts to once every 5 minutes.
+func checkStalled(state *models.State, cache map[string]time.Time) []Alert {
 	var alerts []Alert
 	now := time.Now().UTC()
 
-	info, err := os.Stat(statePath)
-	if err != nil {
+	// Find latest history timestamp and check for active tasks.
+	var latestProgress time.Time
+	hasActive := false
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if !task.Status.IsTerminal() {
+			hasActive = true
+		}
+		for j := range task.History {
+			if task.History[j].Time.After(latestProgress) {
+				latestProgress = task.History[j].Time
+			}
+		}
+	}
+
+	if !hasActive {
+		delete(cache, "stalled:alert")
 		return alerts
 	}
 
-	age := time.Since(info.ModTime())
+	// No history entries: fall back to earliest Created.
+	if latestProgress.IsZero() {
+		for i := range state.Tasks {
+			created := state.Tasks[i].Created
+			if latestProgress.IsZero() || created.Before(latestProgress) {
+				latestProgress = created
+			}
+		}
+	}
+
+	if latestProgress.IsZero() {
+		return alerts
+	}
+
+	age := now.Sub(latestProgress)
 	if age <= StallThreshold {
 		delete(cache, "stalled:alert")
 		return alerts
@@ -584,7 +613,7 @@ func checkStalled(statePath string, cache map[string]time.Time) []Alert {
 			Timestamp: now,
 			Level:     AlertLevelWarning,
 			Category:  "STALLED",
-			Message:   fmt.Sprintf("no progress for %d minutes", int(age.Minutes())),
+			Message:   fmt.Sprintf("no task progress for %d minutes", int(age.Minutes())),
 		})
 		cache[cacheKey] = now
 	}

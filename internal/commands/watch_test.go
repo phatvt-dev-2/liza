@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -682,32 +681,82 @@ func TestCheckApproachingLimits(t *testing.T) {
 }
 
 func TestCheckStalled(t *testing.T) {
+	now := time.Now().UTC()
+
 	tests := []struct {
 		name       string
-		setup      func(string)
+		state      *models.State
 		wantAlerts int
+		wantMsg    string
 	}{
 		{
-			name: "stalled - state.yaml not modified for 31 minutes",
-			setup: func(statePath string) {
-				os.WriteFile(statePath, []byte("tasks: []\n"), 0644)
-				staleTime := time.Now().Add(-31 * time.Minute)
-				os.Chtimes(statePath, staleTime, staleTime)
+			name: "active_task_stale_history",
+			state: &models.State{
+				Tasks: []models.Task{{
+					ID:     "t1",
+					Status: models.TaskStatusImplementing,
+					History: []models.TaskHistoryEntry{{
+						Time:  now.Add(-31 * time.Minute),
+						Event: "claimed",
+					}},
+				}},
 			},
 			wantAlerts: 1,
+			wantMsg:    "no task progress",
 		},
 		{
-			name: "not stalled - state.yaml recently modified",
-			setup: func(statePath string) {
-				os.WriteFile(statePath, []byte("tasks: []\n"), 0644)
-				// mtime is now — no stall
+			name: "active_task_recent_history",
+			state: &models.State{
+				Tasks: []models.Task{{
+					ID:     "t1",
+					Status: models.TaskStatusImplementing,
+					History: []models.TaskHistoryEntry{{
+						Time:  now.Add(-5 * time.Minute),
+						Event: "claimed",
+					}},
+				}},
 			},
 			wantAlerts: 0,
 		},
 		{
-			name: "no state file",
-			setup: func(statePath string) {
-				// Don't create the file
+			name: "all_tasks_terminal",
+			state: &models.State{
+				Tasks: []models.Task{{
+					ID:     "t1",
+					Status: models.TaskStatusMerged,
+					History: []models.TaskHistoryEntry{{
+						Time:  now.Add(-60 * time.Minute),
+						Event: "merged",
+					}},
+				}},
+			},
+			wantAlerts: 0,
+		},
+		{
+			name:       "no_tasks",
+			state:      &models.State{},
+			wantAlerts: 0,
+		},
+		{
+			name: "no_history_fallback_to_created",
+			state: &models.State{
+				Tasks: []models.Task{{
+					ID:      "t1",
+					Status:  models.TaskStatusImplementing,
+					Created: now.Add(-31 * time.Minute),
+				}},
+			},
+			wantAlerts: 1,
+			wantMsg:    "no task progress",
+		},
+		{
+			name: "no_history_recent_created",
+			state: &models.State{
+				Tasks: []models.Task{{
+					ID:      "t1",
+					Status:  models.TaskStatusImplementing,
+					Created: now.Add(-5 * time.Minute),
+				}},
 			},
 			wantAlerts: 0,
 		},
@@ -715,16 +764,16 @@ func TestCheckStalled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			statePath := filepath.Join(tmpDir, "state.yaml")
-
-			tt.setup(statePath)
-
 			cache := make(map[string]time.Time)
-			alerts := checkStalled(statePath, cache)
+			alerts := checkStalled(tt.state, cache)
 
 			if len(alerts) != tt.wantAlerts {
 				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
+			}
+			if tt.wantMsg != "" && len(alerts) > 0 {
+				if !strings.Contains(alerts[0].Message, tt.wantMsg) {
+					t.Errorf("alert message = %q, want substring %q", alerts[0].Message, tt.wantMsg)
+				}
 			}
 		})
 	}
@@ -732,24 +781,28 @@ func TestCheckStalled(t *testing.T) {
 
 func TestCheckStalledThrottling(t *testing.T) {
 	now := time.Now().UTC()
-	tmpDir := t.TempDir()
-	statePath := filepath.Join(tmpDir, "state.yaml")
 
-	// Create state.yaml with stale mtime (31 minutes old)
-	os.WriteFile(statePath, []byte("tasks: []\n"), 0644)
-	staleTime := now.Add(-31 * time.Minute)
-	os.Chtimes(statePath, staleTime, staleTime)
+	state := &models.State{
+		Tasks: []models.Task{{
+			ID:     "t1",
+			Status: models.TaskStatusImplementing,
+			History: []models.TaskHistoryEntry{{
+				Time:  now.Add(-31 * time.Minute),
+				Event: "claimed",
+			}},
+		}},
+	}
 
 	cache := make(map[string]time.Time)
 
 	// First call - should generate alert
-	alerts := checkStalled(statePath, cache)
+	alerts := checkStalled(state, cache)
 	if len(alerts) != 1 {
 		t.Errorf("First call: len(alerts) = %d, want 1", len(alerts))
 	}
 
 	// Second call immediately after - should be throttled
-	alerts = checkStalled(statePath, cache)
+	alerts = checkStalled(state, cache)
 	if len(alerts) != 0 {
 		t.Errorf("Second call (throttled): len(alerts) = %d, want 0", len(alerts))
 	}
@@ -758,7 +811,7 @@ func TestCheckStalledThrottling(t *testing.T) {
 	cache["stalled:alert"] = now.Add(-6 * time.Minute)
 
 	// Third call after 5 minutes - should generate alert again
-	alerts = checkStalled(statePath, cache)
+	alerts = checkStalled(state, cache)
 	if len(alerts) != 1 {
 		t.Errorf("Third call (after 5 min): len(alerts) = %d, want 1", len(alerts))
 	}
