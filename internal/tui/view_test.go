@@ -587,11 +587,13 @@ func TestRenderTaskPanel_SortedByCreatedTime(t *testing.T) {
 	if idx1 == -1 || idx2 == -1 || idx3 == -1 {
 		t.Fatalf("expected all task IDs in output, got:\n%s", out)
 	}
-	if idx1 > idx2 {
-		t.Error("expected first-task (oldest) before second-task")
+	// After partition: active tasks (second-task/IMPLEMENTING) appear before
+	// terminal tasks (first-task/MERGED, third-task/ABANDONED), regardless of Created time.
+	if idx2 > idx1 {
+		t.Error("expected second-task (active/IMPLEMENTING) before first-task (terminal/MERGED)")
 	}
-	if idx2 > idx3 {
-		t.Error("expected second-task before third-task (newest)")
+	if idx1 > idx3 {
+		t.Error("expected first-task (terminal, oldest) before third-task (terminal, newest)")
 	}
 }
 
@@ -641,6 +643,82 @@ func TestRenderTaskPanel_TerminalTasksDimmed(t *testing.T) {
 		// the code path exists by checking both lines contain their task IDs.
 		assertContains(t, mergedLine, "merged-task", "merged task should be in output")
 		assertContains(t, activeLine, "active-task", "active task should be in output")
+	}
+}
+
+func TestRenderTaskPanel_ActiveBeforeTerminal(t *testing.T) {
+	now := time.Now()
+	// Old terminal task
+	merged := makeTask("merged-old", models.TaskStatusMerged, 1)
+	merged.Created = now.Add(-3 * time.Hour)
+	// Newer active task
+	impl := makeTask("impl-new", models.TaskStatusImplementing, 1)
+	impl.Created = now.Add(-1 * time.Hour)
+	// Newest active task
+	blocked := makeTask("blocked-newest", models.TaskStatusBlocked, 1)
+	blocked.Created = now.Add(-30 * time.Minute)
+
+	m := Model{
+		width:      100,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(100),
+		state: &models.State{
+			Tasks: []models.Task{merged, impl, blocked}, // merged is oldest
+		},
+	}
+
+	out := m.renderTaskPanel(15)
+	idxImpl := strings.Index(out, "impl-new")
+	idxBlocked := strings.Index(out, "blocked-newest")
+	idxMerged := strings.Index(out, "merged-old")
+
+	if idxImpl == -1 || idxBlocked == -1 || idxMerged == -1 {
+		t.Fatalf("expected all task IDs in output, got:\n%s", out)
+	}
+	// Active tasks appear before terminal, sorted by Created within group
+	if idxImpl > idxBlocked {
+		t.Error("expected impl-new (active, older) before blocked-newest (active, newer)")
+	}
+	if idxBlocked > idxMerged {
+		t.Error("expected active tasks before terminal (merged-old)")
+	}
+}
+
+func TestRenderTaskPanel_TruncationPreservesActive(t *testing.T) {
+	now := time.Now()
+	var tasks []models.Task
+	// 5 terminal tasks (oldest)
+	for i := 0; i < 5; i++ {
+		tk := makeTask(fmt.Sprintf("merged-%d", i), models.TaskStatusMerged, 1)
+		tk.Created = now.Add(-time.Duration(10-i) * time.Hour)
+		tasks = append(tasks, tk)
+	}
+	// 2 active tasks (newest)
+	active1 := makeTask("active-1", models.TaskStatusImplementing, 1)
+	active1.Created = now.Add(-30 * time.Minute)
+	active2 := makeTask("active-2", models.TaskStatusBlocked, 1)
+	active2.Created = now.Add(-15 * time.Minute)
+	tasks = append(tasks, active1, active2)
+
+	// height=7 → maxRows = 7-3 = 4 data rows
+	m := Model{
+		width:      100,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(100),
+		state: &models.State{
+			Tasks: tasks,
+		},
+	}
+
+	out := m.renderTaskPanel(7)
+	// Both active tasks must survive truncation
+	if !strings.Contains(out, "active-1") {
+		t.Errorf("expected active-1 to survive truncation, got:\n%s", out)
+	}
+	if !strings.Contains(out, "active-2") {
+		t.Errorf("expected active-2 to survive truncation, got:\n%s", out)
 	}
 }
 

@@ -322,6 +322,18 @@ func (m Model) renderTaskPanel(height int) string {
 		return tasks[i].Created.Before(tasks[j].Created)
 	})
 
+	// Partition: active tasks first, terminal tasks after.
+	// Both partitions preserve Created-ascending order.
+	var active, terminal []models.Task
+	for _, t := range tasks {
+		if t.Status.IsTerminal() {
+			terminal = append(terminal, t)
+		} else {
+			active = append(active, t)
+		}
+	}
+	tasks = append(active, terminal...)
+
 	// Define columns per tier
 	type column struct {
 		header string
