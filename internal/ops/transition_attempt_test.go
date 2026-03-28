@@ -101,13 +101,17 @@ func TestTransitionToNewAttempt_Success(t *testing.T) {
 		t.Errorf("Status = %q, want %q", task.Status, models.TaskStatusReady)
 	}
 
-	// Verify history contains new_attempt event.
+	// Verify history contains new_attempt event with rejection feedback in Note.
 	found := false
 	for _, h := range task.History {
 		if h.Event == models.TaskEventNewAttempt {
 			found = true
 			if h.Reason == nil || *h.Reason != "review cycle limit reached" {
 				t.Errorf("new_attempt reason = %v, want %q", h.Reason, "review cycle limit reached")
+			}
+			// Note should carry the rejection feedback from prior attempt.
+			if h.Note == nil || *h.Note != "Needs improvement" {
+				t.Errorf("new_attempt Note = %v, want %q", h.Note, "Needs improvement")
 			}
 			break
 		}
@@ -423,5 +427,50 @@ func TestTransitionToNewAttempt_RejectionReasonOnlyClearedInPhase3(t *testing.T)
 	task := state.FindTask("task-1")
 	if task.RejectionReason != nil {
 		t.Errorf("RejectionReason after Phase 3 = %v, want nil", *task.RejectionReason)
+	}
+}
+
+func TestTransitionToNewAttempt_PreservesRejectionFeedbackInHistoryNote(t *testing.T) {
+	tmpDir, statePath := setupTransitionTest(t)
+
+	_, err := TransitionToNewAttempt(tmpDir, "task-1", "review cycle limit reached")
+	if err != nil {
+		t.Fatalf("TransitionToNewAttempt() error: %v", err)
+	}
+
+	bb := db.New(statePath)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read state: %v", err)
+	}
+
+	task := state.FindTask("task-1")
+	if task == nil {
+		t.Fatal("task not found")
+	}
+
+	// Find the new_attempt history entry.
+	var entry *models.TaskHistoryEntry
+	for i := range task.History {
+		if task.History[i].Event == models.TaskEventNewAttempt {
+			entry = &task.History[i]
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatal("history missing new_attempt event")
+	}
+
+	// Note must equal the task's RejectionReason prior to transition ("Needs improvement").
+	if entry.Note == nil {
+		t.Fatal("new_attempt Note is nil, want rejection feedback")
+	}
+	if *entry.Note != "Needs improvement" {
+		t.Errorf("new_attempt Note = %q, want %q", *entry.Note, "Needs improvement")
+	}
+
+	// Reason carries the escalation reason, not the rejection feedback.
+	if entry.Reason == nil || *entry.Reason != "review cycle limit reached" {
+		t.Errorf("new_attempt Reason = %v, want %q", entry.Reason, "review cycle limit reached")
 	}
 }

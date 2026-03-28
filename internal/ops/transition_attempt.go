@@ -89,6 +89,13 @@ func TransitionToNewAttempt(projectRoot, taskID, reason string) (*TransitionAtte
 			previousAgent = *task.AssignedTo
 		}
 
+		// Capture rejection feedback before mutations for history preservation.
+		var rejectionNote *string
+		if task.RejectionReason != nil && *task.RejectionReason != "" {
+			rr := *task.RejectionReason
+			rejectionNote = &rr
+		}
+
 		// Mutations.
 		task.Attempt = 2
 		task.Iteration = 0
@@ -103,6 +110,7 @@ func TransitionToNewAttempt(projectRoot, taskID, reason string) (*TransitionAtte
 			Time:   now,
 			Event:  models.TaskEventNewAttempt,
 			Reason: &reason,
+			Note:   rejectionNote,
 		})
 
 		if previousAgent != "" {
