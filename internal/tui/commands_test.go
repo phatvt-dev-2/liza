@@ -171,6 +171,21 @@ func TestReadLogCmdNoNewData(t *testing.T) {
 	}
 }
 
+func TestReadLogCmdCorruptYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "log.yaml")
+
+	if err := os.WriteFile(logPath, []byte("not: [valid: yaml: {{{"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := readLogCmd(logPath, 0)
+	msg := cmd()
+	if _, ok := msg.(errMsg); !ok {
+		t.Fatalf("expected errMsg for corrupt YAML, got %T", msg)
+	}
+}
+
 func TestTickCmdReturnsNonNilCmd(t *testing.T) {
 	cmd := tickCmd()
 	if cmd == nil {

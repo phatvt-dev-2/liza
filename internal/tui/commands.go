@@ -89,8 +89,7 @@ func readLogCmd(logPath string, offset int64) tea.Cmd {
 
 		var entries []log.Entry
 		if err := yaml.Unmarshal(data, &entries); err != nil {
-			// Partial/corrupt YAML — don't advance position, retry next tick
-			return LogEntriesMsg{}
+			return errMsg{fmt.Errorf("log.yaml parse: %w", err)}
 		}
 
 		return LogEntriesMsg{
