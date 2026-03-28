@@ -182,12 +182,11 @@ func (m Model) renderAgentPanel(height int) string {
 		return "—"
 	}
 
-	timeOnTaskVal := func(_ string, a models.Agent) string {
-		if a.CurrentTask == nil {
+	lastHeartbeatVal := func(_ string, a models.Agent) string {
+		if a.Heartbeat.IsZero() {
 			return "—"
 		}
-		// Approximate using heartbeat as proxy (task creation time not directly available on Agent)
-		return render.FormatDuration(time.Since(a.Heartbeat))
+		return render.FormatDuration(time.Since(a.Heartbeat)) + " ago"
 	}
 
 	heartbeatVal := func(_ string, a models.Agent) string {
@@ -226,7 +225,7 @@ func (m Model) renderAgentPanel(height int) string {
 
 	if m.columnTier >= ColumnTierWide {
 		cols = append(cols,
-			column{"TIME_ON_TASK", 14, timeOnTaskVal},
+			column{"LAST_HEARTBEAT", 16, lastHeartbeatVal},
 			column{"HEARTBEAT", 14, heartbeatVal},
 		)
 	}

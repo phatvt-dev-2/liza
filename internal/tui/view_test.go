@@ -334,7 +334,7 @@ func TestRenderAgentPanel_ColumnTierWide(t *testing.T) {
 		t.Errorf("expected 6 columns at wide tier, got %d (header: %q)", colCount, header)
 	}
 
-	assertContains(t, header, "TIME_ON_TASK", "header should contain TIME_ON_TASK")
+	assertContains(t, header, "LAST_HEARTBEAT", "header should contain LAST_HEARTBEAT")
 	assertContains(t, header, "HEARTBEAT", "header should contain HEARTBEAT")
 }
 
@@ -364,6 +364,54 @@ func TestRenderAgentPanel_ColumnTierFull(t *testing.T) {
 
 	assertContains(t, header, "PID", "header should contain PID")
 	assertContains(t, header, "CONTEXT", "header should contain CONTEXT")
+}
+
+func TestRenderAgentPanel_LastHeartbeatFormat(t *testing.T) {
+	t.Run("non-zero heartbeat shows ago suffix", func(t *testing.T) {
+		m := Model{
+			width:      130,
+			height:     40,
+			columnTier: ColumnTierWide,
+			styles:     NewStyles(130),
+			state: &models.State{
+				Agents: map[string]models.Agent{
+					"agent-1": {Role: "coder", Status: models.AgentStatusWorking, Heartbeat: time.Now().Add(-3 * time.Minute)},
+				},
+			},
+		}
+
+		out := m.renderAgentPanel(10)
+		assertContains(t, out, "ago", "non-zero heartbeat should show 'ago' suffix")
+	})
+
+	t.Run("zero heartbeat shows dash", func(t *testing.T) {
+		m := Model{
+			width:      130,
+			height:     40,
+			columnTier: ColumnTierWide,
+			styles:     NewStyles(130),
+			state: &models.State{
+				Agents: map[string]models.Agent{
+					"agent-1": {Role: "coder", Status: models.AgentStatusWorking},
+				},
+			},
+		}
+
+		out := m.renderAgentPanel(10)
+		// The LAST_HEARTBEAT column should show "—" for zero heartbeat
+		// Find data row (not header)
+		lines := strings.Split(out, "\n")
+		foundDash := false
+		for _, line := range lines {
+			if strings.Contains(line, "agent-1") && strings.Contains(line, "—") {
+				foundDash = true
+				break
+			}
+		}
+		if !foundDash {
+			t.Error("zero heartbeat should display '—' in LAST_HEARTBEAT column")
+		}
+	})
 }
 
 func TestRenderAgentPanel_HasTitle(t *testing.T) {
@@ -1028,7 +1076,7 @@ func findHeaderLine(output string) string {
 }
 
 func countHeaderColumns(header string) int {
-	columns := []string{"ID", "STATUS", "ROLE", "CURRENT_TASK", "TIME_ON_TASK", "HEARTBEAT", "PID", "CONTEXT"}
+	columns := []string{"ID", "STATUS", "ROLE", "CURRENT_TASK", "LAST_HEARTBEAT", "HEARTBEAT", "PID", "CONTEXT"}
 	count := 0
 	for _, col := range columns {
 		if strings.Contains(header, col) {
