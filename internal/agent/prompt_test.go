@@ -1290,5 +1290,160 @@ func TestBuildPrompt_LimitsLine_FreshAttempt(t *testing.T) {
 	}
 }
 
+// TestBuildTaskRoleContextData_PriorAttemptRejection_Attempt2 verifies that
+// PriorAttemptRejection is populated from the new_attempt history entry's Note
+// when AttemptNum == 2 and Note is present.
+func TestBuildTaskRoleContextData_PriorAttemptRejection_Attempt2(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := testResolver(t)
+	reason := "review cycle limit reached"
+	note := "Needs improvement"
+
+	config := SupervisorConfig{
+		Role:    "coder",
+		AgentID: "coder-1",
+	}
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				Attempt:     2,
+				DoneWhen:    "Done",
+				History: []models.TaskHistoryEntry{
+					{Time: now.Add(-time.Hour), Event: models.TaskEventClaimed},
+					{Time: now.Add(-time.Minute), Event: models.TaskEventNewAttempt, Reason: &reason, Note: &note},
+				},
+				Created: now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if data.PriorAttemptRejection != "Needs improvement" {
+		t.Errorf("PriorAttemptRejection = %q, want %q", data.PriorAttemptRejection, "Needs improvement")
+	}
+}
+
+// TestBuildTaskRoleContextData_PriorAttemptRejection_Attempt2_NilNote verifies that
+// PriorAttemptRejection is empty when the new_attempt history entry has no Note.
+func TestBuildTaskRoleContextData_PriorAttemptRejection_Attempt2_NilNote(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := testResolver(t)
+	reason := "review cycle limit reached"
+
+	config := SupervisorConfig{
+		Role:    "coder",
+		AgentID: "coder-1",
+	}
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				Attempt:     2,
+				DoneWhen:    "Done",
+				History: []models.TaskHistoryEntry{
+					{Time: now.Add(-time.Hour), Event: models.TaskEventClaimed},
+					{Time: now.Add(-time.Minute), Event: models.TaskEventNewAttempt, Reason: &reason},
+				},
+				Created: now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if data.PriorAttemptRejection != "" {
+		t.Errorf("PriorAttemptRejection = %q, want empty for nil Note", data.PriorAttemptRejection)
+	}
+}
+
+// TestBuildPrompt_PriorAttemptRejection_CoderAttempt2 verifies that the coder prompt
+// at attempt 2 contains "LAST REVIEWER FEEDBACK" and the feedback text when the
+// new_attempt history entry has a Note.
+func TestBuildPrompt_PriorAttemptRejection_CoderAttempt2(t *testing.T) {
+	now := time.Now().UTC()
+	reason := "review cycle limit reached"
+	note := "The error handling in parse.go doesn't cover EOF"
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				Attempt:     2,
+				DoneWhen:    "Done",
+				History: []models.TaskHistoryEntry{
+					{Time: now.Add(-time.Hour), Event: models.TaskEventClaimed},
+					{Time: now.Add(-time.Minute), Event: models.TaskEventNewAttempt, Reason: &reason, Note: &note},
+				},
+				Created: now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	config := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	prompt, err := testBuildPrompt(t, state, config, "task-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt() error: %v", err)
+	}
+	if !strings.Contains(prompt, "LAST REVIEWER FEEDBACK") {
+		t.Error("coder prompt at attempt 2 should contain 'LAST REVIEWER FEEDBACK'")
+	}
+	if !strings.Contains(prompt, note) {
+		t.Errorf("coder prompt at attempt 2 should contain feedback text %q", note)
+	}
+}
+
 // Ensure pipeline import is used (linter guard).
 var _ = pipeline.NewResolver

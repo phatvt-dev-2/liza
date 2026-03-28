@@ -3,6 +3,10 @@
 
 === PRIOR ATTEMPT OUTCOME ===
 {{.PriorAttemptOutcome}}
+{{- if ne .PriorAttemptRejection ""}}
+LAST REVIEWER FEEDBACK (from prior attempt):
+{{.PriorAttemptRejection}}
+{{- end}}
 Do NOT repeat the same approach. The prior attempt was exhausted — try a fundamentally different strategy.
 {{- end}}
 {{- end -}}

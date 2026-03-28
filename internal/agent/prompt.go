@@ -156,6 +156,9 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		for i := len(task.History) - 1; i >= 0; i-- {
 			if task.History[i].Event == models.TaskEventNewAttempt && task.History[i].Reason != nil {
 				data.PriorAttemptOutcome = *task.History[i].Reason
+				if task.History[i].Note != nil {
+					data.PriorAttemptRejection = *task.History[i].Note
+				}
 				break
 			}
 		}

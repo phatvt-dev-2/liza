@@ -12,19 +12,20 @@ type RoleContextData struct {
 	RoleType string // "doer", "reviewer", or "orchestrator"
 
 	// Task (populated for doer and reviewer roles)
-	TaskID              string
-	Description         string
-	DoneWhen            string
-	Scope               string
-	SpecRef             string
-	PlanRef             string // file path only (no fragment)
-	PlanSection         string // anchor fragment (e.g., "capability-cap-001---task-creation"), empty if none
-	ValidationPlan      string
-	Worktree            string // resolved absolute path
-	IterationNum        int
-	AttemptNum          int
-	PriorRejection      string // empty if no prior rejection
-	PriorAttemptOutcome string // reason from prior attempt (empty unless AttemptNum == 2)
+	TaskID                string
+	Description           string
+	DoneWhen              string
+	Scope                 string
+	SpecRef               string
+	PlanRef               string // file path only (no fragment)
+	PlanSection           string // anchor fragment (e.g., "capability-cap-001---task-creation"), empty if none
+	ValidationPlan        string
+	Worktree              string // resolved absolute path
+	IterationNum          int
+	AttemptNum            int
+	PriorRejection        string // empty if no prior rejection
+	PriorAttemptOutcome   string // reason from prior attempt (empty unless AttemptNum == 2)
+	PriorAttemptRejection string // reviewer feedback from prior attempt (empty unless AttemptNum == 2 and Note present)
 
 	// Review (populated for reviewer roles)
 	BaseCommit      string // git diff base for reviewer
