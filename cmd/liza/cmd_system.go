@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/interactive"
 	"github.com/liza-mas/liza/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -92,12 +93,17 @@ This is suitable for CI, cron, or running in a secondary terminal.
 
 Press '?' in the TUI for a full keybinding reference.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		headless, _ := cmd.Flags().GetBool("headless")
+
+		if !headless && !interactive.IsInteractive() {
+			headless = true
+			fmt.Fprintln(cmd.ErrOrStderr(), "liza: stdin is not a terminal, falling back to headless mode")
+		}
+
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
 		}
-
-		headless, _ := cmd.Flags().GetBool("headless")
 
 		if headless {
 			interval, _ := cmd.Flags().GetInt("interval")
