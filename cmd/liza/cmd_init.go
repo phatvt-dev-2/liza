@@ -105,6 +105,12 @@ symlinks needed for pairing (no .liza/ workspace):
 				return nil // user aborted
 			}
 
+			// Read cobra flag defaults so the wizard path achieves parity
+			// with the CLI path (which reads these at lines 168-171).
+			configPath, _ := cmd.Flags().GetString("config")
+			branch, _ := cmd.Flags().GetString("branch")
+			postWorktreeCmd, _ := cmd.Flags().GetString("post-worktree-cmd")
+
 			if result.Mode == "pairing" {
 				if autoResume {
 					return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
@@ -120,14 +126,16 @@ symlinks needed for pairing (no .liza/ workspace):
 				return nil
 			}
 			if err := commands.InitCommandWithConfig(commands.InitParams{
-				Description:    result.Description,
-				SpecRef:        result.SpecRef,
-				EntryPoint:     result.EntryPoint,
-				Branch:         result.Branch,
-				AutoResume:     autoResume,
-				Agents:         result.Agents,
-				Stdin:          os.Stdin,
-				ContractAction: result.ContractAction,
+				Description:     result.Description,
+				SpecRef:         result.SpecRef,
+				ConfigPath:      configPath,
+				EntryPoint:      result.EntryPoint,
+				Branch:          branch,
+				PostWorktreeCmd: postWorktreeCmd,
+				AutoResume:      autoResume,
+				Agents:          result.Agents,
+				Stdin:           os.Stdin,
+				ContractAction:  result.ContractAction,
 			}); err != nil {
 				return err
 			}

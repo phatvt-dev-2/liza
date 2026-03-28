@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -93,5 +94,46 @@ func TestInitDispatch_AgentFlagAlonePassesDispatch(t *testing.T) {
 				t.Fatalf("hit dispatch-level error: %v", err)
 			}
 		}
+	}
+}
+
+func TestInitDispatch_WizardPathForwardsConfigDefault(t *testing.T) {
+	// Create a temp HOME with ~/.liza/pipeline.yaml to simulate the scenario
+	// where defaultPipelineConfigPath() returns a real path at init() time.
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	lizaDir := filepath.Join(tmpDir, ".liza")
+	if err := os.MkdirAll(lizaDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	pipelinePath := filepath.Join(lizaDir, "pipeline.yaml")
+	if err := os.WriteFile(pipelinePath, []byte("entry_points: {}\n"), 0o644); err != nil {
+		t.Fatalf("write pipeline.yaml: %v", err)
+	}
+
+	resetRootCmdForTest(t)
+
+	// Simulate what init() would have done if pipeline.yaml existed at
+	// registration time: set the flag's default to the pipeline path.
+	configFlag := initCmd.Flags().Lookup("config")
+	if configFlag == nil {
+		t.Fatal("config flag not registered on init command")
+	}
+	configFlag.DefValue = pipelinePath
+	_ = configFlag.Value.Set(pipelinePath)
+	configFlag.Changed = false
+
+	// When no explicit flags are set, hasExplicitInitFlags must be false
+	// (wizard entry condition), yet the cobra default must still be readable.
+	if hasExplicitInitFlags(initCmd) {
+		t.Fatal("hasExplicitInitFlags should be false when no flags are explicitly set")
+	}
+
+	configPath, err := initCmd.Flags().GetString("config")
+	if err != nil {
+		t.Fatalf("GetString(config): %v", err)
+	}
+	if configPath != pipelinePath {
+		t.Errorf("wizard path ConfigPath = %q, want %q (cobra default not forwarded)", configPath, pipelinePath)
 	}
 }

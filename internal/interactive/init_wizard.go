@@ -17,7 +17,6 @@ type InitWizardResult struct {
 	Description    string   // project goal (full mode only)
 	SpecRef        string   // spec file path (full mode only)
 	EntryPoint     string   // entry point (full mode only)
-	Branch         string   // integration branch name (full mode only; "" = default "integration")
 	ContractAction string   // "global", "rename", "skip" (only if conflict detected)
 }
 
