@@ -6,6 +6,7 @@ import "github.com/charmbracelet/bubbles/key"
 // Implements the help.KeyMap interface for the help overlay.
 type KeyMap struct {
 	Spawn      key.Binding // s — spawn agent
+	Terminate  key.Binding // t — terminate agent
 	Pause      key.Binding // p — pause system
 	Resume     key.Binding // r — resume system
 	AddTask    key.Binding // a — add task (Huh form)
@@ -22,6 +23,10 @@ func NewKeyMap() KeyMap {
 		Spawn: key.NewBinding(
 			key.WithKeys("s"),
 			key.WithHelp("s", "spawn"),
+		),
+		Terminate: key.NewBinding(
+			key.WithKeys("t"),
+			key.WithHelp("t", "terminate"),
 		),
 		Pause: key.NewBinding(
 			key.WithKeys("p"),
@@ -63,6 +68,7 @@ func NewKeyMap() KeyMap {
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Spawn,
+		k.Terminate,
 		k.Pause,
 		k.Resume,
 		k.AddTask,
@@ -79,7 +85,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		// Actions: commands that affect the running system
-		{k.Spawn, k.Pause, k.Resume, k.Checkpoint, k.Yolo},
+		{k.Spawn, k.Terminate, k.Pause, k.Resume, k.Checkpoint, k.Yolo},
 		// System: TUI lifecycle and help
 		{k.Quit, k.Stop, k.Help},
 		// Navigation: task management

@@ -252,6 +252,19 @@ func stopSystemCmd(projectRoot string) tea.Cmd {
 	}
 }
 
+// terminateAgentCmd force-deletes an agent via ops.DeleteAgent.
+// Uses force=true and allowRunningPID=true since the TUI is an interactive context.
+// Returns CmdResultMsg with result.
+func terminateAgentCmd(projectRoot, agentID string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := ops.DeleteAgent(projectRoot, agentID, true, true, "terminated via TUI")
+		if err != nil {
+			return CmdResultMsg{Success: false, Message: fmt.Sprintf("terminate %s: %v", agentID, err)}
+		}
+		return CmdResultMsg{Success: true, Message: "Terminated " + agentID}
+	}
+}
+
 // addTaskCmd adds a new task from form input.
 // Calls ops.AddTask() directly.
 // Returns CmdResultMsg with result.

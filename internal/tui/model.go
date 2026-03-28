@@ -24,10 +24,12 @@ const (
 type InlineAction int
 
 const (
-	InlineActionNone        InlineAction = iota
-	InlineActionSpawn                    // s — collecting role name
-	InlineActionPause                    // p — collecting optional reason
-	InlineActionStopConfirm              // Q — collecting y/n confirmation
+	InlineActionNone             InlineAction = iota
+	InlineActionSpawn                         // s — collecting role name
+	InlineActionPause                         // p — collecting optional reason
+	InlineActionStopConfirm                   // Q — collecting y/n confirmation
+	InlineActionTerminate                     // t — collecting agent ID
+	InlineActionTerminateConfirm              // t (phase 2) — collecting y/n confirmation
 )
 
 // rolesMsg carries loaded role and role-pair names from pipeline config.
@@ -167,8 +169,10 @@ type Model struct {
 	inlineLabel      string           // prompt label shown before textinput (e.g., "Role: ")
 	roleCompletions  []string         // cached role names from pipeline config for tab-completion
 	rolePairNames    []string         // cached role-pair names from pipeline config for add-task form
+	agentCompletions []string         // snapshot of agent IDs for tab-completion (built on 't' press)
 	completionIdx    int              // current position in tab-completion cycle
 	completionPrefix string           // text prefix when Tab was first pressed (filters completions)
+	terminateTarget  string           // agent ID pending termination confirmation
 
 	// Visual
 	styles Styles // Lipgloss styles (adapted to width)

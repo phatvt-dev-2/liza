@@ -917,3 +917,202 @@ func TestRenderFooter_InlineModeShowsLabel(t *testing.T) {
 		t.Errorf("renderFooter in inline mode should contain %q, got %q", "Role: ", output)
 	}
 }
+
+// ============================================================
+// Terminate agent tests
+// ============================================================
+
+func TestUpdate_TerminateSetsInlineMode(t *testing.T) {
+	m := testModel()
+	m.state = &models.State{
+		Agents: map[string]models.Agent{
+			"coder-1":         {Role: "coder"},
+			"code-reviewer-1": {Role: "code-reviewer"},
+		},
+	}
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}}
+	result, _ := m.Update(msg)
+	m2 := result.(Model)
+
+	if m2.inputMode != InputModeInline {
+		t.Errorf("inputMode = %d, want InputModeInline(%d)", m2.inputMode, InputModeInline)
+	}
+	if m2.inlineAction != InlineActionTerminate {
+		t.Errorf("inlineAction = %d, want InlineActionTerminate(%d)", m2.inlineAction, InlineActionTerminate)
+	}
+	if m2.inlineLabel != "Agent ID: " {
+		t.Errorf("inlineLabel = %q, want %q", m2.inlineLabel, "Agent ID: ")
+	}
+	// Agent completions should be populated and sorted
+	if len(m2.agentCompletions) != 2 {
+		t.Fatalf("agentCompletions length = %d, want 2", len(m2.agentCompletions))
+	}
+	if m2.agentCompletions[0] != "code-reviewer-1" || m2.agentCompletions[1] != "coder-1" {
+		t.Errorf("agentCompletions = %v, want [code-reviewer-1 coder-1]", m2.agentCompletions)
+	}
+}
+
+func TestUpdate_TerminateWithNoAgentsSetsInlineMode(t *testing.T) {
+	m := testModel()
+	m.state = &models.State{
+		Agents: map[string]models.Agent{},
+	}
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}}
+	result, _ := m.Update(msg)
+	m2 := result.(Model)
+
+	if m2.inputMode != InputModeInline {
+		t.Errorf("inputMode = %d, want InputModeInline(%d)", m2.inputMode, InputModeInline)
+	}
+	if len(m2.agentCompletions) != 0 {
+		t.Errorf("agentCompletions should be empty, got %v", m2.agentCompletions)
+	}
+}
+
+func TestHandleInlineKey_EnterTerminateUnknownAgentReturnsError(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionTerminate
+	m.agentCompletions = []string{"coder-1", "coder-2"}
+	m.textInput.Focus()
+	m.textInput.SetValue("nonexistent")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	// Should return to normal mode with an error cmd, not enter confirmation
+	if m2.inlineAction == InlineActionTerminateConfirm {
+		t.Error("unknown agent should not transition to confirmation")
+	}
+	if cmd == nil {
+		t.Fatal("unknown agent should return error CmdResultMsg")
+	}
+	// Execute the cmd to verify it's an error
+	cmdMsg := cmd()
+	resultMsg, ok := cmdMsg.(CmdResultMsg)
+	if !ok {
+		t.Fatalf("expected CmdResultMsg, got %T", cmdMsg)
+	}
+	if resultMsg.Success {
+		t.Error("unknown agent should produce a failure CmdResultMsg")
+	}
+}
+
+func TestHandleInlineKey_EscDuringTerminateConfirmClearsTarget(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionTerminateConfirm
+	m.terminateTarget = "coder-1"
+	m.textInput.Focus()
+
+	msg := tea.KeyMsg{Type: tea.KeyEscape}
+	result, _ := m.Update(msg)
+	m2 := result.(Model)
+
+	if m2.terminateTarget != "" {
+		t.Errorf("terminateTarget should be cleared on Esc, got %q", m2.terminateTarget)
+	}
+	if m2.inputMode != InputModeNormal {
+		t.Errorf("inputMode should be Normal after Esc, got %d", m2.inputMode)
+	}
+}
+
+func TestHandleInlineKey_EnterTerminateTransitionsToConfirm(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionTerminate
+	m.textInput.Focus()
+	m.textInput.SetValue("coder-1")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	// Should transition to confirmation phase, not execute yet
+	if m2.inlineAction != InlineActionTerminateConfirm {
+		t.Errorf("inlineAction = %d, want InlineActionTerminateConfirm(%d)", m2.inlineAction, InlineActionTerminateConfirm)
+	}
+	if m2.terminateTarget != "coder-1" {
+		t.Errorf("terminateTarget = %q, want %q", m2.terminateTarget, "coder-1")
+	}
+	if !strings.Contains(m2.inlineLabel, "coder-1") {
+		t.Errorf("inlineLabel = %q, should contain agent ID", m2.inlineLabel)
+	}
+	if cmd != nil {
+		t.Error("should not return a cmd during confirmation phase")
+	}
+}
+
+func TestHandleInlineKey_EnterTerminateEmptyValueReturnsNilCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionTerminate
+	m.textInput.Focus()
+	m.textInput.SetValue("")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.Update(msg)
+
+	if cmd != nil {
+		t.Error("Enter with terminate action and empty value should return nil cmd")
+	}
+}
+
+func TestHandleInlineKey_TerminateConfirmYReturnsCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionTerminateConfirm
+	m.terminateTarget = "coder-1"
+	m.textInput.Focus()
+	m.textInput.SetValue("y")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	if cmd == nil {
+		t.Fatal("Enter with terminate confirm and value 'y' should return a non-nil tea.Cmd")
+	}
+	if m2.terminateTarget != "" {
+		t.Errorf("terminateTarget should be cleared after confirmation, got %q", m2.terminateTarget)
+	}
+}
+
+func TestHandleInlineKey_TerminateConfirmNReturnsNilCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionTerminateConfirm
+	m.terminateTarget = "coder-1"
+	m.textInput.Focus()
+	m.textInput.SetValue("n")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	if cmd != nil {
+		t.Error("Enter with terminate confirm and value 'n' should return nil cmd")
+	}
+	if m2.terminateTarget != "" {
+		t.Errorf("terminateTarget should be cleared after rejection, got %q", m2.terminateTarget)
+	}
+}
+
+func TestHandleInlineKey_TabCyclesAgentCompletion(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionTerminate
+	m.agentCompletions = []string{"code-reviewer-1", "coder-1", "orchestrator-1"}
+	m.textInput.Focus()
+	m.textInput.SetValue("coder")
+
+	// First Tab: should complete to "coder-1"
+	msg := tea.KeyMsg{Type: tea.KeyTab}
+	result, _ := m.Update(msg)
+	m2 := result.(Model)
+
+	if m2.textInput.Value() != "coder-1" {
+		t.Errorf("first Tab got %q, want %q", m2.textInput.Value(), "coder-1")
+	}
+}

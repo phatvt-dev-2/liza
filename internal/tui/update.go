@@ -177,6 +177,25 @@ func (m Model) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 
+	case key.Matches(msg, m.keys.Terminate):
+		// Build agent ID completion list from current state snapshot
+		var agentIDs []string
+		if m.state != nil {
+			for id := range m.state.Agents {
+				agentIDs = append(agentIDs, id)
+			}
+			sort.Strings(agentIDs)
+		}
+		m.agentCompletions = agentIDs
+		m.inputMode = InputModeInline
+		m.inlineAction = InlineActionTerminate
+		m.inlineLabel = "Agent ID: "
+		m.textInput.Reset()
+		m.textInput.Focus()
+		m.completionIdx = 0
+		m.completionPrefix = ""
+		return m, nil
+
 	case key.Matches(msg, m.keys.Pause):
 		m.inputMode = InputModeInline
 		m.inlineAction = InlineActionPause
@@ -232,6 +251,7 @@ func (m Model) handleInlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
 		m.inputMode = InputModeNormal
 		m.inlineAction = InlineActionNone
+		m.terminateTarget = ""
 		m.textInput.Blur()
 		return m, nil
 
@@ -244,7 +264,7 @@ func (m Model) handleInlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.executeInlineAction(action, value)
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
-		if m.inlineAction == InlineActionSpawn {
+		if m.inlineAction == InlineActionSpawn || m.inlineAction == InlineActionTerminate {
 			m = m.cycleCompletion()
 		}
 		return m, nil
@@ -273,6 +293,31 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 		return m, spawnAgentCmd(m.projectRoot, value)
 	case InlineActionPause:
 		return m, pauseSystemCmd(m.projectRoot, value)
+	case InlineActionTerminate:
+		if value == "" {
+			return m, nil
+		}
+		if len(m.agentCompletions) > 0 && !slices.Contains(m.agentCompletions, value) {
+			return m, func() tea.Msg {
+				return CmdResultMsg{Success: false, Message: fmt.Sprintf("unknown agent %q", value)}
+			}
+		}
+		// Phase 2: ask for confirmation
+		m.terminateTarget = value
+		m.inputMode = InputModeInline
+		m.inlineAction = InlineActionTerminateConfirm
+		m.inlineLabel = fmt.Sprintf("Terminate %s? (y/n): ", value)
+		m.textInput.Reset()
+		m.textInput.Focus()
+		return m, nil
+	case InlineActionTerminateConfirm:
+		if strings.HasPrefix(strings.ToLower(value), "y") {
+			target := m.terminateTarget
+			m.terminateTarget = ""
+			return m, terminateAgentCmd(m.projectRoot, target)
+		}
+		m.terminateTarget = ""
+		return m, nil
 	case InlineActionStopConfirm:
 		if strings.HasPrefix(strings.ToLower(value), "y") {
 			return m, stopSystemCmd(m.projectRoot)
@@ -283,9 +328,18 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 	}
 }
 
-// cycleCompletion cycles through role names matching the current input prefix.
+// cycleCompletion cycles through completion candidates matching the current input prefix.
+// Uses roleCompletions for spawn, agentCompletions for terminate.
 func (m Model) cycleCompletion() Model {
-	if len(m.roleCompletions) == 0 {
+	// Select the right completion list based on active inline action
+	var candidates []string
+	switch m.inlineAction {
+	case InlineActionSpawn:
+		candidates = m.roleCompletions
+	case InlineActionTerminate:
+		candidates = m.agentCompletions
+	}
+	if len(candidates) == 0 {
 		return m
 	}
 
@@ -294,12 +348,12 @@ func (m Model) cycleCompletion() Model {
 		m.completionPrefix = m.textInput.Value()
 	}
 
-	// Filter roles matching prefix (case-insensitive)
+	// Filter candidates matching prefix (case-insensitive)
 	prefix := strings.ToLower(m.completionPrefix)
 	var matches []string
-	for _, role := range m.roleCompletions {
-		if prefix == "" || strings.HasPrefix(strings.ToLower(role), prefix) {
-			matches = append(matches, role)
+	for _, c := range candidates {
+		if prefix == "" || strings.HasPrefix(strings.ToLower(c), prefix) {
+			matches = append(matches, c)
 		}
 	}
 
