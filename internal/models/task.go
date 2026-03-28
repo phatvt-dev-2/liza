@@ -268,25 +268,37 @@ func (t *Task) EffectiveAttempt() int {
 	if t.Attempt >= 1 {
 		return t.Attempt
 	}
-	if attempted, ok := t.legacyAttemptedList(); ok {
-		return len(attempted) + 1
+	if attempted, ok := t.legacyAttemptedList(); ok && len(attempted) > 0 {
+		return min(len(attempted)+1, 2)
 	}
 	return 1
 }
 
 // MigrateAttemptedField converts the legacy Extra["attempted"] list into the
-// Attempt field and removes the legacy key. No-op if the legacy field is absent
-// or Attempt is already set.
-func (t *Task) MigrateAttemptedField() {
+// Attempt field and removes the legacy key. Returns true if the task was changed.
+// No-op if the legacy field is absent or Attempt is already set.
+func (t *Task) MigrateAttemptedField() bool {
 	if t.Attempt >= 1 {
-		return
+		return false
 	}
-	attempted, ok := t.legacyAttemptedList()
+	if t.Extra == nil {
+		return false
+	}
+	v, exists := t.Extra["attempted"]
+	if !exists {
+		return false
+	}
+	list, ok := v.([]any)
 	if !ok {
-		return
+		// Wrong type — clean up the key but don't set Attempt.
+		delete(t.Extra, "attempted")
+		return false
 	}
-	t.Attempt = len(attempted) + 1
+	if len(list) > 0 {
+		t.Attempt = min(len(list)+1, 2)
+	}
 	delete(t.Extra, "attempted")
+	return len(list) > 0
 }
 
 // legacyAttemptedList returns the Extra["attempted"] slice and true if it

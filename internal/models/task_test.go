@@ -249,13 +249,104 @@ func TestMigrateAttemptedField_ConvertsLegacyList(t *testing.T) {
 			"attempted": []any{"agent-1"},
 		},
 	}
-	task.MigrateAttemptedField()
+	changed := task.MigrateAttemptedField()
 
+	if !changed {
+		t.Error("MigrateAttemptedField() = false, want true")
+	}
 	if task.Attempt != 2 {
 		t.Errorf("Attempt = %d, want 2", task.Attempt)
 	}
 	if _, exists := task.Extra["attempted"]; exists {
 		t.Error("Extra[\"attempted\"] should be absent after migration")
+	}
+}
+
+func TestMigrateAttemptedField_EmptyList(t *testing.T) {
+	task := &Task{
+		Extra: map[string]any{
+			"attempted": []any{},
+		},
+	}
+	changed := task.MigrateAttemptedField()
+
+	if changed {
+		t.Error("MigrateAttemptedField() = true, want false for empty list")
+	}
+	if task.Attempt != 0 {
+		t.Errorf("Attempt = %d, want 0 (unchanged)", task.Attempt)
+	}
+	if _, exists := task.Extra["attempted"]; exists {
+		t.Error("Extra[\"attempted\"] should be deleted even for empty list")
+	}
+}
+
+func TestMigrateAttemptedField_AlreadyMigrated(t *testing.T) {
+	task := &Task{
+		Attempt: 2,
+		Extra: map[string]any{
+			"attempted": []any{"agent-1"},
+		},
+	}
+	changed := task.MigrateAttemptedField()
+
+	if changed {
+		t.Error("MigrateAttemptedField() = true, want false for already-migrated task")
+	}
+	if task.Attempt != 2 {
+		t.Errorf("Attempt = %d, want 2 (unchanged)", task.Attempt)
+	}
+}
+
+func TestMigrateAttemptedField_NoLegacyField(t *testing.T) {
+	task := &Task{
+		Extra: map[string]any{"other": "value"},
+	}
+	changed := task.MigrateAttemptedField()
+
+	if changed {
+		t.Error("MigrateAttemptedField() = true, want false when no legacy field")
+	}
+	if task.Attempt != 0 {
+		t.Errorf("Attempt = %d, want 0 (unchanged)", task.Attempt)
+	}
+}
+
+func TestMigrateAttemptedField_CapsAtTwo(t *testing.T) {
+	task := &Task{
+		Extra: map[string]any{
+			"attempted": []any{"a", "b", "c"},
+		},
+	}
+	changed := task.MigrateAttemptedField()
+
+	if !changed {
+		t.Error("MigrateAttemptedField() = false, want true")
+	}
+	if task.Attempt != 2 {
+		t.Errorf("Attempt = %d, want 2 (capped)", task.Attempt)
+	}
+	if _, exists := task.Extra["attempted"]; exists {
+		t.Error("Extra[\"attempted\"] should be absent after migration")
+	}
+}
+
+func TestMigrateAttemptedField_WrongType(t *testing.T) {
+	task := &Task{
+		Extra: map[string]any{
+			"attempted": "not-a-list",
+		},
+	}
+	changed := task.MigrateAttemptedField()
+
+	if changed {
+		t.Error("MigrateAttemptedField() = true, want false for wrong type")
+	}
+	if task.Attempt != 0 {
+		t.Errorf("Attempt = %d, want 0 (unchanged)", task.Attempt)
+	}
+	if _, exists := task.Extra["attempted"]; exists {
+		t.Error("Extra[\"attempted\"] should be deleted even for wrong type")
 	}
 }
 
@@ -266,6 +357,16 @@ func TestEffectiveAttempt_LegacyFallback(t *testing.T) {
 	}
 	if got := task.EffectiveAttempt(); got != 2 {
 		t.Errorf("EffectiveAttempt() = %d, want 2", got)
+	}
+}
+
+func TestEffectiveAttempt_LegacyFallbackEmptyList(t *testing.T) {
+	task := &Task{
+		Attempt: 0,
+		Extra:   map[string]any{"attempted": []any{}},
+	}
+	if got := task.EffectiveAttempt(); got != 1 {
+		t.Errorf("EffectiveAttempt() = %d, want 1 (empty list falls through to default)", got)
 	}
 }
 
