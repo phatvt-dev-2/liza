@@ -292,13 +292,13 @@ func (t *Task) MigrateAttemptedField() bool {
 	if !ok {
 		// Wrong type — clean up the key but don't set Attempt.
 		delete(t.Extra, "attempted")
-		return false
+		return true
 	}
 	if len(list) > 0 {
 		t.Attempt = min(len(list)+1, 2)
 	}
 	delete(t.Extra, "attempted")
-	return len(list) > 0
+	return true
 }
 
 // legacyAttemptedList returns the Extra["attempted"] slice and true if it

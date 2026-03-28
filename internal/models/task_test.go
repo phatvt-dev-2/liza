@@ -270,8 +270,8 @@ func TestMigrateAttemptedField_EmptyList(t *testing.T) {
 	}
 	changed := task.MigrateAttemptedField()
 
-	if changed {
-		t.Error("MigrateAttemptedField() = true, want false for empty list")
+	if !changed {
+		t.Error("MigrateAttemptedField() = false, want true (key deleted)")
 	}
 	if task.Attempt != 0 {
 		t.Errorf("Attempt = %d, want 0 (unchanged)", task.Attempt)
@@ -339,8 +339,8 @@ func TestMigrateAttemptedField_WrongType(t *testing.T) {
 	}
 	changed := task.MigrateAttemptedField()
 
-	if changed {
-		t.Error("MigrateAttemptedField() = true, want false for wrong type")
+	if !changed {
+		t.Error("MigrateAttemptedField() = false, want true (key deleted)")
 	}
 	if task.Attempt != 0 {
 		t.Errorf("Attempt = %d, want 0 (unchanged)", task.Attempt)
