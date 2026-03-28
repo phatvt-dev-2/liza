@@ -166,6 +166,36 @@ func TestUpdateAlertsMsgReplacesStateCache(t *testing.T) {
 	}
 }
 
+func TestUpdateAlertsMsgWriteErrSurfacesInActivityFeed(t *testing.T) {
+	m := testModel()
+
+	alerts := alertsMsg{
+		Alerts:     []AlertMsg{},
+		StateCache: map[string]time.Time{},
+		WriteErr:   fmt.Errorf("write /tmp/alerts.log: no space left on device"),
+	}
+
+	result, _ := m.Update(alerts)
+	updated := result.(Model)
+
+	found := false
+	for _, a := range updated.activities {
+		if a.Action == "write_error" {
+			found = true
+			if a.Level != "⚠️" {
+				t.Errorf("expected Level ⚠️, got %q", a.Level)
+			}
+			if a.Detail == "" {
+				t.Error("expected non-empty Detail for write error")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("WriteErr should surface as write_error entry in activity feed")
+	}
+}
+
 func TestUpdateLogEntriesMsgUpdatesPositionAndAppends(t *testing.T) {
 	m := testModel()
 	m.logPosition = 100

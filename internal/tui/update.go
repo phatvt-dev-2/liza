@@ -115,6 +115,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.alertExpiry = time.Now().Add(10 * time.Second)
 			}
 		}
+		if msg.WriteErr != nil {
+			entry := ActivityEntry{
+				Timestamp: time.Now(),
+				Source:    "alert",
+				Action:    "write_error",
+				Level:     "⚠️",
+				Detail:    msg.WriteErr.Error(),
+			}
+			m.activities = appendActivity(m.activities, entry)
+		}
 		return m, nil
 
 	case LogEntriesMsg:

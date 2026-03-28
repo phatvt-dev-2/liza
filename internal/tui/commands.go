@@ -121,8 +121,11 @@ func runChecksCmd(projectRoot, alertsLogPath string, state *models.State, cache 
 		alerts := commands.RunChecksWithState(state, config)
 
 		// Write each alert to alerts.log
+		var writeErr error
 		for _, a := range alerts {
-			_ = commands.WriteAlert(alertsLogPath, a)
+			if err := commands.WriteAlert(alertsLogPath, a); err != nil && writeErr == nil {
+				writeErr = err
+			}
 		}
 
 		// Convert to TUI AlertMsg types
@@ -139,6 +142,7 @@ func runChecksCmd(projectRoot, alertsLogPath string, state *models.State, cache 
 		return alertsMsg{
 			Alerts:     alertMsgs,
 			StateCache: cacheCopy,
+			WriteErr:   writeErr,
 		}
 	}
 }

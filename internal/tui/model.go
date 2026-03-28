@@ -100,6 +100,7 @@ type watcherClosedMsg struct{}
 type alertsMsg struct {
 	Alerts     []AlertMsg
 	StateCache map[string]time.Time
+	WriteErr   error // non-nil if alert persistence to alerts.log failed
 }
 
 // errMsg carries an error from an async Cmd function.
