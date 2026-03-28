@@ -2,7 +2,9 @@ package commands
 
 import (
 	"fmt"
+	"path/filepath"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/ops"
 )
 
@@ -29,6 +31,16 @@ func ResumeCommand(projectRoot, changedBy string) error {
 		}
 		if result.TransitionError != "" {
 			fmt.Printf("  ⚠️  Transition error: %s\n", result.TransitionError)
+		}
+	}
+
+	// Clear any provider quota signals so restarted agents aren't immediately blocked.
+	if matches, err := filepath.Glob(agent.QuotaSignalGlob(projectRoot)); err == nil {
+		for _, m := range matches {
+			provider := agent.ProviderFromSignalFile(m)
+			if clearErr := agent.ClearQuotaSignal(projectRoot, provider); clearErr == nil {
+				fmt.Printf("  Cleared quota signal for provider: %s\n", provider)
+			}
 		}
 	}
 

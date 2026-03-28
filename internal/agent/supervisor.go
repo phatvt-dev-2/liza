@@ -494,6 +494,14 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			return nil
 		}
 
+		// Check provider quota exhaustion (written by any supervisor on the same provider)
+		if CheckQuotaSignal(config.ProjectRoot, config.CLIName) {
+			GetLogger().Info("Provider quota exhausted, shutting down",
+				"provider", config.CLIName,
+				"agent_id", config.AgentID)
+			return nil
+		}
+
 		// Wait while PAUSE/CHECKPOINT
 		if err := waitWhilePaused(ctx, config.ProjectRoot); err != nil {
 			return err
@@ -597,6 +605,23 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			time.Sleep(outcome.Delay)
 		default:
 			exit42Tracker.reset(taskID)
+
+			// Check if crash was caused by provider quota exhaustion.
+			output := latestOutputContent(lizaPaths.AgentOutputsDir(), config.AgentID)
+			if qe := DetectQuotaExhaustion(output, config.CLIName); qe != nil {
+				GetLogger().Error("Provider quota exhausted, terminating",
+					"provider", qe.Provider,
+					"agent_id", config.AgentID,
+					"message", qe.Message)
+				if alertErr := LogQuotaAlert(config.ProjectRoot, qe); alertErr != nil {
+					GetLogger().Warn("Failed to write quota alert", "error", alertErr)
+				}
+				if err := WriteQuotaSignal(config.ProjectRoot, qe.Provider, qe.Message); err != nil {
+					GetLogger().Warn("Failed to write quota signal", "error", err)
+				}
+				return nil
+			}
+
 			GetLogger().Error("Agent crashed, restarting", "exit_code", exitCode, "delay_seconds", 5)
 			time.Sleep(5 * time.Second)
 		}
