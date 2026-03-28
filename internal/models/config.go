@@ -85,6 +85,8 @@ const (
 	DefaultReviewerMaxWait          = 7200 // 2 hours
 	DefaultExit42MaxBackoffSec      = 60
 	DefaultExit42RestartLimit       = 5
+	DefaultCrashRestartThreshold    = 5
+	DefaultSpinningRestartThreshold = 10
 )
 
 // Bounds for heartbeat interval validation.
@@ -116,18 +118,20 @@ type Config struct {
 	// OrchestratorMaxWait is the maximum time an orchestrator agent will wait for work
 	// before exiting. When 0, defaults to DefaultOrchestratorMaxWait (2 hours).
 	// The orchestrator will exit earlier if STOPPED mode is detected or context is cancelled.
-	OrchestratorMaxWait     int            `yaml:"orchestrator_max_wait"`
-	ReviewerPollInterval    int            `yaml:"reviewer_poll_interval"`
-	ReviewerMaxWait         int            `yaml:"reviewer_max_wait"`
-	Exit42RestartThreshold  int            `yaml:"exit42_restart_threshold,omitempty"`
-	Exit42MaxBackoffSeconds int            `yaml:"exit42_max_backoff_seconds,omitempty"`
-	IntegrationBranch       string         `yaml:"integration_branch"`
-	EscalationWebhook       *string        `yaml:"escalation_webhook,omitempty"`
-	Mode                    SystemMode     `yaml:"mode,omitempty"`
-	ModeChangedAt           *time.Time     `yaml:"mode_changed_at,omitempty"`
-	ModeChangedBy           *string        `yaml:"mode_changed_by,omitempty"`
-	DiagnosticLogging       bool           `yaml:"diagnostic_logging,omitempty"`
-	AutoResume              bool           `yaml:"auto_resume,omitempty"`
-	PostWorktreeCmd         *string        `yaml:"post_worktree_cmd,omitempty"`
-	Extra                   map[string]any `yaml:",inline"`
+	OrchestratorMaxWait      int            `yaml:"orchestrator_max_wait"`
+	ReviewerPollInterval     int            `yaml:"reviewer_poll_interval"`
+	ReviewerMaxWait          int            `yaml:"reviewer_max_wait"`
+	Exit42RestartThreshold   int            `yaml:"exit42_restart_threshold,omitempty"`
+	Exit42MaxBackoffSeconds  int            `yaml:"exit42_max_backoff_seconds,omitempty"`
+	CrashRestartThreshold    int            `yaml:"crash_restart_threshold,omitempty"`
+	SpinningRestartThreshold int            `yaml:"spinning_restart_threshold,omitempty"`
+	IntegrationBranch        string         `yaml:"integration_branch"`
+	EscalationWebhook        *string        `yaml:"escalation_webhook,omitempty"`
+	Mode                     SystemMode     `yaml:"mode,omitempty"`
+	ModeChangedAt            *time.Time     `yaml:"mode_changed_at,omitempty"`
+	ModeChangedBy            *string        `yaml:"mode_changed_by,omitempty"`
+	DiagnosticLogging        bool           `yaml:"diagnostic_logging,omitempty"`
+	AutoResume               bool           `yaml:"auto_resume,omitempty"`
+	PostWorktreeCmd          *string        `yaml:"post_worktree_cmd,omitempty"`
+	Extra                    map[string]any `yaml:",inline"`
 }

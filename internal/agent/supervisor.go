@@ -104,21 +104,21 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, task
 
 		task.Exit42RestartCount = outcome.RestartCount
 
-		if role != "coder" {
-			return nil
-		}
 		if outcome.RestartCount <= restartLimit {
 			return nil
 		}
-		// Check if task is in an executing state using pipeline resolver
+		// Check if task is in an active state owned by this agent.
 		pr, prErr := ops.LoadResolverForModels(projectRoot)
 		if prErr != nil {
 			return prErr
 		}
-		if !models.IsExecutingStatus(task, pr) {
+		isActive := models.IsExecutingStatus(task, pr) || isReviewingStatus(task, pr)
+		if !isActive {
 			return nil
 		}
-		if task.AssignedTo == nil || *task.AssignedTo != agentID {
+		ownedByAgent := (task.AssignedTo != nil && *task.AssignedTo == agentID) ||
+			(task.ReviewingBy != nil && *task.ReviewingBy == agentID)
+		if !ownedByAgent {
 			return nil
 		}
 
@@ -145,6 +145,8 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, task
 		task.BlockedQuestions = questions
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
+		task.ReviewingBy = nil
+		task.ReviewLeaseExpires = nil
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
 			Event:  models.TaskEventBlocked,
@@ -229,6 +231,134 @@ func exit42TaskProgressSignature(task *models.Task) string {
 		return fmt.Sprintf("%s|%d|%t", task.Status, task.Iteration, task.HandoffPending)
 	}
 	return string(payload)
+}
+
+// isReviewingStatus checks if a task is in a reviewing state.
+func isReviewingStatus(task *models.Task, pr models.PipelineResolver) bool {
+	if task.RolePair == "" || pr == nil {
+		return false
+	}
+	reviewing, err := pr.ReviewingStatus(task.RolePair)
+	return err == nil && task.Status == reviewing
+}
+
+// blockTaskFromSupervisor marks a task as BLOCKED and releases the assignment.
+// Best-effort: logs warnings on failure but does not return errors.
+func blockTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID, agentID, reason string) {
+	pipelineTransitions, ptErr := ops.LoadPipelineTransitions(projectRoot)
+	if ptErr != nil {
+		GetLogger().Warn("Failed to load pipeline transitions for blocking", "error", ptErr)
+		return
+	}
+
+	if err := bb.Modify(func(s *models.State) error {
+		task := s.FindTask(taskID)
+		if task == nil {
+			return nil
+		}
+		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		task.BlockedReason = &reason
+		task.BlockedQuestions = []string{
+			"Is the task spec unclear or incomplete?",
+			"Is there an environment or tooling issue preventing progress?",
+		}
+		task.AssignedTo = nil
+		task.LeaseExpires = nil
+		task.ReviewingBy = nil
+		task.ReviewLeaseExpires = nil
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:   now,
+			Event:  models.TaskEventBlocked,
+			Agent:  &agentID,
+			Reason: &reason,
+		})
+		return nil
+	}); err != nil {
+		GetLogger().Warn("Failed to block task from supervisor", "error", err, "task_id", taskID)
+	}
+}
+
+// --- Crash restart tracker ---
+
+type crashRestartState struct {
+	Count     int
+	Signature string
+}
+
+type crashRestartTracker struct {
+	byTask map[string]crashRestartState
+}
+
+func newCrashRestartTracker() *crashRestartTracker {
+	return &crashRestartTracker{byTask: make(map[string]crashRestartState)}
+}
+
+func (t *crashRestartTracker) reset(taskID string) {
+	delete(t.byTask, taskID)
+}
+
+// Increment records a crash for the task and returns the new count.
+// Resets the counter if task state has changed (progress detected).
+func (t *crashRestartTracker) Increment(taskID string, currentSignature string) int {
+	prev := t.byTask[taskID]
+	if prev.Signature != "" && currentSignature != "" && prev.Signature != currentSignature {
+		prev.Count = 0
+	}
+	prev.Count++
+	prev.Signature = currentSignature
+	t.byTask[taskID] = prev
+	return prev.Count
+}
+
+// --- Spinning (same-task re-execution) tracker ---
+
+type spinningState struct {
+	Count     int
+	Signature string
+}
+
+type spinningTracker struct {
+	byTask map[string]spinningState
+}
+
+func newSpinningTracker() *spinningTracker {
+	return &spinningTracker{byTask: make(map[string]spinningState)}
+}
+
+// Track records an execution for the task and returns the new count.
+// Resets when task ID changes (caller responsibility) or task state progresses.
+func (t *spinningTracker) Track(taskID string, currentSignature string) int {
+	prev := t.byTask[taskID]
+	if prev.Signature != "" && currentSignature != "" && prev.Signature != currentSignature {
+		prev.Count = 0
+	}
+	prev.Count++
+	prev.Signature = currentSignature
+	t.byTask[taskID] = prev
+	return prev.Count
+}
+
+func (t *spinningTracker) reset(taskID string) {
+	delete(t.byTask, taskID)
+}
+
+// --- Effective config helpers ---
+
+func effectiveCrashRestartThreshold(cfg models.Config) int {
+	if cfg.CrashRestartThreshold > 0 {
+		return cfg.CrashRestartThreshold
+	}
+	return models.DefaultCrashRestartThreshold
+}
+
+func effectiveSpinningRestartThreshold(cfg models.Config) int {
+	if cfg.SpinningRestartThreshold > 0 {
+		return cfg.SpinningRestartThreshold
+	}
+	return models.DefaultSpinningRestartThreshold
 }
 
 // cliSupportsStdin returns true if the CLI can read the prompt from stdin
@@ -480,6 +610,8 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	}
 
 	exit42Tracker := newExit42RestartTracker()
+	crashTracker := newCrashRestartTracker()
+	spinTracker := newSpinningTracker()
 
 	for {
 		// Check context cancellation (signal received)
@@ -544,6 +676,34 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			return fmt.Errorf("failed to read state for prompt: %w", err)
 		}
 
+		// Spinning detection: track re-executions for the same task.
+		effectiveTask := claimedTaskID
+		if effectiveTask == "" {
+			effectiveTask = taskID
+		}
+		if effectiveTask != "" {
+			var sig string
+			if task := stateBefore.FindTask(effectiveTask); task != nil {
+				sig = exit42TaskProgressSignature(task)
+			}
+			spinCount := spinTracker.Track(effectiveTask, sig)
+			spinThreshold := effectiveSpinningRestartThreshold(stateBefore.Config)
+			if spinCount > spinThreshold {
+				reason := fmt.Sprintf("spinning detected: %d consecutive executions for task %s without progress (threshold=%d)",
+					spinCount, effectiveTask, spinThreshold)
+				GetLogger().Error("Spinning detected, blocking task",
+					"task_id", effectiveTask,
+					"agent_id", config.AgentID,
+					"count", spinCount)
+				if alertErr := LogAlert(config.ProjectRoot, "🚨", "SPINNING", reason); alertErr != nil {
+					GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
+				}
+				blockTaskFromSupervisor(bb, config.ProjectRoot, effectiveTask, config.AgentID, reason)
+				spinTracker.reset(effectiveTask)
+				continue
+			}
+		}
+
 		prompt, err := strategy.BuildPrompt(stateBefore, config, taskID)
 		if err != nil {
 			return fmt.Errorf("failed to build prompt: %w", err)
@@ -575,6 +735,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				GetLogger().Warn("Post-execution error", "error", err)
 			}
 			exit42Tracker.reset(taskID)
+			crashTracker.reset(effectiveTask)
 		case 42:
 			restartTaskID := claimedTaskID
 			if restartTaskID == "" {
@@ -620,6 +781,33 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 					GetLogger().Warn("Failed to write quota signal", "error", err)
 				}
 				return nil
+			}
+
+			// Track crash restarts per task.
+			if effectiveTask != "" {
+				var sig string
+				if s, rErr := bb.Read(); rErr == nil {
+					if task := s.FindTask(effectiveTask); task != nil {
+						sig = exit42TaskProgressSignature(task)
+					}
+				}
+				crashCount := crashTracker.Increment(effectiveTask, sig)
+				crashThreshold := effectiveCrashRestartThreshold(stateBefore.Config)
+				if crashCount > crashThreshold {
+					reason := fmt.Sprintf("crash restart loop detected: %d consecutive crashes for task %s without progress (threshold=%d, last exit code=%d)",
+						crashCount, effectiveTask, crashThreshold, exitCode)
+					GetLogger().Error("Crash restart loop detected, blocking task",
+						"task_id", effectiveTask,
+						"agent_id", config.AgentID,
+						"crash_count", crashCount,
+						"exit_code", exitCode)
+					if alertErr := LogAlert(config.ProjectRoot, "🚨", "CRASH RESTART LOOP", reason); alertErr != nil {
+						GetLogger().Warn("Failed to write crash alert", "error", alertErr)
+					}
+					blockTaskFromSupervisor(bb, config.ProjectRoot, effectiveTask, config.AgentID, reason)
+					crashTracker.reset(effectiveTask)
+					continue
+				}
 			}
 
 			GetLogger().Error("Agent crashed, restarting", "exit_code", exitCode, "delay_seconds", 5)

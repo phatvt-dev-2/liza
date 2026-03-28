@@ -211,6 +211,109 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 	}
 }
 
+func TestExit42RestartTracker_BlocksNonCoderRoles(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	now := time.Now().UTC()
+
+	agentID := "code-reviewer-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)
+	task.AssignedTo = &agentID
+	task.ReviewingBy = &agentID
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{task}
+	state.Config.Exit42RestartThreshold = 2
+	state.Agents[agentID] = models.Agent{Role: "code-reviewer", Status: models.AgentStatusReviewing}
+
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	tracker := newExit42RestartTracker()
+
+	// Exhaust the threshold.
+	for i := 0; i < 3; i++ {
+		tracker.Handle(bb, tmpDir, "code-reviewer", task.ID, agentID)
+	}
+
+	// Read updated state — task should be BLOCKED.
+	updatedState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("failed to read state: %v", err)
+	}
+	updatedTask := updatedState.FindTask(task.ID)
+	if updatedTask == nil {
+		t.Fatalf("task %q not found", task.ID)
+	}
+	if updatedTask.Status != models.TaskStatusBlocked {
+		t.Errorf("task status = %q, want BLOCKED", updatedTask.Status)
+	}
+}
+
+func TestCrashRestartTracker_BlocksAfterThreshold(t *testing.T) {
+	tracker := newCrashRestartTracker()
+	threshold := 3
+
+	// Same signature (no progress) — count accumulates.
+	for i := 1; i <= threshold; i++ {
+		count := tracker.Increment("task-1", "same-sig")
+		if count != i {
+			t.Fatalf("Increment() = %d, want %d", count, i)
+		}
+	}
+
+	// Over threshold.
+	count := tracker.Increment("task-1", "same-sig")
+	if count != threshold+1 {
+		t.Fatalf("Increment() = %d, want %d", count, threshold+1)
+	}
+
+	// Reset clears.
+	tracker.reset("task-1")
+	count = tracker.Increment("task-1", "same-sig")
+	if count != 1 {
+		t.Fatalf("after reset, Increment() = %d, want 1", count)
+	}
+}
+
+func TestCrashRestartTracker_ResetsOnProgress(t *testing.T) {
+	tracker := newCrashRestartTracker()
+
+	tracker.Increment("task-1", "sig-a")
+	tracker.Increment("task-1", "sig-a")
+
+	// Signature changes — progress detected, counter resets.
+	count := tracker.Increment("task-1", "sig-b")
+	if count != 1 {
+		t.Fatalf("Increment() after progress = %d, want 1", count)
+	}
+}
+
+func TestSpinningTracker_BlocksAfterThreshold(t *testing.T) {
+	tracker := newSpinningTracker()
+	threshold := 5
+
+	for i := 1; i <= threshold+1; i++ {
+		count := tracker.Track("task-1", "same-sig")
+		if count != i {
+			t.Fatalf("Track() = %d, want %d", count, i)
+		}
+	}
+}
+
+func TestSpinningTracker_ResetsOnProgress(t *testing.T) {
+	tracker := newSpinningTracker()
+
+	tracker.Track("task-1", "sig-a")
+	tracker.Track("task-1", "sig-a")
+	tracker.Track("task-1", "sig-a")
+
+	// Progress detected.
+	count := tracker.Track("task-1", "sig-b")
+	if count != 1 {
+		t.Fatalf("Track() after progress = %d, want 1", count)
+	}
+}
+
 func TestRunAgent_ExtractedOps_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)

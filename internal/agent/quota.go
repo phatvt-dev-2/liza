@@ -92,17 +92,22 @@ func CheckQuotaSignal(projectRoot, provider string) bool {
 	return err == nil
 }
 
-// LogQuotaAlert appends a quota-exhaustion alert to alerts.log.
-func LogQuotaAlert(projectRoot string, qe *QuotaExhaustion) error {
+// LogAlert appends an alert line to alerts.log.
+func LogAlert(projectRoot, level, category, message string) error {
 	alertsPath := filepath.Join(projectRoot, paths.LizaDirName, paths.AlertsLogFileName)
 	f, err := os.OpenFile(alertsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("open alerts log: %w", err)
 	}
 	defer f.Close()
-	_, err = fmt.Fprintf(f, "[%s] 🚨 PROVIDER QUOTA EXHAUSTED — %s: %s\n",
-		time.Now().UTC().Format(time.RFC3339), qe.Provider, qe.Message)
+	_, err = fmt.Fprintf(f, "[%s] %s %s — %s\n",
+		time.Now().UTC().Format(time.RFC3339), level, category, message)
 	return err
+}
+
+// LogQuotaAlert appends a quota-exhaustion alert to alerts.log.
+func LogQuotaAlert(projectRoot string, qe *QuotaExhaustion) error {
+	return LogAlert(projectRoot, "🚨", "PROVIDER QUOTA EXHAUSTED", qe.Provider+": "+qe.Message)
 }
 
 // ClearQuotaSignal removes the quota signal file for a provider.
