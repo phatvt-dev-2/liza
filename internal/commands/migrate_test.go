@@ -240,6 +240,84 @@ func TestMigrateCommand_NoAgents(t *testing.T) {
 	}
 }
 
+func TestMigrateCommand_NormalizesLegacyAttempted(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:      "task-1",
+			Status:  models.TaskStatusDraft,
+			Created: now,
+			Extra:   map[string]any{"attempted": []any{"agent-1"}},
+		},
+	}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	changed, err := MigrateCommand(statePath)
+	if err != nil {
+		t.Fatalf("MigrateCommand() error = %v", err)
+	}
+	if !changed {
+		t.Error("MigrateCommand() changed = false, want true")
+	}
+
+	// Read raw YAML to verify persisted state
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	var updated models.State
+	if err := yaml.Unmarshal(data, &updated); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	task := updated.Tasks[0]
+	if task.Attempt != 2 {
+		t.Errorf("task.Attempt = %d, want 2", task.Attempt)
+	}
+	if _, exists := task.Extra["attempted"]; exists {
+		t.Error("task.Extra[\"attempted\"] still present, want deleted")
+	}
+}
+
+func TestMigrateCommand_LegacyAttempted_Idempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{
+			ID:      "task-1",
+			Status:  models.TaskStatusDraft,
+			Created: now,
+			Extra:   map[string]any{"attempted": []any{"agent-1"}},
+		},
+	}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	// First run — should change
+	changed1, err := MigrateCommand(statePath)
+	if err != nil {
+		t.Fatalf("First MigrateCommand() error = %v", err)
+	}
+	if !changed1 {
+		t.Error("First MigrateCommand() changed = false, want true")
+	}
+
+	// Second run — should report no changes
+	changed2, err := MigrateCommand(statePath)
+	if err != nil {
+		t.Fatalf("Second MigrateCommand() error = %v", err)
+	}
+	if changed2 {
+		t.Error("Second MigrateCommand() changed = true, want false")
+	}
+}
+
 func TestMigrateCommand_InvalidStatePath(t *testing.T) {
 	_, err := MigrateCommand("/nonexistent/path/state.yaml")
 	if err == nil {

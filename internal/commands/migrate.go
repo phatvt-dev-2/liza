@@ -37,6 +37,12 @@ func MigrateCommand(statePath string) (bool, error) {
 		}
 	}
 
+	for i := range state.Tasks {
+		if state.Tasks[i].MigrateAttemptedField() {
+			changed = true
+		}
+	}
+
 	if !changed {
 		return false, nil
 	}
