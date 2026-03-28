@@ -243,6 +243,32 @@ func TestEffectiveAttempt_ReturnsActualValue(t *testing.T) {
 	}
 }
 
+func TestMigrateAttemptedField_ConvertsLegacyList(t *testing.T) {
+	task := &Task{
+		Extra: map[string]any{
+			"attempted": []any{"agent-1"},
+		},
+	}
+	task.MigrateAttemptedField()
+
+	if task.Attempt != 2 {
+		t.Errorf("Attempt = %d, want 2", task.Attempt)
+	}
+	if _, exists := task.Extra["attempted"]; exists {
+		t.Error("Extra[\"attempted\"] should be absent after migration")
+	}
+}
+
+func TestEffectiveAttempt_LegacyFallback(t *testing.T) {
+	task := &Task{
+		Attempt: 0,
+		Extra:   map[string]any{"attempted": []any{"agent-1"}},
+	}
+	if got := task.EffectiveAttempt(); got != 2 {
+		t.Errorf("EffectiveAttempt() = %d, want 2", got)
+	}
+}
+
 func TestApprovalHelpers(t *testing.T) {
 	t.Run("ApprovalCount", func(t *testing.T) {
 		t.Run("empty list", func(t *testing.T) {

@@ -262,11 +262,48 @@ func (t *Task) EffectiveType() TaskType {
 
 // EffectiveAttempt returns the task's attempt number, defaulting to 1 when
 // Attempt is 0 (unset) for backward compatibility with existing tasks.
+// When Attempt is unset and legacy Extra["attempted"] exists, derives the
+// attempt count from len(attempted) + 1.
 func (t *Task) EffectiveAttempt() int {
-	if t.Attempt < 1 {
-		return 1
+	if t.Attempt >= 1 {
+		return t.Attempt
 	}
-	return t.Attempt
+	if attempted, ok := t.legacyAttemptedList(); ok {
+		return len(attempted) + 1
+	}
+	return 1
+}
+
+// MigrateAttemptedField converts the legacy Extra["attempted"] list into the
+// Attempt field and removes the legacy key. No-op if the legacy field is absent
+// or Attempt is already set.
+func (t *Task) MigrateAttemptedField() {
+	if t.Attempt >= 1 {
+		return
+	}
+	attempted, ok := t.legacyAttemptedList()
+	if !ok {
+		return
+	}
+	t.Attempt = len(attempted) + 1
+	delete(t.Extra, "attempted")
+}
+
+// legacyAttemptedList returns the Extra["attempted"] slice and true if it
+// exists and is a []any, or nil and false otherwise.
+func (t *Task) legacyAttemptedList() ([]any, bool) {
+	if t.Extra == nil {
+		return nil, false
+	}
+	v, exists := t.Extra["attempted"]
+	if !exists {
+		return nil, false
+	}
+	list, ok := v.([]any)
+	if !ok {
+		return nil, false
+	}
+	return list, true
 }
 
 // ApprovalCount returns the number of approvals recorded on this task.
