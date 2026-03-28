@@ -417,6 +417,10 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 		cmd = exec.CommandContext(ctx, "claude", args...)
 	case "codex":
 		args := []string{
+			// Non-interactive agents need full auto-approval. Since March 2026,
+			// Codex denies custom MCP tool calls under "on-failure" policy when
+			// there is no interactive TTY to prompt for consent.
+			"-c", `approval_policy="never"`,
 			"-c", fmt.Sprintf("mcp_servers.liza.command=%q", "liza-mcp"),
 			"-c", fmt.Sprintf("mcp_servers.liza.args=[%q,%q]", "--project-root", projectRoot),
 		}
