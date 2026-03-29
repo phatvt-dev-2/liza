@@ -102,17 +102,17 @@ Do NOT mix in same batch (would cause all sibling calls to fail).
 
 ## RTK (Rust Token Killer) - Claude only
 
-RTK is a CLI proxy that compresses tool output (git, go, cargo, etc.) saving ~90% tokens.
-It runs transparently via a PreToolUse hook — most Bash commands are automatically rewritten to `rtk <command>`.
-RTK works FINE. It removes noise, not content — output is COMPLETE.
-**Unfamiliar formatting (shorter, denser, different alignment) is a feature, not a failure.**
+RTK is a CLI proxy that compresses tool output (git, go, pytest etc.) saving ~90% tokens. A PreToolUse hook rewrites
+most Bash commands to `rtk <command>` transparently.
+**Shorter, denser output is a feature.** Content is complete, exit codes are unaltered — diagnose real errors, not RTK.
 
-ONLY when Command REALLY failed **with an explicit error** may you disable RTK for **that** command:
+ONLY when Command REALLY failed **with an explicit error mentioning rtk** may you disable RTK for **that** command:
 ```bash
 rtk proxy <cmd>
 ```
 
 **Do NOT:**
+- Use rtk proxy as a first response to unexpected output.
 - Invent workarounds (subshells, echo debugging) to speculative errors.
 - Rationalize away unexpected output ("nothing to stash" when there are changes)
 
