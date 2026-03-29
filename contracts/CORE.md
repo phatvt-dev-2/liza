@@ -1,7 +1,8 @@
 # Core Contract
 
-**Reading this file, the applicable mode-specific annex (see Mode Selection Gate), GUARDRAILS.md (if present) and ~/.liza/AGENT_TOOLS.md,
-all four TILL THE END, is MANDATORY BEFORE DOING ANYTHING ELSE, even processing the first prompt.**
+**This file is loaded as system prompt — process it TILL THE END before proceeding.
+Reading the applicable mode-specific annex (see Mode Selection Gate), GUARDRAILS.md (if present) and ~/.liza/AGENT_TOOLS.md,
+all three TILL THE END, is MANDATORY BEFORE DOING ANYTHING ELSE, even processing the first prompt.**
 
 Universal rules shared between Pairing and Multi-Agent modes.
 
