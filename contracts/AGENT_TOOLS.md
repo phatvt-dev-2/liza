@@ -13,13 +13,12 @@ Any non destructive tool by default.
 
 ## MCP Server & Plugin Integration
 
-**Default Rule:** Use MCP tools first. Standard tools are fallback when MCP unavailable or inappropriate.
+**Pre-Action Check:** Before file/search/web operations, use the required tool from the table below.
+Fallback tools are permitted ONLY when the fallback condition is met OR the required tool returns an error.
 
-**Pre-Action Check:** Before file/search/web operations, identify the MCP tool that applies. If using standard tools instead, state why.
+### Tool Requirements by Operation
 
-### Tool Defaults by Operation
-
-| Operation | Default Tool | Fallback | Use Fallback When |
+| Operation | Required Tool | Fallback | Use Fallback When |
 |-----------|--------------|----------|-------------------|
 | Read multiple files | `mcp__filesystem__read_multiple_files` | Read | Single file only |
 | Directory exploration | `mcp__jetbrains__list_directory_tree` | Glob | JetBrains unavailable |
@@ -37,7 +36,7 @@ Any non destructive tool by default.
 
 ### Codebase Exploration
 
-| Question Type | Primary Tool | Fallback |
+| Question Type | Required Tool | Fallback |
 |-------------------------------------------|--------------|----------|
 | Exact keyword ("TODO") | Grep | — |
 | Find files by name | JetBrains `find_files_by_name_keyword` | Glob |
