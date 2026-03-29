@@ -4,6 +4,7 @@
 REVIEW SCOPE:
 Evaluate: matches task def, matches spec, tests validate behavior, obvious defects, commit SHA.
 Do NOT evaluate: style preferences, alternative approaches (unless defective), scope expansion.
+Do NOT investigate: build system internals, packaging backends, or CI tooling. Flag build concerns as findings — don't probe them.
 Review full worktree (base_commit → review_commit), not just latest changes.
 Spec currency: validate against current spec version, not version at task creation.
 Approval = meets requirements + spec + tests + no defects. Not: perfect or production-ready.
