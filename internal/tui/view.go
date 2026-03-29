@@ -189,25 +189,11 @@ func (m Model) renderAgentPanel(height int) string {
 		return render.FormatDuration(time.Since(a.Heartbeat)) + " ago"
 	}
 
-	heartbeatVal := func(_ string, a models.Agent) string {
-		if a.Heartbeat.IsZero() {
-			return "—"
-		}
-		return render.FormatDuration(time.Since(a.Heartbeat)) + " ago"
-	}
-
 	pidVal := func(_ string, a models.Agent) string {
 		if a.PID == 0 {
 			return "—"
 		}
 		return fmt.Sprintf("%d", a.PID)
-	}
-
-	contextVal := func(_ string, a models.Agent) string {
-		if a.ContextPercent == 0 {
-			return "—"
-		}
-		return fmt.Sprintf("%d%%", a.ContextPercent)
 	}
 
 	// Build column list based on tier
@@ -218,22 +204,20 @@ func (m Model) renderAgentPanel(height int) string {
 
 	if m.columnTier >= ColumnTierStandard {
 		cols = append(cols,
-			column{"ROLE", 18, func(_ string, a models.Agent) string { return a.Role }},
-			column{"CURRENT_TASK", 36, currentTaskVal},
+			column{"ROLE", 24, func(_ string, a models.Agent) string { return a.Role }},
+			column{"CURRENT_TASK", 44, currentTaskVal},
 		)
 	}
 
 	if m.columnTier >= ColumnTierWide {
 		cols = append(cols,
 			column{"LAST_HEARTBEAT", 16, lastHeartbeatVal},
-			column{"HEARTBEAT", 14, heartbeatVal},
 		)
 	}
 
 	if m.columnTier >= ColumnTierFull {
 		cols = append(cols,
 			column{"PID", 10, pidVal},
-			column{"CONTEXT", 10, contextVal},
 		)
 	}
 

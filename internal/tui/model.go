@@ -131,8 +131,8 @@ type ColumnTier int
 const (
 	ColumnTierMinimal  ColumnTier = iota // < 80 cols: ID, STATUS only
 	ColumnTierStandard                   // ≥ 80 cols: + ROLE, CURRENT_TASK / ATTEMPT, ASSIGNED_TO
-	ColumnTierWide                       // ≥ 120 cols: + TIME_ON_TASK, HEARTBEAT / AGE, DESCRIPTION
-	ColumnTierFull                       // ≥ 160 cols: + PID, CONTEXT / REVIEWING_BY, DEPS, TIME_IN_STATUS
+	ColumnTierWide                       // ≥ 120 cols: + LAST_HEARTBEAT / AGE, DESCRIPTION
+	ColumnTierFull                       // ≥ 160 cols: + PID / REVIEWING_BY, DEPS, TIME_IN_STATUS
 )
 
 // ColumnTierForWidth returns the column tier for a given terminal width.

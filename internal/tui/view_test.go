@@ -330,12 +330,11 @@ func TestRenderAgentPanel_ColumnTierWide(t *testing.T) {
 	}
 
 	colCount := countHeaderColumns(header)
-	if colCount != 6 {
-		t.Errorf("expected 6 columns at wide tier, got %d (header: %q)", colCount, header)
+	if colCount != 5 {
+		t.Errorf("expected 5 columns at wide tier, got %d (header: %q)", colCount, header)
 	}
 
 	assertContains(t, header, "LAST_HEARTBEAT", "header should contain LAST_HEARTBEAT")
-	assertContains(t, header, "HEARTBEAT", "header should contain HEARTBEAT")
 }
 
 func TestRenderAgentPanel_ColumnTierFull(t *testing.T) {
@@ -358,12 +357,11 @@ func TestRenderAgentPanel_ColumnTierFull(t *testing.T) {
 	}
 
 	colCount := countHeaderColumns(header)
-	if colCount != 8 {
-		t.Errorf("expected 8 columns at full tier, got %d (header: %q)", colCount, header)
+	if colCount != 6 {
+		t.Errorf("expected 6 columns at full tier, got %d (header: %q)", colCount, header)
 	}
 
 	assertContains(t, header, "PID", "header should contain PID")
-	assertContains(t, header, "CONTEXT", "header should contain CONTEXT")
 }
 
 func TestRenderAgentPanel_LastHeartbeatFormat(t *testing.T) {
@@ -1076,7 +1074,7 @@ func findHeaderLine(output string) string {
 }
 
 func countHeaderColumns(header string) int {
-	columns := []string{"ID", "STATUS", "ROLE", "CURRENT_TASK", "LAST_HEARTBEAT", "HEARTBEAT", "PID", "CONTEXT"}
+	columns := []string{"ID", "STATUS", "ROLE", "CURRENT_TASK", "LAST_HEARTBEAT", "PID"}
 	count := 0
 	for _, col := range columns {
 		if strings.Contains(header, col) {
