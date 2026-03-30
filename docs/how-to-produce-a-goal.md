@@ -2,7 +2,7 @@
 
 A goal document is the input to `liza init --spec`. It defines what you want built, why, and what "done" looks like — with enough precision that agents can decompose it into tasks without guessing.
 
-This guide walks you through producing one interactively using Claude in Pairing mode.
+This guide walks you through producing one interactively in Pairing mode.
 
 ## Rule of thumb
 
@@ -14,24 +14,24 @@ A goal document is not a technical spec — it defines the problem (WHY) and des
 
 ## Prerequisites
 
-- Claude Code installed and configured with the Liza contract
+- Your coding CLI (claude, codex, ...) installed and configured with the Liza contract
 - A rough idea of what you want to build (even a single sentence is enough to start)
 
 ## Process
 
 ### 1. Start a Pairing session
 
-Open Claude Code in a terminal. You'll use two collaboration modes in sequence: **Coach** first, then **Challenger**.
+Open the coding CLI in a terminal. You'll use two collaboration modes in sequence: **Coach** first, then **Challenger**.
 
 ### 2. Coach mode — surface the WHY
 
-Ask Claude to switch to Coach mode:
+Ask the agent to switch to Coach mode:
 
 ```
 Switching to Coach — I have an idea for a project but the WHY isn't sharp yet.
 ```
 
-Coach mode is Socratic. Claude will ask questions, not propose solutions. Expect questions like:
+Coach mode is Socratic. The agent will ask questions, not propose solutions. Expect questions like:
 
 - Who is this for? What problem are they hitting today?
 - What happens if we don't build this?
@@ -57,7 +57,7 @@ Defend or revise. The goal isn't to survive unscathed — it's to surface gaps b
 
 ### 4. Write the goal document
 
-Still in the same session, ask Claude to draft the goal document based on the conversation. The document should cover:
+Still in the same session, ask the agent to draft the goal document based on the conversation. The document should cover:
 
 - **Problem Statement** — what problem, with evidence
 - **Target Users** — who benefits, what they need
@@ -68,7 +68,13 @@ Still in the same session, ask Claude to draft the goal document based on the co
 - **Success Criteria** — how you know you succeeded
 - **Risks and Assumptions** — what could go wrong
 
-### 5. Iterate until tight
+### 5. Review thoroughly
+
+**It is of paramount importance that YOU review this document with the greatest attention because:**
+1. This is the document that captures YOUR INTENT. Any drift would compound.
+2. This is a crucial opportunity for you to build your mental model of the system to be built, especially if the implementation is to be performed by autonomous agents.
+
+### 6. Iterate until tight
 
 Continue pairing to fill gaps. A goal document is ready when:
 
@@ -77,9 +83,9 @@ Continue pairing to fill gaps. A goal document is ready when:
 - No ambiguous "TBD" items remain on the critical path
 - Out-of-scope is explicit enough to prevent creep
 
-### 6. Get a review
+### 7. Get reviews from other agents
 
-Open a fresh Claude Pairing session in another terminal. Ask it to review the goal document cold — no context from the first session. A good review prompt:
+Open a fresh Pairing session in another terminal. Ask it to review the goal document cold — no context from the first session. A good review prompt:
 
 ```
 Review this goal document as if you were an agent about to decompose it into tasks.
@@ -90,7 +96,14 @@ Liza's contract makes the agents accountable. They'd raise concerns if any rathe
 
 Address the feedback and iterate until the reviewer agent approves.
 
-### 7. Initialize the project
+If you have multiple provider subscriptions, it is highly recommended to make different models review the goal spec.
+
+Do a final pass with the systemic-thinking skill:
+```bash
+/systemic-thinking path/to/your-goal.md
+```
+
+### 8. Initialize the project
 
 ```bash
 liza init --spec path/to/your-goal.md
