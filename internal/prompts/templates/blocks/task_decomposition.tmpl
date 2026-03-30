@@ -13,6 +13,11 @@ Declare dependency order between tasks — no circular or missing dependencies.
 Shared-file rule: when two tasks modify the same file, they MUST have a depends_on
 relationship. Parallel coders work in isolated worktrees — shared files without
 dependency ordering cause merge conflicts. Audit scope overlaps before finalizing.
+Parallelism objective: tasks without depends_on run concurrently — each dependency
+link added serializes execution. Prefer wide task graphs over deep chains when
+integration risk is manageable. When splitting, ask: "can these run in parallel
+without touching the same files?" If yes, omit depends_on — wall-clock time shrinks.
+If shared files force ordering, that's correct; don't remove real dependencies for speed.
 Verify the plan covers ALL spec requirements — gaps will be rejected.
 
 REFACTORING TASKS:
