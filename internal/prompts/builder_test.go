@@ -59,7 +59,7 @@ func TestBuildBasePrompt(t *testing.T) {
 				"COMMUNICATION:",
 				"FORBIDDEN:",
 				"Do NOT attempt to claim tasks",
-				"EXIT CODES:",
+				"SESSION EXIT CODES",
 				"TIMESTAMPS:",
 				"FIRST ACTIONS:",
 				`Query your assigned task: liza_get {"query": "tasks/task-1"}`,
@@ -551,10 +551,10 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		"Do NOT make architecture decisions",
 	})
 
-	// --- EXIT CODES: supervisor protocol ---
+	// --- SESSION EXIT CODES: supervisor protocol ---
 	assertSection("exit-codes", []string{
-		"EXIT CODES:",
-		"Role complete",
+		"SESSION EXIT CODES",
+		"Session ended normally",
 		"Graceful abort",
 		"Restart with backoff",
 	})
