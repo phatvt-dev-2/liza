@@ -9,20 +9,20 @@ The goal is catching issues the author couldn't see — and occasionally sharing
 # Review Context
 
 Before reviewing, establish context:
-- **Scope:** Default to staged files (`git diff --cached`). For PRs, use the PR diff. For commits, use `git show <SHA>`. Only broaden scope if explicitly asked.
-- **Intent:** For PRs, check ticket link or description. For pending changes, ask the author. If unclear, clarify before reviewing.
-- **Timing:** Is now a good time to add this functionality? Half-baked features or premature additions warrant a `[question]`.
-- **Approach:** For complex changes, was the high-level approach discussed before implementation? Complete rewrites are painful — catch architectural misalignment early.
-- **Diff-first:** Read the diff before reading any source files. Only read source files when a specific finding needs surrounding context. Never read the entire codebase as preparation for a review.
-- **Size:** If diff >800 lines or >20 files, consider suggesting a split (PR) or incremental commits (pending). Large diffs hide bugs.
-- **Large diffs:** If diff is truncated or >800 lines, verify critical findings against source before tagging `[blocker]` or `[concern]`.
-- **Reviewer limits:** If reviewing outside your expertise, say so upfront. Make assumptions explicit.
+- **Scope:** Default to staged files (`git diff --cached`). For PRs, use the PR diff. For commits, use `git show <SHA>`. Only broaden if explicitly asked.
+- **Intent:** Check ticket/description (PRs) or ask the author (pending). If unclear, clarify before reviewing.
+- **Timing:** Is now the right time for this functionality? Half-baked or premature additions warrant a `[question]`.
+- **Approach:** For complex changes, was the approach discussed before implementation? Catch architectural misalignment early — complete rewrites are painful.
+- **Diff-first:** Read the diff before source files. Only read source when a finding needs surrounding context. Never pre-read the entire codebase.
+- **Size:** If >800 lines or >20 files, consider suggesting a split (PR) or incremental commits (pending). Large diffs hide bugs.
+- **Large diffs:** If truncated or >800 lines, verify critical findings against source before tagging `[blocker]` or `[concern]`.
+- **Reviewer limits:** If reviewing outside your expertise, say so. Make assumptions explicit.
 
 # Review Modes
 
 | Mode | Scope | When |
 |------|-------|------|
-| **Sanity** | Skim diff, check for obvious issues | Trivial changes, config, docs, low-risk path |
+| **Sanity** | Skim diff, obvious issues | Trivial changes, config, docs, low-risk |
 | **Standard** | Full diff, P0-P3 checklist, spot-check tests | Most changes — balanced cost/coverage |
 | **Deep** | Full diff + context, all priorities, trace data flow | Security-sensitive, core architecture, unfamiliar domain |
 
@@ -30,7 +30,7 @@ Announce mode: `"Reviewing in [mode] because [reason]. Adjust?"`
 
 Default to Standard. Escalate to Deep if review surfaces unexpected complexity.
 
-**Start high level, work down:** In early rounds, focus on design and structure. Defer naming, comments, and style until high-level issues are resolved — low-level notes often become moot after refactoring.
+**Start high level, work down:** Focus on design and structure first. Defer naming, comments, and style until high-level issues are resolved — low-level notes often become moot after refactoring.
 
 # Review Hierarchy
 
@@ -46,7 +46,7 @@ Review in this order. Stop and flag blockers immediately.
 | P5 | **Maintainability** | Readability, naming, complexity, test quality |
 | P6 | **Style** | Only if egregious or violates established conventions |
 
-**Attention budget:** P0-P2 (70%) catch most production incidents — prioritize these. P3-P4 (20%) catch architectural and performance issues. P5-P6 (10%) for maintainability and style only when egregious.
+**Attention budget:** P0-P2 (70%) catch most production incidents — prioritize these. P3-P4 (20%) architectural and performance. P5-P6 (10%) only when egregious.
 
 # Review Checklist
 
@@ -66,27 +66,22 @@ Not exhaustive — a mental sweep, not a checkbox exercise.
 - [ ] Return values / exceptions match contract
 - [ ] External calls/APIs verified to exist and behave as assumed
 - [ ] Impact of code removal assessed (callers, dependencies)
-- [ ] New behavior has corresponding tests
-- [ ] Changed behavior has updated tests
+- [ ] New behavior has tests; changed behavior has updated tests
 
 **Data (P2):**
 - [ ] Transactions wrap related mutations
 - [ ] Concurrent access considered
-- [ ] Migrations are reversible or safe; online-safe (no long-running locks on large tables)
+- [ ] Migrations reversible or safe; online-safe (no long-running locks on large tables)
 
 **Architecture & Operability (P3):**
-- [ ] Changes respect existing patterns
-- [ ] No unnecessary coupling introduced
-- [ ] Public API changes are intentional
-- [ ] Backward compatibility considered (APIs, schemas, configs)
+- [ ] Respects existing patterns; no unnecessary coupling
+- [ ] Public API changes intentional; backward compatibility considered
 - [ ] Dependency additions justified; version changes assessed for breaking behavior
-- [ ] Behavior not relying on implicit/undocumented configuration
-- [ ] New environment variables documented and added to templates
-- [ ] User-facing or operational behavior changes are documented
-- [ ] README/CHANGELOG updated if user-facing changes
-- [ ] Deployment procedure defined if relevant (db change, breaking change, etc.)
-- [ ] Logs are actionable (not noisy, not silent)
-- [ ] Errors include enough context to debug
+- [ ] Not relying on implicit/undocumented configuration
+- [ ] New env vars documented and added to templates
+- [ ] User-facing/operational changes documented; README/CHANGELOG updated
+- [ ] Deployment procedure defined if relevant (db change, breaking change)
+- [ ] Logs actionable (not noisy, not silent); errors include debug context
 - [ ] Metrics/tracing updated if behavior changes
 - [ ] Feature flags/kill switches respected if applicable
 - [ ] Rollback path exists (code + data)
@@ -97,14 +92,13 @@ Not exhaustive — a mental sweep, not a checkbox exercise.
 - [ ] No premature optimization — flag if complexity added for hypothetical gains
 
 **Maintainability (P5):**
-- [ ] Code is readable without author's context
+- [ ] Readable without author's context
 - [ ] Names reveal intent
 - [ ] Comments explain *why*, not *what* — if code needs explanation, simplify it
-- [ ] TODOs have ticket references — naked TODOs pile up and become stale
+- [ ] TODOs have ticket references — naked TODOs become stale
 - [ ] Complexity proportional to problem
-- [ ] Tests validate intent, not implementation (see Test Protocol)
-- [ ] Tests would fail if the behavior regressed
-- [ ] Mock-heavy tests that verify implementation rather than behavior are flagged
+- [ ] Tests validate intent, not implementation; would fail on regression
+- [ ] Mock-heavy implementation-testing flagged
 
 # Feedback Format
 
@@ -117,18 +111,18 @@ Not exhaustive — a mental sweep, not a checkbox exercise.
 | `[suggestion]` | Consider — minor improvements, alternatives | No |
 | `[question]` | Clarify — reviewer may be missing context | No |
 | `[nit]` | Take or leave — style, naming preference | No |
-| `[appraisal]` | Acknowledge — good pattern, notable improvement, smart decision | No |
+| `[appraisal]` | Acknowledge — good pattern, notable improvement | No |
 
-**Feedback structure:**
+**Structure:**
 ```
 [tag] file:line — Brief issue
 
 Why it matters: [impact if not addressed]
 Suggestion: [concrete alternative, if any]
 ```
-For `[nit]` and trivial `[suggestion]`: one-liner is fine — skip the template.
+For `[nit]` and trivial `[suggestion]`: one-liner is fine.
 
-**Tone:** Avoid "you" — it shifts focus from code to coder. Use "we" or omit the subject entirely. "You forgot to close the handle" → "File handle left open" or "Can we close the handle here?"
+**Tone:** Avoid "you" — focus on code, not coder. Use "we" or omit the subject. "You forgot to close the handle" → "File handle left open" or "Can we close the handle here?"
 
 **Example:**
 ```
@@ -138,7 +132,7 @@ Why it matters: Allows auth bypass and data exfiltration
 Suggestion: Use parameterized query: cursor.execute("SELECT ... WHERE user = %s", (username,))
 ```
 
-**Repeated patterns:** Don't flag every instance of the same issue. Call out 2-3 occurrences, then ask the author to fix the pattern throughout.
+**Repeated patterns:** Flag 2-3 occurrences, then ask the author to fix the pattern throughout.
 
 # Review Anti-Patterns
 
@@ -150,45 +144,43 @@ Suggestion: Use parameterized query: cursor.execute("SELECT ... WHERE user = %s"
 - Miss security issues while debating naming
 - Demand perfection — good enough ships, perfect doesn't
 - Accept style changes mixed with functional changes — ask to split
-- Expand scope to untouched lines — if the changelist doesn't touch it, file a bug or fix it yourself
+- Expand scope to untouched lines — file a bug or fix it yourself
 
 **Do:**
-- Ask yourself: "How would I solve this?" If differently, why? Is yours shorter/cleaner/safer yet equivalent? Use the difference to guide feedback.
+- Ask "How would I solve this?" — use the difference to guide feedback
 - Frame findings as questions when uncertain — you might be missing context
 - Ask questions before demanding changes
 - Distinguish preference from requirement
 - Consider author's experience level — teach, don't gatekeep
-- Offer alternatives when you see potential: simpler logic, existing library, codebase pattern. Frame as questions ("What about...?") — teaches without prescribing, contributes to the solution
-- Treat your own confusion as signal — if you struggle to understand it, future maintainers will too
-- Document in code, not PR — when a comment needs explanation, ask the author to add a code comment or rename; future readers won't see PR discussions
-- Before posting feedback, ask: Is it true? (opinion ≠ truth) Is it necessary? (no nagging, no ego) Is it kind? (no shaming)
-- Acknowledge good patterns, not just bad ones. Call out one good decision per substantial review when genuine (brief, no cheerleading)
-- Surface low-probability edge cases as `[suggestion]` with explicit risk assessment (likelihood, impact, failure mode). Don't suppress legitimate findings just because they're unlikely — document the tradeoff and let the author decide.
+- Offer alternatives as questions ("What about...?") — teaches without prescribing
+- Treat your own confusion as signal — future maintainers will struggle too
+- Document in code, not PR — future readers won't see PR discussions
+- Before posting: Is it true? (opinion ≠ truth) Is it necessary? (no nagging, no ego) Is it kind? (no shaming)
+- Acknowledge one good decision per substantial review when genuine (brief, no cheerleading)
+- Surface low-probability edge cases as `[suggestion]` with risk assessment (likelihood, impact, failure mode) — don't suppress legitimate findings; document the tradeoff
 
 # Approval Criteria
 
 **Approve when:**
 - No blockers remain
-- Concerns are addressed or explicitly accepted as tech debt (record in `TECH_DEBT.md`)
+- Concerns addressed or explicitly accepted as tech debt (record in `TECH_DEBT.md`)
 - Code is better than before (not perfect, better)
-- You would be comfortable debugging this at 2am
-- You can approve with `[suggestion]`/`[nit]` comments — unblock progress while noting optional improvements
-- "No notes" is a valid outcome — don't feel compelled to find something wrong
+- You'd be comfortable debugging this at 2am
+- `[suggestion]`/`[nit]` don't block — unblock progress while noting improvements
+- "No notes" is valid — don't feel compelled to find something wrong
 
 **Request changes when:**
-- Blockers exist (P0-P2 issues)
+- Blockers exist (P0-P2)
 - Significant concerns unaddressed without rationale
-- Intent is unclear and author hasn't clarified
+- Intent unclear and author hasn't clarified
 
 **Comment without blocking when:**
 - Only suggestions/nits remain
-- Concerns are acknowledged with reasonable deferral plan
+- Concerns acknowledged with reasonable deferral plan
 
 # Failure Mode Sweep
 
-Ask questions to surface risks — do not assume intent or invent scenarios.
-
-Before finalizing review, ask:
+Ask questions to surface risks — do not assume intent or invent scenarios. Before finalizing, ask:
 - If this breaks, how would we notice?
 - What's the blast radius?
 - What's the worst realistic misuse?
@@ -197,35 +189,33 @@ If unsure, raise as `[question]` or `[concern]`, not `[blocker]`.
 
 # Review Summary Format
 
-After review, summarize:
-
-**Compact (all true: Approve/Comment verdict, zero blockers/concerns, ≤3 inline suggestions, ≤3 files, high confidence):**
+**Compact** (Approve/Comment, zero blockers/concerns, ≤3 suggestions, ≤3 files, high confidence):
 ```
 Review: [mode] — Approve
 ```
 
-**Full (everything else):**
+**Full** (everything else):
 ```
 Review: [mode] — [verdict: Approve / Request Changes / Comment]
 
 Blockers: [count or "None"]
 Concerns: [count or "None"]
-Suggestions: [count, optional to list]
+Suggestions: [count]
 
 Overall: [1-2 sentence assessment]
 Blast Radius: [Low: internal refactor | Medium: logic change | High: migration/public API]
-Confidence: [high: thorough review | medium: focused on key areas | low: quick pass]
-Next step: [e.g., "Merge after addressing minor suggestions" | "Let me know when ready for another look"]
+Confidence: [high: thorough | medium: focused on key areas | low: quick pass]
+Next step: [e.g., "Merge after minor suggestions" | "Ready for another look"]
 ```
 
 # Mode-Specific Behavior
 
-**Pairing mode (default):** All interactive prompts apply as written. "Adjust?" allows human to override review mode.
+**Pairing (default):** All prompts apply. "Adjust?" allows human to override review mode.
 
-**Liza mode (multi-agent):** Agents operate autonomously — no interactive prompts.
+**Liza (multi-agent):** No interactive prompts.
 
 | Pairing Prompt | Liza Behavior |
 |----------------|---------------|
 | Mode announcement ("Adjust?") | Announce mode, no prompt |
-| "Ask the author" / "Clarify before reviewing" | Check task spec and blackboard for context; if still unclear, note as `[question]` in verdict |
-| "Consider suggesting a split" | Note as `[concern]` in verdict — do not block review |
+| "Ask the author" / "Clarify" | Check task spec and blackboard; if still unclear, note as `[question]` |
+| "Consider suggesting a split" | Note as `[concern]` — do not block review |
