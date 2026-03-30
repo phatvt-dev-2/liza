@@ -27,6 +27,12 @@ optimized for **doing things right on the first pass** — with the auditability
 Liza bets on time-to-quality and durable codebase maintainability through automated reviews and documentation
 (e.g. the [ADR Backfill](skills/adr-backfill) skill).
 
+> Soufiane Keli – VP Software Engineering, Octo Technology (Accenture) – maps AI engineering maturity across 5 levels,
+> from autocomplete (L1) to software factory (L5, still theoretical). He places Liza at L4 – Collaborative Agent Networks:
+> <br>
+> *"Multiple specialized agents work together on design, code, testing, and deployment. Humans orchestrate. This is typically
+> what's happening with BMAD, BEADS, and LIZA. Very few organizations have genuinely reached this level in 2026."*
+
 ### Main characteristics:
 
 - **Behavior, Posture, Know-How** — three layers that make coding agents useful:
@@ -35,7 +41,7 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
   - **Know-How**: 20 composable [skills](skills/) encode methodology
   - *[Full analysis](https://medium.com/@tangi.vass/behavior-posture-know-how-the-three-layers-that-make-ai-agents-useful-d485388442eb)*
 - **Autonomous Spec-driven Coding System:**
-  - From vague spec to code and tests, with multi-stage decomposition into intermediate artifacts (epics, US, implementation plans)
+  - From **general goal** to code and tests, with multi-stage decomposition into intermediate artifacts (epics, US, implementation plans)
     that are AI generated but human reviewed.
   - Automatic task decomposition based on complexity with dependency management for parallel execution.
   - Multi-sprints: agents are fully autonomous within a sprint, user steers between sprints via Liza CLI - review of produced artifacts, continuous improvement, and steering of the next sprint
@@ -56,7 +62,7 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
   - BYOM: Claude Code, Codex CLI, Kimi, Mistral, Gemini. [Not all are made equal though](docs/demo-benchmark).
 - **Structured workflow:**
   - Defined as a composable and customizable YAML pipeline with declarative sub-pipelines (e.g. specification, coding).
-  - Coordination is performed via an auditable YAML **blackboard** (the Kanban board of the agents with full historized state details).
+  - Coordination is performed via an auditable YAML **blackboard** that acts as both the Kanban board of the agents with full historized state details and the support for PR-like comments made by the reviewer agents.
   - Agents don't discover work — they receive pre-claimed tasks in bootstrap prompt. Eliminates race conditions and cognitive overhead.
 - **Resilience:**
   - Circuit breaker: pattern detection (loops, repeated failures) triggers automatic sprint checkpoint
@@ -75,7 +81,7 @@ Under the contract, there's a third option: **say "I'm stuck" and mean it.** The
 
 This won't self-correct. Sycophancy drives engagement — that's what gets optimized. Acting fast with little thinking controls inference costs. Model providers optimize for adoption and cost efficiency, not engineering reliability.
 
-Ten months of pairing under this contract, and the vigilance tax dropped to near zero. I can mostly focus on the architecture.
+Ten months of pairing under this contract, and the vigilance tax dropped to near zero. I can mostly focus on the architecture and more specifically build up a MAS upon the contract.
 
 Here is a [demo video](https://drive.google.com/drive/folders/1Iea-nNxAazBHeLXL7IElXnG5r1i1E-Ha?usp=sharing) of an implementation of a basic Todo CLI
 using Liza in Multi-agent mode - spec-driven with intermediate epic and User Story creation, fully autonomous agents within sprints, human reviews between sprints.
@@ -183,12 +189,15 @@ liza setup  # initial install or liza upgrade: installs contracts + skills to ~/
 liza setup --claude --codex --gemini --mistral
 ```
 
-> **Customize your tool setup:** The installed `~/.liza/AGENT_TOOLS.md` ships with a default
+> **️⚠️ Customize your tool setup:**<br>
+> The installed `~/.liza/AGENT_TOOLS.md` ships with a default
 > MCP server and tool configuration. It defines which tools agents prefer (IDE integrations,
-> search providers, documentation sources, etc.) and is specific to each user's environment.
+> search providers, documentation sources, etc.) and is specific to each user's environment.<br>
+> Context management is of paramount importance. Make sure you use tools that reduce token usage.<br>
+> Recos: [RTK](https://github.com/rtk-ai/rtk), filesystem MCP, MorphLLM MCP, Perplexity MCP.<br>
 > Edit `~/.liza/AGENT_TOOLS.md` to match your own setup — remove tools you don't have,
-> add ones you do, and adjust precedence rules accordingly.
-> Alternatively, provide your own file at install time: `liza setup --agent-tools ~/my-tools.md`.
+> add ones you do, and adjust precedence rules accordingly.<br>
+> Or better, provide your own file at install time: `liza setup --agent-tools ~/my-tools.md`.<br>
 
 To init your project repo, do:
 ```bash
@@ -208,10 +217,11 @@ The interactive wizard walks through mode selection (pairing vs full MAS), agent
 - **Multi-Agent (Liza)**: See [USAGE](docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
 - **Reference**: [Configuration](docs/CONFIGURATION.md) · [Recipes](docs/RECIPES.md) · [Troubleshooting](docs/TROUBLESHOOTING.md)
 
-**Pairing mode** — install once, then start coding in any project:
+**Pairing mode** — install once, then start coding in any project (`liza init` still required per project):
 
 When starting your CLI session (`claude`, `codex`, ...), pairing mode will be selected automatically.
 It should start by displaying a canary test inspired by [Van Halen's M&M's trick](https://colterreed.com/blog/the-genius-of-banishing-brown-mms/) — Four words coming from four different contract files to show what the agent actually read thoroughly.
+Reading the contract files is enforced by a hook for Claude, by instructions for other agents.
 
 The agent reads the contract, builds mental models, and operates as a senior peer:
 analyzing before acting, presenting approval requests at every state change, validating before claiming done.
@@ -435,10 +445,12 @@ See [Release Notes](docs/release_notes/) for version history and [RELEASE.md](RE
 
 **Where Liza works today:**
 - **Pairing mode** is battle-tested — agents write **~90% of production code** under human supervision
-- **Multi-agent mode** produces solid code through the full spec-to-merge pipeline with 9 roles across 2 phases — starting from release v0.4.0, all major Liza changes are implemented using this mode
+- **Multi-agent mode** produces solid specs and code through the full goal-to-merge pipeline with 9 roles across 2 phases — starting from release v0.4.0, all major Liza changes are implemented using this mode
+
+Liza is a collaborative agent network (L4 AI maturity) but its architecture has been designed to support a software factory (L5) where humans focus on strategy and product vision. Still a long way to go.
 
 **Implemented roles:**
-- Orchestrator (decomposes goal into tasks)
+- Orchestrator (decomposes goal into planning tasks)
 - Epic Planner / Epic Plan Reviewer
 - US Writer / US Reviewer
 - Code Planner / Code Plan Reviewer

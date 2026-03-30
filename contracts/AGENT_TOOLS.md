@@ -26,7 +26,7 @@ Fallback tools are permitted ONLY when the fallback condition is met OR the requ
 | Symbol lookup | `mcp__jetbrains__get_symbol_info` | LSP | JetBrains unavailable |
 | File edit | `mcp__morph-mcp__edit_file` | Edit | File >2000 lines (tool reliability limit) |
 | Web content | WebFetch | `mcp__fetch__fetch` | Need raw HTML, pagination, or blocked |
-| Current info / library discovery | `mcp__perplexity__perplexity_ask` | WebSearch | — |
+| Current info / library discovery | `mcp__perplexity__perplexity_ask` | WebSearch | Perplexity unavailable or error |
 | Library API docs | `mcp__context7__query-docs` | Ref | Unknown/niche library, need tutorials |
 | Library tutorials/guides | `mcp__Ref__ref_search_documentation` | WebFetch | Ref returns nothing useful |
 | Repo architecture | `mcp__deepwiki__ask_question` | WebFetch | — |
@@ -36,16 +36,16 @@ Fallback tools are permitted ONLY when the fallback condition is met OR the requ
 
 ### Codebase Exploration
 
-| Question Type | Required Tool | Fallback |
-|-------------------------------------------|--------------|----------|
-| Exact keyword ("TODO") | Grep | — |
-| Find files by name | JetBrains `find_files_by_name_keyword` | Glob |
-| Semantic code search ("how does X work?") | **morph-mcp** (`mcp__morph-mcp__codebase_search`) | Task(Explore) only if morph-mcp insufficient |
-| Symbol info at position | JetBrains `get_symbol_info` | LSP `hover` |
-| Find references | LSP `findReferences` | Grep |
-| Call hierarchy (callers/callees) | LSP `incomingCalls`/`outgoingCalls` | Task(Explore) if LSP not configured |
-| Cross-file definitions | LSP `goToDefinition` | Task(Explore) if LSP not configured |
-| Multi-file structural analysis | Task(Explore) | — |
+| Question Type | Required Tool | Fallback | Use Fallback When |
+|-------------------------------------------|--------------|----------|-------------------|
+| Exact keyword ("TODO") | Grep | — | — |
+| Find files by name | JetBrains `find_files_by_name_keyword` | Glob | JetBrains unavailable |
+| Semantic code search ("how does X work?") | **morph-mcp** (`mcp__morph-mcp__codebase_search`) | Task(Explore) | morph-mcp insufficient |
+| Symbol info at position | JetBrains `get_symbol_info` | LSP `hover` | JetBrains unavailable |
+| Find references | LSP `findReferences` | Grep | LSP not configured |
+| Call hierarchy (callers/callees) | LSP `incomingCalls`/`outgoingCalls` | Task(Explore) | LSP not configured |
+| Cross-file definitions | LSP `goToDefinition` | Task(Explore) | LSP not configured |
+| Multi-file structural analysis | Task(Explore) | — | — |
 
 **Tool characteristics:**
 - **Grep**: Fastest, exact matches only, no synthesis
@@ -68,7 +68,7 @@ Fallback tools are permitted ONLY when the fallback condition is met OR the requ
 
 **fetch MCP**: Exact content without summarization — use when you need raw HTML, pagination, or WebFetch is blocked.
 
-**perplexity**: Real-time web search with synthesis. Use for current info, library discovery, unfamiliar tech, external dependency issues.
+**perplexity**: Real-time web search with synthesis. Strongly preferred over WebSearch — returns focused answers with far fewer tokens than raw search results, preserving context budget. Use for current info, library discovery, unfamiliar tech, external dependency issues.
 
 **context7**: Structured API docs with code examples for well-known libraries. Two-step flow: `resolve-library-id` → `query-docs`. Best for "what's the API for X?" questions. High snippet density, consistent format.
 
