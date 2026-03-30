@@ -6,6 +6,7 @@ Verify the output matches {{.Worktree}}. Then:
 - ALL file operations use {{.Worktree}}/ prefix (Read, Edit, Glob, Grep tools)
 - All git commands MUST use: git -C {{.Worktree}}
 - NEVER use the project root path for file operations
+- Do not rewrite paths from FIRST ACTIONS or BOOTSTRAP CONTEXT — they are already resolved to the correct location
 {{- if eq .RoleType "doer"}}
 - File Read/Edit paths must match exactly — the edit tool tracks reads by string, not inode.
   Never retype or reconstruct the path.
