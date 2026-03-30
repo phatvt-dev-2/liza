@@ -19,6 +19,9 @@ integration risk is manageable. When splitting, ask: "can these run in parallel
 without touching the same files?" If yes, omit depends_on — wall-clock time shrinks.
 If shared files force ordering, that's correct; don't remove real dependencies for speed.
 Verify the plan covers ALL spec requirements — gaps will be rejected.
+TDD colocation: a behavior change and its unit tests are one intent, not two.
+Never split "implement X" from "test X" — coders do TDD inside each task.
+Integration tests spanning multiple components MAY be separate tasks.
 
 REFACTORING TASKS:
 When a task is pure structural refactoring (file split/move with no behavior change),
