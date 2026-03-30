@@ -90,6 +90,8 @@ IN_PROGRESS → CHECKPOINT → COMPLETED → (new sprint) IN_PROGRESS
 
 ## Reading state.yaml
 
+> **Blackboard is read-only.** Never edit `state.yaml` directly — all mutations go through `liza` CLI commands or MCP tools. Direct edits bypass validation and produce invalid states.
+
 Key task fields:
 - `status` — current state
 - `assigned_to` — which agent holds the task (doer)
@@ -125,9 +127,20 @@ Exit 42 with `handoff_pending: true` on the task means context exhaustion — th
 
 ## Common Failure Patterns
 
+### Lease defaults
+
+- Lease duration: 30 minutes
+- Heartbeat interval: 60 seconds
+- If lease expires, task becomes reclaimable
+
+### Timestamp format
+
+All timestamps in state.yaml use ISO 8601 UTC: `YYYY-MM-DDTHH:MM:SSZ`
+Generate: `date -u +%Y-%m-%dT%H:%M:%SZ`
+
 ### Stuck task (stale lease)
 **Symptom**: Task in IMPLEMENTING or REVIEWING but agent is gone.
-**Diagnosis**: `liza get tasks` — check `lease_expires` is in the past.
+**Diagnosis**: `liza get tasks` — check `lease_expires` is in the past (see Lease defaults above).
 **Fix**: `liza recover-task <task-id>` or `liza release-claim <task-id>`.
 
 ### Agent crash loop
