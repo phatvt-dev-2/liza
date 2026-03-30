@@ -11,13 +11,14 @@ Approval = meets requirements + spec + tests + no defects. Not: perfect or produ
 
 INSTRUCTIONS:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
-2. Run tests: cd {{.Worktree}} and run the project's test suite
-   If tests fail, triage — check whether the failing test's package was touched:
+2. Run tests: cd {{.Worktree}} && <project test command> (always cd first — never pass worktree paths as test runner arguments)
+   If tests fail, TRIAGE ONLY — do not debug:
    git -C {{.Worktree}} diff --name-only {{.BaseCommit}}..{{.ReviewCommit}}
-   Then check: does any changed file share a package with the failing test?
+   Check: does any changed file share a package with the failing test?
    - No → pre-existing failure, note but do not reject for it
-   - Yes → potential regression, investigate the change
-   To inspect base version: git -C {{.Worktree}} show {{.BaseCommit}}:<path>
+   - Yes → potential regression. Compare with base: git -C {{.Worktree}} show {{.BaseCommit}}:<path>
+     If the change plausibly caused the failure → REJECT with the test name and failure output
+     If unclear after reading the diff and base version → REJECT citing the test failure. Do not investigate further.
 3. Review ALL changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
    Each review is a fresh evaluation: "does this worktree satisfy the task?"
 4. Invoke skill: code-review, then apply it to the full diff
