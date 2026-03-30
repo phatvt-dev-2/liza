@@ -35,8 +35,8 @@ if [[ ! -f "$STATE_DIR/GUARDRAILS.done" ]] && \
   touch "$STATE_DIR/GUARDRAILS.done"
 fi
 
-# Bootstrap tool: allow ToolSearch to load Read schema.
-if [[ "$tool_name" == "ToolSearch" ]]; then
+# Read-only discovery tools: allow before gate clears.
+if [[ "$tool_name" == "ToolSearch" || "$tool_name" == "Glob" ]]; then
   exit 0
 fi
 
