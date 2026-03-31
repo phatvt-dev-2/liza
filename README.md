@@ -258,6 +258,8 @@ liza recover-task <id>                              # Crash recovery (tasks)
 liza analyze                                        # Circuit breaker analysis
 ```
 
+> ️⚠️ To use Claude Code with your Claude subscription, make sure the ANTHROPIC_API_KEY environment variable is not set by default on a new shell start ([Claude support](https://support.claude.com/en/articles/12304248-managing-api-key-environment-variables-in-claude-code), not specific to Liza).
+
 ---
 
 ## Architecture
