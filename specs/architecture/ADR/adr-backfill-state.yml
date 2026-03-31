@@ -745,10 +745,40 @@ clusters:
       limitations: "Phase 1: no panel navigation, item selection, mouse support; spawn lacks --cli provider selection"
     note: "Spec-first implementation by Liza agents. 8,500 lines across 6 files in internal/tui/."
 
+  # --- Wave 8: 2026-03-28 to 2026-03-31 ---
+
+  - id: 53
+    title: "Supervisor Resilience: Automated Failure Detection and Recovery"
+    commit_shas: ["e2fd453", "b5f9c3d"]
+    date_range: "2026-03-28"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0053-supervisor-resilience-automated-failure-detection.md"
+    user_context:
+      problem: "Codex security policy change caused 9-hour infinite restart loop — no detection for quota exhaustion or crash loops"
+      alternatives: "None — in-process detection with file-based coordination, consistent with existing architecture"
+      rationale: "Different failure causes need different responses: quota is provider-scoped, spinning is task-scoped"
+      limitations: "In-memory tracking resets on supervisor restart — acceptable given no automatic supervisor restarts"
+    note: "Extends ADR-0010 (Loop Detection Self-Abort) and ADR-0023 (Crash Recovery Commands)"
+
+  - id: 54
+    title: "Blocking Await Primitives for Session-Persistent Review Flow"
+    commit_shas: ["3f49344", "ce6469a", "50a1237"]
+    date_range: "2026-03-30 to 2026-03-31"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0054-blocking-await-primitives-for-review-flow.md"
+    user_context:
+      problem: "Original vision was attempt-scoped sessions; cold restarts (~47s each) wasted tokens and destroyed context"
+      alternatives: "None — attempt-scoped agent lifespan is the right trade-off between context reuse and context pressure"
+      rationale: "Blocking MCP calls consistent with existing architecture (waitForWorkEventDriven pattern)"
+      limitations: "25-min default timeout constrained by Claude Code MCP_TIMEOUT"
+    note: "Restores original vision. Extends ADR-0051 (First-Class Attempt Model)."
+
 processing_cursor:
   step: "cluster_analysis"
   substep: "high_confidence_complete"
-  note: "Wave 7 complete (ADR-0052). Non-ADR commits since Wave 6: interactive onboarding wizard (6f30ad5), --branch flag (9aa67bf), race condition fixes (45cd029, 1f07ec5, 3cd783d, d96198d), SCC cycle detection (614f3e4), install.sh improvements, docs."
+  note: "Wave 8 complete (ADR-0053, ADR-0054). Non-ADR commits since Wave 7: attempt model migration fixes (ADR-0051 follow-up), TUI bug fixes (ADR-0052 follow-up), prompt tuning, contract tightening, auto-resume option, platform fixes, docs."
 
 configuration:
   adr_output_dir: "specs/architecture/ADR"

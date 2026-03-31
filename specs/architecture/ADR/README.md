@@ -54,3 +54,5 @@
 | [0050 — Brownfield-Safe Initialization](0050-brownfield-safe-initialization.md) | Global fallback symlinks for existing projects and Node.js auto-detection. |
 | [0051 — First-Class Attempt Model](0051-first-class-attempt-model.md) | Structural attempt lifecycle replacing identity-based reassignment, with 3-phase transition and sentinel guards. |
 | [0052 — Bubbletea TUI](0052-bubbletea-tui.md) | Interactive Bubbletea TUI replacing console.sh and headless monitoring with live dashboard and keyboard commands. |
+| [0053 — Supervisor Resilience](0053-supervisor-resilience-automated-failure-detection.md) | Three-layer automated failure detection (quota exhaustion, crash loops, spinning) preventing infinite supervisor restart cycles. |
+| [0054 — Blocking Await Primitives](0054-blocking-await-primitives-for-review-flow.md) | Session-persistent blocking MCP tools (`await_verdict`, `await_resubmission`) eliminating cold restarts across review cycles. |
