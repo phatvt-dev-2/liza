@@ -63,7 +63,7 @@ if [[ "$tool_name" == "Read" ]]; then
 fi
 
 # Non-Read tool call: block if gate not cleared.
-# Stdout is shown to the agent as the block reason; stderr is swallowed.
+# Stderr is shown to the agent as the block reason (exit 2 protocol).
 missing=""
 [[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing
   - ~/.liza/AGENT_TOOLS.md"
@@ -72,7 +72,7 @@ missing=""
 [[ ! -f "$STATE_DIR/GUARDRAILS.done" ]] && missing="$missing
   - GUARDRAILS.md (project root, or confirm absent)"
 
-cat <<EOF
+cat <<EOF >&2
 BLOCKED — session initialization incomplete.
 
 You must Read these files before using any other tool:
