@@ -10,6 +10,10 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// maxSafeBlockSeconds is the hard ceiling for per-call blocking, below the
+// shortest known MCP transport timeout (Codex: 120s).
+const maxSafeBlockSeconds = 110
+
 // resolveOrchestratorID resolves the orchestrator agent ID from params or state.
 // When agent_id is absent from params, auto-resolves from the registered orchestrator.
 // When agent_id is present but empty or non-string, returns a validation error
@@ -139,12 +143,20 @@ func (s *Server) handleAwaitVerdict(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Optional timeout with default 1500s (25 min, within Claude Code's 30 min MCP_TIMEOUT)
-	timeoutSeconds := 1500
-	if v, ok := params["timeout_seconds"].(float64); ok && v > 0 {
-		timeoutSeconds = int(v)
+	maxBlock := 100
+	if v, ok := params["max_block_seconds"].(float64); ok && v > 0 {
+		maxBlock = int(v)
 	}
-	timeout := time.Duration(timeoutSeconds) * time.Second
+	maxBlock = min(maxBlock, maxSafeBlockSeconds)
+
+	// timeout_seconds is the remaining total budget. Default 1500s (25 min).
+	remaining := 1500
+	if v, ok := params["timeout_seconds"].(float64); ok && v > 0 {
+		remaining = int(v)
+	}
+
+	blockFor := min(remaining, maxBlock)
+	timeout := time.Duration(blockFor) * time.Second
 
 	result, err := ops.AwaitVerdict(context.Background(), s.projectRoot, taskID, agentID, timeout)
 	if err != nil {
@@ -154,8 +166,17 @@ func (s *Server) handleAwaitVerdict(params map[string]any) (any, error) {
 		return nil, fmt.Errorf("await verdict failed: %w", err)
 	}
 
+	// Convert TIMEOUT to POLL if budget remains, else keep TIMEOUT.
+	remainingAfter := remaining - blockFor
+	if result.Verdict == ops.VerdictTimeout && remainingAfter > 0 {
+		result.Verdict = ops.VerdictPoll
+	}
+
 	msg := fmt.Sprintf("Verdict: %s\nStatus: %s\nReason: %s\nReviewer: %s",
 		result.Verdict, result.TaskStatus, result.Reason, result.ReviewerAgent)
+	if result.Verdict == ops.VerdictPoll {
+		msg += fmt.Sprintf("\nBlocking interval expired. Call await_verdict again with timeout_seconds=%d to continue waiting.", remainingAfter)
+	}
 	if result.Guidance != "" {
 		msg += fmt.Sprintf("\n\n%s", result.Guidance)
 	}
@@ -178,22 +199,39 @@ func (s *Server) handleAwaitResubmission(params map[string]any) (any, error) {
 		return nil, err
 	}
 
-	// Optional timeout with default 1500s (25 min, within Claude Code's 30 min MCP_TIMEOUT)
-	timeoutSeconds := 1500
-	if v, ok := params["timeout_seconds"].(float64); ok && v > 0 {
-		timeoutSeconds = int(v)
+	maxBlock := 100
+	if v, ok := params["max_block_seconds"].(float64); ok && v > 0 {
+		maxBlock = int(v)
 	}
-	timeout := time.Duration(timeoutSeconds) * time.Second
+	maxBlock = min(maxBlock, maxSafeBlockSeconds)
+
+	// timeout_seconds is the remaining total budget. Default 1500s (25 min).
+	remaining := 1500
+	if v, ok := params["timeout_seconds"].(float64); ok && v > 0 {
+		remaining = int(v)
+	}
+
+	blockFor := min(remaining, maxBlock)
+	timeout := time.Duration(blockFor) * time.Second
 
 	result, err := ops.AwaitResubmission(context.Background(), s.projectRoot, taskID, agentID, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("await resubmission failed: %w", err)
 	}
 
+	// Convert TIMEOUT to POLL if budget remains, else keep TIMEOUT.
+	remainingAfter := remaining - blockFor
+	if result.Verdict == ops.ResubmissionTimeout && remainingAfter > 0 {
+		result.Verdict = ops.ResubmissionPoll
+	}
+
 	msg := fmt.Sprintf("Verdict: %s\nStatus: %s", result.Verdict, result.TaskStatus)
 	if result.Verdict == ops.ResubmissionResubmitted {
 		msg += fmt.Sprintf("\nNew submission received. Review the changes at commit %s. Review cycle %d.",
 			result.ReviewCommit, result.ReviewCycle)
+	}
+	if result.Verdict == ops.ResubmissionPoll {
+		msg += fmt.Sprintf("\nBlocking interval expired. Call await_resubmission again with timeout_seconds=%d to continue waiting.", remainingAfter)
 	}
 	if result.Reason != "" {
 		msg += fmt.Sprintf("\nReason: %s", result.Reason)

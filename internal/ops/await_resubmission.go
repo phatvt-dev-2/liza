@@ -19,6 +19,7 @@ const (
 	ResubmissionTerminal    = "TERMINAL"
 	ResubmissionTimeout     = "TIMEOUT"
 	ResubmissionAborted     = "ABORTED"
+	ResubmissionPoll        = "POLL" // Blocking interval expired, caller should retry
 )
 
 // AwaitResubmissionResult holds the outcome of blocking on a doer resubmission.

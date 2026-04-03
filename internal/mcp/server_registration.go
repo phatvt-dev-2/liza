@@ -235,7 +235,11 @@ func (s *Server) registerMutationTools() {
 						},
 						"timeout_seconds": {
 							Type:        "integer",
-							Description: "Max wait time in seconds (default: 1500, must be < MCP_TIMEOUT)",
+							Description: "Total wait budget in seconds (capped to max_block_seconds per call)",
+						},
+						"max_block_seconds": {
+							Type:        "integer",
+							Description: "Max blocking time per call in seconds (default: 100). Returns POLL if exceeded.",
 						},
 					},
 					Required: []string{"task_id", "agent_id"},
@@ -254,9 +258,10 @@ func (s *Server) registerMutationTools() {
 				InputSchema: protocol.InputSchema{
 					Type: "object",
 					Properties: map[string]protocol.Property{
-						"task_id":         {Type: "string", Description: "Task ID to await resubmission for"},
-						"agent_id":        {Type: "string", Description: "Agent ID (for authorization)"},
-						"timeout_seconds": {Type: "integer", Description: "Max wait time in seconds (default: 1500, must be < MCP_TIMEOUT)"},
+						"task_id":           {Type: "string", Description: "Task ID to await resubmission for"},
+						"agent_id":          {Type: "string", Description: "Agent ID (for authorization)"},
+						"timeout_seconds":   {Type: "integer", Description: "Total wait budget in seconds (capped to max_block_seconds per call)"},
+						"max_block_seconds": {Type: "integer", Description: "Max blocking time per call in seconds (default: 100). Returns POLL if exceeded."},
 					},
 					Required: []string{"task_id", "agent_id"},
 				},

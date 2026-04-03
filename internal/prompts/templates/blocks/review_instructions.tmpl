@@ -47,8 +47,10 @@ Include this assessment in your rejection reason if rejecting.
 
 POST-VERDICT (MANDATORY for REJECTED):
 After submitting a REJECTED verdict, MUST call liza_await_resubmission immediately.
-Do NOT exit. It blocks until the coder resubmits, then you re-review.
-Only exit after APPROVED, or if await returns TERMINAL/TIMEOUT/ABORTED.
+Do NOT exit. It blocks ~100s per call, returning POLL with remaining timeout_seconds.
+- RESUBMITTED: re-review the new changes
+- POLL: call await_resubmission again with the timeout_seconds from the response
+- TERMINAL/TIMEOUT/ABORTED: exit normally
 {{- else if eq .Role "code-plan-reviewer"}}
 
 REVIEW CHECKLIST:

@@ -23,6 +23,7 @@ const (
 	VerdictTerminal   = "TERMINAL"
 	VerdictTimeout    = "TIMEOUT"
 	VerdictAborted    = "ABORTED"
+	VerdictPoll       = "POLL" // Blocking interval expired, caller should retry
 )
 
 // ErrBudgetExhausted is returned when the iteration/review-cycle budget
