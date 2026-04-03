@@ -55,10 +55,11 @@ func TestAwaitVerdict_WrongStatus(t *testing.T) {
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
-	// IMPLEMENTING is not in the awaitable set (submitted/reviewing/partially-approved)
+	// IMPLEMENTING with no submission history — submitter validation rejects first.
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 	}
+	state.Agents["coder-1"] = models.Agent{Role: "coder", Status: models.AgentStatusIdle}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 30*time.Second)
@@ -70,7 +71,7 @@ func TestAwaitVerdict_WrongStatus(t *testing.T) {
 	if !stderrors.As(err, &pe) {
 		t.Fatalf("expected PreconditionError, got %T: %v", err, err)
 	}
-	testhelpers.RequireErrorContains(t, err, "not in an awaitable status")
+	testhelpers.RequireErrorContains(t, err, "no submission history")
 }
 
 func TestAwaitVerdict_WrongAgent(t *testing.T) {
@@ -87,6 +88,7 @@ func TestAwaitVerdict_WrongAgent(t *testing.T) {
 		Agent: strPtr("coder-1"),
 	})
 	state.Tasks = []models.Task{task}
+	state.Agents["coder-2"] = models.Agent{Role: "coder", Status: models.AgentStatusIdle}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// coder-2 was NOT the last submitter
@@ -663,6 +665,170 @@ func TestAwaitVerdict_Aborted(t *testing.T) {
 	agent := s.Agents["coder-1"]
 	if agent.CurrentTask != nil {
 		t.Errorf("expected CurrentTask=nil after abort, got %q", *agent.CurrentTask)
+	}
+}
+
+func TestAwaitVerdict_AlreadyBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventSubmittedForReview,
+		Agent: strPtr("coder-1"),
+	})
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:   "coder",
+		Status: models.AgentStatusIdle,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+	if err != nil {
+		t.Fatalf("AwaitVerdict error: %v", err)
+	}
+	if result.Verdict != VerdictTerminal {
+		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
+	}
+	if result.TaskStatus != models.TaskStatusBlocked {
+		t.Errorf("TaskStatus = %q, want BLOCKED", result.TaskStatus)
+	}
+
+	// Verify no ownership mutation.
+	bb := db.For(stateFile)
+	s, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("failed to read state: %v", readErr)
+	}
+	agent := s.Agents["coder-1"]
+	if agent.CurrentTask != nil {
+		t.Error("CurrentTask should remain nil (no ownership acquired)")
+	}
+}
+
+func TestAwaitVerdict_AlreadyTerminal(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventSubmittedForReview,
+		Agent: strPtr("coder-1"),
+	})
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:   "coder",
+		Status: models.AgentStatusIdle,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+	if err != nil {
+		t.Fatalf("AwaitVerdict error: %v", err)
+	}
+	if result.Verdict != VerdictTerminal {
+		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
+	}
+	if result.TaskStatus != models.TaskStatusSuperseded {
+		t.Errorf("TaskStatus = %q, want SUPERSEDED", result.TaskStatus)
+	}
+}
+
+func TestAwaitVerdict_AlreadyApproved(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusApproved, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventSubmittedForReview,
+		Agent: strPtr("coder-1"),
+	}, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventApproved,
+		Agent: strPtr("code-reviewer-1"),
+	})
+	reviewer := "code-reviewer-1"
+	task.ApprovedBy = &reviewer
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:   "coder",
+		Status: models.AgentStatusIdle,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+	if err != nil {
+		t.Fatalf("AwaitVerdict error: %v", err)
+	}
+	if result.Verdict != VerdictApproved {
+		t.Errorf("Verdict = %q, want APPROVED", result.Verdict)
+	}
+	if result.ReviewerAgent != "code-reviewer-1" {
+		t.Errorf("ReviewerAgent = %q, want code-reviewer-1", result.ReviewerAgent)
+	}
+}
+
+func TestAwaitVerdict_AlreadyBlocked_NonexistentAgent(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventSubmittedForReview,
+		Agent: strPtr("coder-1"),
+	})
+	state.Tasks = []models.Task{task}
+	// coder-1 NOT in state.Agents
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+	if err == nil {
+		t.Fatal("expected error for nonexistent agent")
+	}
+	if !errors.IsNotFound(err) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestAwaitVerdict_AlreadyBlocked_WrongSubmitter(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventSubmittedForReview,
+		Agent: strPtr("coder-1"),
+	})
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-2"] = models.Agent{
+		Role:   "coder",
+		Status: models.AgentStatusIdle,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-2", 10*time.Second)
+	if err == nil {
+		t.Fatal("expected error for wrong submitter")
+	}
+	var pe *PreconditionError
+	if !stderrors.As(err, &pe) {
+		t.Fatalf("expected PreconditionError, got %T: %v", err, err)
 	}
 }
 

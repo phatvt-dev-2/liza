@@ -54,9 +54,15 @@ func AwaitResubmission(ctx context.Context, projectRoot, taskID, agentID string,
 	bb := db.For(lp.StatePath())
 
 	// Read state and find task.
-	_, task, err := readTaskState(bb, taskID)
+	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Verify agent exists in state (early exits below bypass acquireReviewOwnership
+	// which would otherwise catch nonexistent agents).
+	if _, ok := state.Agents[agentID]; !ok {
+		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
 	}
 
 	// Verify agent was the last rejecting reviewer (even for early exits).
@@ -166,7 +172,8 @@ func AwaitResubmission(ctx context.Context, projectRoot, taskID, agentID string,
 }
 
 // checkResubmissionPrecondition verifies the task is in a status where
-// awaiting resubmission is valid: rejected or already submitted (fast-doer).
+// awaiting resubmission is valid: rejected, executing (fast-coder claimed
+// before reviewer called await), or already submitted (fast-doer).
 func checkResubmissionPrecondition(task *models.Task, resolver *pipeline.Resolver) error {
 	rejected, err := resolver.RejectedStatus(task.RolePair)
 	if err != nil {
@@ -176,14 +183,18 @@ func checkResubmissionPrecondition(task *models.Task, resolver *pipeline.Resolve
 	if err != nil {
 		return &PreconditionError{Reason: fmt.Sprintf("unrecognized role-pair %q — check pipeline.yaml config", task.RolePair)}
 	}
+	executing, err := resolver.ExecutingStatus(task.RolePair)
+	if err != nil {
+		return &PreconditionError{Reason: fmt.Sprintf("unrecognized role-pair %q — check pipeline.yaml config", task.RolePair)}
+	}
 
-	if task.Status == rejected || task.Status == submitted {
+	if task.Status == rejected || task.Status == submitted || task.Status == executing {
 		return nil
 	}
 
 	return &PreconditionError{
-		Reason: fmt.Sprintf("task %s is not in a rejected or submitted status (current: %s, expected: %s or %s)",
-			task.ID, task.Status, rejected, submitted),
+		Reason: fmt.Sprintf("task %s is not in a rejected, executing, or submitted status (current: %s, expected: %s, %s, or %s)",
+			task.ID, task.Status, rejected, executing, submitted),
 	}
 }
 

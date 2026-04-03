@@ -60,6 +60,7 @@ func TestAwaitResubmission_WrongStatus(t *testing.T) {
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 	}
+	state.Agents["reviewer-1"] = models.Agent{Role: "code-reviewer", Status: models.AgentStatusIdle}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 30*time.Second)
@@ -88,6 +89,7 @@ func TestAwaitResubmission_WrongAgent(t *testing.T) {
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
+	state.Agents["reviewer-2"] = models.Agent{Role: "code-reviewer", Status: models.AgentStatusIdle}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// reviewer-2 was NOT the last rejecting reviewer.
@@ -670,6 +672,7 @@ func TestAwaitResubmission_AlreadyBlocked_WrongReviewer(t *testing.T) {
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
+	state.Agents["reviewer-2"] = models.Agent{Role: "code-reviewer", Status: models.AgentStatusIdle}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// reviewer-2 was NOT the rejecting reviewer — should still get precondition error.

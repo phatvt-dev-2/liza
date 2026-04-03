@@ -60,6 +60,27 @@ func AwaitVerdict(ctx context.Context, projectRoot, taskID, agentID string, time
 		return nil, err
 	}
 
+	// Verify agent exists in state (early exits below bypass acquireAwaitOwnership
+	// which would otherwise catch nonexistent agents).
+	if _, ok := state.Agents[agentID]; !ok {
+		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
+	}
+
+	// Verify agent was the last submitter (even for early exits).
+	if err := checkLastSubmitter(task, agentID); err != nil {
+		return nil, err
+	}
+
+	// If the task was already decided (BLOCKED or terminal) before we got here,
+	// return immediately so the coder can exit cleanly.
+	if task.Status == models.TaskStatusBlocked || task.Status.IsTerminal() {
+		return &AwaitVerdictResult{
+			Verdict:    VerdictTerminal,
+			TaskStatus: task.Status,
+			Reason:     fmt.Sprintf("task already %s — no verdict expected", task.Status),
+		}, nil
+	}
+
 	// Resolve pipeline statuses for the task's role-pair.
 	if task.RolePair == "" {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
@@ -69,13 +90,16 @@ func AwaitVerdict(ctx context.Context, projectRoot, taskID, agentID string, time
 		return nil, &OperationalError{Message: "failed to load pipeline config", Err: resolverErr}
 	}
 
-	// Check task status is in the awaitable set.
-	if err := checkAwaitableStatus(task, resolver); err != nil {
-		return nil, err
+	// Fast-reviewer race: if verdict already arrived, handle it directly
+	// instead of entering the event loop.
+	approved, _ := resolver.ApprovedStatus(task.RolePair)
+	rejected, _ := resolver.RejectedStatus(task.RolePair)
+	if task.Status == approved || task.Status == rejected {
+		return handleVerdictResult(bb, task, agentID, projectRoot, resolver, task.RolePair)
 	}
 
-	// Verify agent was the last submitter.
-	if err := checkLastSubmitter(task, agentID); err != nil {
+	// Check task status is in the awaitable set.
+	if err := checkAwaitableStatus(task, resolver); err != nil {
 		return nil, err
 	}
 
