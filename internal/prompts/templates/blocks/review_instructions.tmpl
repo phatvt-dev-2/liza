@@ -44,6 +44,11 @@ Before submitting verdict, compare this iteration against prior rejection:
 - Which prior issues are PARTIALLY ADDRESSED?
 Include this assessment in your rejection reason if rejecting.
 {{- end}}
+
+POST-VERDICT (MANDATORY for REJECTED):
+After submitting a REJECTED verdict, MUST call liza_await_resubmission immediately.
+Do NOT exit. It blocks until the coder resubmits, then you re-review.
+Only exit after APPROVED, or if await returns TERMINAL/TIMEOUT/ABORTED.
 {{- else if eq .Role "code-plan-reviewer"}}
 
 REVIEW CHECKLIST:

@@ -56,7 +56,7 @@ func TestAwaitResubmission_WrongStatus(t *testing.T) {
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
-	// IMPLEMENTING is not rejected or submitted — should fail precondition.
+	// IMPLEMENTING with no rejection history — reviewer validation rejects first.
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
 	}
@@ -71,7 +71,7 @@ func TestAwaitResubmission_WrongStatus(t *testing.T) {
 	if !stderrors.As(err, &pe) {
 		t.Fatalf("expected PreconditionError, got %T: %v", err, err)
 	}
-	testhelpers.RequireErrorContains(t, err, "not in a rejected or submitted status")
+	testhelpers.RequireErrorContains(t, err, "no rejection history")
 }
 
 func TestAwaitResubmission_WrongAgent(t *testing.T) {
@@ -576,6 +576,112 @@ func TestAwaitResubmission_Aborted(t *testing.T) {
 	if agent.CurrentTask != nil {
 		t.Errorf("expected CurrentTask=nil after abort, got %q", *agent.CurrentTask)
 	}
+}
+
+// --- Early exit tests (task already BLOCKED/terminal at entry) ---
+
+func TestAwaitResubmission_AlreadyBlocked_RejectingReviewer(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventRejected,
+		Agent: strPtr("reviewer-1"),
+	})
+	state.Tasks = []models.Task{task}
+	state.Agents["reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusIdle,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 10*time.Second)
+	if err != nil {
+		t.Fatalf("AwaitResubmission error: %v", err)
+	}
+	if result.Verdict != ResubmissionAborted {
+		t.Errorf("Verdict = %q, want ABORTED", result.Verdict)
+	}
+	if result.TaskStatus != models.TaskStatusBlocked {
+		t.Errorf("TaskStatus = %q, want BLOCKED", result.TaskStatus)
+	}
+
+	// Verify no ownership mutation occurred.
+	bb := db.For(stateFile)
+	s, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("failed to read state: %v", readErr)
+	}
+	tk := s.FindTask("task-1")
+	if tk.ReviewingBy != nil {
+		t.Error("ReviewingBy should remain nil (no ownership acquired)")
+	}
+	agent := s.Agents["reviewer-1"]
+	if agent.CurrentTask != nil {
+		t.Error("CurrentTask should remain nil (no ownership acquired)")
+	}
+}
+
+func TestAwaitResubmission_AlreadyTerminal_RejectingReviewer(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventRejected,
+		Agent: strPtr("reviewer-1"),
+	})
+	state.Tasks = []models.Task{task}
+	state.Agents["reviewer-1"] = models.Agent{
+		Role:   "code-reviewer",
+		Status: models.AgentStatusIdle,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 10*time.Second)
+	if err != nil {
+		t.Fatalf("AwaitResubmission error: %v", err)
+	}
+	if result.Verdict != ResubmissionAborted {
+		t.Errorf("Verdict = %q, want ABORTED", result.Verdict)
+	}
+	if result.TaskStatus != models.TaskStatusSuperseded {
+		t.Errorf("TaskStatus = %q, want SUPERSEDED", result.TaskStatus)
+	}
+}
+
+func TestAwaitResubmission_AlreadyBlocked_WrongReviewer(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventRejected,
+		Agent: strPtr("reviewer-1"),
+	})
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// reviewer-2 was NOT the rejecting reviewer — should still get precondition error.
+	_, err := AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-2", 10*time.Second)
+	if err == nil {
+		t.Fatal("expected error for wrong reviewer on already-blocked task")
+	}
+	var pe *PreconditionError
+	if !stderrors.As(err, &pe) {
+		t.Fatalf("expected PreconditionError, got %T: %v", err, err)
+	}
+	testhelpers.RequireErrorContains(t, err, "not the last rejecting reviewer")
 }
 
 // --- Edge case tests ---

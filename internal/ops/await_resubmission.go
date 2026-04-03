@@ -59,6 +59,21 @@ func AwaitResubmission(ctx context.Context, projectRoot, taskID, agentID string,
 		return nil, err
 	}
 
+	// Verify agent was the last rejecting reviewer (even for early exits).
+	if err := checkLastRejectingReviewer(task, agentID); err != nil {
+		return nil, err
+	}
+
+	// If the task was escalated (BLOCKED or terminal) by the verdict, return
+	// immediately so the reviewer can exit cleanly without parsing verdict details.
+	if task.Status == models.TaskStatusBlocked || task.Status.IsTerminal() {
+		return &AwaitResubmissionResult{
+			Verdict:    ResubmissionAborted,
+			TaskStatus: task.Status,
+			Reason:     fmt.Sprintf("task already %s — no resubmission expected", task.Status),
+		}, nil
+	}
+
 	// Resolve pipeline statuses for the task's role-pair.
 	if task.RolePair == "" {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
@@ -70,11 +85,6 @@ func AwaitResubmission(ctx context.Context, projectRoot, taskID, agentID string,
 
 	// Check task status is rejected or already submitted (fast-doer edge case).
 	if err := checkResubmissionPrecondition(task, resolver); err != nil {
-		return nil, err
-	}
-
-	// Verify agent was the last rejecting reviewer.
-	if err := checkLastRejectingReviewer(task, agentID); err != nil {
 		return nil, err
 	}
 
