@@ -368,6 +368,27 @@ func cliSupportsStdin(cliName string) bool {
 	return cliName != "vibe"
 }
 
+func buildCodexArgs(projectRoot, prompt string, useStdin bool, outputsDir string) []string {
+	args := []string{
+		"-c", fmt.Sprintf("mcp_servers.liza.command=%q", "liza-mcp"),
+		"-c", fmt.Sprintf("mcp_servers.liza.args=[%q,%q]", "--project-root", projectRoot),
+	}
+	if useStdin {
+		args = append(args, "exec", "-")
+	} else {
+		args = append(args, "exec", prompt)
+	}
+	// Non-interactive Codex sessions currently cancel external MCP calls unless
+	// approvals and sandboxing are fully bypassed. Liza agents run inside
+	// controlled worktrees with repo guardrails, so we opt into the broader
+	// bypass here to keep blackboard writes functional.
+	args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+	if outputsDir != "" {
+		args = append(args, "--json")
+	}
+	return args
+}
+
 // CLIExecutor interface for testing (mock vs real CLI)
 type CLIExecutor interface {
 	Execute(ctx context.Context, cliName string, agentID string, prompt string, projectRoot string) (exitCode int, err error)
@@ -416,22 +437,7 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 		}
 		cmd = exec.CommandContext(ctx, "claude", args...)
 	case "codex":
-		args := []string{
-			// Non-interactive agents need full auto-approval. Since March 2026,
-			// Codex denies custom MCP tool calls under "on-failure" policy when
-			// there is no interactive TTY to prompt for consent.
-			"-c", `approval_policy="never"`,
-			"-c", fmt.Sprintf("mcp_servers.liza.command=%q", "liza-mcp"),
-			"-c", fmt.Sprintf("mcp_servers.liza.args=[%q,%q]", "--project-root", projectRoot),
-		}
-		if useStdin {
-			args = append(args, "exec", "-")
-		} else {
-			args = append(args, "exec", prompt)
-		}
-		if d.outputsDir != "" {
-			args = append(args, "--json")
-		}
+		args := buildCodexArgs(projectRoot, prompt, useStdin, d.outputsDir)
 		cmd = exec.CommandContext(ctx, "codex", args...)
 	case "gemini":
 		args := []string{"-p"}

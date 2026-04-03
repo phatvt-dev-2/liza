@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -574,6 +575,39 @@ func TestCLISupportsStdin(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildCodexArgs(t *testing.T) {
+	t.Run("stdin without logging bypasses approvals and sandbox", func(t *testing.T) {
+		args := buildCodexArgs("/tmp/project", "ignored", true, "")
+
+		if slices.Contains(args, "-a") || slices.Contains(args, "never") {
+			t.Fatalf("args = %v, did not expect approval-only flag", args)
+		}
+		if !slices.Contains(args, "--dangerously-bypass-approvals-and-sandbox") {
+			t.Fatalf("args = %v, want bypass flag", args)
+		}
+		if !slices.Contains(args, "exec") || !slices.Contains(args, "-") {
+			t.Fatalf("args = %v, want stdin exec invocation", args)
+		}
+		if slices.Contains(args, "--json") {
+			t.Fatalf("args = %v, did not expect --json without logging", args)
+		}
+	})
+
+	t.Run("prompt with logging emits json", func(t *testing.T) {
+		args := buildCodexArgs("/tmp/project", "do the thing", false, "/tmp/logs")
+
+		if !slices.Contains(args, "do the thing") {
+			t.Fatalf("args = %v, want prompt argument", args)
+		}
+		if !slices.Contains(args, "--json") {
+			t.Fatalf("args = %v, want --json when logging enabled", args)
+		}
+		if !slices.Contains(args, "--dangerously-bypass-approvals-and-sandbox") {
+			t.Fatalf("args = %v, want bypass flag", args)
+		}
+	})
 }
 
 func TestNewDefaultCLIExecutor(t *testing.T) {
