@@ -3,6 +3,7 @@ package ops
 import (
 	"fmt"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +16,50 @@ import (
 // DeleteAgentResult contains the outcome of deleting an agent.
 type DeleteAgentResult struct {
 	AgentID string
+	PID     int // PID of the deleted agent's process (0 if unknown).
+}
+
+// SignalProcess sends SIGTERM to the deleted agent's process if it had a known PID.
+// Verifies the process is a liza agent via /proc/<pid>/cmdline before signaling,
+// preventing accidental kills from PID reuse. Safe to call unconditionally.
+func (r *DeleteAgentResult) SignalProcess() bool {
+	if r.PID <= 0 {
+		return false
+	}
+	if !isLizaAgentProcess(r.PID) {
+		return false
+	}
+	proc, err := os.FindProcess(r.PID)
+	if err != nil {
+		return false
+	}
+	return proc.Signal(syscall.SIGTERM) == nil
+}
+
+// isLizaAgentProcess checks if the process with the given PID is a liza agent
+// by reading /proc/<pid>/cmdline. Returns false if the process doesn't exist,
+// is unreadable, or isn't a liza agent.
+// Linux-only: returns false on platforms without procfs (documented no-op).
+func isLizaAgentProcess(pid int) bool {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil {
+		return false
+	}
+	return matchLizaAgentCmdline(string(data))
+}
+
+// matchLizaAgentCmdline checks if a null-separated cmdline string matches
+// a liza agent process (argv[0] basename == "liza", argv[1] == "agent").
+func matchLizaAgentCmdline(cmdline string) bool {
+	args := strings.Split(cmdline, "\x00")
+	if len(args) < 2 {
+		return false
+	}
+	base := args[0]
+	if i := strings.LastIndex(base, "/"); i >= 0 {
+		base = base[i+1:]
+	}
+	return base == "liza" && args[1] == "agent"
 }
 
 // IsProcessAlive checks if a process with the given PID is running.
@@ -107,6 +152,7 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 
 	return &DeleteAgentResult{
 		AgentID: agentID,
+		PID:     agent.PID,
 	}, nil
 }
 

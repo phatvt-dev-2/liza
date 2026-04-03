@@ -254,15 +254,18 @@ func stopSystemCmd(projectRoot string) tea.Cmd {
 	}
 }
 
-// terminateAgentCmd force-deletes an agent via ops.DeleteAgent.
+// terminateAgentCmd force-deletes an agent via ops.DeleteAgent, then kills the
+// process if it was running. The kill happens after state removal so the agent
+// cannot re-register before the state entry is gone.
 // Uses force=true and allowRunningPID=true since the TUI is an interactive context.
 // Returns CmdResultMsg with result.
 func terminateAgentCmd(projectRoot, agentID string) tea.Cmd {
 	return func() tea.Msg {
-		_, err := ops.DeleteAgent(projectRoot, agentID, true, true, "terminated via TUI")
+		result, err := ops.DeleteAgent(projectRoot, agentID, true, true, "terminated via TUI")
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("terminate %s: %v", agentID, err)}
 		}
+		result.SignalProcess()
 		return CmdResultMsg{Success: true, Message: "Terminated " + agentID}
 	}
 }

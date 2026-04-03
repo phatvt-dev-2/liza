@@ -32,6 +32,8 @@ func DeleteAgentCommand(projectRoot, agentID string, force bool, reason string, 
 		return fmt.Errorf("delete agent: %w", err)
 	}
 
+	result.SignalProcess()
+
 	fmt.Printf("Deleted agent %s\n", result.AgentID)
 	return nil
 }

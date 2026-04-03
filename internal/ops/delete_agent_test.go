@@ -240,3 +240,66 @@ func TestDeleteAgent_BusyWithTask_Force(t *testing.T) {
 		t.Errorf("AgentID = %q, want %q", result.AgentID, "coder-1")
 	}
 }
+
+func TestMatchLizaAgentCmdline(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmdline  string
+		expected bool
+	}{
+		{"exact match", "liza\x00agent\x00coder\x00--cli\x00claude\x00", true},
+		{"full path", "/home/user/.local/bin/liza\x00agent\x00code-reviewer\x00", true},
+		{"wrong binary", "codex\x00agent\x00coder\x00", false},
+		{"wrong subcommand", "liza\x00status\x00", false},
+		{"empty cmdline", "", false},
+		{"single arg", "liza\x00", false},
+		{"go test runner", "go\x00test\x00./internal/ops/...\x00", false},
+		{"liza without agent", "liza\x00validate\x00", false},
+		{"agent without liza", "other\x00agent\x00", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchLizaAgentCmdline(tt.cmdline)
+			if got != tt.expected {
+				t.Errorf("matchLizaAgentCmdline(%q) = %v, want %v", tt.cmdline, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSignalProcess_ZeroPID(t *testing.T) {
+	r := &DeleteAgentResult{AgentID: "test", PID: 0}
+	if r.SignalProcess() {
+		t.Error("SignalProcess should return false for PID 0")
+	}
+}
+
+func TestSignalProcess_CurrentProcess(t *testing.T) {
+	// os.Getpid() is a go test runner, not "liza agent" — identity check rejects it.
+	r := &DeleteAgentResult{AgentID: "test", PID: os.Getpid()}
+	if r.SignalProcess() {
+		t.Error("SignalProcess should return false for non-liza process")
+	}
+}
+
+func TestDeleteAgent_ReturnsPID(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Agents["coder-1"] = models.Agent{
+		Role:   "coder",
+		Status: models.AgentStatusIdle,
+		PID:    12345,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := DeleteAgent(tmpDir, "coder-1", false, false, "test")
+	if err != nil {
+		t.Fatalf("DeleteAgent() error: %v", err)
+	}
+	if result.PID != 12345 {
+		t.Errorf("PID = %d, want 12345", result.PID)
+	}
+}
