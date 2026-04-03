@@ -638,6 +638,8 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		// Check provider quota exhaustion (written by any supervisor on the same provider)
 		if CheckQuotaSignal(config.ProjectRoot, config.CLIName) {
+			LogAlert(config.ProjectRoot, "🚨", "PROVIDER QUOTA EXHAUSTED",
+				fmt.Sprintf("agent %s shutting down — %s quota signal present", config.AgentID, config.CLIName))
 			GetLogger().Info("Provider quota exhausted, shutting down",
 				"provider", config.CLIName,
 				"agent_id", config.AgentID)
