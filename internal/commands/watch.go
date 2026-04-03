@@ -496,8 +496,8 @@ func checkApproachingLimits(state *models.State) []Alert {
 			})
 		}
 
-		// Review cycles: warn at 3, cliff at 5
-		if task.ReviewCyclesCurrent >= 3 && task.ReviewCyclesCurrent < 5 {
+		// Review cycles: warn at 3, cliff at 5 (only for non-terminal tasks)
+		if !task.Status.IsTerminal() && task.ReviewCyclesCurrent >= 3 && task.ReviewCyclesCurrent < 5 {
 			var msg string
 			if attemptNum == 2 {
 				msg = fmt.Sprintf("%s — attempt 2 (final), review cycle %d/5", task.ID, task.ReviewCyclesCurrent)
