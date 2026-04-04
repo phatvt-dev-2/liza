@@ -26,8 +26,8 @@ func TestSupersedeTask_Validation(t *testing.T) {
 			wantErr: "task ID is required",
 		},
 		{
-			name: "no replacements", taskID: "t1", replacementIDs: []string{}, reason: "r",
-			wantErr: "at least one replacement",
+			name: "no replacements and no reason", taskID: "t1", replacementIDs: []string{},
+			wantErr: "rescope reason is required",
 		},
 		{
 			name: "empty reason", taskID: "t1", replacementIDs: []string{"r1"},
@@ -102,6 +102,112 @@ func TestSupersedeTask_FromBlocked(t *testing.T) {
 	lastHistory := task.History[len(task.History)-1]
 	if lastHistory.Event != models.TaskEventSuperseded {
 		t.Errorf("History event = %q, want %q", lastHistory.Event, models.TaskEventSuperseded)
+	}
+}
+
+func TestSupersedeTask_NoReplacements(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SupersedeTask(tmpDir, "task-1", nil, "Work already merged in prior sprint", "orchestrator-1")
+	if err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+
+	if result.TaskID != "task-1" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
+	}
+	if len(result.ReplacementIDs) != 0 {
+		t.Errorf("ReplacementIDs = %v, want empty", result.ReplacementIDs)
+	}
+
+	// Verify state
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := readState.FindTask("task-1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusSuperseded {
+		t.Errorf("Status = %v, want SUPERSEDED", task.Status)
+	}
+	if len(task.SupersededBy) != 0 {
+		t.Errorf("SupersededBy = %v, want empty", task.SupersededBy)
+	}
+	if task.RescopeReason == nil || *task.RescopeReason != "Work already merged in prior sprint" {
+		t.Error("RescopeReason not set correctly")
+	}
+
+	lastHistory := task.History[len(task.History)-1]
+	if lastHistory.Note == nil || *lastHistory.Note != "superseded without replacements" {
+		t.Errorf("History note = %v, want 'superseded without replacements'", lastHistory.Note)
+	}
+}
+
+func TestSupersedeTask_NoReplacements_DeletesBranch(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create a branch for the task
+	gw := git.New(tmpDir)
+	_, err := gw.CreateWorktree("task-1", "main")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+
+	// Verify branch exists
+	exists, err := gw.BranchExists("task/task-1")
+	if err != nil {
+		t.Fatalf("BranchExists error: %v", err)
+	}
+	if !exists {
+		t.Fatal("branch should exist before supersede")
+	}
+
+	// Set up state with BLOCKED task that has a worktree
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SupersedeTask(tmpDir, "task-1", nil, "Completed externally", "orchestrator-1")
+	if err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+
+	// No warnings expected
+	if len(result.Warnings) > 0 {
+		t.Errorf("unexpected warnings: %v", result.Warnings)
+	}
+
+	// Verify worktree directory removed
+	wtPath := filepath.Join(tmpDir, ".worktrees", "task-1")
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Error("worktree directory should be removed")
+	}
+
+	// Verify branch deleted — no successors to preserve it for
+	exists, err = gw.BranchExists("task/task-1")
+	if err != nil {
+		t.Fatalf("BranchExists error: %v", err)
+	}
+	if exists {
+		t.Error("branch should be deleted when superseding with no replacements")
 	}
 }
 

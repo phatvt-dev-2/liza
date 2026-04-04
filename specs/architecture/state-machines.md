@@ -13,7 +13,7 @@
 | APPROVED | Code Reviewer approved, merge eligible | → MERGED, INTEGRATION_FAILED |
 | MERGED | Successfully merged to integration | Terminal |
 | BLOCKED | Cannot proceed, awaiting escalation | → SUPERSEDED, ABANDONED |
-| SUPERSEDED | Replaced by rescoped task(s) | Terminal |
+| SUPERSEDED | Replaced by rescoped task(s) or completed externally | Terminal |
 | ABANDONED | Orchestrator killed task | Terminal |
 | INTEGRATION_FAILED | Merge conflict or integration test failure | → IMPLEMENTING (integration-fix scope) |
 
@@ -101,9 +101,11 @@ claimable(task, role) =
 > a dependency is satisfied when it reaches its role-pair's **successful** sprint-terminal state
 > (e.g., CODING_PLAN_APPROVED for code-planning-pair, US_APPROVED for us-writing-pair, MERGED for
 > coding-pair). The `role_pair` field on each dependency task determines which terminal applies.
-> ABANDONED and SUPERSEDED do **not** satisfy dependencies — they indicate the upstream work was
-> dropped or replaced. When a dependency is SUPERSEDED, the dependent task should be re-evaluated
-> against the replacement task(s) referenced in `superseded_by`.
+> ABANDONED does **not** satisfy dependencies — it indicates the upstream work was dropped.
+> SUPERSEDED **does** satisfy dependencies — the work was either replaced by successor tasks
+> (listed in `superseded_by`) or completed externally (empty `superseded_by`). When a dependency
+> is SUPERSEDED with replacements, the dependent task should be re-evaluated against the
+> replacement task(s) referenced in `superseded_by`.
 
 > **Phase-gate dependency propagation:** When pipeline transitions create child tasks from
 > parent tasks that have `depends_on`, the children automatically inherit dependencies on
@@ -202,7 +204,7 @@ The transition CODING_PLAN_APPROVED → DRAFT (coding pair) is executed by the o
 | REJECTED → IMPLEMENTING (same coder) | `lease_expires` (new) | `worktree`, `review_cycles_current`, `review_cycles_total` | Supervisor reclaims for same coder to address feedback |
 | REJECTED → IMPLEMENTING (different coder) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `review_cycles_total` | Worktree reset: delete old, create fresh |
 | INTEGRATION_FAILED → IMPLEMENTING | `lease_expires`, `integration_fix: true` | `worktree` | Any coder may claim; keeps worktree for conflict resolution |
-| BLOCKED → SUPERSEDED | `superseded_by`, `rescope_reason`, status=SUPERSEDED | `failed_by` | Orchestrator links blocked task to replacement task(s) |
+| BLOCKED → SUPERSEDED | `rescope_reason`, status=SUPERSEDED; `superseded_by` optional | `failed_by` | Orchestrator supersedes task — with replacements or completed externally |
 | BLOCKED → ABANDONED | status=ABANDONED | `failed_by` | Orchestrator abandons blocked task when no viable continuation exists |
 | READY → IMPLEMENTING (reassignment) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `failed_by`, `review_cycles_total` | Fresh worktree created |
 | Any → MERGED | — | — | Must clear `worktree` (cleanup) |
@@ -536,7 +538,7 @@ invariants:
   - "REVIEWING task must have review_commit"
   - "REJECTED task must have rejection_reason"
   - "BLOCKED task must have blocked_reason"
-  - "SUPERSEDED task must have superseded_by and rescope_reason"
+  - "SUPERSEDED task must have rescope_reason (superseded_by is optional)"
   - "MERGED task must not have worktree"
   # Code-planning pair invariants
   - "DRAFT_CODING_PLAN task cannot have assigned_to"

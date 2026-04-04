@@ -136,6 +136,14 @@ tasks:
     priority: 2
     created: 2025-01-17T14:10:00Z
 
+  - id: task-5
+    description: "Task whose work was completed in a prior sprint"
+    status: SUPERSEDED
+    # superseded_by is optional — omit when no replacement tasks exist
+    rescope_reason: "Auth middleware already merged in sprint-2"
+    priority: 1
+    created: 2025-01-17T13:00:00Z
+
   - id: task-4a
     description: "Add auth retry logic"
     status: READY
@@ -832,12 +840,12 @@ invariants:
   - "REVIEWING task must have review_commit"
   - "REJECTED task must have rejection_reason"
   - "BLOCKED task must have blocked_reason and blocked_questions"
-  - "SUPERSEDED task must have superseded_by and rescope_reason"
+  - "SUPERSEDED task must have rescope_reason (superseded_by is optional)"
   - "MERGED task must not have worktree"
   - "Task type must be a known type (currently: 'coding', 'planning'); empty defaults to 'coding'"
   - "depends_on must reference existing task IDs"
   - "depends_on must not create circular dependencies"
-  - "IMPLEMENTING task must have all depends_on tasks in MERGED status"
+  - "IMPLEMENTING task must have all depends_on tasks in MERGED or SUPERSEDED status"
   - "Agent WORKING must have task"
   - "Agent WORKING should have lease_expires in future (warning if expired beyond grace period of 60s — may indicate long-running operation)"
   - "No two agents assigned to same task"

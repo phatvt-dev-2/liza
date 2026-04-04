@@ -135,30 +135,34 @@ Example YAML file format:
 }
 
 var supersedeTaskCmd = &cobra.Command{
-	Use:   "supersede-task <task-id> <replacement-task-ids> <rescope-reason>",
-	Short: "Mark a task as SUPERSEDED by replacement tasks",
-	Long: `Mark a task as SUPERSEDED when it needs to be replaced by new task(s).
+	Use:   "supersede-task <task-id> [replacement-task-ids] --reason <reason>",
+	Short: "Mark a task as SUPERSEDED, optionally by replacement tasks",
+	Long: `Mark a task as SUPERSEDED when it is replaced by new task(s) or completed externally.
 
-Used by orchestrator when rescoping blocked, rejected, or problematic tasks.
+Used by orchestrator when rescoping blocked, rejected, or problematic tasks,
+or when a task's work was already completed outside the current sprint.
 
 Requirements:
   - Task must be in BLOCKED, rejected, or initial status
-  - At least one replacement task ID must be provided
-  - Rescope reason must explain why the task is being superseded
+  - --reason is always required
 
-The replacement task IDs should be comma-separated.
+Replacement task IDs are optional and should be comma-separated.
+When no replacements are given, the task's branch is deleted immediately.
 
-Example:
-  liza supersede-task task-3 task-4,task-5 "Split into smaller tasks due to complexity"`,
-	Args: cobra.ExactArgs(3),
+Examples:
+  liza supersede-task task-3 task-4,task-5 --reason "Split into smaller tasks"
+  liza supersede-task task-3 --reason "Work already merged in prior sprint"`,
+	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		taskID := args[0]
-		replacementIDsStr := args[1]
-		reason := args[2]
 
-		replacementIDs := strings.Split(replacementIDsStr, ",")
-		for i := range replacementIDs {
-			replacementIDs[i] = strings.TrimSpace(replacementIDs[i])
+		reason, _ := cmd.Flags().GetString("reason")
+
+		var replacementIDs []string
+		if len(args) == 2 {
+			for _, id := range strings.Split(args[1], ",") {
+				replacementIDs = append(replacementIDs, strings.TrimSpace(id))
+			}
 		}
 
 		agentID, err := resolveOrchestratorID(cmd)
@@ -294,7 +298,7 @@ var cancelTaskCmd = &cobra.Command{
 	Short: "Cancel a task (transition to ABANDONED)",
 	Long: `Cancel a task by transitioning it to ABANDONED status with a reason.
 
-Unlike delete-task (removes from state) or supersede-task (requires replacements),
+Unlike delete-task (removes from state) or supersede-task (marks as replaced/completed externally),
 cancel-task simply stops the task while preserving full audit trail.
 
 Cancellable states are determined by the pipeline transition map. Generally:
@@ -358,6 +362,8 @@ func init() {
 
 	addAgentIDFlag(addTaskCmd)
 	addAgentIDFlag(supersedeTaskCmd)
+	supersedeTaskCmd.Flags().String("reason", "", "reason for superseding (required)")
+	supersedeTaskCmd.MarkFlagRequired("reason")
 	addAgentIDFlag(cancelTaskCmd)
 
 	// Mark-blocked command flags

@@ -111,7 +111,7 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 ORCHESTRATOR COMMANDS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_status,mcp__liza__liza_add_tasks,mcp__liza__liza_supersede_task,mcp__liza__liza_assess_blocked,mcp__liza__liza_wt_delete,mcp__liza__liza_sprint_checkpoint,mcp__liza__liza_update_sprint_metrics):
 - liza_add_tasks — Add one or more tasks to blackboard (atomic per task, with validation)
   Tool parameters: {"tasks": [{"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...]}], "agent_id": "%s"}
-- liza_supersede_task — Supersede task
+- liza_supersede_task — Supersede task (replacement_ids optional — omit when work completed externally)
   Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "%s"}
 - liza_assess_blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
   Tool parameters: {"task_id": "...", "note": "...", "agent_id": "%s"}

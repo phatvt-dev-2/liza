@@ -339,7 +339,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza mark-blocked <task-id>` | Mark a task as BLOCKED with reason and questions |
 | `liza assess-blocked <task-id>` | Record orchestrator assessment of a BLOCKED task (prevents re-wake loops) |
 | `liza handoff <task-id> <summary> <next-action>` | Context-exhaustion handoff for a doer agent's claimed task |
-| `liza supersede-task <task-id>` | Mark a task as SUPERSEDED by replacements |
+| `liza supersede-task <task-id> [replacements] --reason "..."` | Mark a task as SUPERSEDED (with or without replacements) |
 | `liza proceed <task-id> <transition>` | Execute inter-pair pipeline transition (e.g., code-plan-to-coding) |
 | **Worktree Management** | |
 | `liza wt-create <task-id>` | Create a worktree for an executing task |

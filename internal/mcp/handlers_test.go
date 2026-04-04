@@ -1391,6 +1391,54 @@ func TestHandleSupersede(t *testing.T) {
 	}
 }
 
+// TestHandleSupersedeWithoutReplacements verifies superseding with no replacement IDs.
+func TestHandleSupersedeWithoutReplacements(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	result, err := server.handleSupersede(map[string]any{
+		"task_id":  "task-1",
+		"reason":   "Work already merged in prior sprint",
+		"agent_id": "orchestrator-1",
+	})
+
+	if err != nil {
+		t.Fatalf("handleSupersede without replacements failed: %v", err)
+	}
+
+	content, ok := result.(map[string]any)
+	if !ok {
+		t.Fatal("Expected result to be map")
+	}
+	if content["content"] == nil {
+		t.Error("Expected content field in result")
+	}
+
+	// Verify task was superseded with no replacements
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := state.FindTask("task-1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusSuperseded {
+		t.Errorf("Expected status SUPERSEDED, got %s", task.Status)
+	}
+	if len(task.SupersededBy) != 0 {
+		t.Errorf("Expected empty superseded_by, got %v", task.SupersededBy)
+	}
+	if task.RescopeReason == nil || *task.RescopeReason != "Work already merged in prior sprint" {
+		t.Error("RescopeReason not set correctly")
+	}
+}
+
 // TestHandleSupersedeAutoResolveAgentID verifies that omitting agent_id
 // auto-resolves the orchestrator from state for liza_supersede_task.
 func TestHandleSupersedeAutoResolveAgentID(t *testing.T) {

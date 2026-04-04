@@ -60,7 +60,7 @@ APPROVED → INTEGRATION_FAILED → IMPLEMENTING (integration-fix)
 | APPROVED | Reviewer approved — eligible for merge |
 | MERGED | Merged to integration branch (terminal) |
 | BLOCKED | Cannot proceed — see `blocked_reason` and `blocked_questions` |
-| SUPERSEDED | Replaced by new tasks listed in `superseded_by` (terminal) |
+| SUPERSEDED | Replaced by tasks in `superseded_by`, or completed externally (terminal) |
 | ABANDONED | Killed by orchestrator (terminal) |
 | INTEGRATION_FAILED | Merge conflict or test failure |
 
@@ -151,7 +151,7 @@ Generate: `date -u +%Y-%m-%dT%H:%M:%SZ`
 ### BLOCKED task
 **Symptom**: Task in BLOCKED state, agents skip it.
 **Diagnosis**: Read `blocked_reason` and `blocked_questions` in state.yaml.
-**Fix**: Either `liza supersede-task <id>` (replace with new tasks) or resolve the blocker and use `liza recover-task <id>` to reset.
+**Fix**: Either `liza supersede-task <id> [replacements] --reason "..."` (replace with new tasks or mark completed externally) or resolve the blocker and use `liza recover-task <id>` to reset.
 
 ### Integration failure
 **Symptom**: Task in INTEGRATION_FAILED state.

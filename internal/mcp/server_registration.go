@@ -485,7 +485,7 @@ func (s *Server) registerMutationTools() {
 		{
 			tool: protocol.Tool{
 				Name:        "liza_supersede_task",
-				Description: "Mark a task as superseded by replacement tasks. Requires orchestrator role.",
+				Description: "Mark a task as superseded, optionally by replacement tasks. Requires orchestrator role.",
 				InputSchema: protocol.InputSchema{
 					Type: "object",
 					Properties: map[string]protocol.Property{
@@ -495,7 +495,7 @@ func (s *Server) registerMutationTools() {
 						},
 						"replacement_ids": {
 							Type:        "array",
-							Description: "List of replacement task IDs",
+							Description: "List of replacement task IDs (optional — omit when task was completed externally)",
 						},
 						"reason": {
 							Type:        "string",

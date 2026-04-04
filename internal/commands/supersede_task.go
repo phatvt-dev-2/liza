@@ -15,7 +15,12 @@ func SupersedeTaskCommand(projectRoot, taskID string, replacementIDs []string, r
 		return fmt.Errorf("supersede task: %w", err)
 	}
 
-	fmt.Printf("Superseded task %s (was %s) with replacements: %s\n",
-		result.TaskID, result.OriginalStatus, strings.Join(result.ReplacementIDs, ", "))
+	if len(result.ReplacementIDs) > 0 {
+		fmt.Printf("Superseded task %s (was %s) with replacements: %s\n",
+			result.TaskID, result.OriginalStatus, strings.Join(result.ReplacementIDs, ", "))
+	} else {
+		fmt.Printf("Superseded task %s (was %s) without replacements\n",
+			result.TaskID, result.OriginalStatus)
+	}
 	return nil
 }

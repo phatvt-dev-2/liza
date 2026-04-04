@@ -234,11 +234,18 @@ When a task is blocked or needs to be replaced:
 liza add-task --id task-4 --desc "..." --spec ... --done ... --scope ...
 liza add-task --id task-5 --desc "..." --spec ... --done ... --scope ...
 
-# 2. Supersede original
-liza supersede-task task-3 task-4,task-5 "Split into smaller tasks due to complexity"
+# 2. Supersede original with replacements
+liza supersede-task task-3 task-4,task-5 --reason "Split into smaller tasks due to complexity"
 
-# 3. Clean up old worktree
+# 3. Clean up old worktree (branch preserved for successor access)
 liza wt-delete task-3
 ```
 
-Used by the planner agent when tasks are BLOCKED, have failed multiple times, or need decomposition.
+When a task's work was already completed externally (e.g., merged in a prior sprint):
+
+```bash
+# Supersede without replacements (branch deleted immediately)
+liza supersede-task task-3 --reason "Work already merged in prior sprint"
+```
+
+Used by the planner agent when tasks are BLOCKED, have failed multiple times, need decomposition, or are satisfied by external work.

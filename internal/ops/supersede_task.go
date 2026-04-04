@@ -21,13 +21,12 @@ type SupersedeResult struct {
 }
 
 // SupersedeTask transitions a BLOCKED, REJECTED, or READY task to SUPERSEDED,
-// linking it to one or more replacement task IDs. No terminal I/O.
+// optionally linking it to replacement task IDs. When no replacements are given
+// the task's branch is deleted immediately (no successors to trigger cleanup).
+// No terminal I/O.
 func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, agentID string) (*SupersedeResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
-	}
-	if len(replacementIDs) == 0 {
-		return nil, &PreconditionError{Reason: "at least one replacement task ID is required"}
 	}
 	if reason == "" {
 		return nil, &PreconditionError{Reason: "rescope reason is required"}
@@ -82,7 +81,12 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 		currentTask.Worktree = nil
 
 		now := time.Now().UTC()
-		note := fmt.Sprintf("replaced by: %s", strings.Join(replacementIDs, ", "))
+		var note string
+		if len(replacementIDs) > 0 {
+			note = fmt.Sprintf("replaced by: %s", strings.Join(replacementIDs, ", "))
+		} else {
+			note = "superseded without replacements"
+		}
 		currentTask.History = append(currentTask.History, models.TaskHistoryEntry{
 			Time:   now,
 			Event:  models.TaskEventSuperseded,
@@ -99,12 +103,26 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 	}
 
 	// Best-effort worktree cleanup (after state commit — safe to lose worktree now).
-	// Branch is intentionally preserved — successors may need it via git show.
 	var warnings []string
 	gw := git.New(projectRoot)
 	if hadWorktree {
 		if rmErr := gw.RemoveWorktreeDir(taskID); rmErr != nil {
 			warnings = append(warnings, fmt.Sprintf("failed to remove worktree directory: %v", rmErr))
+		}
+	}
+
+	// When there are no successors, delete the branch immediately — no successor
+	// will ever trigger cleanup via cleanupPredecessorBranches.
+	// When successors exist, branch is preserved for git show access.
+	if len(replacementIDs) == 0 {
+		branchName := paths.TaskBranchPrefix + taskID
+		exists, err := gw.BranchExists(branchName)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to check branch %s: %v", branchName, err))
+		} else if exists {
+			if err := gw.DeleteBranch(branchName); err != nil {
+				warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", branchName, err))
+			}
 		}
 	}
 

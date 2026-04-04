@@ -337,9 +337,6 @@ func validateStatusFields(task *models.Task, sc *statusClassifier) error {
 	}
 
 	if task.Status == models.TaskStatusSuperseded {
-		if len(task.SupersededBy) == 0 {
-			return fmt.Errorf("SUPERSEDED task without superseded_by: %s", task.ID)
-		}
 		if task.RescopeReason == nil {
 			return fmt.Errorf("SUPERSEDED task without rescope_reason: %s", task.ID)
 		}

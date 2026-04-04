@@ -120,6 +120,58 @@ func TestMutationCommandWiring(t *testing.T) {
 		}
 	})
 
+	t.Run("supersede-task with replacements and --reason flag", func(t *testing.T) {
+		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
+			now := time.Now().UTC()
+			state.Tasks = []models.Task{
+				testhelpers.BuildTaskByStatus("task-supersede-repl", models.TaskStatusBlocked, now),
+			}
+		})
+
+		err := executeRootCommand(t, projectRoot, "supersede-task", "task-supersede-repl", "task-new-1,task-new-2", "--reason", "Split into smaller tasks", "--agent-id", "orchestrator-1")
+		if err != nil {
+			t.Fatalf("supersede-task execute failed: %v", err)
+		}
+
+		state := readState(t, statePath)
+		task := mustFindTask(t, state, "task-supersede-repl")
+		if task.Status != models.TaskStatusSuperseded {
+			t.Fatalf("task status = %s, want %s", task.Status, models.TaskStatusSuperseded)
+		}
+		if len(task.SupersededBy) != 2 || task.SupersededBy[0] != "task-new-1" || task.SupersededBy[1] != "task-new-2" {
+			t.Fatalf("superseded_by = %v, want [task-new-1 task-new-2]", task.SupersededBy)
+		}
+		if task.RescopeReason == nil || *task.RescopeReason != "Split into smaller tasks" {
+			t.Fatalf("rescope_reason = %v, want 'Split into smaller tasks'", task.RescopeReason)
+		}
+	})
+
+	t.Run("supersede-task without replacements", func(t *testing.T) {
+		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
+			now := time.Now().UTC()
+			state.Tasks = []models.Task{
+				testhelpers.BuildTaskByStatus("task-supersede-norep", models.TaskStatusBlocked, now),
+			}
+		})
+
+		err := executeRootCommand(t, projectRoot, "supersede-task", "task-supersede-norep", "--reason", "Work already merged", "--agent-id", "orchestrator-1")
+		if err != nil {
+			t.Fatalf("supersede-task without replacements failed: %v", err)
+		}
+
+		state := readState(t, statePath)
+		task := mustFindTask(t, state, "task-supersede-norep")
+		if task.Status != models.TaskStatusSuperseded {
+			t.Fatalf("task status = %s, want %s", task.Status, models.TaskStatusSuperseded)
+		}
+		if len(task.SupersededBy) != 0 {
+			t.Fatalf("superseded_by = %v, want empty", task.SupersededBy)
+		}
+		if task.RescopeReason == nil || *task.RescopeReason != "Work already merged" {
+			t.Fatalf("rescope_reason = %v, want 'Work already merged'", task.RescopeReason)
+		}
+	})
+
 	t.Run("release-claim uses --changed-by over env fallback", func(t *testing.T) {
 		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
 			now := time.Now().UTC()

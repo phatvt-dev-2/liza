@@ -146,16 +146,6 @@ func TestValidateTaskInvariants_EnforcesStatusSpecificRequiredFields(t *testing.
 			wantErr: "CODE_REJECTED task without rejection_reason: task-1",
 		},
 		{
-			name: "superseded status requires superseded_by",
-			task: func() models.Task {
-				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, time.Now().UTC())
-				task.SupersededBy = nil
-				task.RescopeReason = testhelpers.StringPtr("replaced")
-				return task
-			},
-			wantErr: "SUPERSEDED task without superseded_by: task-1",
-		},
-		{
 			name: "superseded status requires rescope_reason",
 			task: func() models.Task {
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, time.Now().UTC())
@@ -171,6 +161,20 @@ func TestValidateTaskInvariants_EnforcesStatusSpecificRequiredFields(t *testing.
 			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
 			assertErrorContains(t, err, tc.wantErr)
 		})
+	}
+}
+
+func TestValidateTaskInvariants_SupersededWithoutReplacements(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, time.Now().UTC())
+	task.SupersededBy = nil
+	task.RescopeReason = testhelpers.StringPtr("Work already merged in prior sprint")
+
+	err := validateTaskInvariants(stateWithTasks(task), "", true, resolver, cfg)
+	if err != nil {
+		t.Errorf("superseded without replacements should be valid, got: %v", err)
 	}
 }
 
