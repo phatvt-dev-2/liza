@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -357,6 +358,87 @@ func TestResumeSystemCmd_FailurePreservesQuotaSignals(t *testing.T) {
 	// Quota signal file should still exist (cleanup skipped on failure)
 	if _, err := os.Stat(signalPath); os.IsNotExist(err) {
 		t.Error("quota signal file should be preserved when resume fails")
+	}
+}
+
+func TestAddTaskCmd_SuccessMessage(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Post-write validation checks spec_ref file existence.
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "test")
+	testhelpers.CreateSpecFile(t, tmpDir, "test.md", "test")
+
+	input := &commands.TaskInput{
+		ID:          "test-task",
+		Type:        "coding",
+		RolePair:    "coding-pair",
+		Description: "A test task",
+		SpecRef:     "specs/test.md",
+		DoneWhen:    "tests pass",
+		Scope:       "internal/foo",
+		Priority:    1,
+	}
+
+	cmd := addTaskCmd(tmpDir, input)
+	msg := cmd()
+	result, ok := msg.(CmdResultMsg)
+	if !ok {
+		t.Fatalf("expected CmdResultMsg, got %T", msg)
+	}
+	if !result.Success {
+		t.Fatalf("add task failed: %s", result.Message)
+	}
+	if result.Message != "Task test-task added" {
+		t.Errorf("message = %q, want %q", result.Message, "Task test-task added")
+	}
+}
+
+func TestAddTaskCmd_SurfacesWarnings(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Post-write validation checks spec_ref file existence.
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "test")
+	testhelpers.CreateSpecFile(t, tmpDir, "test.md", "test")
+
+	// Make log.yaml a directory so the log write fails, producing a warning.
+	logPath := filepath.Join(tmpDir, ".liza", "log.yaml")
+	if err := os.MkdirAll(logPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	input := &commands.TaskInput{
+		ID:          "warn-task",
+		Type:        "coding",
+		RolePair:    "coding-pair",
+		Description: "Task that triggers warning",
+		SpecRef:     "specs/test.md",
+		DoneWhen:    "tests pass",
+		Scope:       "internal/foo",
+		Priority:    1,
+	}
+
+	cmd := addTaskCmd(tmpDir, input)
+	msg := cmd()
+	result, ok := msg.(CmdResultMsg)
+	if !ok {
+		t.Fatalf("expected CmdResultMsg, got %T", msg)
+	}
+	if !result.Success {
+		t.Fatalf("add task should succeed despite log warning: %s", result.Message)
+	}
+	if !strings.Contains(result.Message, "warning") {
+		t.Errorf("expected warning in message, got %q", result.Message)
+	}
+	if !strings.Contains(result.Message, "log") {
+		t.Errorf("expected log-related warning detail, got %q", result.Message)
 	}
 }
 

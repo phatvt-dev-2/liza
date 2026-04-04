@@ -309,11 +309,15 @@ func addTaskCmd(projectRoot string, input *commands.TaskInput) tea.Cmd {
 			Priority:    input.Priority,
 			DependsOn:   input.DependsOn,
 		}
-		_, err := ops.AddTask(p.StatePath(), p.LogPath(), opsInput, "operator")
+		result, err := ops.AddTask(p.StatePath(), p.LogPath(), opsInput, "operator")
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("add task: %v", err)}
 		}
-		return CmdResultMsg{Success: true, Message: "Task " + input.ID + " added"}
+		msg := "Task " + input.ID + " added"
+		if len(result.Warnings) > 0 {
+			msg += " (warning: " + strings.Join(result.Warnings, "; ") + ")"
+		}
+		return CmdResultMsg{Success: true, Message: msg}
 	}
 }
 
