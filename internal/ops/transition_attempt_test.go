@@ -474,3 +474,129 @@ func TestTransitionToNewAttempt_PreservesRejectionFeedbackInHistoryNote(t *testi
 		t.Errorf("new_attempt Reason = %v, want %q", entry.Reason, "review cycle limit reached")
 	}
 }
+
+func TestTransitionToNewAttempt_ReviewerReleased(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	task.Attempt = 1
+	task.ReviewCyclesCurrent = 5
+	task.ReviewCyclesTotal = 5
+	reviewCommit := "rev123"
+	task.ReviewCommit = &reviewCommit
+	reviewerID := "code-reviewer-1"
+	task.ReviewingBy = &reviewerID
+	leaseExp := now.Add(30 * time.Minute)
+	task.ReviewLeaseExpires = &leaseExp
+
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: testhelpers.StringPtr("task-1"),
+		Heartbeat:   now,
+		Terminal:    "test",
+	}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:        "code-reviewer",
+		Status:      models.AgentStatusWaiting,
+		CurrentTask: testhelpers.StringPtr("task-1"),
+		Heartbeat:   now,
+		Terminal:    "test",
+	}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	_, err := TransitionToNewAttempt(tmpDir, "task-1", "review cycle limit")
+	if err != nil {
+		t.Fatalf("TransitionToNewAttempt() error: %v", err)
+	}
+
+	bb := db.New(statePath)
+	s, _ := bb.Read()
+
+	// Task review fields must be cleared.
+	tk := s.FindTask("task-1")
+	if tk.ReviewCommit != nil {
+		t.Errorf("ReviewCommit = %v, want nil", *tk.ReviewCommit)
+	}
+	if tk.ReviewingBy != nil {
+		t.Errorf("ReviewingBy = %v, want nil", *tk.ReviewingBy)
+	}
+	if tk.ReviewLeaseExpires != nil {
+		t.Errorf("ReviewLeaseExpires = %v, want nil", tk.ReviewLeaseExpires)
+	}
+
+	// Reviewer agent must be released.
+	reviewer := s.Agents["code-reviewer-1"]
+	if reviewer.Status != models.AgentStatusIdle {
+		t.Errorf("reviewer status = %q, want IDLE", reviewer.Status)
+	}
+	if reviewer.CurrentTask != nil {
+		t.Errorf("reviewer CurrentTask = %v, want nil", *reviewer.CurrentTask)
+	}
+}
+
+func TestTransitionToNewAttempt_ReviewerNotReleasedOnPhase3Failure(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	task.Attempt = 1
+	task.ReviewCyclesCurrent = 5
+	task.ReviewCyclesTotal = 5
+	reviewerID := "code-reviewer-1"
+	task.ReviewingBy = &reviewerID
+
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:        "coder",
+		Status:      models.AgentStatusWorking,
+		CurrentTask: testhelpers.StringPtr("task-1"),
+		Heartbeat:   now,
+		Terminal:    "test",
+	}
+	state.Agents["code-reviewer-1"] = models.Agent{
+		Role:        "code-reviewer",
+		Status:      models.AgentStatusWaiting,
+		CurrentTask: testhelpers.StringPtr("task-1"),
+		Heartbeat:   now,
+		Terminal:    "test",
+	}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	// Sabotage Phase 3: replace sentinel between phases so Phase 3 fails.
+	bb := db.New(statePath)
+	testTransitionHooks = &transitionTestHooks{
+		afterPhase1: func() {
+			_ = bb.Modify(func(s *models.State) error {
+				tk := s.FindTask("task-1")
+				intruder := "intruder"
+				tk.AssignedTo = &intruder
+				return nil
+			})
+		},
+	}
+	t.Cleanup(func() { testTransitionHooks = nil })
+
+	_, err := TransitionToNewAttempt(tmpDir, "task-1", "review cycle limit")
+	if err == nil {
+		t.Fatal("expected Phase 3 failure due to sentinel replacement")
+	}
+
+	// Reviewer should still be WAITING (not released) since Phase 3 didn't execute.
+	s, _ := bb.Read()
+	reviewer := s.Agents["code-reviewer-1"]
+	if reviewer.Status != models.AgentStatusWaiting {
+		t.Errorf("reviewer status = %q, want WAITING (Phase 3 didn't run)", reviewer.Status)
+	}
+	if reviewer.CurrentTask == nil || *reviewer.CurrentTask != "task-1" {
+		t.Error("reviewer CurrentTask should still be task-1 (Phase 3 didn't run)")
+	}
+}

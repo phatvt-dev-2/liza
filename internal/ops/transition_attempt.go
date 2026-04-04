@@ -161,10 +161,18 @@ func TransitionToNewAttempt(projectRoot, taskID, reason string) (*TransitionAtte
 			return fmt.Errorf("sentinel replaced: expected %s, got %s (concurrent modification)", transitioning, actual)
 		}
 
+		// Release reviewer agent before clearing task fields (same transaction).
+		if task.ReviewingBy != nil {
+			state.ReleaseAgent(*task.ReviewingBy)
+		}
+
 		task.AssignedTo = nil
 		task.RejectionReason = nil
 		task.Worktree = nil
 		task.BaseCommit = nil
+		task.ReviewCommit = nil
+		task.ReviewingBy = nil
+		task.ReviewLeaseExpires = nil
 
 		return task.TransitionWith(initialStatus, pb.transitions)
 	})
