@@ -3,12 +3,16 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/log"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
 	"gopkg.in/yaml.v3"
 )
 
@@ -255,6 +259,104 @@ func TestLoadRolesCmd_MissingPipelineConfig(t *testing.T) {
 	}
 	if roles.Roles != nil {
 		t.Fatalf("expected nil Roles for missing pipeline config, got %v", roles.Roles)
+	}
+}
+
+func TestResumeSystemCmd_ClearsQuotaSignals(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModePaused
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Create a quota signal file
+	if err := agent.WriteQuotaSignal(tmpDir, "codex", "You've hit your usage limit"); err != nil {
+		t.Fatal(err)
+	}
+	signalPath := agent.QuotaSignalPath(tmpDir, "codex")
+	if _, err := os.Stat(signalPath); err != nil {
+		t.Fatalf("signal file should exist before resume: %v", err)
+	}
+
+	cmd := resumeSystemCmd(tmpDir)
+	msg := cmd()
+	result, ok := msg.(CmdResultMsg)
+	if !ok {
+		t.Fatalf("expected CmdResultMsg, got %T", msg)
+	}
+	if !result.Success {
+		t.Fatalf("resume failed: %s", result.Message)
+	}
+	if result.Message != "System resumed" {
+		t.Errorf("message = %q, want %q", result.Message, "System resumed")
+	}
+
+	// Quota signal file should be removed
+	if _, err := os.Stat(signalPath); !os.IsNotExist(err) {
+		t.Error("quota signal file should have been removed after resume")
+	}
+}
+
+func TestResumeSystemCmd_WarnsOnQuotaClearFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModePaused
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Replace the signal file with a non-empty directory so os.Remove fails
+	// ("directory not empty") without affecting state.yaml writes.
+	signalPath := agent.QuotaSignalPath(tmpDir, "codex")
+	if err := os.MkdirAll(signalPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(signalPath, "blocker"), []byte{}, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := resumeSystemCmd(tmpDir)
+	msg := cmd()
+	result, ok := msg.(CmdResultMsg)
+	if !ok {
+		t.Fatalf("expected CmdResultMsg, got %T", msg)
+	}
+	if !result.Success {
+		t.Fatalf("resume should succeed even when quota clear fails: %s", result.Message)
+	}
+	if !strings.Contains(result.Message, "warning") {
+		t.Errorf("expected warning in message, got %q", result.Message)
+	}
+	if !strings.Contains(result.Message, "codex") {
+		t.Errorf("expected provider name in warning, got %q", result.Message)
+	}
+}
+
+func TestResumeSystemCmd_FailurePreservesQuotaSignals(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupLizaDir(t, tmpDir)
+	// No state written — ops.Resume will fail because state.yaml doesn't exist
+
+	// Create a quota signal file
+	if err := agent.WriteQuotaSignal(tmpDir, "codex", "quota hit"); err != nil {
+		t.Fatal(err)
+	}
+	signalPath := agent.QuotaSignalPath(tmpDir, "codex")
+
+	cmd := resumeSystemCmd(tmpDir)
+	msg := cmd()
+	result, ok := msg.(CmdResultMsg)
+	if !ok {
+		t.Fatalf("expected CmdResultMsg, got %T", msg)
+	}
+	if result.Success {
+		t.Fatal("expected resume to fail on missing state")
+	}
+
+	// Quota signal file should still exist (cleanup skipped on failure)
+	if _, err := os.Stat(signalPath); os.IsNotExist(err) {
+		t.Error("quota signal file should be preserved when resume fails")
 	}
 }
 
