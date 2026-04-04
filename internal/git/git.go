@@ -3,8 +3,9 @@ package git
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
+
+	"github.com/liza-mas/liza/internal/gitenv"
 )
 
 // Git provides git operations for worktree management
@@ -28,7 +29,7 @@ func New(projectRoot string) *Git {
 
 // exec runs a git command in the project root and returns output
 func (g *Git) exec(args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	cmd := gitenv.Command(args...)
 	cmd.Dir = g.projectRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -39,7 +40,7 @@ func (g *Git) exec(args ...string) (string, error) {
 
 // execInDir runs a git command in a specific directory
 func (g *Git) execInDir(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	cmd := gitenv.Command(args...)
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
