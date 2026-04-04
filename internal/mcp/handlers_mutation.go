@@ -514,6 +514,8 @@ func (s *Server) handleDeleteAgent(params map[string]any) (any, error) {
 		return nil, fmt.Errorf("delete agent failed: %w", err)
 	}
 
+	result.SignalProcess()
+
 	return textResult(fmt.Sprintf("Agent %s deleted", result.AgentID))
 }
 

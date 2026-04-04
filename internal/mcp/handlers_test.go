@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1965,6 +1966,84 @@ func TestHandleDeleteAgent(t *testing.T) {
 
 	if _, exists := state.Agents["inactive-agent"]; exists {
 		t.Error("Expected agent to be deleted from state")
+	}
+}
+
+// TestHandleDeleteAgent_SignalsProcess verifies that handleDeleteAgent sends
+// SIGTERM to the agent process, matching CLI and TUI behavior.
+// Spawns a real child process whose argv matches the liza agent identity check
+// (argv[0] basename "liza", argv[1] "agent"), registers its PID, and asserts
+// the process is killed after the handler returns.
+func TestHandleDeleteAgent_SignalsProcess(t *testing.T) {
+	if _, err := os.Stat("/proc/self/cmdline"); err != nil {
+		t.Skip("requires procfs (Linux)")
+	}
+
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Build a tiny binary named "liza" that just sleeps.
+	fakeBin := filepath.Join(t.TempDir(), "liza")
+	buildCmd := exec.Command("go", "build", "-o", fakeBin)
+	buildCmd.Dir = filepath.Join("testdata", "fakesleep")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build fake liza binary: %v\n%s", err, out)
+	}
+
+	// Start it with argv = ["<path>/liza", "agent"] so /proc/<pid>/cmdline
+	// passes the identity check in isLizaAgentProcess.
+	child := exec.Command(fakeBin, "agent")
+	if err := child.Start(); err != nil {
+		t.Fatalf("failed to start fake agent: %v", err)
+	}
+	pid := child.Process.Pid
+
+	// Single goroutine owns Wait(). exited is closed when the process dies,
+	// used by both the assertion and cleanup without double-consume risk.
+	exited := make(chan struct{})
+	go func() {
+		child.Wait()
+		close(exited)
+	}()
+	t.Cleanup(func() {
+		child.Process.Kill() // no-op if already dead
+		<-exited             // always safe — closed, not consumed
+	})
+
+	// Register the agent with the real PID.
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	err := bb.Modify(func(state *models.State) error {
+		state.Agents["doomed-agent"] = models.Agent{
+			Role:      "coder",
+			Status:    models.AgentStatusIdle,
+			PID:       pid,
+			Heartbeat: time.Now().UTC(),
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to add agent: %v", err)
+	}
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	_, err = server.handleDeleteAgent(map[string]any{
+		"target_agent_id": "doomed-agent",
+		"agent_id":        "orchestrator-1",
+		"force":           true,
+		"reason":          "Testing signal delivery",
+	})
+	if err != nil {
+		t.Fatalf("handleDeleteAgent failed: %v", err)
+	}
+
+	// The child should have received SIGTERM and exited.
+	select {
+	case <-exited:
+		// Process exited — SIGTERM was delivered.
+	case <-time.After(2 * time.Second):
+		t.Error("child process still alive 2s after handler returned — SignalProcess not called")
 	}
 }
 
