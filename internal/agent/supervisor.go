@@ -378,11 +378,12 @@ func buildCodexArgs(projectRoot, prompt string, useStdin bool, outputsDir string
 	} else {
 		args = append(args, "exec", prompt)
 	}
-	// Non-interactive Codex sessions currently cancel external MCP calls unless
-	// approvals and sandboxing are fully bypassed. Liza agents run inside
-	// controlled worktrees with repo guardrails, so we opt into the broader
-	// bypass here to keep blackboard writes functional.
-	args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+	// Codex exec mode auto-cancels MCP elicitation prompts for tools with
+	// destructiveHint=true (the default). Liza MCP tools declare
+	// destructiveHint=false, so --full-auto lets them through while keeping
+	// the OS-enforced sandbox.
+	// Requires Codex >0.118.0: https://github.com/openai/codex/issues/16685
+	args = append(args, "--full-auto")
 	if outputsDir != "" {
 		args = append(args, "--json")
 	}

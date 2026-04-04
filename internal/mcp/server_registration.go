@@ -4,6 +4,32 @@ import (
 	"github.com/liza-mas/liza/internal/mcp/protocol"
 )
 
+// Annotation presets for MCP tools. These tell clients (e.g. Codex) whether
+// a tool requires interactive approval. Without annotations, the MCP spec
+// defaults to destructiveHint=true, causing exec-mode clients to cancel calls.
+var (
+	readOnlyAnnotations = &protocol.ToolAnnotations{
+		ReadOnlyHint:    boolPtr(true),
+		DestructiveHint: boolPtr(false),
+		IdempotentHint:  boolPtr(true),
+		OpenWorldHint:   boolPtr(false),
+	}
+	mutationAnnotations = &protocol.ToolAnnotations{
+		ReadOnlyHint:    boolPtr(false),
+		DestructiveHint: boolPtr(false),
+		IdempotentHint:  boolPtr(false),
+		OpenWorldHint:   boolPtr(false),
+	}
+	idempotentMutationAnnotations = &protocol.ToolAnnotations{
+		ReadOnlyHint:    boolPtr(false),
+		DestructiveHint: boolPtr(false),
+		IdempotentHint:  boolPtr(true),
+		OpenWorldHint:   boolPtr(false),
+	}
+)
+
+func boolPtr(v bool) *bool { return &v }
+
 // registerTool registers a tool with its handler, automatically wrapping it with logging middleware.
 func (s *Server) registerTool(tool protocol.Tool, handler ToolHandler) {
 	s.tools[tool.Name] = tool
@@ -52,6 +78,7 @@ func (s *Server) registerReadOnlyTools() {
 			},
 			Required: []string{"query"},
 		},
+		Annotations: readOnlyAnnotations,
 	}, s.handleGet)
 
 	// liza_status tool
@@ -61,6 +88,7 @@ func (s *Server) registerReadOnlyTools() {
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 		},
+		Annotations: readOnlyAnnotations,
 	}, s.handleStatus)
 
 	// liza_validate tool
@@ -77,6 +105,7 @@ func (s *Server) registerReadOnlyTools() {
 				},
 			},
 		},
+		Annotations: readOnlyAnnotations,
 	}, s.handleValidate)
 
 	// liza_version tool
@@ -86,6 +115,7 @@ func (s *Server) registerReadOnlyTools() {
 		InputSchema: protocol.InputSchema{
 			Type: "object",
 		},
+		Annotations: readOnlyAnnotations,
 	}, s.handleVersion)
 }
 
@@ -135,6 +165,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"tasks"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler: s.handleAddTasks,
 		},
@@ -161,6 +192,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"id", "desc", "spec", "done", "scope"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler: s.handleAddTaskCompat,
 		},
@@ -184,6 +216,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "agent_id"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler:     s.handleClaimTask,
 			roleChecker: typeChecker(s.resolver, s.pipelineLoadErr, "doer"),
@@ -212,6 +245,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "commit_sha", "agent_id"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler:     s.handleSubmitForReview,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_submit_for_review"),
@@ -244,6 +278,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "agent_id"},
 				},
+				Annotations: readOnlyAnnotations,
 			},
 			handler:     s.handleAwaitVerdict,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_await_verdict"),
@@ -265,6 +300,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "agent_id"},
 				},
+				Annotations: readOnlyAnnotations,
 			},
 			handler:     s.handleAwaitResubmission,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_await_resubmission"),
@@ -317,6 +353,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "summary", "next_action", "agent_id"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler:     s.handleHandoff,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_handoff"),
@@ -355,6 +392,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "verdict", "agent_id"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler:     s.handleSubmitVerdict,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_submit_verdict"),
@@ -387,6 +425,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "agent_id", "reason", "questions"},
 				},
+				Annotations: idempotentMutationAnnotations,
 			},
 			handler: s.handleMarkBlocked,
 		},
@@ -423,6 +462,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "role", "agent_id"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler: s.handleReleaseClaim,
 		},
@@ -450,6 +490,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id"},
 				},
+				Annotations: idempotentMutationAnnotations,
 			},
 			handler: s.handleAssessBlocked,
 		},
@@ -477,6 +518,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id"},
 				},
+				Annotations: idempotentMutationAnnotations,
 			},
 			handler: s.handleAssessHypothesisExhausted,
 		},
@@ -508,6 +550,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "reason"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler: s.handleSupersede,
 		},
@@ -535,6 +578,7 @@ func (s *Server) registerMutationTools() {
 					},
 					Required: []string{"task_id", "reason"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler: s.handleCancelTask,
 		},
@@ -568,6 +612,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"task_id", "agent_id"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler:     s.handleWtCreate,
 			roleChecker: typeChecker(s.resolver, s.pipelineLoadErr, "doer"),
@@ -592,6 +637,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"task_id", "agent_id"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler:     s.handleWtDelete,
 			roleChecker: typeChecker(s.resolver, s.pipelineLoadErr, "doer", "orchestrator"),
@@ -616,6 +662,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"task_id", "agent_id"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler:     s.handleWtMerge,
 			roleChecker: typeChecker(s.resolver, s.pipelineLoadErr, "reviewer"),
@@ -644,6 +691,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"discovery_id", "disposition", "agent_id"},
 				},
+				Annotations: idempotentMutationAnnotations,
 			},
 			handler:     s.handleSetDiscoveryDisposition,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_set_discovery_disposition"),
@@ -664,6 +712,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"agent_id"},
 				},
+				Annotations: readOnlyAnnotations,
 			},
 			handler:     s.handleAnalyze,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_analyze"),
@@ -684,6 +733,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"agent_id"},
 				},
+				Annotations: idempotentMutationAnnotations,
 			},
 			handler:     s.handleUpdateSprintMetrics,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_update_sprint_metrics"),
@@ -708,6 +758,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"agent_id"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler:     s.handleSprintCheckpoint,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_sprint_checkpoint"),
@@ -728,6 +779,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"agent_id"},
 				},
+				Annotations: idempotentMutationAnnotations,
 			},
 			handler:     s.handleClearStaleReviews,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_clear_stale_review_claims"),
@@ -784,6 +836,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"task_id", "agent_id", "intent", "validation_plan", "files_to_modify"},
 				},
+				Annotations: idempotentMutationAnnotations,
 			},
 			handler:     s.handleWriteCheckpoint,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_write_checkpoint"),
@@ -812,6 +865,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"task_id", "agent_id", "output"},
 				},
+				Annotations: idempotentMutationAnnotations,
 			},
 			handler:     s.handleSetTaskOutput,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_set_task_output"),
@@ -845,6 +899,7 @@ func (s *Server) registerComplexOperations() {
 					},
 					Required: []string{"target_agent_id", "agent_id", "reason"},
 				},
+				Annotations: mutationAnnotations,
 			},
 			handler:     s.handleDeleteAgent,
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_delete_agent"),

@@ -163,6 +163,23 @@ func TestToolSchemaRequiredMatchesHandlerExtraction(t *testing.T) {
 	}
 }
 
+func TestAllToolsHaveAnnotations(t *testing.T) {
+	server := NewServer("/tmp", "/tmp/log.yaml")
+	for _, name := range server.ToolNames() {
+		tool, ok := server.GetTool(name)
+		if !ok {
+			t.Fatalf("tool %q not found", name)
+		}
+		if tool.Annotations == nil {
+			t.Errorf("tool %q has no annotations — MCP spec defaults to destructiveHint=true, which blocks Codex exec mode", name)
+			continue
+		}
+		if tool.Annotations.DestructiveHint == nil || *tool.Annotations.DestructiveHint {
+			t.Errorf("tool %q has destructiveHint=true (or nil) — will be blocked in Codex exec mode", name)
+		}
+	}
+}
+
 func TestHandlerParamExtractionKnownPatterns(t *testing.T) {
 	mcpDir := mcpSourceDir(t)
 	usageByHandler, err := parseHandlerParamUsages(

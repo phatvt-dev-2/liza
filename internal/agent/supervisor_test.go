@@ -578,14 +578,14 @@ func TestCLISupportsStdin(t *testing.T) {
 }
 
 func TestBuildCodexArgs(t *testing.T) {
-	t.Run("stdin without logging bypasses approvals and sandbox", func(t *testing.T) {
+	t.Run("stdin without logging uses full-auto", func(t *testing.T) {
 		args := buildCodexArgs("/tmp/project", "ignored", true, "")
 
-		if slices.Contains(args, "-a") || slices.Contains(args, "never") {
-			t.Fatalf("args = %v, did not expect approval-only flag", args)
+		if !slices.Contains(args, "--full-auto") {
+			t.Fatalf("args = %v, want --full-auto flag", args)
 		}
-		if !slices.Contains(args, "--dangerously-bypass-approvals-and-sandbox") {
-			t.Fatalf("args = %v, want bypass flag", args)
+		if slices.Contains(args, "--dangerously-bypass-approvals-and-sandbox") {
+			t.Fatalf("args = %v, did not expect bypass flag", args)
 		}
 		if !slices.Contains(args, "exec") || !slices.Contains(args, "-") {
 			t.Fatalf("args = %v, want stdin exec invocation", args)
@@ -604,8 +604,8 @@ func TestBuildCodexArgs(t *testing.T) {
 		if !slices.Contains(args, "--json") {
 			t.Fatalf("args = %v, want --json when logging enabled", args)
 		}
-		if !slices.Contains(args, "--dangerously-bypass-approvals-and-sandbox") {
-			t.Fatalf("args = %v, want bypass flag", args)
+		if !slices.Contains(args, "--full-auto") {
+			t.Fatalf("args = %v, want --full-auto flag", args)
 		}
 	})
 }

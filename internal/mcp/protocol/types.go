@@ -25,11 +25,26 @@ type JSONRPCError struct {
 	Data    any    `json:"data,omitempty"`
 }
 
+// ToolAnnotations holds MCP tool annotation hints that inform clients
+// about tool behavior (e.g. whether approval is needed). See
+// https://modelcontextprotocol.io/specification/draft/server/tools
+type ToolAnnotations struct {
+	// ReadOnlyHint indicates the tool only reads data (default false).
+	ReadOnlyHint *bool `json:"readOnlyHint,omitempty"`
+	// DestructiveHint indicates the tool performs irreversible changes (default true).
+	DestructiveHint *bool `json:"destructiveHint,omitempty"`
+	// IdempotentHint indicates repeated identical calls produce the same effect (default false).
+	IdempotentHint *bool `json:"idempotentHint,omitempty"`
+	// OpenWorldHint indicates the tool interacts with external entities (default true).
+	OpenWorldHint *bool `json:"openWorldHint,omitempty"`
+}
+
 // Tool represents an MCP tool definition
 type Tool struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	InputSchema InputSchema `json:"inputSchema"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	InputSchema InputSchema      `json:"inputSchema"`
+	Annotations *ToolAnnotations `json:"annotations,omitempty"`
 }
 
 // InputSchema represents the JSON schema for tool input

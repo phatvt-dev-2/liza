@@ -54,6 +54,7 @@ See [DEMO](DEMO.md) for a full example.
 - Claude Code CLI and git installed
 - Go >= 1.25.5 installed
 - `liza` and `liza-mcp` Go binaries in PATH
+- When using `--cli codex`: Codex CLI > 0.118.0 (0.117.0–0.118.0 have a [regression](https://github.com/openai/codex/issues/16685) that cancels MCP tool calls in exec mode; 0.116.0 also works)
 
 **Installing the Liza CLI:**
 
