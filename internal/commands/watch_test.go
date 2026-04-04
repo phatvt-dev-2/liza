@@ -1792,3 +1792,45 @@ func TestRunChecksWithState_BlockedTask(t *testing.T) {
 		t.Errorf("expected alert with category BLOCKED, got %d alerts: %v", len(alerts), alerts)
 	}
 }
+
+func TestParseAlertLine_RoundTrip(t *testing.T) {
+	original := Alert{
+		Timestamp: time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC),
+		Level:     "⚠️",
+		Category:  "BLOCKED",
+		Message:   "task blocked-1 is stuck",
+	}
+
+	line := original.String()
+	parsed, ok := ParseAlertLine(line)
+	if !ok {
+		t.Fatalf("ParseAlertLine(%q) returned false", line)
+	}
+	if !parsed.Timestamp.Equal(original.Timestamp) {
+		t.Errorf("timestamp = %v, want %v", parsed.Timestamp, original.Timestamp)
+	}
+	if parsed.Level != original.Level {
+		t.Errorf("level = %q, want %q", parsed.Level, original.Level)
+	}
+	if parsed.Category != original.Category {
+		t.Errorf("category = %q, want %q", parsed.Category, original.Category)
+	}
+	if parsed.Message != original.Message {
+		t.Errorf("message = %q, want %q", parsed.Message, original.Message)
+	}
+}
+
+func TestParseAlertLine_Malformed(t *testing.T) {
+	cases := []string{
+		"",
+		"no brackets",
+		"[bad-timestamp] ⚠️ CAT: msg",
+		"[2026-04-04T12:00:00Z] nocolon",
+		"[2026-04-04T12:00:00Z]",
+	}
+	for _, line := range cases {
+		if _, ok := ParseAlertLine(line); ok {
+			t.Errorf("ParseAlertLine(%q) should return false", line)
+		}
+	}
+}

@@ -5,7 +5,6 @@ import (
 	"io"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/process"
 	"gopkg.in/yaml.v3"
 )
 
@@ -157,28 +157,13 @@ func tickCmd() tea.Cmd {
 }
 
 // spawnAgentCmd spawns a new agent process for the given role and CLI backend.
-// Uses exec.Command("liza", "agent", role, "--cli", cli).Start().
-// The child process is detached with stdout/stderr redirected to os.DevNull.
+// Delegates to process.SpawnAgent for detached subprocess lifecycle.
 // Returns CmdResultMsg with success/error status.
 func spawnAgentCmd(projectRoot, role, cli string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("liza", "agent", role, "--cli", cli)
-		cmd.Dir = projectRoot
-		setDetachedProcessGroup(cmd)
-
-		devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-		if err != nil {
+		if _, err := process.SpawnAgent(projectRoot, role, cli); err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("spawn %s: %v", role, err)}
 		}
-		cmd.Stdout = devNull
-		cmd.Stderr = devNull
-
-		if err := cmd.Start(); err != nil {
-			devNull.Close()
-			return CmdResultMsg{Success: false, Message: fmt.Sprintf("spawn %s: %v", role, err)}
-		}
-		go cmd.Wait() // Reap child to prevent zombie accumulation
-		devNull.Close()
 		return CmdResultMsg{Success: true, Message: "Spawned " + role}
 	}
 }

@@ -54,6 +54,49 @@ func (a Alert) String() string {
 		a.Message)
 }
 
+// ParseAlertLine parses a line written by Alert.String() back into an Alert.
+// Returns the parsed alert and true on success, or zero value and false on
+// malformed input.
+//
+// Format: [<RFC3339>] <level> <CATEGORY>: <message>
+func ParseAlertLine(line string) (Alert, bool) {
+	if !strings.HasPrefix(line, "[") {
+		return Alert{}, false
+	}
+	closeBracket := strings.IndexByte(line, ']')
+	if closeBracket < 0 {
+		return Alert{}, false
+	}
+	ts, err := time.Parse(time.RFC3339, line[1:closeBracket])
+	if err != nil {
+		return Alert{}, false
+	}
+
+	rest := strings.TrimLeft(line[closeBracket+1:], " ")
+
+	// Split "<level> <CATEGORY>: <message>" on first ": ".
+	colonIdx := strings.Index(rest, ": ")
+	if colonIdx < 0 {
+		return Alert{}, false
+	}
+	levelAndCategory := rest[:colonIdx]
+	message := rest[colonIdx+2:]
+
+	spaceIdx := strings.IndexByte(levelAndCategory, ' ')
+	if spaceIdx < 0 {
+		return Alert{}, false
+	}
+	level := AlertLevel(levelAndCategory[:spaceIdx])
+	category := strings.TrimSpace(levelAndCategory[spaceIdx+1:])
+
+	return Alert{
+		Timestamp: ts,
+		Level:     level,
+		Category:  category,
+		Message:   message,
+	}, true
+}
+
 type WatchConfig struct {
 	ProjectRoot   string
 	CheckInterval time.Duration
