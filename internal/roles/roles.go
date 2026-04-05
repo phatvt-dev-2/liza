@@ -28,15 +28,17 @@ const (
 
 // validRoles is the set of all valid role names.
 var validRoles = map[string]bool{
-	Coder:            true,
-	CodeReviewer:     true,
-	Orchestrator:     true,
-	CodePlanner:      true,
-	CodePlanReviewer: true,
-	EpicPlanner:      true,
-	EpicPlanReviewer: true,
-	USWriter:         true,
-	USReviewer:       true,
+	Coder:               true,
+	CodeReviewer:        true,
+	Orchestrator:        true,
+	CodePlanner:         true,
+	CodePlanReviewer:    true,
+	EpicPlanner:         true,
+	EpicPlanReviewer:    true,
+	USWriter:            true,
+	USReviewer:          true,
+	IntegrationAnalyst:  true,
+	IntegrationReviewer: true,
 }
 
 // IsValid checks if the given role is a valid role name.
@@ -51,21 +53,24 @@ func All() []string {
 		CodePlanner, CodePlanReviewer,
 		EpicPlanner, EpicPlanReviewer,
 		USWriter, USReviewer,
+		IntegrationAnalyst, IntegrationReviewer,
 	}
 }
 
 // underscoreToHyphenated maps deprecated underscore-form role names to their
 // canonical hyphenated form. Used only for migration/normalization.
 var underscoreToHyphenated = map[string]string{
-	"coder":              Coder,
-	"code_reviewer":      CodeReviewer,
-	"orchestrator":       Orchestrator,
-	"code_planner":       CodePlanner,
-	"code_plan_reviewer": CodePlanReviewer,
-	"epic_planner":       EpicPlanner,
-	"epic_plan_reviewer": EpicPlanReviewer,
-	"us_writer":          USWriter,
-	"us_reviewer":        USReviewer,
+	"coder":                Coder,
+	"code_reviewer":        CodeReviewer,
+	"orchestrator":         Orchestrator,
+	"code_planner":         CodePlanner,
+	"code_plan_reviewer":   CodePlanReviewer,
+	"epic_planner":         EpicPlanner,
+	"epic_plan_reviewer":   EpicPlanReviewer,
+	"us_writer":            USWriter,
+	"us_reviewer":          USReviewer,
+	"integration_analyst":  IntegrationAnalyst,
+	"integration_reviewer": IntegrationReviewer,
 }
 
 // NormalizeRoleName converts a known underscore-form role name to its
