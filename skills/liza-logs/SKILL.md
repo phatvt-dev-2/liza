@@ -22,7 +22,14 @@ Report sections: session header, token summary (fresh/cached/output, cache hit r
 
 2. Refine the analysis using the raw logs.
 
-3. Propose fixes whenever possible.
+3. Before proposing a fix, check whether the fix is already implemented (e.g. an instruction already exists but agents ignore it):
+   - Read one agent prompt of the relevant role in `.liza/agent-prompts/`
+   - Check the contract files in `~/.liza/` (CORE.md, AGENT_TOOLS.md, MULTI_AGENT_MODE.md)
+
+4. Propose fixes whenever possible.
+
+FALSE POSITIVES:
+- **Near-duplicate contract reads** (~8KB per session): Agents read AGENT_TOOLS.md, GUARDRAILS.md, etc. during initialization. These appear as "near-duplicate results" in the analyzer but are cache hits — negligible cost. Do not flag as waste.
 
 NOTE:
 The skill contains a web tool for humans to inspect logs: ~/.liza/skills/liza-logs/tools/liza-session-analyzer.html
