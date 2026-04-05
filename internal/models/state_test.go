@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -424,6 +425,50 @@ priority: 1
 	}
 	if task.EffectiveType() != TaskTypeCoding {
 		t.Errorf("EffectiveType() = %s, want %s", task.EffectiveType(), TaskTypeCoding)
+	}
+}
+
+func TestTaskTypeIntegrationIsValid(t *testing.T) {
+	if !TaskTypeIntegration.IsValid() {
+		t.Error("TaskTypeIntegration should be valid")
+	}
+}
+
+func TestTaskTypeIntegrationHasRoles(t *testing.T) {
+	if !TaskTypeIntegration.HasRole("integration-analyst") {
+		t.Error("integration type should have integration-analyst role")
+	}
+	if !TaskTypeIntegration.HasRole("integration-reviewer") {
+		t.Error("integration type should have integration-reviewer role")
+	}
+	// Should not have coding roles
+	if TaskTypeIntegration.HasRole(RoleCoder) {
+		t.Error("integration type should not have coder role")
+	}
+	if TaskTypeIntegration.HasRole(RoleCodeReviewer) {
+		t.Error("integration type should not have code-reviewer role")
+	}
+}
+
+func TestTaskTypeIntegrationNotCoding(t *testing.T) {
+	// Verifies TDD bypass condition: integration != coding
+	if TaskTypeIntegration == TaskTypeCoding {
+		t.Error("TaskTypeIntegration must differ from TaskTypeCoding (TDD bypass condition)")
+	}
+}
+
+func TestEffectiveTypeBackwardCompat(t *testing.T) {
+	// Empty type still defaults to coding (not integration)
+	task := Task{Type: ""}
+	if task.EffectiveType() != TaskTypeCoding {
+		t.Errorf("EffectiveType() for empty type = %s, want %s", task.EffectiveType(), TaskTypeCoding)
+	}
+}
+
+func TestValidTaskTypeNamesIncludesIntegration(t *testing.T) {
+	names := ValidTaskTypeNames()
+	if !slices.Contains(names, "integration") {
+		t.Errorf("ValidTaskTypeNames() = %v, should include 'integration'", names)
 	}
 }
 

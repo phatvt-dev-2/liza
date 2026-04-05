@@ -14,30 +14,34 @@ import (
 type TaskType string
 
 const (
-	TaskTypeCoding   TaskType = "coding"
-	TaskTypePlanning TaskType = "planning"
+	TaskTypeCoding      TaskType = "coding"
+	TaskTypePlanning    TaskType = "planning"
+	TaskTypeIntegration TaskType = "integration"
 )
 
 // Role name constants used in task definitions.
 // These are aliases for the canonical definitions in the roles package.
 const (
-	RoleCoder            = roles.Coder
-	RoleCodeReviewer     = roles.CodeReviewer
-	RoleOrchestrator     = roles.Orchestrator
-	RoleCodePlanner      = roles.CodePlanner
-	RoleCodePlanReviewer = roles.CodePlanReviewer
-	RoleEpicPlanner      = roles.EpicPlanner
-	RoleEpicPlanReviewer = roles.EpicPlanReviewer
-	RoleUSWriter         = roles.USWriter
-	RoleUSReviewer       = roles.USReviewer
+	RoleCoder               = roles.Coder
+	RoleCodeReviewer        = roles.CodeReviewer
+	RoleOrchestrator        = roles.Orchestrator
+	RoleCodePlanner         = roles.CodePlanner
+	RoleCodePlanReviewer    = roles.CodePlanReviewer
+	RoleEpicPlanner         = roles.EpicPlanner
+	RoleEpicPlanReviewer    = roles.EpicPlanReviewer
+	RoleUSWriter            = roles.USWriter
+	RoleUSReviewer          = roles.USReviewer
+	RoleIntegrationAnalyst  = roles.IntegrationAnalyst
+	RoleIntegrationReviewer = roles.IntegrationReviewer
 )
 
 // taskWorkflows maps each TaskType to its ordered role sequence.
 // This is the single source of truth for which roles participate in a task type's lifecycle.
 // Access via RoleWorkflow(), HasRole(), and IsValid() — not directly.
 var taskWorkflows = map[TaskType][]string{
-	TaskTypeCoding:   {RoleCoder, RoleCodeReviewer},
-	TaskTypePlanning: {RoleCodePlanner, RoleCodePlanReviewer},
+	TaskTypeCoding:      {RoleCoder, RoleCodeReviewer},
+	TaskTypePlanning:    {RoleCodePlanner, RoleCodePlanReviewer},
+	TaskTypeIntegration: {RoleIntegrationAnalyst, RoleIntegrationReviewer},
 }
 
 // IsValid checks if the task type is known.

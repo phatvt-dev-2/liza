@@ -13,15 +13,17 @@ const (
 
 // Unified role name constants. Single hyphenated form used everywhere.
 const (
-	Coder            = "coder"
-	CodeReviewer     = "code-reviewer"
-	Orchestrator     = "orchestrator"
-	CodePlanner      = "code-planner"
-	CodePlanReviewer = "code-plan-reviewer"
-	EpicPlanner      = "epic-planner"
-	EpicPlanReviewer = "epic-plan-reviewer"
-	USWriter         = "us-writer"
-	USReviewer       = "us-reviewer"
+	Coder               = "coder"
+	CodeReviewer        = "code-reviewer"
+	Orchestrator        = "orchestrator"
+	CodePlanner         = "code-planner"
+	CodePlanReviewer    = "code-plan-reviewer"
+	EpicPlanner         = "epic-planner"
+	EpicPlanReviewer    = "epic-plan-reviewer"
+	USWriter            = "us-writer"
+	USReviewer          = "us-reviewer"
+	IntegrationAnalyst  = "integration-analyst"
+	IntegrationReviewer = "integration-reviewer"
 )
 
 // validRoles is the set of all valid role names.
