@@ -107,7 +107,7 @@ liza init "[Goal description]" --spec [spec_ref]
 #
 # Entry points (--entry-point selects which sub-pipeline to start from):
 #   liza init "Build auth system" --entry-point general-objective   # full pipeline: epic → US → code-plan → code
-#   liza init "Implement from spec" --entry-point detailed-spec     # coding pipeline only: code-plan → code
+#   liza init "Implement from spec" --entry-point detailed-spec     # coding pipeline: architecture → code-plan → code
 #   # If omitted, the orchestrator auto-classifies from the spec content.
 
 # Verify
@@ -145,6 +145,10 @@ Roles:
   us-writer               - Writes user stories from epics
   us-reviewer             - Reviews user stories
 
+  Architecture phase (both entry points):
+  architect               - Defines component boundaries, interfaces, and structural decisions
+  architecture-reviewer   - Reviews architectural coherence and structural soundness
+
   Coding phase (both entry points):
   code-planner            - Claims and produces coding plans
   code-plan-reviewer      - Reviews coding plans and submits verdicts
@@ -156,10 +160,10 @@ Roles:
   integration-reviewer    - Validates and enriches integration findings
 ```
 
-**Minimal setup (detailed-spec entry point) — 5 agents:**
-Spawn from the TUI (`s`): orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer.
+**Minimal setup (detailed-spec entry point) — 7 agents:**
+Spawn from the TUI (`s`): orchestrator, architect, architecture-reviewer, code-planner, code-plan-reviewer, coder, code-reviewer.
 
-**Full pipeline (general-objective entry point) — 9 agents:**
+**Full pipeline (general-objective entry point) — 11 agents:**
 All of the above plus: epic-planner, epic-plan-reviewer, us-writer, us-reviewer.
 
 **Integration phase** agents (integration-analyst, integration-reviewer) are spawned by the orchestrator after all coding tasks for a goal complete. They are not needed at startup — spawn them when the orchestrator triggers the integration sub-pipeline.
@@ -240,10 +244,10 @@ The pipeline defines which role-pairs execute and how tasks flow between them:
 
 ```
 general-objective entry point (full pipeline):
-  epic-planning-pair → us-writing-pair → code-planning-pair → coding-pair
+  epic-planning-pair → us-writing-pair → architecture-pair → code-planning-pair → coding-pair
 
-detailed-spec entry point (coding only):
-  code-planning-pair → coding-pair
+detailed-spec entry point (coding pipeline):
+  architecture-pair → code-planning-pair → coding-pair
 
 integration sub-pipeline (post-coding, orchestrator-triggered):
   integration-pair → coding-pair (fix tasks)
@@ -271,7 +275,7 @@ The `integration-to-fix` transition is an exception — it uses `trigger: auto`,
 └─────────────────────────────────────────────────────────┘
 ```
 
-Transitions create child tasks from the parent's `output[]` entries (per-subtask cardinality) or from the parent task itself (one-to-one cardinality). Available transitions are defined in `.liza/pipeline.yaml`.
+Transitions create child tasks from the parent's `output[]` entries (per-subtask cardinality), from the parent task itself (one-to-one cardinality), or from multiple parent tasks in a cohort (many-to-one cardinality). Available transitions are defined in `.liza/pipeline.yaml`.
 
 #### What Humans Do at Checkpoints
 

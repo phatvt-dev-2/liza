@@ -84,7 +84,7 @@ func RunInitWizard(projectRoot string) (*InitWizardResult, error) {
 					Options(
 						huh.NewOption("Auto — let the orchestrator decide", ""),
 						huh.NewOption("General Objective — full pipeline (epics → stories → code)", "general-objective"),
-						huh.NewOption("Detailed Spec — coding only (code planning → coding)", "detailed-spec"),
+						huh.NewOption("Detailed Spec — coding pipeline (architecture → code planning → coding)", "detailed-spec"),
 					).
 					Value(&result.EntryPoint),
 			),

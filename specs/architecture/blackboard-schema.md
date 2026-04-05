@@ -241,7 +241,8 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
       done_when: "Expired tokens trigger refresh flow"
       scope: "src/auth/refresh.go"
       spec_ref: specs/auth.md#refresh
-  parent_task: null                # Set on child tasks, references parent task ID
+  parent_task: null                # Deprecated: use parent_tasks. Set on child tasks, references parent task ID
+  parent_tasks: []                 # Multi-parent linkage (many-to-one transitions). Back-references from child to parent tasks
   transitions_executed:            # Tracks which transitions have been applied
     code-plan-to-coding: true
 ```
@@ -249,7 +250,8 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
 | Field | Type | Set By | Purpose |
 |-------|------|--------|---------|
 | `output` | `[]OutputEntry` | Doer agent | Structured subtask definitions for next role pair |
-| `parent_task` | `*string` | `liza proceed` / orchestrator | Back-reference from child to parent task |
+| `parent_task` | `*string` | `liza proceed` / orchestrator | Back-reference from child to parent task (deprecated: use `parent_tasks`) |
+| `parent_tasks` | `[]string` | `liza proceed` / orchestrator | Multi-parent back-references (used by many-to-one transitions; supersedes `parent_task`) |
 | `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions |
 
 **OutputEntry fields** (all required):
@@ -262,7 +264,8 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
 
 | Name | Source Status | Effect |
 |------|-------------|--------|
-| `code-plan-to-coding` | `CODING_PLAN_APPROVED` | Creates child tasks at DRAFT from `output[]` |
+| `architecture-to-code-plan` | `ARCHITECTURE_APPROVED` | Creates child code-planning tasks at DRAFT from `output[]` |
+| `code-plan-to-coding` | `CODING_PLAN_APPROVED` | Creates child coding tasks at DRAFT from `output[]` |
 
 **Child task ID format:** `{parent-id}-{transition-name}-{index}` (deterministic, namespaced by transition for crash recovery). Example: `task-1-code-plan-to-coding-0`.
 
@@ -851,7 +854,7 @@ invariants:
   - "No two agents assigned to same task"
   - "Task with integration_fix:true must have prior INTEGRATION_FAILED in history"
   - "Task failed_by list must contain unique agent IDs"
-  - "Task parent_task must reference an existing task ID"
+  - "Task parent_task/parent_tasks must reference existing task IDs"
   - "Task output entries must have all required fields (desc, done_when, scope, spec_ref)"
   - "Anomaly type must be one of: retry_loop, trade_off, spec_ambiguity, external_blocker, assumption_violated, scope_deviation, workaround, debt_created, spec_changed, hypothesis_exhaustion, spec_gap, review_budget_exhausted, review_exhaustion, reviewer_loop, system_ambiguity"
   # Transition invariants (runtime-enforced, not statically validated)

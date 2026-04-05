@@ -123,7 +123,7 @@ liza setup  # one-time: installs contracts + skills to ~/.liza/
 liza init "Build hello CLI" --spec specs/vision.md --entry-point detailed-spec
 ```
 
-The `--entry-point detailed-spec` skips the specification phase (epic planning, user stories) and goes straight to code planning → coding. For a simple hello-world, this is the right entry point.
+The `--entry-point detailed-spec` skips the specification phase (epic planning, user stories) and goes straight to the coding pipeline: architecture → code planning → coding. For a simple hello-world, this is the right entry point.
 
 This creates:
 - `.liza/state.yaml` — the blackboard
