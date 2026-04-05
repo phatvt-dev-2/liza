@@ -250,15 +250,39 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
 | Field | Type | Set By | Purpose |
 |-------|------|--------|---------|
 | `output` | `[]OutputEntry` | Doer agent | Structured subtask definitions for next role pair |
+| `arch_ref` | `string` | `liza proceed` | Path to architecture document (repo-relative). Set on child tasks during transition: first hop copies from parent's `output[]` entry, second hop inherits from parent task field. Validated via `checkSpecFileExists` (same pattern as `plan_ref`). |
 | `parent_task` | `*string` | `liza proceed` / orchestrator | Back-reference from child to parent task (deprecated: use `parent_tasks`) |
 | `parent_tasks` | `[]string` | `liza proceed` / orchestrator | Multi-parent back-references (used by many-to-one transitions; supersedes `parent_task`) |
 | `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions. For `many-to-one` transitions, set on **all** cohort members (not just the trigger task) to prevent re-firing from any member |
 
-**OutputEntry fields** (all required):
+**OutputEntry fields:**
+
+Required:
 - `desc`: Task description for the child task
 - `done_when`: Completion criteria
 - `scope`: Files/areas affected
 - `spec_ref`: Specification reference
+
+Optional:
+- `plan_ref` (`string`): Path to the plan artifact (repo-relative). Set by doer via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped).
+- `arch_ref` (`string`): Path to the architecture document (repo-relative). Set by architect via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped). Propagated to child tasks by `proceed.go` during transitions.
+
+**`arch_ref` Propagation:**
+
+`arch_ref` flows through the pipeline in two hops:
+
+| Hop | Source | Target | Mechanism |
+|-----|--------|--------|-----------|
+| First | Architect's `output[]` entry `.arch_ref` | Code-planning child task `.arch_ref` | `proceed.go` `buildChildTask` copies `entry.ArchRef` |
+| Second | Parent code-planning task `.arch_ref` | Coding child task `.arch_ref` | `proceed.go` `buildOneToOneChild` / `buildChildTask` inherits `parent.ArchRef` as fallback when entry has no `arch_ref` |
+
+Precedence: entry-level `arch_ref` takes priority over parent task `arch_ref`. This allows an output entry to override the inherited architecture document if needed.
+
+| Task | `spec_ref` | `arch_ref` | `plan_ref` |
+|------|-----------|-----------|-----------|
+| Architecture | goal spec | — (produces it via `output[]`) | — |
+| Code-planning | from `output[]` entry | from architecture task's `output[]` entry (first hop) | — |
+| Coding | from `output[]` entry | inherited from parent code-planning task (second hop) | from code-planner's `output[]` entry |
 
 **Available transitions:**
 
@@ -862,6 +886,10 @@ invariants:
   - "Task failed_by list must contain unique agent IDs"
   - "Task parent_task/parent_tasks must reference existing task IDs"
   - "Task output entries must have all required fields (desc, done_when, scope, spec_ref)"
+  - "Task arch_ref must not contain worktree prefix (.worktrees/) — must be repo-relative"
+  - "Task arch_ref must reference an existing file (checked via checkSpecFileExists against project root then integration branch)"
+  - "Task output entry arch_ref must not contain worktree prefix (.worktrees/) — must be repo-relative"
+  # Note: output entry arch_ref does NOT have file-existence validation (entries are set before merge)
   - "Anomaly type must be one of: retry_loop, trade_off, spec_ambiguity, external_blocker, assumption_violated, scope_deviation, workaround, debt_created, spec_changed, hypothesis_exhaustion, spec_gap, review_budget_exhausted, review_exhaustion, reviewer_loop, system_ambiguity"
   # Transition invariants (runtime-enforced, not statically validated)
   # These are enforced by agent behavior and atomic operations during state transitions.
