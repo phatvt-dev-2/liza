@@ -26,5 +26,11 @@ US WRITER STATE TRANSITIONS:
 - WRITING_US → US_READY_FOR_REVIEW (submit for review)
 - WRITING_US → BLOCKED (spec ambiguity or dependency blocker)
 - US_REJECTED → DRAFT_US (supervisor re-claims for revision)
+{{- else if eq .Role "architect"}}
+
+ARCHITECT STATE TRANSITIONS:
+- ARCHITECTING → ARCHITECTURE_TO_REVIEW (submit for review)
+- ARCHITECTING → BLOCKED (spec ambiguity or dependency blocker)
+- ARCHITECTURE_REJECTED → DRAFT_ARCHITECTURE (supervisor re-claims for revision)
 {{- end}}
 {{- end -}}

@@ -211,6 +211,46 @@ REVIEW PHASE:
 DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- end}}
 9. Submit verdict with liza_submit_verdict.
+{{- else if eq .Role "architecture-reviewer"}}
+
+REVIEW CHECKLIST:
+| Gate | Reject if |
+|------|-----------|
+| Decomposition completeness | Architecture does not cover the full scope of the goal spec |
+| Component boundaries | Boundaries are unclear, overlapping, or don't follow natural seams in the codebase |
+| Interface contracts | Interfaces between components are vague or undefined |
+| Cross-cutting concerns | Cross-cutting concerns (error handling, observability, security) are unaddressed or assigned to no component |
+| Composability | The M code-planning scopes would not compose into a working whole — integration gaps exist |
+| Single intent per scope | An output[] entry bundles multiple unrelated concerns |
+| Falsifiable done_when | done_when for output[] entries is vague or untestable |
+| Dependency ordering | Output[] entries have circular or missing dependencies |
+| Shared-file dependencies | Two output[] entries may modify the same files without depends_on |
+| arch_ref set | Output[] entries missing arch_ref pointing to the architecture document |
+| Spec alignment | Architecture decisions contradict or ignore spec requirements |
+{{- if ne .ValidationPlan ""}}
+
+DOER VALIDATION PLAN: {{.ValidationPlan}}
+{{- end}}
+{{- if ne .PriorRejection ""}}
+
+PRIOR FEEDBACK REVIEW (MANDATORY for iteration 2+):
+Before submitting verdict, compare this iteration against prior rejection:
+- Which prior issues are now RESOLVED?
+- Which prior issues are STILL PRESENT?
+- Which prior issues are PARTIALLY ADDRESSED?
+Include this assessment in your rejection reason if rejecting.
+{{- end}}
+
+REVIEW PHASE:
+1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
+2. Invoke skill: systemic-thinking for cross-cutting coherence analysis.
+3. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
+4. Read the architecture document in the worktree (look for the arch doc in specs/arch-plan/).
+5. Validate the decomposition: does it cover the full scope of the goal spec?
+6. Verify output[] entries: run liza_get with {"query": "tasks/{{.TaskID}}"} and confirm
+   output[] has one entry per code-planning scope with valid desc, done_when, scope, spec_ref, arch_ref.
+7. Check each proposed scope against the review checklist above.
+8. Submit verdict with liza_submit_verdict.
 {{- else if eq .Role "integration-reviewer"}}
 
 REVIEW SCOPE:

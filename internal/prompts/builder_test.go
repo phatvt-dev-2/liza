@@ -1388,6 +1388,88 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("architect", func(t *testing.T) {
+		_ = makeDoerTask("task-arch")
+		data := &RoleContextData{
+			Role: "architect", AgentID: "architect-1", RoleType: "doer",
+			TaskID: "task-arch", Description: "Define architecture for feature X",
+			DoneWhen: "Architecture document covers all components", Scope: "specs/arch-plan",
+			SpecRef:      "specs/goals/feature-x.md",
+			Worktree:     projectRoot + "/.worktrees/task-arch",
+			IterationNum: 1,
+			ParentTaskContexts: []ParentTaskContext{
+				{ID: "us-1", Description: "User story 1", DoneWhen: "US1 done", SpecRef: "specs/goals/feature-x.md"},
+				{ID: "us-2", Description: "User story 2", DoneWhen: "US2 done", SpecRef: "specs/goals/feature-x.md"},
+			},
+			ProjectRoot: projectRoot,
+		}
+		sections, err := resolver.ContextSections("architect")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
+		}
+		output, err := BuildRoleContext("architect", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		for _, key := range []string{
+			"=== ASSIGNED ARCHITECTURE TASK ===",
+			"TASK ID: task-arch",
+			"ARCHITECT STATE TRANSITIONS:",
+			"ARCHITECTING",
+			"ARCHITECTURE_TO_REVIEW",
+			"ARCHITECT TOOLS (resolve AFTER initialization:",
+			"liza_set_task_output",
+			"arch_ref",
+			"IMPLEMENTATION PHASE:",
+			"Architecture document",
+			"specs/arch-plan",
+		} {
+			if !strings.Contains(output, key) {
+				t.Errorf("output missing key string %q", key)
+			}
+		}
+	})
+
+	t.Run("architecture-reviewer", func(t *testing.T) {
+		_ = makeReviewerTask("task-archr")
+		data := &RoleContextData{
+			Role: "architecture-reviewer", AgentID: "architecture-reviewer-1", RoleType: "reviewer",
+			TaskID: "task-archr", Description: "Review architecture for feature X",
+			DoneWhen: "Architecture is coherent and complete", Scope: "specs/arch-plan",
+			Worktree:     projectRoot + "/.worktrees/task-archr",
+			IterationNum: 1,
+			BaseCommit:   "abc1234", ReviewCommit: "def5678", AssignedTo: "architect-1",
+			ProjectRoot: projectRoot,
+		}
+		sections, err := resolver.ContextSections("architecture-reviewer")
+		if err != nil {
+			t.Fatalf("ContextSections: %v", err)
+		}
+		output, err := BuildRoleContext("architecture-reviewer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+
+		for _, key := range []string{
+			"=== ASSIGNED ARCHITECTURE REVIEW TASK ===",
+			"TASK ID: task-archr",
+			"ARCHITECTURE REVIEWER STATE TRANSITIONS:",
+			"REVIEWING_ARCHITECTURE",
+			"ARCHITECTURE REVIEWER TOOLS (resolve AFTER initialization:",
+			"liza_submit_verdict",
+			"liza_await_resubmission",
+			"REVIEW CHECKLIST:",
+			"Decomposition completeness",
+			"Composability",
+			"VERDICT SUBMISSION",
+		} {
+			if !strings.Contains(output, key) {
+				t.Errorf("output missing key string %q", key)
+			}
+		}
+	})
 }
 
 func TestBuildRoleContext_PlanRefAndValidationPlan(t *testing.T) {
