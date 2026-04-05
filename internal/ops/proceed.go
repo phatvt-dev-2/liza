@@ -14,7 +14,6 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 // errTransitionAlreadyExecuted is returned by proceedInner when the transition
@@ -751,17 +750,14 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 	}
 
 	// Resolve doer display name and task type from the target role-pair.
-	// Only role-pairs with a known type mapping get a specific type;
-	// others default to TaskTypeCoding for backward compatibility until
-	// the type registry covers all workflows.
+	// Task type is derived from the doer role via the taskWorkflows registry,
+	// falling back to TaskTypeCoding for unknown roles.
 	var doerDisplay string
 	childTaskType := models.TaskTypeCoding
 	rp, rpErr := resolver.RolePair(targetPair)
 	if rpErr == nil {
 		doerDisplay = resolver.RoleDisplayName(rp.Doer)
-		if rp.Doer == roles.CodePlanner {
-			childTaskType = models.TaskTypePlanning
-		}
+		childTaskType = models.TaskTypeForRole(rp.Doer)
 	}
 
 	return transitionDef{

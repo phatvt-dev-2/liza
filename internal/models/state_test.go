@@ -473,6 +473,27 @@ func TestValidTaskTypeNamesIncludesIntegration(t *testing.T) {
 	}
 }
 
+func TestTaskTypeForRole(t *testing.T) {
+	tests := []struct {
+		role string
+		want TaskType
+	}{
+		{RoleCoder, TaskTypeCoding},
+		{RoleCodeReviewer, TaskTypeCoding},
+		{RoleCodePlanner, TaskTypePlanning},
+		{RoleCodePlanReviewer, TaskTypePlanning},
+		{RoleIntegrationAnalyst, TaskTypeIntegration},
+		{RoleIntegrationReviewer, TaskTypeIntegration},
+		{"unknown-role", TaskTypeCoding}, // fallback
+	}
+	for _, tt := range tests {
+		got := TaskTypeForRole(tt.role)
+		if got != tt.want {
+			t.Errorf("TaskTypeForRole(%q) = %q, want %q", tt.role, got, tt.want)
+		}
+	}
+}
+
 func TestIsClaimableWithRole(t *testing.T) {
 	pr := &mockPipelineResolver{
 		doer:      "coder",         // runtime form

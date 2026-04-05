@@ -76,6 +76,17 @@ func (tt TaskType) HasRole(role string) bool {
 	return slices.Contains(taskWorkflows[tt], role)
 }
 
+// TaskTypeForRole returns the task type whose workflow includes the given role.
+// Falls back to TaskTypeCoding for unknown roles (backward compatibility).
+func TaskTypeForRole(role string) TaskType {
+	for tt, wf := range taskWorkflows {
+		if slices.Contains(wf, role) {
+			return tt
+		}
+	}
+	return TaskTypeCoding
+}
+
 // TaskStatus represents the state of a task
 type TaskStatus string
 
