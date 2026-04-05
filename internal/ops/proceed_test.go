@@ -3430,3 +3430,179 @@ func TestComputeInheritedDeps_ManyToOne(t *testing.T) {
 		t.Errorf("inherited[0] = %q, want %q", inherited[0], childID)
 	}
 }
+
+func TestProceedManyToOne_CrashRecovery_MissingChild(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	parentID := "epic-plan-1"
+	cohort := makeManyToOneCohort(parentID, "us-writing-pair", models.TaskStatusMerged, "specs/goal.md", 3)
+
+	// Simulate crash: set transitions_executed on first 2 members only, no child created
+	cohort[0].TransitionsExecuted = map[string]bool{"us-to-coding": true}
+	cohort[1].TransitionsExecuted = map[string]bool{"us-to-coding": true}
+	// cohort[2] has NO transitions_executed (partial crash)
+
+	for _, task := range cohort {
+		state.Tasks = append(state.Tasks, task)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// Proceed should detect partial transitions_executed and create child (crash recovery)
+	result, err := Proceed(tmpDir, cohort[0].ID, "us-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	// Should create exactly one child
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1", len(result.ChildTaskIDs))
+	}
+
+	expectedChildID := "epic-plan-1-us-to-coding"
+	if result.ChildTaskIDs[0] != expectedChildID {
+		t.Errorf("ChildTaskIDs[0] = %q, want %q", result.ChildTaskIDs[0], expectedChildID)
+	}
+
+	// Verify persisted state
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child := readState.FindTask(expectedChildID)
+	if child == nil {
+		t.Fatal("Child task not found after crash recovery")
+	}
+
+	// Child has ParentTasks containing all cohort member IDs
+	if len(child.ParentTasks) != 3 {
+		t.Fatalf("Child ParentTasks count = %d, want 3", len(child.ParentTasks))
+	}
+	for _, c := range cohort {
+		if !slices.Contains(child.ParentTasks, c.ID) {
+			t.Errorf("Child ParentTasks = %v, want to contain %q", child.ParentTasks, c.ID)
+		}
+	}
+
+	// transitions_executed repaired on ALL cohort members (including member 2)
+	for _, c := range cohort {
+		srcTask := readState.FindTask(c.ID)
+		if !srcTask.TransitionsExecuted["us-to-coding"] {
+			t.Errorf("Task %s: transitions_executed should contain us-to-coding (crash recovery repair)", c.ID)
+		}
+	}
+}
+
+func TestProceedManyToOne_CrashRecovery_ChildExists(t *testing.T) {
+	tmpDir, _ := setupPhase2PipelineProceedTest(t)
+
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+	tDef, err := buildTransitionDefFromPipeline(resolver, "us-to-coding")
+	if err != nil {
+		t.Fatalf("buildTransitionDefFromPipeline: %v", err)
+	}
+
+	parentID := "epic-plan-1"
+	cohort := makeManyToOneCohort(parentID, "us-writing-pair", models.TaskStatusMerged, "specs/goal.md", 3)
+
+	// Simulate crash: transitions_executed on first 2 members, child exists
+	cohort[0].TransitionsExecuted = map[string]bool{"us-to-coding": true}
+	cohort[1].TransitionsExecuted = map[string]bool{"us-to-coding": true}
+	// cohort[2] missing transitions_executed (partial crash, but child was created)
+
+	childID := "epic-plan-1-us-to-coding"
+	state := &models.State{Tasks: append(cohort, models.Task{
+		ID:          childID,
+		Type:        models.TaskTypeArchitecture,
+		RolePair:    "architecture-pair",
+		Description: "Existing child",
+		Status:      models.TaskStatus("DRAFT_ARCHITECTURE"),
+		ParentTasks: []string{cohort[0].ID, cohort[1].ID, cohort[2].ID},
+		Created:     time.Now().UTC(),
+		History:     []models.TaskHistoryEntry{},
+	})}
+
+	now := time.Now().UTC()
+	result := &ProceedResult{}
+	err = proceedInner(state, cohort[0].ID, "us-to-coding", tDef, nil, now, result)
+
+	// Should return errTransitionAlreadyExecuted
+	if err == nil {
+		t.Fatal("proceedInner should return error when child exists")
+	}
+	if !strings.Contains(err.Error(), "transition already executed") {
+		t.Errorf("error = %q, want to contain 'transition already executed'", err.Error())
+	}
+
+	// Verify transitions_executed repaired on ALL members (in-memory)
+	for i := range cohort {
+		member := state.FindTask(cohort[i].ID)
+		if !member.TransitionsExecuted["us-to-coding"] {
+			t.Errorf("Task %s: transitions_executed should be repaired", cohort[i].ID)
+		}
+	}
+}
+
+func TestIsTransitionIncomplete_ManyToOne(t *testing.T) {
+	tmpDir, _ := setupPhase2PipelineProceedTest(t)
+
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+
+	parentID := "epic-plan-1"
+	childID := manyToOneChildID(parentID, "us-to-coding")
+
+	t.Run("child missing returns true", func(t *testing.T) {
+		state := &models.State{
+			Tasks: []models.Task{
+				{
+					ID:          "us-1",
+					RolePair:    "us-writing-pair",
+					ParentTasks: []string{parentID},
+					TransitionsExecuted: map[string]bool{
+						"us-to-coding": true,
+					},
+				},
+			},
+		}
+		task := state.FindTask("us-1")
+		if !isTransitionIncomplete(state, task, "us-to-coding", resolver) {
+			t.Error("isTransitionIncomplete = false, want true (child missing)")
+		}
+	})
+
+	t.Run("child present returns false", func(t *testing.T) {
+		state := &models.State{
+			Tasks: []models.Task{
+				{
+					ID:          "us-1",
+					RolePair:    "us-writing-pair",
+					ParentTasks: []string{parentID},
+					TransitionsExecuted: map[string]bool{
+						"us-to-coding": true,
+					},
+				},
+				{
+					ID:       childID,
+					RolePair: "architecture-pair",
+				},
+			},
+		}
+		task := state.FindTask("us-1")
+		if isTransitionIncomplete(state, task, "us-to-coding", resolver) {
+			t.Error("isTransitionIncomplete = true, want false (child present)")
+		}
+	})
+}

@@ -425,6 +425,43 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		})
 		return nil
 
+	case "many-to-one":
+		cohort, sharedParentID, err := findManyToOneCohort(s, task)
+		if err != nil {
+			return fmt.Errorf("crash recovery cohort detection: %w", err)
+		}
+		childID := manyToOneChildID(sharedParentID, transitionName)
+		if existing := s.FindTask(childID); existing != nil {
+			for _, member := range cohort {
+				if member.TransitionsExecuted == nil {
+					member.TransitionsExecuted = make(map[string]bool)
+				}
+				member.TransitionsExecuted[transitionName] = true
+			}
+			patchInheritedDeps(existing, inheritedDeps)
+			return fmt.Errorf("%w: %q on cohort (parent %s)", errTransitionAlreadyExecuted, transitionName, sharedParentID)
+		}
+		child := buildManyToOneChild(childID, cohort, sharedParentID, tDef, inheritedDeps, now)
+		s.Tasks = append(s.Tasks, child)
+		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+		for _, member := range cohort {
+			if member.TransitionsExecuted == nil {
+				member.TransitionsExecuted = make(map[string]bool)
+			}
+			member.TransitionsExecuted[transitionName] = true
+		}
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:  now,
+			Event: models.TaskEventTransitionCrashRecov,
+			Extra: map[string]any{
+				"transition":         transitionName,
+				"cardinality":        "many-to-one",
+				"cohort_parent":      sharedParentID,
+				"recovered_children": 1,
+			},
+		})
+		return nil
+
 	default:
 		return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
 	}
@@ -455,6 +492,16 @@ func isTransitionIncomplete(s *models.State, task *models.Task, transName string
 		}
 	case "one-to-one":
 		if s.FindTask(oneToOneChildID(task.ID, transName)) == nil {
+			return true
+		}
+	case "many-to-one":
+		parents := task.EffectiveParentTasks()
+		if len(parents) == 0 {
+			return false
+		}
+		cohortParentID := parents[0]
+		if s.FindTask(manyToOneChildID(task.ID, transName)) == nil &&
+			s.FindTask(manyToOneChildID(cohortParentID, transName)) == nil {
 			return true
 		}
 	}
