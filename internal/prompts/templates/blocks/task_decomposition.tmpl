@@ -23,6 +23,13 @@ TDD colocation: a behavior change and its unit tests are one intent, not two.
 Never split "implement X" from "test X" — coders do TDD inside each task.
 Integration tests spanning multiple components MAY be separate tasks.
 
+Cross-cutting deliverables: features that add or change user-visible behavior need
+SEPARATE tasks for:
+- e2e tests: exercise the new behavior end-to-end through the project's integration test layer
+- Doc updates: update affected user-facing documentation and specifications
+These are first-class deliverables, not afterthoughts. They depend on the implementation tasks.
+If the feature is purely internal with no user-visible change, note "N/A" with justification in the spec compliance matrix.
+
 REFACTORING TASKS:
 When a task is pure structural refactoring (file split/move with no behavior change),
 done_when MUST distinguish behavioral test changes (not expected) from mechanical test

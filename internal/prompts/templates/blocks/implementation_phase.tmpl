@@ -57,6 +57,10 @@ IMPLEMENTATION PHASE:
       - Any GAP row = not ready to submit. Resolve by adding tasks or clarifying scope.
       - Task IDs must match the plan's task headings and correspond to output[] entry order (Task 1 = output[0], etc.).
       - Spec "Out of Scope" items do not need rows.
+      - After all spec rows, add two mandatory impact rows:
+        | E2E | e2e test coverage for new behavior | Cross-cutting | <task(s) or "N/A: <justification>"> | Covered/N/A |
+        | DOC | Documentation updates for changed behavior | Cross-cutting | <task(s) or "N/A: <justification>"> | Covered/N/A |
+        N/A requires justification (e.g., "internal refactor, no user-visible change").
    d. output[] completeness: one entry per planned coding task, each with required fields
       (desc, done_when, scope, spec_ref, plan_ref) populated. depends_on set where tasks have ordering constraints.
    e. output[] parity: re-read the plan file at the path chosen in step 2 and verify each output[]
