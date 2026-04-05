@@ -202,5 +202,42 @@ REVIEW PHASE:
 DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- end}}
 9. Submit verdict with liza_submit_verdict.
+{{- else if eq .Role "integration-reviewer"}}
+
+REVIEW SCOPE:
+Evaluate the analyst's proposed fix-task definitions (output[]) against the branch diff.
+Each fix-task must be well-formed (single intent, falsifiable done_when, correct scope) and correctly scoped.
+Enrich with systemic analysis: interaction effects across fixes, architectural drift, emergent risks.
+
+INSTRUCTIONS:
+1. Invoke skill: systemic-thinking for systemic analysis framing.
+2. Read the branch diff: git -C {{.Worktree}} diff {{.GoalBaseCommit}}..HEAD
+3. Review the analyst's output[]: liza_get {"query": "tasks/{{.TaskID}}"}
+   For each proposed fix-task:
+   a. Verify the finding is real (confirmed by the diff, not fabricated)
+   b. Verify the fix-task is well-formed: single intent, falsifiable done_when, correct scope
+   c. Verify the scope is minimal — fix only what's needed, no scope creep
+4. Systemic enrichment: after reviewing individual fix-tasks, analyze:
+   a. Interaction effects: could fixing A break the fix for B?
+   b. Architectural drift: do the fixes collectively move the codebase away from its design intent?
+   c. Emergent risks: are there cross-cutting concerns invisible at the individual finding level?
+   d. Missing findings: are there integration issues the analyst missed?
+5. If enrichment produces additional fix-tasks, include them in the rejection with specific task definitions.
+{{- if ne .PriorRejection ""}}
+
+PRIOR FEEDBACK REVIEW (MANDATORY for iteration 2+):
+Before submitting verdict, compare this iteration against prior rejection:
+- Which prior issues are now RESOLVED?
+- Which prior issues are STILL PRESENT?
+- Which prior issues are PARTIALLY ADDRESSED?
+Include this assessment in your rejection reason if rejecting.
+{{- end}}
+
+POST-VERDICT (MANDATORY for REJECTED):
+After submitting a REJECTED verdict, MUST call liza_await_resubmission immediately.
+Do NOT exit. It blocks ~100s per call, returning POLL with remaining timeout_seconds.
+- RESUBMITTED: re-review the new changes
+- POLL: call await_resubmission again with the timeout_seconds from the response
+- TERMINAL/TIMEOUT/ABORTED: exit normally
 {{- end}}
 {{- end -}}

@@ -1584,3 +1584,125 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 		}
 	})
 }
+
+func TestBlockBranchIntegrationContext_Populated(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/branch_integration_context.tmpl"))
+
+	data := RoleContextData{
+		GoalBaseCommit: "abc123def456",
+		Worktree:       "/home/user/.worktrees/task-1",
+		CompletedTasks: []CompletedTaskSummary{
+			{
+				ID:       "task-alpha",
+				DoneWhen: "tests pass for alpha feature",
+				SpecRef:  "specs/alpha.md",
+			},
+			{
+				ID:       "task-beta",
+				DoneWhen: "beta endpoint returns 200",
+				SpecRef:  "specs/beta.md",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "branch-integration-context", &data)
+	if err != nil {
+		t.Fatalf("failed to execute branch-integration-context template: %v", err)
+	}
+
+	result := buf.String()
+
+	if !strings.Contains(result, "BRANCH INTEGRATION CONTEXT") {
+		t.Error("expected BRANCH INTEGRATION CONTEXT header")
+	}
+	if !strings.Contains(result, "git -C /home/user/.worktrees/task-1 diff abc123def456..HEAD") {
+		t.Error("expected diff command with GoalBaseCommit and Worktree path")
+	}
+	for _, task := range data.CompletedTasks {
+		if !strings.Contains(result, task.ID) {
+			t.Errorf("expected completed task ID %q in output", task.ID)
+		}
+		if !strings.Contains(result, task.DoneWhen) {
+			t.Errorf("expected completed task DoneWhen %q in output", task.DoneWhen)
+		}
+		if !strings.Contains(result, task.SpecRef) {
+			t.Errorf("expected completed task SpecRef %q in output", task.SpecRef)
+		}
+	}
+}
+
+func TestBlockBranchIntegrationContext_Empty(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/branch_integration_context.tmpl"))
+
+	data := RoleContextData{
+		GoalBaseCommit: "",
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "branch-integration-context", &data)
+	if err != nil {
+		t.Fatalf("failed to execute branch-integration-context template: %v", err)
+	}
+
+	if buf.String() != "" {
+		t.Errorf("expected empty output when GoalBaseCommit is empty, got %q", buf.String())
+	}
+}
+
+func TestBlockBranchIntegrationContext_NoCompletedTasks(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/branch_integration_context.tmpl"))
+
+	data := RoleContextData{
+		GoalBaseCommit: "abc123def456",
+		Worktree:       "/home/user/.worktrees/task-1",
+		CompletedTasks: nil,
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "branch-integration-context", &data)
+	if err != nil {
+		t.Fatalf("failed to execute branch-integration-context template: %v", err)
+	}
+
+	result := buf.String()
+
+	if !strings.Contains(result, "git -C /home/user/.worktrees/task-1 diff abc123def456..HEAD") {
+		t.Error("expected diff command in output")
+	}
+	if !strings.Contains(result, "(no completed tasks found)") {
+		t.Error("expected '(no completed tasks found)' when CompletedTasks is nil")
+	}
+}
+
+func TestBlockReviewInstructions_IntegrationReviewer(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/review_instructions.tmpl"))
+
+	data := RoleContextData{
+		Role:           "integration-reviewer",
+		GoalBaseCommit: "abc123def456",
+		Worktree:       "/home/user/.worktrees/task-1",
+		TaskID:         "integration-task-1",
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "review-instructions", &data)
+	if err != nil {
+		t.Fatalf("failed to execute review-instructions template: %v", err)
+	}
+
+	result := buf.String()
+
+	if !strings.Contains(result, "REVIEW SCOPE") {
+		t.Error("expected REVIEW SCOPE header")
+	}
+	if !strings.Contains(result, "systemic-thinking") {
+		t.Error("expected systemic-thinking skill reference")
+	}
+	if !strings.Contains(result, "git -C /home/user/.worktrees/task-1 diff abc123def456..HEAD") {
+		t.Error("expected diff command with GoalBaseCommit and Worktree path")
+	}
+	if !strings.Contains(result, "output[]") {
+		t.Error("expected output[] references")
+	}
+}

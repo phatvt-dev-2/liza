@@ -1,0 +1,20 @@
+{{- define "branch-integration-context" -}}
+{{- if ne .GoalBaseCommit ""}}
+
+=== BRANCH INTEGRATION CONTEXT ===
+SCAN BOUNDARY: goal base commit {{.GoalBaseCommit}}
+
+DIFF COMMAND (execute in your worktree to see all changes for this goal):
+git -C {{.Worktree}} diff {{.GoalBaseCommit}}..HEAD
+
+COMPLETED TASKS:
+{{- range .CompletedTasks}}
+- {{.ID}}: {{.Description}}
+  Done when: {{.DoneWhen}}
+  Spec: {{.SpecRef}}
+{{- end}}
+{{- if not .CompletedTasks}}
+(no completed tasks found)
+{{- end}}
+{{- end}}
+{{- end -}}
