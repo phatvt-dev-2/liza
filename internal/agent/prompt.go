@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // baseConfigFrom constructs the BasePromptConfig shared by all roles.
@@ -190,6 +191,14 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		}
 	}
 
+	// Integration-specific: branch context for analyst and reviewer
+	if config.Role == roles.IntegrationAnalyst || config.Role == roles.IntegrationReviewer {
+		if state.Goal.BaseCommit != nil {
+			data.GoalBaseCommit = *state.Goal.BaseCommit
+		}
+		data.CompletedTasks = collectCompletedTasks(state)
+	}
+
 	// Declarative fields from pipeline YAML
 	if skills, err := resolver.Skills(config.Role); err == nil {
 		data.Skills = skills
@@ -199,6 +208,22 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 	}
 
 	return data
+}
+
+// collectCompletedTasks returns summaries of all MERGED tasks for integration context.
+func collectCompletedTasks(state *models.State) []prompts.CompletedTaskSummary {
+	var tasks []prompts.CompletedTaskSummary
+	for _, t := range state.Tasks {
+		if t.Status == models.TaskStatusMerged {
+			tasks = append(tasks, prompts.CompletedTaskSummary{
+				ID:          t.ID,
+				Description: truncateDescription(t.Description, 200),
+				DoneWhen:    t.DoneWhen,
+				SpecRef:     t.SpecRef,
+			})
+		}
+	}
+	return tasks
 }
 
 // resolveWorktreePath returns the absolute worktree path, or "" if worktree is nil.

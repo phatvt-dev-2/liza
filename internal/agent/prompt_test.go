@@ -1445,5 +1445,283 @@ func TestBuildPrompt_PriorAttemptRejection_CoderAttempt2(t *testing.T) {
 	}
 }
 
+// integrationTestPipelineYAML is a minimal pipeline config with integration roles
+// for testing integration context population in buildTaskRoleContextData.
+var integrationTestPipelineYAML = `pipeline:
+  roles:
+    integration-analyst:
+      type: doer
+      display-name: "Integration Analyst"
+      context-sections:
+        - assigned-task
+    integration-reviewer:
+      type: reviewer
+      display-name: "Integration Reviewer"
+      context-sections:
+        - review-task
+    coder:
+      type: doer
+      display-name: "Coder"
+      context-sections:
+        - assigned-task
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      context-sections:
+        - review-task
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+      context-sections:
+        - orchestrator-dashboard
+  role-pairs:
+    integration-pair:
+      doer: integration-analyst
+      reviewer: integration-reviewer
+      states:
+        initial: DRAFT_INTEGRATION_ANALYSIS
+        executing: ANALYZING_INTEGRATION
+        submitted: INTEGRATION_ANALYSIS_TO_REVIEW
+        reviewing: REVIEWING_INTEGRATION_ANALYSIS
+        approved: INTEGRATION_ANALYSIS_APPROVED
+        rejected: INTEGRATION_ANALYSIS_REJECTED
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+`
+
+// TestBuildTaskRoleContextData_IntegrationAnalyst verifies that integration-analyst
+// receives GoalBaseCommit and CompletedTasks populated from the state.
+func TestBuildTaskRoleContextData_IntegrationAnalyst(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, integrationTestPipelineYAML)
+	baseCommit := "abc123def456"
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			BaseCommit:  &baseCommit,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "analysis-task",
+				Description: "Analyze integration",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				DoneWhen:    "Analysis complete",
+				Created:     now,
+			},
+			{
+				ID:          "task-merged-1",
+				Description: "First merged task",
+				Status:      models.TaskStatusMerged,
+				Priority:    2,
+				Iteration:   1,
+				DoneWhen:    "Tests pass for feature A",
+				SpecRef:     "specs/feature-a.md",
+				Created:     now,
+			},
+			{
+				ID:          "task-merged-2",
+				Description: "Second merged task",
+				Status:      models.TaskStatusMerged,
+				Priority:    3,
+				Iteration:   1,
+				DoneWhen:    "API endpoint returns 200",
+				SpecRef:     "specs/feature-b.md",
+				Created:     now,
+			},
+			{
+				ID:          "task-implementing",
+				Description: "Still in progress",
+				Status:      models.TaskStatusImplementing,
+				Priority:    4,
+				Iteration:   1,
+				DoneWhen:    "Should not appear",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "integration"},
+	}
+
+	config := SupervisorConfig{
+		Role:    "integration-analyst",
+		AgentID: "integration-analyst-1",
+	}
+
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+
+	if data.GoalBaseCommit != baseCommit {
+		t.Errorf("GoalBaseCommit = %q, want %q", data.GoalBaseCommit, baseCommit)
+	}
+	if len(data.CompletedTasks) != 2 {
+		t.Fatalf("CompletedTasks length = %d, want 2", len(data.CompletedTasks))
+	}
+
+	// Verify first merged task
+	found := make(map[string]bool)
+	for _, ct := range data.CompletedTasks {
+		found[ct.ID] = true
+		switch ct.ID {
+		case "task-merged-1":
+			if ct.DoneWhen != "Tests pass for feature A" {
+				t.Errorf("task-merged-1 DoneWhen = %q, want %q", ct.DoneWhen, "Tests pass for feature A")
+			}
+			if ct.SpecRef != "specs/feature-a.md" {
+				t.Errorf("task-merged-1 SpecRef = %q, want %q", ct.SpecRef, "specs/feature-a.md")
+			}
+		case "task-merged-2":
+			if ct.DoneWhen != "API endpoint returns 200" {
+				t.Errorf("task-merged-2 DoneWhen = %q, want %q", ct.DoneWhen, "API endpoint returns 200")
+			}
+			if ct.SpecRef != "specs/feature-b.md" {
+				t.Errorf("task-merged-2 SpecRef = %q, want %q", ct.SpecRef, "specs/feature-b.md")
+			}
+		default:
+			t.Errorf("unexpected completed task ID: %q", ct.ID)
+		}
+	}
+	if !found["task-merged-1"] || !found["task-merged-2"] {
+		t.Errorf("missing expected completed tasks: got IDs %v", found)
+	}
+}
+
+// TestBuildTaskRoleContextData_IntegrationReviewer verifies that integration-reviewer
+// receives the same integration context fields as the analyst.
+func TestBuildTaskRoleContextData_IntegrationReviewer(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, integrationTestPipelineYAML)
+	baseCommit := "abc123def456"
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			BaseCommit:  &baseCommit,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "review-task",
+				Description: "Review integration",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				DoneWhen:    "Review complete",
+				Created:     now,
+			},
+			{
+				ID:          "task-merged-1",
+				Description: "Merged task",
+				Status:      models.TaskStatusMerged,
+				Priority:    2,
+				Iteration:   1,
+				DoneWhen:    "Feature works",
+				SpecRef:     "specs/feature.md",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "integration"},
+	}
+
+	config := SupervisorConfig{
+		Role:    "integration-reviewer",
+		AgentID: "integration-reviewer-1",
+	}
+
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+
+	if data.GoalBaseCommit != baseCommit {
+		t.Errorf("GoalBaseCommit = %q, want %q", data.GoalBaseCommit, baseCommit)
+	}
+	if len(data.CompletedTasks) != 1 {
+		t.Fatalf("CompletedTasks length = %d, want 1", len(data.CompletedTasks))
+	}
+	if data.CompletedTasks[0].ID != "task-merged-1" {
+		t.Errorf("CompletedTasks[0].ID = %q, want %q", data.CompletedTasks[0].ID, "task-merged-1")
+	}
+	if data.CompletedTasks[0].DoneWhen != "Feature works" {
+		t.Errorf("CompletedTasks[0].DoneWhen = %q, want %q", data.CompletedTasks[0].DoneWhen, "Feature works")
+	}
+	if data.CompletedTasks[0].SpecRef != "specs/feature.md" {
+		t.Errorf("CompletedTasks[0].SpecRef = %q, want %q", data.CompletedTasks[0].SpecRef, "specs/feature.md")
+	}
+}
+
+// TestBuildTaskRoleContextData_CoderNoIntegrationFields verifies that coder role
+// does not receive integration-specific fields even when the state has them.
+func TestBuildTaskRoleContextData_CoderNoIntegrationFields(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, integrationTestPipelineYAML)
+	baseCommit := "abc123def456"
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			BaseCommit:  &baseCommit,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "coder-task",
+				Description: "Implement feature",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				DoneWhen:    "Tests pass",
+				Created:     now,
+			},
+			{
+				ID:          "task-merged",
+				Description: "Already merged",
+				Status:      models.TaskStatusMerged,
+				Priority:    2,
+				Iteration:   1,
+				DoneWhen:    "Done",
+				SpecRef:     "specs/done.md",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "integration"},
+	}
+
+	config := SupervisorConfig{
+		Role:    "coder",
+		AgentID: "coder-1",
+	}
+
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+
+	if data.GoalBaseCommit != "" {
+		t.Errorf("GoalBaseCommit = %q, want empty for coder role", data.GoalBaseCommit)
+	}
+	if data.CompletedTasks != nil {
+		t.Errorf("CompletedTasks = %v, want nil for coder role", data.CompletedTasks)
+	}
+}
+
 // Ensure pipeline import is used (linter guard).
 var _ = pipeline.NewResolver

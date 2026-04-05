@@ -2,6 +2,14 @@ package prompts
 
 import "github.com/liza-mas/liza/internal/models"
 
+// CompletedTaskSummary provides context about completed tasks for integration analysis.
+type CompletedTaskSummary struct {
+	ID          string
+	Description string
+	DoneWhen    string
+	SpecRef     string
+}
+
 // RoleContextData is the unified template data type for all role template blocks.
 // Each field group is populated as appropriate for the role being rendered.
 // Fields not relevant to a particular role remain at their zero value.
@@ -41,6 +49,10 @@ type RoleContextData struct {
 	TaskOrdinal    int // 1-based position in sprint plan
 	DependsOn      []string
 	TaskRolePair   string
+
+	// Integration-specific (populated for integration-analyst and integration-reviewer)
+	GoalBaseCommit string
+	CompletedTasks []CompletedTaskSummary
 
 	// Coder-specific
 	IntegrationBranch string
