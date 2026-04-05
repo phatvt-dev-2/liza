@@ -337,6 +337,9 @@ func validateQuorumStates(rpName string, rp RolePairDef) error {
 		if rp.States.Reviewing2 == "" {
 			return fmt.Errorf("role-pair %q: quorum states (partially-approved, reviewing-2) required when effective quorum can exceed 1", rpName)
 		}
+		if rp.States.Clean != "" {
+			return fmt.Errorf("role-pair %q: clean state is not supported with quorum > 1 (reviewing-2 → clean transition not implemented)", rpName)
+		}
 	}
 	return nil
 }

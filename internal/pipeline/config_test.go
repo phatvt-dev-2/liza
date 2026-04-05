@@ -2052,6 +2052,46 @@ func TestValidPhases_IncludesClean(t *testing.T) {
 	}
 }
 
+func TestCleanStateRejectedWithQuorumGt1(t *testing.T) {
+	yaml := `
+pipeline:
+  roles:
+    analyst:
+      type: doer
+      display-name: "Analyst"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    test-pair:
+      doer: analyst
+      reviewer: reviewer
+      review-policy:
+        quorum: 2
+      states:
+        initial: DRAFT
+        executing: EXECUTING
+        submitted: SUBMITTED
+        reviewing: REVIEWING
+        approved: APPROVED
+        rejected: REJECTED
+        partially-approved: PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_2
+        clean: CLEAN_STATE
+  sub-pipelines:
+    main:
+      steps: [test-pair]
+      transitions: []
+  entry-points: {}
+`
+	cfg := writeTemp(t, yaml)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for clean + quorum > 1")
+	}
+	assertContains(t, err.Error(), "clean state is not supported with quorum > 1")
+}
+
 func TestQuorumStatesRequiredForBaseQuorum(t *testing.T) {
 	// Base quorum 2, missing quorum states → rejected.
 	yaml := `
