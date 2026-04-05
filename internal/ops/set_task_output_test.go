@@ -289,6 +289,51 @@ func TestSetTaskOutput_NormalizesWorktreePlanRef(t *testing.T) {
 	}
 }
 
+func TestSetTaskOutput_NormalizesWorktreeArchRef(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	output := []models.OutputEntry{
+		{Desc: "feature A", DoneWhen: "tests pass", Scope: "pkg/a", SpecRef: "specs/a.md", ArchRef: ".worktrees/task-1/specs/arch-plan/feature.md"},
+		{Desc: "feature B", DoneWhen: "linter green", Scope: "pkg/b", SpecRef: "specs/b.md", ArchRef: "specs/arch-plan/already-clean.md"},
+		{Desc: "feature C", DoneWhen: "done", Scope: "pkg/c", SpecRef: "specs/c.md"},
+	}
+
+	err := SetTaskOutput(tmpDir, &SetTaskOutputInput{
+		TaskID:  "task-1",
+		AgentID: "coder-1",
+		Output:  output,
+	})
+	if err != nil {
+		t.Fatalf("SetTaskOutput() unexpected error: %v", err)
+	}
+
+	bb := db.For(stateFile)
+	stateAfter, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := stateAfter.FindTask("task-1")
+	if task == nil {
+		t.Fatal("task-1 not found after SetTaskOutput")
+	}
+
+	wantArchRefs := []string{"specs/arch-plan/feature.md", "specs/arch-plan/already-clean.md", ""}
+	for i, want := range wantArchRefs {
+		if task.Output[i].ArchRef != want {
+			t.Errorf("Output[%d].ArchRef = %q, want %q", i, task.Output[i].ArchRef, want)
+		}
+	}
+}
+
 func TestSetTaskOutput_DependsOnRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

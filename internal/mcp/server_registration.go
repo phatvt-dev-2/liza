@@ -860,7 +860,7 @@ func (s *Server) registerComplexOperations() {
 						},
 						"output": {
 							Type:        "array",
-							Description: "Array of output entries, each with: desc (string), done_when (string), scope (string), spec_ref (string, optional), plan_ref (string, optional — path to the plan artifact), depends_on (array of index strings referencing other entries, optional)",
+							Description: "Array of output entries, each with: desc (string), done_when (string), scope (string), spec_ref (string, optional), plan_ref (string, optional — path to the plan artifact), arch_ref (string, optional — path to the architecture document), depends_on (array of index strings referencing other entries, optional)",
 						},
 					},
 					Required: []string{"task_id", "agent_id", "output"},

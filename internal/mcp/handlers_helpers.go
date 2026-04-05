@@ -263,6 +263,7 @@ func extractOutputEntries(raw []any) ([]models.OutputEntry, error) {
 			Scope:     stringFromMap(m, "scope"),
 			SpecRef:   stringFromMap(m, "spec_ref"),
 			PlanRef:   stringFromMap(m, "plan_ref"),
+			ArchRef:   stringFromMap(m, "arch_ref"),
 			DependsOn: extractStringSlice(m, "depends_on"),
 		}
 		out = append(out, entry)

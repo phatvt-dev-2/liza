@@ -49,6 +49,7 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 	for i := range input.Output {
 		input.Output[i].SpecRef = paths.NormalizeSpecRef(input.Output[i].SpecRef)
 		input.Output[i].PlanRef = paths.NormalizeSpecRef(input.Output[i].PlanRef)
+		input.Output[i].ArchRef = paths.NormalizeSpecRef(input.Output[i].ArchRef)
 	}
 
 	lp := paths.New(projectRoot)

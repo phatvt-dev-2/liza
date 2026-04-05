@@ -270,6 +270,39 @@ func TestExtractOutputEntries_WithPlanRef(t *testing.T) {
 	}
 }
 
+func TestExtractOutputEntries_WithArchRef(t *testing.T) {
+	raw := []any{
+		map[string]any{
+			"desc":      "Task A",
+			"done_when": "A works",
+			"scope":     "a",
+			"spec_ref":  "specs/a.md",
+			"arch_ref":  "specs/arch-plan/feature.md",
+		},
+		map[string]any{
+			"desc":      "Task B",
+			"done_when": "B works",
+			"scope":     "b",
+			"spec_ref":  "specs/b.md",
+			// arch_ref intentionally omitted
+		},
+	}
+
+	entries, err := extractOutputEntries(raw)
+	if err != nil {
+		t.Fatalf("extractOutputEntries() error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("len(entries) = %d, want 2", len(entries))
+	}
+	if entries[0].ArchRef != "specs/arch-plan/feature.md" {
+		t.Errorf("entries[0].ArchRef = %q, want %q", entries[0].ArchRef, "specs/arch-plan/feature.md")
+	}
+	if entries[1].ArchRef != "" {
+		t.Errorf("entries[1].ArchRef = %q, want empty", entries[1].ArchRef)
+	}
+}
+
 func TestExtractTaskInputs_WithPlanRef(t *testing.T) {
 	raw := []any{
 		map[string]any{
