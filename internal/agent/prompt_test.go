@@ -1946,5 +1946,290 @@ func TestBuildTaskRoleContextData_ParentTaskContexts(t *testing.T) {
 	}
 }
 
+// architectE2EPipelineYAML has full context-sections for architect and
+// architecture-reviewer, matching the production pipeline configuration.
+var architectE2EPipelineYAML = `pipeline:
+  roles:
+    architect:
+      type: doer
+      display-name: "Architect"
+      context-sections:
+        - assigned-task
+        - parent-tasks-context
+        - worktree-rules
+        - prior-rejection
+        - prior-attempt
+        - doer-state-transitions
+        - doer-tools
+        - implementation-phase
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - software-architecture-review
+    architecture-reviewer:
+      type: reviewer
+      display-name: "Architecture Reviewer"
+      context-sections:
+        - review-task
+        - worktree-rules
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - systemic-thinking
+        - software-architecture-review
+    coder:
+      type: doer
+      display-name: "Coder"
+      context-sections:
+        - assigned-task
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      context-sections:
+        - review-task
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+      context-sections:
+        - orchestrator-dashboard
+  role-pairs:
+    architecture-pair:
+      doer: architect
+      reviewer: architecture-reviewer
+      states:
+        initial: DRAFT_ARCHITECTURE
+        executing: ARCHITECTING
+        submitted: ARCHITECTURE_TO_REVIEW
+        reviewing: REVIEWING_ARCHITECTURE
+        approved: ARCHITECTURE_APPROVED
+        rejected: ARCHITECTURE_REJECTED
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - architecture-pair
+        - coding-pair
+      transitions:
+        - name: architecture-to-coding
+          from: architecture-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+  entry-points:
+    detailed-spec: coding-subpipeline.architecture-pair
+`
+
+func TestBuildPromptWithContext_Architect(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, architectE2EPipelineYAML)
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Build feature X",
+			SpecRef:     "specs/goals/feature-x.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "arch-1",
+				Description: "Define architecture for feature X",
+				Status:      "ARCHITECTING",
+				Priority:    1,
+				Iteration:   1,
+				DoneWhen:    "Architecture document produced",
+				SpecRef:     "specs/goals/feature-x.md",
+				ParentTasks: []string{"us-1", "us-2"},
+				Created:     now,
+			},
+			{
+				ID:          "us-1",
+				Description: "User can sign up with email",
+				Status:      models.TaskStatusMerged,
+				Priority:    2,
+				Iteration:   1,
+				DoneWhen:    "Signup works end-to-end",
+				SpecRef:     "specs/goals/feature-x.md",
+				PlanRef:     "specs/plans/signup.md",
+				Created:     now,
+			},
+			{
+				ID:          "us-2",
+				Description: "User can reset password",
+				Status:      models.TaskStatusMerged,
+				Priority:    3,
+				Iteration:   1,
+				DoneWhen:    "Password reset sends email",
+				SpecRef:     "specs/goals/feature-x.md",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	worktree := ".worktrees/arch-1"
+	state.Tasks[0].Worktree = &worktree
+
+	tmpDir := t.TempDir()
+	config := SupervisorConfig{
+		Role:        "architect",
+		AgentID:     "architect-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	strategy, err := NewRoleStrategy(config.Role, resolver)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy error = %v", err)
+	}
+
+	prompt, err := strategy.BuildPrompt(state, config, "arch-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt error = %v", err)
+	}
+
+	// Architect prompt must include parent tasks context, tools, state transitions, and implementation phase
+	mustContain := []string{
+		"PARENT TASKS (2)",
+		"User can sign up with email",
+		"User can reset password",
+		"ARCHITECT TOOLS",
+		"ARCHITECT STATE TRANSITIONS",
+		"ARCHITECTING",
+		"IMPLEMENTATION PHASE",
+		"specs/arch-plan",
+		"specs/goals/feature-x.md",
+		"ASSIGNED ARCHITECTURE TASK",
+	}
+	for _, s := range mustContain {
+		if !strings.Contains(prompt, s) {
+			t.Errorf("prompt should contain %q", s)
+		}
+	}
+
+	// Must not contain other role sections
+	mustNotContain := []string{
+		"CODER TOOLS",
+		"CODER STATE TRANSITIONS",
+		"CODE PLANNER TOOLS",
+	}
+	for _, s := range mustNotContain {
+		if strings.Contains(prompt, s) {
+			t.Errorf("prompt should NOT contain %q", s)
+		}
+	}
+}
+
+func TestBuildPromptWithContext_ArchitectureReviewer(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, architectE2EPipelineYAML)
+
+	baseCommit := "abc123"
+	reviewCommit := "def456"
+	assignedTo := "architect-1"
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Build feature X",
+			SpecRef:     "specs/goals/feature-x.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:           "arch-1",
+				Description:  "Define architecture for feature X",
+				Status:       "ARCHITECTURE_TO_REVIEW",
+				Priority:     1,
+				Iteration:    1,
+				DoneWhen:     "Architecture document produced",
+				SpecRef:      "specs/goals/feature-x.md",
+				BaseCommit:   &baseCommit,
+				ReviewCommit: &reviewCommit,
+				AssignedTo:   &assignedTo,
+				Created:      now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	worktree := ".worktrees/arch-1"
+	state.Tasks[0].Worktree = &worktree
+
+	tmpDir := t.TempDir()
+	config := SupervisorConfig{
+		Role:        "architecture-reviewer",
+		AgentID:     "architecture-reviewer-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, "state.yaml"),
+	}
+
+	strategy, err := NewRoleStrategy(config.Role, resolver)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy error = %v", err)
+	}
+
+	prompt, err := strategy.BuildPrompt(state, config, "arch-1")
+	if err != nil {
+		t.Fatalf("BuildPrompt error = %v", err)
+	}
+
+	// Architecture reviewer prompt must include review checklist with structural gates and state transitions
+	mustContain := []string{
+		"ARCHITECTURE REVIEWER STATE TRANSITIONS",
+		"REVIEWING_ARCHITECTURE",
+		"ARCHITECTURE_APPROVED",
+		"ARCHITECTURE_REJECTED",
+		"ARCHITECTURE REVIEWER TOOLS",
+		"REVIEW CHECKLIST",
+		"Decomposition completeness",
+		"Composability",
+		"systemic-thinking",
+		"ASSIGNED ARCHITECTURE REVIEW TASK",
+	}
+	for _, s := range mustContain {
+		if !strings.Contains(prompt, s) {
+			t.Errorf("prompt should contain %q", s)
+		}
+	}
+
+	// Must not contain doer sections
+	mustNotContain := []string{
+		"IMPLEMENTATION PHASE",
+		"ARCHITECT TOOLS",
+		"ARCHITECT STATE TRANSITIONS",
+		"CODER TOOLS",
+	}
+	for _, s := range mustNotContain {
+		if strings.Contains(prompt, s) {
+			t.Errorf("prompt should NOT contain %q", s)
+		}
+	}
+}
+
 // Ensure pipeline import is used (linter guard).
 var _ = pipeline.NewResolver
