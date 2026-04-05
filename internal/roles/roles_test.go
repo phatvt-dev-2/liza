@@ -24,6 +24,8 @@ func TestConstants(t *testing.T) {
 		{"USReviewer", USReviewer, "us-reviewer"},
 		{"IntegrationAnalyst", IntegrationAnalyst, "integration-analyst"},
 		{"IntegrationReviewer", IntegrationReviewer, "integration-reviewer"},
+		{"Architect", Architect, "architect"},
+		{"ArchitectureReviewer", ArchitectureReviewer, "architecture-reviewer"},
 	}
 
 	for _, tt := range tests {
@@ -54,6 +56,8 @@ func TestIsValid(t *testing.T) {
 		{USReviewer, USReviewer, true},
 		{IntegrationAnalyst, IntegrationAnalyst, true},
 		{IntegrationReviewer, IntegrationReviewer, true},
+		{Architect, Architect, true},
+		{ArchitectureReviewer, ArchitectureReviewer, true},
 		{"underscore form invalid", "code_reviewer", false},
 		{"unknown", "unknown", false},
 		{"empty", "", false},
@@ -78,6 +82,7 @@ func TestAll(t *testing.T) {
 		EpicPlanner, EpicPlanReviewer,
 		USWriter, USReviewer,
 		IntegrationAnalyst, IntegrationReviewer,
+		Architect, ArchitectureReviewer,
 	}
 
 	if len(got) != len(want) {
@@ -122,6 +127,8 @@ func TestNormalizeRoleName(t *testing.T) {
 		{"us_reviewer to us-reviewer", "us_reviewer", "us-reviewer"},
 		{"integration_analyst to integration-analyst", "integration_analyst", "integration-analyst"},
 		{"integration_reviewer to integration-reviewer", "integration_reviewer", "integration-reviewer"},
+		{"architect unchanged", "architect", "architect"},
+		{"architecture_reviewer to architecture-reviewer", "architecture_reviewer", "architecture-reviewer"},
 		{"already hyphenated passes through", "code-reviewer", "code-reviewer"},
 		{"unknown name passes through", "custom_role", "custom_role"},
 		{"empty string passes through", "", ""},

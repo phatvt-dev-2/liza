@@ -458,6 +458,33 @@ func TestTaskTypeIntegrationNotCoding(t *testing.T) {
 	}
 }
 
+func TestTaskTypeArchitectureIsValid(t *testing.T) {
+	if !TaskTypeArchitecture.IsValid() {
+		t.Error("TaskTypeArchitecture should be valid")
+	}
+}
+
+func TestTaskTypeArchitectureHasRoles(t *testing.T) {
+	if !TaskTypeArchitecture.HasRole(RoleArchitect) {
+		t.Error("architecture type should have architect role")
+	}
+	if !TaskTypeArchitecture.HasRole(RoleArchitectureReviewer) {
+		t.Error("architecture type should have architecture-reviewer role")
+	}
+	if TaskTypeArchitecture.HasRole(RoleCoder) {
+		t.Error("architecture type should not have coder role")
+	}
+	if TaskTypeArchitecture.HasRole(RoleCodeReviewer) {
+		t.Error("architecture type should not have code-reviewer role")
+	}
+}
+
+func TestTaskTypeArchitectureNotCoding(t *testing.T) {
+	if TaskTypeArchitecture == TaskTypeCoding {
+		t.Error("TaskTypeArchitecture must differ from TaskTypeCoding")
+	}
+}
+
 func TestEffectiveTypeBackwardCompat(t *testing.T) {
 	// Empty type still defaults to coding (not integration)
 	task := Task{Type: ""}
@@ -484,6 +511,8 @@ func TestTaskTypeForRole(t *testing.T) {
 		{RoleCodePlanReviewer, TaskTypePlanning},
 		{RoleIntegrationAnalyst, TaskTypeIntegration},
 		{RoleIntegrationReviewer, TaskTypeIntegration},
+		{RoleArchitect, TaskTypeArchitecture},
+		{RoleArchitectureReviewer, TaskTypeArchitecture},
 		{"unknown-role", TaskTypeCoding}, // fallback
 	}
 	for _, tt := range tests {

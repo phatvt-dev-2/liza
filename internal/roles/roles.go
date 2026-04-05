@@ -13,32 +13,36 @@ const (
 
 // Unified role name constants. Single hyphenated form used everywhere.
 const (
-	Coder               = "coder"
-	CodeReviewer        = "code-reviewer"
-	Orchestrator        = "orchestrator"
-	CodePlanner         = "code-planner"
-	CodePlanReviewer    = "code-plan-reviewer"
-	EpicPlanner         = "epic-planner"
-	EpicPlanReviewer    = "epic-plan-reviewer"
-	USWriter            = "us-writer"
-	USReviewer          = "us-reviewer"
-	IntegrationAnalyst  = "integration-analyst"
-	IntegrationReviewer = "integration-reviewer"
+	Coder                = "coder"
+	CodeReviewer         = "code-reviewer"
+	Orchestrator         = "orchestrator"
+	CodePlanner          = "code-planner"
+	CodePlanReviewer     = "code-plan-reviewer"
+	EpicPlanner          = "epic-planner"
+	EpicPlanReviewer     = "epic-plan-reviewer"
+	USWriter             = "us-writer"
+	USReviewer           = "us-reviewer"
+	IntegrationAnalyst   = "integration-analyst"
+	IntegrationReviewer  = "integration-reviewer"
+	Architect            = "architect"
+	ArchitectureReviewer = "architecture-reviewer"
 )
 
 // validRoles is the set of all valid role names.
 var validRoles = map[string]bool{
-	Coder:               true,
-	CodeReviewer:        true,
-	Orchestrator:        true,
-	CodePlanner:         true,
-	CodePlanReviewer:    true,
-	EpicPlanner:         true,
-	EpicPlanReviewer:    true,
-	USWriter:            true,
-	USReviewer:          true,
-	IntegrationAnalyst:  true,
-	IntegrationReviewer: true,
+	Coder:                true,
+	CodeReviewer:         true,
+	Orchestrator:         true,
+	CodePlanner:          true,
+	CodePlanReviewer:     true,
+	EpicPlanner:          true,
+	EpicPlanReviewer:     true,
+	USWriter:             true,
+	USReviewer:           true,
+	IntegrationAnalyst:   true,
+	IntegrationReviewer:  true,
+	Architect:            true,
+	ArchitectureReviewer: true,
 }
 
 // IsValid checks if the given role is a valid role name.
@@ -54,23 +58,26 @@ func All() []string {
 		EpicPlanner, EpicPlanReviewer,
 		USWriter, USReviewer,
 		IntegrationAnalyst, IntegrationReviewer,
+		Architect, ArchitectureReviewer,
 	}
 }
 
 // underscoreToHyphenated maps deprecated underscore-form role names to their
 // canonical hyphenated form. Used only for migration/normalization.
 var underscoreToHyphenated = map[string]string{
-	"coder":                Coder,
-	"code_reviewer":        CodeReviewer,
-	"orchestrator":         Orchestrator,
-	"code_planner":         CodePlanner,
-	"code_plan_reviewer":   CodePlanReviewer,
-	"epic_planner":         EpicPlanner,
-	"epic_plan_reviewer":   EpicPlanReviewer,
-	"us_writer":            USWriter,
-	"us_reviewer":          USReviewer,
-	"integration_analyst":  IntegrationAnalyst,
-	"integration_reviewer": IntegrationReviewer,
+	"coder":                 Coder,
+	"code_reviewer":         CodeReviewer,
+	"orchestrator":          Orchestrator,
+	"code_planner":          CodePlanner,
+	"code_plan_reviewer":    CodePlanReviewer,
+	"epic_planner":          EpicPlanner,
+	"epic_plan_reviewer":    EpicPlanReviewer,
+	"us_writer":             USWriter,
+	"us_reviewer":           USReviewer,
+	"integration_analyst":   IntegrationAnalyst,
+	"integration_reviewer":  IntegrationReviewer,
+	"architect":             Architect,
+	"architecture_reviewer": ArchitectureReviewer,
 }
 
 // NormalizeRoleName converts a known underscore-form role name to its
