@@ -540,3 +540,98 @@ func TestSubmitForReview_TDDEnforcement_CustomDoerRole(t *testing.T) {
 	}
 	testhelpers.RequireErrorContains(t, err, "code tasks must include test files")
 }
+
+// TestSubmitForReview_ZeroDiffIntegration verifies that SubmitForReview succeeds
+// when the integration analyst has not committed any code changes to its worktree.
+// The analyst produces findings (not code), so zero-diff submission must work:
+// - TDD gate is bypassed because EffectiveType() returns TaskTypeIntegration
+// - Rebase is a no-op (no new commits on the task branch)
+// - Task transitions to INTEGRATION_ANALYSIS_TO_REVIEW
+func TestSubmitForReview_ZeroDiffIntegration(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+
+	g := git.New(tmpDir)
+	taskID := "task-zero-diff-integration"
+	baseCommit, err := g.CreateWorktree(taskID, "integration")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+
+	// NO commits on worktree branch — zero-diff scenario
+	wtCommit := testhelpers.MustGit(t, g.GetWorktreePath(taskID), "rev-parse", "HEAD")
+
+	agentID := "integration-analyst-1"
+	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+	worktree := g.GetWorktreeRelPath(taskID)
+	initialState := &models.State{
+		Config: models.Config{
+			IntegrationBranch: "integration",
+			LeaseDuration:     1800,
+		},
+		Tasks: []models.Task{
+			{
+				ID:           taskID,
+				Type:         models.TaskTypeIntegration,
+				Description:  "Integration analysis — zero-diff test",
+				Status:       "ANALYZING_INTEGRATION",
+				RolePair:     "integration-pair",
+				AssignedTo:   &agentID,
+				LeaseExpires: &leaseExpires,
+				Worktree:     &worktree,
+				BaseCommit:   &baseCommit,
+				Iteration:    1,
+				Created:      time.Now().UTC(),
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: models.TaskEventPreExecutionCheckpoint,
+						Agent: &agentID,
+						Extra: map[string]any{
+							"intent":          "scan branch for integration issues",
+							"validation_plan": "verify findings against branch diff",
+							"files_to_modify": []string{},
+						},
+					},
+				},
+			},
+		},
+		Agents: map[string]models.Agent{
+			agentID: {Role: "integration-analyst", Status: models.AgentStatusWorking, CurrentTask: &taskID},
+		},
+	}
+
+	bb := testhelpers.WriteInitialState(t, statePath, initialState)
+
+	result, err := SubmitForReview(tmpDir, taskID, wtCommit, agentID)
+	if err != nil {
+		t.Fatalf("SubmitForReview() unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("SubmitForReview() returned nil result")
+	}
+
+	// Verify ReviewCommit is non-empty
+	if result.ReviewCommit == "" {
+		t.Error("expected non-empty ReviewCommit")
+	}
+
+	// Read state and verify task transitioned to INTEGRATION_ANALYSIS_TO_REVIEW
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("task not found after submission")
+	}
+	if task.Status != "INTEGRATION_ANALYSIS_TO_REVIEW" {
+		t.Errorf("expected status INTEGRATION_ANALYSIS_TO_REVIEW, got %s", task.Status)
+	}
+
+	// Verify ReviewCommit is set on the task
+	if task.ReviewCommit == nil || *task.ReviewCommit == "" {
+		t.Error("expected task.ReviewCommit to be set")
+	}
+}
