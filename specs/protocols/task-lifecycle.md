@@ -20,6 +20,7 @@ Each task has a `type` field that determines which roles participate in its life
 |------|----------|-------------|
 | `coding` (default) | coder → code-reviewer | Standard code implementation with review |
 | `planning` | code-planner → code-plan-reviewer | Code plan creation with review. TDD gate exempt. |
+| `integration` | integration-analyst → integration-reviewer | Branch-wide integration analysis. TDD gate exempt. Analyst produces fix-task definitions as `output[]`; approved findings auto-transition to coding-pair fix tasks. |
 
 When the `type` field is empty, it defaults to `"coding"` for backward compatibility. Unknown types are rejected by `liza validate`.
 
@@ -384,6 +385,29 @@ Before agents can run, human must initialize the project:
 6. Examine worktree, validate against spec and `done_when` criteria, run validations, produce verdict
 7. **For iteration 2+:** Compare current submission against prior rejection — report which issues are RESOLVED, STILL PRESENT, or PARTIAL
 8. On approval: execute merge
+
+## Integration Phase
+
+After all coding tasks for a goal complete, the orchestrator spawns an integration-analyst task scoped to the full branch diff (`goal.base_commit..HEAD`).
+
+### Lifecycle
+
+1. **Orchestrator** creates integration-pair task (status: DRAFT_INTEGRATION_ANALYSIS)
+2. **Integration Analyst** claims, scans branch diff, produces fix-task definitions as `output[]`
+3. **Integration Reviewer** validates findings via submit/verdict
+4. **Two outcomes after approval:**
+   - **Findings exist** (`output[]` non-empty): auto-transition `integration-to-fix` creates one coding-pair child per finding. Fix tasks follow the standard coding lifecycle (coder + code-reviewer).
+   - **Clean scan** (`output[]` empty): task routes to INTEGRATION_ANALYSIS_CLEAN — a terminal state. Supervisor cleans up worktree.
+
+### Auto-Transitions
+
+The `integration-to-fix` transition has `trigger: auto` — it executes in the reviewer's PreWork phase without a human gate. This is the only auto-trigger transition in the current pipeline. Integration tasks fan out from APPROVED state directly (not MERGED, since the analyst doesn't commit code).
+
+### Goal BaseCommit
+
+`goal.base_commit` is snapshotted when the first coding-pair children are created (from any pipeline transition). It records the integration branch HEAD at that point, giving the analyst a stable diff base that captures exactly the work done for this goal.
+
+---
 
 ## Related Documents
 

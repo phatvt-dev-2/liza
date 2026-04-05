@@ -84,9 +84,11 @@ Note: REVIEWING → READY_FOR_REVIEW (stale lease recovery, not shown)
 
 Each task has a `type` field (default: `"coding"`) that determines which roles participate in its lifecycle. The workflow registry maps each type to an ordered role sequence:
 
-| Type | Role Workflow | Coder Claims | Code Reviewer Claims |
-|------|--------------|--------------|---------------------|
-| `coding` | coder → code_reviewer | READY, REJECTED, INTEGRATION_FAILED | READY_FOR_REVIEW |
+| Type | Role Workflow | Doer Claims | Reviewer Claims |
+|------|--------------|-------------|-----------------|
+| `coding` (default) | coder → code-reviewer | DRAFT_CODE, CODE_REJECTED, INTEGRATION_FAILED | CODE_READY_FOR_REVIEW |
+| `planning` | code-planner → code-plan-reviewer | DRAFT_CODING_PLAN, CODING_PLAN_REJECTED | CODING_PLAN_TO_REVIEW |
+| `integration` | integration-analyst → integration-reviewer | DRAFT_INTEGRATION_ANALYSIS, INTEGRATION_ANALYSIS_REJECTED | INTEGRATION_ANALYSIS_TO_REVIEW |
 
 Claimability rule:
 ```
@@ -181,6 +183,28 @@ The transition CODING_PLAN_APPROVED → DRAFT (coding pair) is executed by the o
 |------|--------|--------|
 | Code Planner (`code_planner`) | DRAFT_CODING_PLAN | Doer role (supervisor transitions CODING_PLAN_REJECTED → DRAFT_CODING_PLAN first) |
 | Code Plan Reviewer (`code_plan_reviewer`) | CODING_PLAN_TO_REVIEW | Reviewer role |
+
+### Integration-Pair State Machine
+
+The integration pair introduces a state cycle for branch-wide integration analysis after coding completes.
+
+| State | Description | Valid Transitions |
+|-------|-------------|-------------------|
+| DRAFT_INTEGRATION_ANALYSIS | Task created by orchestrator | → ANALYZING_INTEGRATION |
+| ANALYZING_INTEGRATION | Integration Analyst scanning branch diff | → INTEGRATION_ANALYSIS_TO_REVIEW, BLOCKED |
+| INTEGRATION_ANALYSIS_TO_REVIEW | Analyst done, awaiting Integration Reviewer | → REVIEWING_INTEGRATION_ANALYSIS |
+| REVIEWING_INTEGRATION_ANALYSIS | Integration Reviewer active | → INTEGRATION_ANALYSIS_APPROVED, INTEGRATION_ANALYSIS_REJECTED, INTEGRATION_ANALYSIS_CLEAN |
+| INTEGRATION_ANALYSIS_APPROVED | Findings approved, fix tasks pending | Auto-transition creates coding-pair children |
+| INTEGRATION_ANALYSIS_REJECTED | Reviewer rejected, feedback provided | → DRAFT_INTEGRATION_ANALYSIS |
+| INTEGRATION_ANALYSIS_CLEAN | No findings — terminal | Terminal (worktree cleaned up by supervisor) |
+
+**Two terminal outcomes:**
+- **Findings exist** (`output[]` non-empty): APPROVED → auto-transition `integration-to-fix` creates one coding-pair child per output entry. Fix tasks follow the standard coding lifecycle.
+- **Clean scan** (`output[]` empty): CLEAN — bypasses per-subtask transition entirely. The supervisor cleans up the worktree and releases the assigned agent.
+
+**Auto-transitions:** The `integration-to-fix` transition has `trigger: auto` — it executes in the reviewer's PreWork without a human gate. Integration tasks fan out from APPROVED (not MERGED, since the analyst doesn't commit code).
+
+**Goal.BaseCommit:** Snapshotted when the first coding-pair children are created (from any transition). The analyst diffs `goal.base_commit..HEAD` to scope the integration analysis.
 
 ### Forbidden Transitions
 
@@ -509,6 +533,14 @@ task_states:
     - REVIEWING_CODING_PLAN
     - CODING_PLAN_APPROVED
     - CODING_PLAN_REJECTED
+    # Integration-pair states
+    - DRAFT_INTEGRATION_ANALYSIS
+    - ANALYZING_INTEGRATION
+    - INTEGRATION_ANALYSIS_TO_REVIEW
+    - REVIEWING_INTEGRATION_ANALYSIS
+    - INTEGRATION_ANALYSIS_APPROVED
+    - INTEGRATION_ANALYSIS_REJECTED
+    - INTEGRATION_ANALYSIS_CLEAN
   terminal:
     - MERGED
     - ABANDONED
@@ -518,6 +550,7 @@ task_states:
     - ABANDONED
     - SUPERSEDED
     - CODING_PLAN_APPROVED
+    - INTEGRATION_ANALYSIS_CLEAN
 
 agent_states:
   - STARTING

@@ -137,19 +137,23 @@ Roles are organized into two phases. Which agents you need depends on your entry
 
 ```
 Roles:
-  orchestrator        - Creates and manages task breakdown
+  orchestrator            - Creates and manages task breakdown
 
   Specification phase (general-objective entry point):
-  epic-planner        - Decomposes vision into epics
-  epic-plan-reviewer  - Reviews epic decomposition
-  us-writer           - Writes user stories from epics
-  us-reviewer         - Reviews user stories
+  epic-planner            - Decomposes vision into epics
+  epic-plan-reviewer      - Reviews epic decomposition
+  us-writer               - Writes user stories from epics
+  us-reviewer             - Reviews user stories
 
   Coding phase (both entry points):
-  code-planner        - Claims and produces coding plans
-  code-plan-reviewer  - Reviews coding plans and submits verdicts
-  coder               - Claims and implements coding tasks
-  code-reviewer       - Reviews coding tasks and submits verdicts
+  code-planner            - Claims and produces coding plans
+  code-plan-reviewer      - Reviews coding plans and submits verdicts
+  coder                   - Claims and implements coding tasks
+  code-reviewer           - Reviews coding tasks and submits verdicts
+
+  Integration phase (post-coding, orchestrator-triggered):
+  integration-analyst     - Scans full branch diff for cross-task integration issues
+  integration-reviewer    - Validates and enriches integration findings
 ```
 
 **Minimal setup (detailed-spec entry point) — 5 agents:**
@@ -157,6 +161,8 @@ Spawn from the TUI (`s`): orchestrator, code-planner, code-plan-reviewer, coder,
 
 **Full pipeline (general-objective entry point) — 9 agents:**
 All of the above plus: epic-planner, epic-plan-reviewer, us-writer, us-reviewer.
+
+**Integration phase** agents (integration-analyst, integration-reviewer) are spawned by the orchestrator after all coding tasks for a goal complete. They are not needed at startup — spawn them when the orchestrator triggers the integration sub-pipeline.
 
 Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --cli gemini`.
 Selecting alternative agent CLI from the TUI is not supported yet.
@@ -238,9 +244,14 @@ general-objective entry point (full pipeline):
 
 detailed-spec entry point (coding only):
   code-planning-pair → coding-pair
+
+integration sub-pipeline (post-coding, orchestrator-triggered):
+  integration-pair → coding-pair (fix tasks)
 ```
 
 Each transition between pairs is a **human gate** (unless auto-resume is enabled): the sprint completes, the human reviews, then runs `liza proceed <task-id> <transition>` followed by `liza resume`. With auto-resume, these transitions happen automatically.
+
+The `integration-to-fix` transition is an exception — it uses `trigger: auto`, meaning fix tasks are created automatically when the integration reviewer approves findings, without a human gate.
 
 #### Sprint Phases
 

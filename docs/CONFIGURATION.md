@@ -229,8 +229,17 @@ When `liza tui` triggers the circuit breaker, it also sets `sprint.status` to `C
 | ABANDONED | No | No | **Yes** |
 | SUPERSEDED | No | No | **Yes** |
 | INTEGRATION_FAILED | Yes | No | No |
+| | | | |
+| **Integration-pair** | | | |
+| DRAFT_INTEGRATION_ANALYSIS | Yes | No | No |
+| ANALYZING_INTEGRATION | No | No | No |
+| INTEGRATION_ANALYSIS_TO_REVIEW | No | Yes | No |
+| REVIEWING_INTEGRATION_ANALYSIS | No | No | No |
+| INTEGRATION_ANALYSIS_APPROVED | No | No | No |
+| INTEGRATION_ANALYSIS_REJECTED | Yes | No | No |
+| INTEGRATION_ANALYSIS_CLEAN | No | No | **Yes** |
 
-> **Note:** Status names are pipeline-specific. The table above shows the `coding-pair` states.
+> **Note:** Status names are pipeline-specific. The tables above show `coding-pair` and `integration-pair` states.
 > Other role-pairs use their own names (e.g. `DRAFT_EPIC_PLAN`, `DRAFT_US`).
 > See `pipeline.yaml` for the full list.
 

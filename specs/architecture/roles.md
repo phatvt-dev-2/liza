@@ -15,6 +15,8 @@ from the YAML at load time — no hardcoded role constants.
 | Code Plan Reviewer | `code-plan-reviewer` | `code-plan-reviewer-` | `code-plan-reviewer-1`, `code-plan-reviewer-2` |
 | Coder | `coder` | `coder-` | `coder-1`, `coder-2` |
 | Code Reviewer | `code-reviewer` | `code-reviewer-` | `code-reviewer-1`, `code-reviewer-2` |
+| Integration Analyst | `integration-analyst` | `integration-analyst-` | `integration-analyst-1` |
+| Integration Reviewer | `integration-reviewer` | `integration-reviewer-` | `integration-reviewer-1` |
 
 **Usage Rules:**
 - **Prose/documentation:** Use canonical name ("Code Reviewer validates...")
@@ -22,7 +24,7 @@ from the YAML at load time — no hardcoded role constants.
 - **Agent IDs:** Use prefix form (`code-reviewer-1`, `coder-2`)
 - **Single name form:** The YAML key is the canonical identifier — used in pipeline YAML, task model, agent IDs, and CLI. There is no separate "workflow" form.
 
-**ID Validation Regex:** `^(coder|code-reviewer|orchestrator|code-planner|code-plan-reviewer)-[0-9]+$`
+**ID Validation Regex:** `^(coder|code-reviewer|orchestrator|code-planner|code-plan-reviewer|integration-analyst|integration-reviewer)-[0-9]+$`
 
 ## Multiple Agents Per Role
 
@@ -429,12 +431,55 @@ Prior Feedback Status:  # Required for iteration 2+
 
 ---
 
+## Integration Analyst
+
+**Purpose:** Scan the full branch diff after all coding tasks complete. Produce actionable fix-task definitions for mechanical integration issues.
+
+**Capabilities:**
+- Read full branch diff (`goal.base_commit..HEAD`) in assigned worktree
+- Read all specs referenced by completed tasks
+- Produce fix-task definitions as `output[]` entries (desc, done_when, scope, spec_ref)
+- Mark self BLOCKED if issues require human judgment
+
+**Constraints:**
+- Does not commit code — submits with worktree HEAD unchanged
+- TDD enforcement does not apply (task type `integration`, not `coding`)
+- Findings must be mechanical and pattern-matchable: type alignment, serialization completeness, error mapping, API surface coherence, test/code agreement, code organization
+- Judgment calls (architecture decisions, design trade-offs) are out of scope — escalate via BLOCKED
+
+**Context:** Receives `branch-integration-context` section with the diff command and completed task list with `done_when` criteria. The analyst executes the diff in its worktree at analysis time — the diff is not stored in the blackboard.
+
+**Clean scan:** When no issues are found, the analyst submits without setting output. The reviewer approves, and the task routes to `INTEGRATION_ANALYSIS_CLEAN` — a terminal state that bypasses per-subtask transition.
+
+---
+
+## Integration Reviewer
+
+**Purpose:** Validate and enrich the integration analyst's findings with systemic analysis.
+
+**Capabilities:**
+- Read the same branch diff as the analyst
+- Validate that each proposed fix-task is well-formed and correctly scoped
+- Enrich findings with systemic concerns: interaction effects across fixes, architectural drift, emergent risks
+- Approve or reject with binding verdict (same mechanism as Code Reviewer)
+
+**Constraints:**
+- Cannot modify the analyst's output — can only approve or reject
+- Must verify each `output[]` entry has valid desc, done_when, scope, spec_ref
+- Rejection must cite specific issues with task definitions, not disagree on whether findings are valid
+
+**Context:** Receives `branch-integration-context` (same as analyst) plus `prior-rejection` context for re-reviews.
+
+---
+
 ## Role Interaction Summary
 
 | Actor | Can Commit To |
 |-------|---------------|
 | Coder | Task worktree branch only |
 | Code Reviewer | None (read-only; approves for merge) |
+| Integration Analyst | None (analysis only — submits with worktree HEAD unchanged) |
+| Integration Reviewer | None (read-only; approves or rejects findings) |
 | Orchestrator | Neither (no code changes) |
 | Supervisor | Integration branch (executes merge after APPROVED) |
 
