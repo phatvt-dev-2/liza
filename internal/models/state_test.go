@@ -1907,3 +1907,91 @@ func TestEffectiveParentTasks(t *testing.T) {
 		})
 	}
 }
+
+func TestArchRefYAMLRoundTrip(t *testing.T) {
+	t.Run("Task with ArchRef", func(t *testing.T) {
+		task := Task{
+			ID:          "task-1",
+			Description: "test task",
+			Status:      "DRAFT_CODE",
+			ArchRef:     "specs/arch-plan/my-feature.md",
+		}
+
+		data, err := yaml.Marshal(&task)
+		if err != nil {
+			t.Fatalf("Failed to marshal task: %v", err)
+		}
+
+		yamlStr := string(data)
+		if !strings.Contains(yamlStr, "arch_ref:") {
+			t.Errorf("YAML output should contain 'arch_ref:' field, got:\n%s", yamlStr)
+		}
+
+		var unmarshaled Task
+		if err := yaml.Unmarshal(data, &unmarshaled); err != nil {
+			t.Fatalf("Failed to unmarshal task: %v", err)
+		}
+		if unmarshaled.ArchRef != "specs/arch-plan/my-feature.md" {
+			t.Errorf("ArchRef mismatch: got %q, want %q", unmarshaled.ArchRef, "specs/arch-plan/my-feature.md")
+		}
+	})
+
+	t.Run("Task without ArchRef omits field", func(t *testing.T) {
+		task := Task{
+			ID:          "task-2",
+			Description: "test task without arch_ref",
+			Status:      "DRAFT_CODE",
+		}
+
+		data, err := yaml.Marshal(&task)
+		if err != nil {
+			t.Fatalf("Failed to marshal task: %v", err)
+		}
+
+		yamlStr := string(data)
+		if strings.Contains(yamlStr, "arch_ref:") {
+			t.Errorf("YAML output should NOT contain 'arch_ref:' when empty, got:\n%s", yamlStr)
+		}
+	})
+
+	t.Run("OutputEntry with ArchRef", func(t *testing.T) {
+		entry := OutputEntry{
+			Desc:    "subtask-1",
+			ArchRef: "specs/arch-plan/my-feature.md",
+		}
+
+		data, err := yaml.Marshal(&entry)
+		if err != nil {
+			t.Fatalf("Failed to marshal OutputEntry: %v", err)
+		}
+
+		yamlStr := string(data)
+		if !strings.Contains(yamlStr, "arch_ref:") {
+			t.Errorf("YAML output should contain 'arch_ref:' field, got:\n%s", yamlStr)
+		}
+
+		var unmarshaled OutputEntry
+		if err := yaml.Unmarshal(data, &unmarshaled); err != nil {
+			t.Fatalf("Failed to unmarshal OutputEntry: %v", err)
+		}
+		if unmarshaled.ArchRef != "specs/arch-plan/my-feature.md" {
+			t.Errorf("ArchRef mismatch: got %q, want %q", unmarshaled.ArchRef, "specs/arch-plan/my-feature.md")
+		}
+	})
+
+	t.Run("OutputEntry without ArchRef omits field", func(t *testing.T) {
+		entry := OutputEntry{
+			Desc: "subtask-2",
+		}
+
+		data, err := yaml.Marshal(&entry)
+		if err != nil {
+			t.Fatalf("Failed to marshal OutputEntry: %v", err)
+		}
+
+		yamlStr := string(data)
+		if strings.Contains(yamlStr, "arch_ref:") {
+			t.Errorf("YAML output should NOT contain 'arch_ref:' when empty, got:\n%s", yamlStr)
+		}
+	})
+}
