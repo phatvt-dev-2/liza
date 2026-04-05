@@ -628,6 +628,168 @@ func TestResumeWithoutSprintAdvance(t *testing.T) {
 	}
 }
 
+func ptrS(s string) *string { return &s }
+
+func TestIsManyToOneReady(t *testing.T) {
+	now := time.Now().UTC()
+
+	m2oTransitions := []ManyToOneTransitionInfo{
+		{Name: "us-to-coding", SourceRolePair: "us-writing-pair"},
+	}
+
+	t.Run("CompleteCohort", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		parentID := "epic-plan-1"
+
+		us1 := testhelpers.BuildTaskByStatus("us-1", models.TaskStatusMerged, now)
+		us1.RolePair = "us-writing-pair"
+		us1.ParentTask = ptrS(parentID)
+
+		us2 := testhelpers.BuildTaskByStatus("us-2", models.TaskStatusMerged, now)
+		us2.RolePair = "us-writing-pair"
+		us2.ParentTask = ptrS(parentID)
+
+		us3 := testhelpers.BuildTaskByStatus("us-3", models.TaskStatusMerged, now)
+		us3.RolePair = "us-writing-pair"
+		us3.ParentTask = ptrS(parentID)
+
+		state.Tasks = []models.Task{us1, us2, us3}
+
+		if !IsManyToOneReady(&state.Tasks[0], state, m2oTransitions) {
+			t.Error("IsManyToOneReady() = false, want true for complete cohort")
+		}
+	})
+
+	t.Run("IncompleteCohort", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		parentID := "epic-plan-1"
+
+		us1 := testhelpers.BuildTaskByStatus("us-1", models.TaskStatusMerged, now)
+		us1.RolePair = "us-writing-pair"
+		us1.ParentTask = ptrS(parentID)
+
+		us2 := testhelpers.BuildTaskByStatus("us-2", models.TaskStatusMerged, now)
+		us2.RolePair = "us-writing-pair"
+		us2.ParentTask = ptrS(parentID)
+
+		// us3 is not MERGED yet
+		us3 := testhelpers.BuildTaskByStatus("us-3", models.TaskStatus("US_APPROVED"), now)
+		us3.RolePair = "us-writing-pair"
+		us3.ParentTask = ptrS(parentID)
+
+		state.Tasks = []models.Task{us1, us2, us3}
+
+		if IsManyToOneReady(&state.Tasks[0], state, m2oTransitions) {
+			t.Error("IsManyToOneReady() = true, want false for incomplete cohort")
+		}
+	})
+
+	t.Run("AlreadyExecuted", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		parentID := "epic-plan-1"
+
+		us1 := testhelpers.BuildTaskByStatus("us-1", models.TaskStatusMerged, now)
+		us1.RolePair = "us-writing-pair"
+		us1.ParentTask = ptrS(parentID)
+		us1.TransitionsExecuted = map[string]bool{"us-to-coding": true}
+
+		us2 := testhelpers.BuildTaskByStatus("us-2", models.TaskStatusMerged, now)
+		us2.RolePair = "us-writing-pair"
+		us2.ParentTask = ptrS(parentID)
+		us2.TransitionsExecuted = map[string]bool{"us-to-coding": true}
+
+		us3 := testhelpers.BuildTaskByStatus("us-3", models.TaskStatusMerged, now)
+		us3.RolePair = "us-writing-pair"
+		us3.ParentTask = ptrS(parentID)
+		us3.TransitionsExecuted = map[string]bool{"us-to-coding": true}
+
+		state.Tasks = []models.Task{us1, us2, us3}
+
+		if IsManyToOneReady(&state.Tasks[0], state, m2oTransitions) {
+			t.Error("IsManyToOneReady() = true, want false when transitions already executed")
+		}
+	})
+}
+
+func TestCollectMergedManyToOneWithUnfiredTransition(t *testing.T) {
+	now := time.Now().UTC()
+
+	m2oTransitions := []ManyToOneTransitionInfo{
+		{Name: "us-to-coding", SourceRolePair: "us-writing-pair"},
+	}
+
+	state := testhelpers.CreateValidState()
+	parentID := "epic-plan-1"
+
+	us1 := testhelpers.BuildTaskByStatus("us-1", models.TaskStatusMerged, now)
+	us1.RolePair = "us-writing-pair"
+	us1.ParentTask = ptrS(parentID)
+
+	us2 := testhelpers.BuildTaskByStatus("us-2", models.TaskStatusMerged, now)
+	us2.RolePair = "us-writing-pair"
+	us2.ParentTask = ptrS(parentID)
+
+	state.Tasks = []models.Task{us1, us2}
+	state.Sprint.Scope.Planned = []string{"us-1", "us-2"}
+
+	carried := collectMergedManyToOneWithUnfiredTransition(state, m2oTransitions)
+
+	if len(carried) != 2 {
+		t.Fatalf("carried = %v, want 2 items", carried)
+	}
+	if !slices.Contains(carried, "us-1") {
+		t.Errorf("carried = %v, want to include us-1", carried)
+	}
+	if !slices.Contains(carried, "us-2") {
+		t.Errorf("carried = %v, want to include us-2", carried)
+	}
+
+	// Verify dedup: add duplicate IDs to planned scope
+	state.Sprint.Scope.Planned = []string{"us-1", "us-2", "us-1"}
+	carried = collectMergedManyToOneWithUnfiredTransition(state, m2oTransitions)
+	if len(carried) != 2 {
+		t.Errorf("carried = %v (len %d), want exactly 2 (dedup should prevent duplicates)", carried, len(carried))
+	}
+}
+
+func TestBuildSprintAdvancePlan_CarriesManyToOne(t *testing.T) {
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.Number = 1
+
+	parentID := "epic-plan-1"
+
+	us1 := testhelpers.BuildTaskByStatus("us-1", models.TaskStatusMerged, now)
+	us1.RolePair = "us-writing-pair"
+	us1.ParentTask = ptrS(parentID)
+
+	us2 := testhelpers.BuildTaskByStatus("us-2", models.TaskStatusMerged, now)
+	us2.RolePair = "us-writing-pair"
+	us2.ParentTask = ptrS(parentID)
+
+	state.Tasks = []models.Task{us1, us2}
+	state.Sprint.Scope.Planned = []string{"us-1", "us-2"}
+
+	planningPairs := map[string]bool{"code-planning-pair": true}
+	m2oTransitions := []ManyToOneTransitionInfo{
+		{Name: "us-to-coding", SourceRolePair: "us-writing-pair"},
+	}
+
+	plan, err := buildSprintAdvancePlan(state, now, planningPairs, m2oTransitions)
+	if err != nil {
+		t.Fatalf("buildSprintAdvancePlan() error: %v", err)
+	}
+
+	if !slices.Contains(plan.carriedTasks, "us-1") {
+		t.Errorf("carriedTasks = %v, want to include us-1 (many-to-one cohort member)", plan.carriedTasks)
+	}
+	if !slices.Contains(plan.carriedTasks, "us-2") {
+		t.Errorf("carriedTasks = %v, want to include us-2 (many-to-one cohort member)", plan.carriedTasks)
+	}
+}
+
 func TestAdvanceSprint_CycleBlockedPlanningTaskCarriedForward(t *testing.T) {
 	tmpDir, stateFile := setupAdvanceTest(t)
 

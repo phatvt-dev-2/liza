@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -96,11 +97,11 @@ func planSprintAdvance(s *models.State, now time.Time, projectRoot string) (*spr
 		return nil, fmt.Errorf("cannot advance sprint: not all planned tasks are terminal")
 	}
 
-	planningPairs, ppErr := loadPlanningPairsForAdvance(projectRoot)
+	detCtx, ppErr := loadDetectionContextForAdvance(projectRoot)
 	if ppErr != nil {
 		return nil, fmt.Errorf("cannot advance sprint: %w", ppErr)
 	}
-	return buildSprintAdvancePlan(s, now, planningPairs)
+	return buildSprintAdvancePlan(s, now, detCtx.planningPairs, detCtx.m2oTransitions)
 }
 
 // applySprintAdvance mutates state to record the completed sprint in history
@@ -159,11 +160,11 @@ func planSprintAdvanceFromCompleted(s *models.State, now time.Time, projectRoot 
 		return nil, fmt.Errorf("cannot advance sprint: status is %s, expected COMPLETED", s.Sprint.Status)
 	}
 
-	planningPairs, err := loadPlanningPairsForAdvance(projectRoot)
+	detCtx, err := loadDetectionContextForAdvance(projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("cannot advance sprint: %w", err)
 	}
-	return buildSprintAdvancePlan(s, now, planningPairs)
+	return buildSprintAdvancePlan(s, now, detCtx.planningPairs, detCtx.m2oTransitions)
 }
 
 // buildSprintAdvancePlan is the shared implementation for sprint advance planning.
@@ -173,7 +174,9 @@ func planSprintAdvanceFromCompleted(s *models.State, now time.Time, projectRoot 
 // planningPairs identifies which role-pairs are transition sources (planning pairs).
 // Merged planning tasks with unconsumed output are carried forward alongside
 // non-terminal tasks so the orchestrator can fire PLANNING_COMPLETE in the new sprint.
-func buildSprintAdvancePlan(s *models.State, now time.Time, planningPairs map[string]bool) (*sprintAdvancePlan, error) {
+// m2oTransitions identifies many-to-one transitions whose merged cohort members
+// with unfired transitions must also be carried forward.
+func buildSprintAdvancePlan(s *models.State, now time.Time, planningPairs map[string]bool, m2oTransitions []ManyToOneTransitionInfo) (*sprintAdvancePlan, error) {
 	archivedSprint := s.Sprint
 	if archivedSprint.Number == 0 {
 		archivedSprint.Number = 1
@@ -186,6 +189,7 @@ func buildSprintAdvancePlan(s *models.State, now time.Time, planningPairs map[st
 	newSprintID := fmt.Sprintf("sprint-%d", newNumber)
 	carriedTasks := collectNonTerminalTaskIDs(s)
 	carriedTasks = append(carriedTasks, collectMergedPlanningWithUnconsumedOutput(s, planningPairs)...)
+	carriedTasks = append(carriedTasks, collectMergedManyToOneWithUnfiredTransition(s, m2oTransitions)...)
 
 	return &sprintAdvancePlan{
 		archivedSprint: archivedSprint,
@@ -308,20 +312,108 @@ func collectMergedPlanningWithUnconsumedOutput(state *models.State, planningPair
 	return carried
 }
 
+// advanceDetectionContext holds the detection data needed for sprint advance.
+type advanceDetectionContext struct {
+	planningPairs  map[string]bool
+	m2oTransitions []ManyToOneTransitionInfo
+}
+
+// IsManyToOneReady checks if a MERGED task is part of a complete many-to-one
+// cohort whose transition has not yet been executed. Used by both carry-forward
+// and wake detection. A cohort is complete when all siblings (same parent, same
+// role_pair) are MERGED with no transitions_executed for the transition name.
+func IsManyToOneReady(task *models.Task, state *models.State, m2oTransitions []ManyToOneTransitionInfo) bool {
+	if task == nil || task.Status != models.TaskStatusMerged {
+		return false
+	}
+	parents := task.EffectiveParentTasks()
+	if len(parents) == 0 {
+		return false
+	}
+
+	for _, m2o := range m2oTransitions {
+		if task.RolePair != m2o.SourceRolePair {
+			continue
+		}
+		if task.TransitionsExecuted[m2o.Name] {
+			continue
+		}
+
+		// Check if ALL siblings in the cohort are MERGED with unfired transition
+		sharedParentID := parents[0]
+		allReady := true
+		for i := range state.Tasks {
+			sibling := &state.Tasks[i]
+			if sibling.RolePair != task.RolePair {
+				continue
+			}
+			siblingParents := sibling.EffectiveParentTasks()
+			if !slices.Contains(siblingParents, sharedParentID) {
+				continue
+			}
+			if sibling.Status != models.TaskStatusMerged {
+				allReady = false
+				break
+			}
+			if sibling.TransitionsExecuted[m2o.Name] {
+				allReady = false // already executed — not "unfired"
+				break
+			}
+		}
+		if allReady {
+			return true
+		}
+	}
+	return false
+}
+
+// collectMergedManyToOneWithUnfiredTransition returns IDs of planned MERGED tasks
+// that are part of a complete many-to-one cohort with an unfired transition.
+// These must be carried forward so the orchestrator can fire the transition.
+// Returns deduplicated IDs (each cohort member appears at most once).
+func collectMergedManyToOneWithUnfiredTransition(state *models.State, m2oTransitions []ManyToOneTransitionInfo) []string {
+	seen := make(map[string]bool)
+	var carried []string
+	for _, taskID := range state.Sprint.Scope.Planned {
+		if seen[taskID] {
+			continue
+		}
+		task := state.FindTask(taskID)
+		if IsManyToOneReady(task, state, m2oTransitions) {
+			carried = append(carried, taskID)
+			seen[taskID] = true
+		}
+	}
+	return carried
+}
+
+// loadDetectionContextForAdvance loads detection context from pipeline config.
+// Returns zero-value context (nil maps/slices) when the pipeline config is absent
+// (legacy project) — IsPlanningPair falls back to recognizing "code-planning-pair".
+// Returns a non-nil error when the config exists but cannot be loaded (parse or
+// validation failure), preventing silent fallback that would drop non-legacy pairs.
+func loadDetectionContextForAdvance(projectRoot string) (*advanceDetectionContext, error) {
+	detCtx, err := LoadDetectionContext(projectRoot)
+	if err != nil {
+		if errors.Is(err, pipeline.ErrConfigNotFound) {
+			return &advanceDetectionContext{}, nil // legacy project
+		}
+		return nil, fmt.Errorf("pipeline config failed to load: %w", err)
+	}
+	return &advanceDetectionContext{
+		planningPairs:  detCtx.PlanningPairs,
+		m2oTransitions: detCtx.ManyToOneTransitions,
+	}, nil
+}
+
 // loadPlanningPairsForAdvance loads planning pairs from pipeline config.
 // Returns (nil, nil) when the pipeline config is absent (legacy project) —
 // IsPlanningPair falls back to recognizing "code-planning-pair" as the only
 // planning pair.
-// Returns a non-nil error when the config exists but cannot be loaded (parse or
-// validation failure), preventing silent fallback that would drop non-legacy
-// planning pairs.
 func loadPlanningPairsForAdvance(projectRoot string) (map[string]bool, error) {
-	detCtx, err := LoadDetectionContext(projectRoot)
+	detCtx, err := loadDetectionContextForAdvance(projectRoot)
 	if err != nil {
-		if errors.Is(err, pipeline.ErrConfigNotFound) {
-			return nil, nil // legacy project — no pipeline config
-		}
-		return nil, fmt.Errorf("pipeline config failed to load: %w", err)
+		return nil, err
 	}
-	return detCtx.PlanningPairs, nil
+	return detCtx.planningPairs, nil
 }

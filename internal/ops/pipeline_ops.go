@@ -108,11 +108,18 @@ func BuildPipelineTransitions(r *pipeline.Resolver) map[models.TaskStatus][]mode
 	return tm
 }
 
+// ManyToOneTransitionInfo holds pre-resolved data for a many-to-one transition.
+type ManyToOneTransitionInfo struct {
+	Name           string
+	SourceRolePair string
+}
+
 // PipelineDetectionContext holds pipeline-derived data needed for orchestrator
 // wake detection. Computed once from a single config load via LoadDetectionContext.
 type PipelineDetectionContext struct {
-	SprintTerminals []models.TaskStatus
-	PlanningPairs   map[string]bool
+	SprintTerminals      []models.TaskStatus
+	PlanningPairs        map[string]bool
+	ManyToOneTransitions []ManyToOneTransitionInfo
 }
 
 // LoadDetectionContext loads pipeline config once and returns both sprint-terminal
@@ -122,9 +129,24 @@ func LoadDetectionContext(projectRoot string) (*PipelineDetectionContext, error)
 	if err != nil {
 		return nil, fmt.Errorf("loading pipeline config for detection context: %w", err)
 	}
+	var m2oInfos []ManyToOneTransitionInfo
+	for _, td := range resolver.AllTransitions() {
+		if td.Cardinality == "many-to-one" {
+			srcPair, err := resolver.TransitionSourceRolePair(td.Name)
+			if err != nil {
+				continue
+			}
+			m2oInfos = append(m2oInfos, ManyToOneTransitionInfo{
+				Name:           td.Name,
+				SourceRolePair: srcPair,
+			})
+		}
+	}
+
 	return &PipelineDetectionContext{
-		SprintTerminals: resolver.SprintTerminalStates(),
-		PlanningPairs:   resolver.TransitionSourcePairs(),
+		SprintTerminals:      resolver.SprintTerminalStates(),
+		PlanningPairs:        resolver.TransitionSourcePairs(),
+		ManyToOneTransitions: m2oInfos,
 	}, nil
 }
 
