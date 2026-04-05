@@ -31,11 +31,19 @@ func oneToOneChildID(parentID, transitionName string) string {
 	return fmt.Sprintf("%s-%s", parentID, transitionName)
 }
 
+// manyToOneChildID returns the deterministic child task ID for a many-to-one transition.
+// The cohort's shared parent ID is used as the anchor since all cohort members
+// are siblings created from the same upstream task.
+func manyToOneChildID(cohortParentID, transitionName string) string {
+	return fmt.Sprintf("%s-%s", cohortParentID, transitionName)
+}
+
 // ProceedResult contains the outcome of executing a manual inter-pair transition.
 type ProceedResult struct {
 	SourceTaskID   string
 	TransitionName string
 	ChildTaskIDs   []string
+	CohortTaskIDs  []string // populated for many-to-one transitions
 }
 
 // transitionDef defines a manual transition between role pairs.
@@ -120,6 +128,165 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 	return result, nil
 }
 
+// findManyToOneCohort finds all sibling tasks that form a many-to-one cohort
+// with the trigger task. Siblings share a parent_task and the same role_pair.
+// Returns the cohort members (as pointers into state.Tasks) and the shared parent ID.
+func findManyToOneCohort(s *models.State, triggerTask *models.Task) ([]*models.Task, string, error) {
+	parents := triggerTask.EffectiveParentTasks()
+	if len(parents) == 0 {
+		return nil, "", fmt.Errorf("trigger task %q has no parent_task — cannot determine many-to-one cohort", triggerTask.ID)
+	}
+	sharedParentID := parents[0]
+
+	var cohort []*models.Task
+	for i := range s.Tasks {
+		task := &s.Tasks[i]
+		if task.RolePair != triggerTask.RolePair {
+			continue
+		}
+		taskParents := task.EffectiveParentTasks()
+		if slices.Contains(taskParents, sharedParentID) {
+			cohort = append(cohort, task)
+		}
+	}
+
+	if len(cohort) == 0 {
+		return nil, "", fmt.Errorf("no cohort members found for trigger task %q", triggerTask.ID)
+	}
+
+	// Sort for deterministic ordering
+	slices.SortFunc(cohort, func(a, b *models.Task) int {
+		return strings.Compare(a.ID, b.ID)
+	})
+
+	return cohort, sharedParentID, nil
+}
+
+// buildManyToOneChild creates a single child task from N parent cohort members.
+// The child's ParentTasks lists all cohort member IDs. SpecRef is inherited
+// from the cohort (all members share the same spec_ref via the pipeline chain).
+func buildManyToOneChild(childID string, cohort []*models.Task, sharedParentID string, tDef transitionDef, inheritedDeps []string, now time.Time) models.Task {
+	parentIDs := make([]string, len(cohort))
+	for i, member := range cohort {
+		parentIDs[i] = member.ID
+	}
+
+	doerName := tDef.doerDisplayName
+	if doerName == "" {
+		doerName = tDef.targetRolePair
+	}
+
+	specRef := cohort[0].SpecRef
+
+	return models.Task{
+		ID:          childID,
+		Type:        tDef.taskType,
+		RolePair:    tDef.targetRolePair,
+		Description: fmt.Sprintf("%s task consolidating %d approved tasks from %s", doerName, len(cohort), sharedParentID),
+		Status:      tDef.targetStatus,
+		Priority:    cohort[0].Priority,
+		ParentTasks: parentIDs,
+		SpecRef:     paths.NormalizeSpecRef(specRef),
+		DoneWhen:    fmt.Sprintf("Complete %s work based on %d parent tasks from %s", doerName, len(cohort), sharedParentID),
+		Scope:       fmt.Sprintf("Consolidation of %d tasks from %s", len(cohort), sharedParentID),
+		DependsOn:   inheritedDeps,
+		Created:     now,
+		History:     []models.TaskHistoryEntry{},
+	}
+}
+
+// proceedManyToOneInner handles many-to-one transition logic. The trigger task
+// identifies the cohort (all siblings sharing a parent_task with the same role_pair).
+// The transition fires only when ALL cohort members are at the required status
+// (or MERGED, for the ExecuteAvailableTransitions path). Creates one child task
+// linked to all N cohort members and sets transitions_executed on all of them.
+func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef transitionDef, inheritedDeps []string, now time.Time, result *ProceedResult) error {
+	task := s.FindTask(taskID)
+	if task == nil {
+		return fmt.Errorf("task %q not found", taskID)
+	}
+
+	// Accept both the required status and MERGED (see Design Decision D3)
+	if task.Status != tDef.requiredStatus && task.Status != models.TaskStatusMerged {
+		return fmt.Errorf("task %q must be at %s (or MERGED) for many-to-one transition %q (current: %s)",
+			taskID, tDef.requiredStatus, transitionName, task.Status)
+	}
+
+	cohort, sharedParentID, err := findManyToOneCohort(s, task)
+	if err != nil {
+		return fmt.Errorf("many-to-one cohort detection failed: %w", err)
+	}
+
+	// Validate all cohort members are ready
+	for _, member := range cohort {
+		if member.Status != tDef.requiredStatus && member.Status != models.TaskStatusMerged {
+			return fmt.Errorf("many-to-one cohort incomplete: member %q is at %s (need %s or MERGED)",
+				member.ID, member.Status, tDef.requiredStatus)
+		}
+	}
+
+	childID := manyToOneChildID(sharedParentID, transitionName)
+
+	// Idempotency: check if any cohort member already has transition executed
+	anyExecuted := false
+	for _, member := range cohort {
+		if member.TransitionsExecuted[transitionName] {
+			anyExecuted = true
+			break
+		}
+	}
+
+	if anyExecuted {
+		// Crash recovery: check if child exists
+		if existing := s.FindTask(childID); existing != nil {
+			// Ensure all cohort members have transitions_executed set (repair partial)
+			for _, member := range cohort {
+				if member.TransitionsExecuted == nil {
+					member.TransitionsExecuted = make(map[string]bool)
+				}
+				member.TransitionsExecuted[transitionName] = true
+			}
+			patchInheritedDeps(existing, inheritedDeps)
+			return fmt.Errorf("%w: %q on cohort (parent %s)", errTransitionAlreadyExecuted, transitionName, sharedParentID)
+		}
+		// Child missing — fall through to create it (crash recovery)
+	}
+
+	// Set transitions_executed on ALL cohort members BEFORE child creation (crash recovery)
+	for _, member := range cohort {
+		if member.TransitionsExecuted == nil {
+			member.TransitionsExecuted = make(map[string]bool)
+		}
+		member.TransitionsExecuted[transitionName] = true
+	}
+
+	child := buildManyToOneChild(childID, cohort, sharedParentID, tDef, inheritedDeps, now)
+	s.Tasks = append(s.Tasks, child)
+	result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
+
+	// Populate CohortTaskIDs
+	cohortIDs := make([]string, len(cohort))
+	for i, member := range cohort {
+		cohortIDs[i] = member.ID
+	}
+	result.CohortTaskIDs = cohortIDs
+
+	// Record history on the trigger task
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventTransitionExecuted,
+		Extra: map[string]any{
+			"transition":    transitionName,
+			"cardinality":   "many-to-one",
+			"cohort_size":   len(cohort),
+			"cohort_parent": sharedParentID,
+			"children":      1,
+		},
+	})
+
+	return nil
+}
+
 // proceedInner is the core transition logic, operating on *models.State directly.
 // It has no blackboard dependency and no sprint status check, making it usable
 // both from Proceed (human-initiated, with sprint gate) and from
@@ -127,6 +294,9 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 //
 // The result.ChildTaskIDs slice is appended to with created child task IDs.
 func proceedInner(s *models.State, taskID, transitionName string, tDef transitionDef, inheritedDeps []string, now time.Time, result *ProceedResult) error {
+	if tDef.cardinality == "many-to-one" {
+		return proceedManyToOneInner(s, taskID, transitionName, tDef, inheritedDeps, now, result)
+	}
 	task := s.FindTask(taskID)
 	if task == nil {
 		return fmt.Errorf("task %q not found", taskID)
@@ -889,6 +1059,19 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 				return nil, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
 			}
 			inherited = append(inherited, childID)
+		case "many-to-one":
+			parents := depTask.EffectiveParentTasks()
+			if len(parents) == 0 {
+				continue
+			}
+			cohortParentID := parents[0]
+			childID := manyToOneChildID(cohortParentID, transitionName)
+			if s.FindTask(childID) == nil {
+				return nil, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
+			}
+			if !slices.Contains(inherited, childID) {
+				inherited = append(inherited, childID)
+			}
 		}
 	}
 	return inherited, nil

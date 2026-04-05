@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -811,6 +812,7 @@ func setupPhase2PipelineProceedTest(t *testing.T) (string, string) {
 // --- Proceed: one-to-one cardinality ---
 
 func TestProceed_OneToOne_CreatesSingleChild(t *testing.T) {
+	// us-to-coding is now many-to-one (CP1). Test single-member cohort creates one child.
 	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
@@ -818,16 +820,18 @@ func TestProceed_OneToOne_CreatesSingleChild(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
-	parentID := "us-task-1"
+	cohortParentID := "epic-plan-1"
+	taskID := "us-task-1"
 	reviewCommit := "abc123"
 	task := models.Task{
-		ID:           parentID,
+		ID:           taskID,
 		Type:         models.TaskTypeCoding,
 		RolePair:     "us-writing-pair",
 		Description:  "User authentication story",
 		Status:       models.TaskStatus("US_APPROVED"),
 		Priority:     1,
 		Created:      now,
+		ParentTasks:  []string{cohortParentID},
 		SpecRef:      "specs/auth.md",
 		DoneWhen:     "US approved",
 		Scope:        "auth module",
@@ -835,10 +839,10 @@ func TestProceed_OneToOne_CreatesSingleChild(t *testing.T) {
 		History:      []models.TaskHistoryEntry{},
 	}
 	state.Tasks = append(state.Tasks, task)
-	state.Sprint.Scope.Planned = []string{parentID}
+	state.Sprint.Scope.Planned = []string{taskID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := Proceed(tmpDir, parentID, "us-to-coding")
+	result, err := Proceed(tmpDir, taskID, "us-to-coding")
 	if err != nil {
 		t.Fatalf("Proceed() error: %v", err)
 	}
@@ -848,8 +852,8 @@ func TestProceed_OneToOne_CreatesSingleChild(t *testing.T) {
 		t.Fatalf("ChildTaskIDs count = %d, want 1", len(result.ChildTaskIDs))
 	}
 
-	// Child ID follows <parent>-<transition-name> pattern (no index)
-	expectedChildID := "us-task-1-us-to-coding"
+	// Child ID follows <cohort-parent>-<transition-name> pattern
+	expectedChildID := "epic-plan-1-us-to-coding"
 	if result.ChildTaskIDs[0] != expectedChildID {
 		t.Errorf("ChildTaskIDs[0] = %q, want %q", result.ChildTaskIDs[0], expectedChildID)
 	}
@@ -866,40 +870,33 @@ func TestProceed_OneToOne_CreatesSingleChild(t *testing.T) {
 		t.Fatal("Child task not found")
 	}
 
-	// Child has correct status (target pair's initial state)
-	if child.Status != models.TaskStatus("DRAFT_CODING_PLAN") {
-		t.Errorf("Child status = %v, want DRAFT_CODING_PLAN", child.Status)
+	// Child has correct status (architecture-pair initial)
+	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
+		t.Errorf("Child status = %v, want DRAFT_ARCHITECTURE", child.Status)
 	}
-	// Child has correct role_pair (target pair)
-	if child.RolePair != "code-planning-pair" {
-		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "code-planning-pair")
+	// Child has correct role_pair (architecture-pair)
+	if child.RolePair != "architecture-pair" {
+		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "architecture-pair")
 	}
 	// Child has parent_tasks set
-	if !slices.Contains(child.ParentTasks, parentID) {
-		t.Errorf("Child parent_tasks = %v, want to contain %q", child.ParentTasks, parentID)
+	if !slices.Contains(child.ParentTasks, taskID) {
+		t.Errorf("Child parent_tasks = %v, want to contain %q", child.ParentTasks, taskID)
 	}
-	// Child desc contains doer display name and parent description
-	if !strings.Contains(child.Description, "Code Planner") {
-		t.Errorf("Child desc = %q, want to contain 'Code Planner'", child.Description)
-	}
-	if !strings.Contains(child.Description, "User authentication story") {
-		t.Errorf("Child desc = %q, want to contain parent description", child.Description)
+	// Child desc contains doer display name
+	if !strings.Contains(child.Description, "Architect") {
+		t.Errorf("Child desc = %q, want to contain 'Architect'", child.Description)
 	}
 	// Child spec_ref is parent's spec_ref
 	if child.SpecRef != "specs/auth.md" {
 		t.Errorf("Child spec_ref = %q, want %q", child.SpecRef, "specs/auth.md")
 	}
-	// Child scope references parent
-	if !strings.Contains(child.Scope, parentID) {
-		t.Errorf("Child scope = %q, want to contain parent ID %q", child.Scope, parentID)
-	}
-	// Child type is planning (target is code-planning-pair)
-	if child.Type != models.TaskTypePlanning {
-		t.Errorf("Child type = %q, want %q", child.Type, models.TaskTypePlanning)
+	// Child type is architecture (target is architecture-pair)
+	if child.Type != models.TaskTypeArchitecture {
+		t.Errorf("Child type = %q, want %q", child.Type, models.TaskTypeArchitecture)
 	}
 
 	// Source task unchanged status, transitions_executed set
-	srcTask := readState.FindTask(parentID)
+	srcTask := readState.FindTask(taskID)
 	if srcTask.Status != models.TaskStatus("US_APPROVED") {
 		t.Errorf("Source status = %v, want US_APPROVED", srcTask.Status)
 	}
@@ -974,16 +971,18 @@ func TestProceed_OneToOne_CrashRecovery_ChildExists(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
-	parentID := "us-task-1"
+	cohortParentID := "epic-plan-1"
+	taskID := "us-task-1"
 	reviewCommit := "abc123"
 	parentTask := models.Task{
-		ID:                  parentID,
+		ID:                  taskID,
 		Type:                models.TaskTypeCoding,
 		RolePair:            "us-writing-pair",
 		Description:         "User authentication story",
 		Status:              models.TaskStatus("US_APPROVED"),
 		Priority:            1,
 		Created:             now,
+		ParentTasks:         []string{cohortParentID},
 		SpecRef:             "specs/auth.md",
 		DoneWhen:            "US approved",
 		Scope:               "auth module",
@@ -993,16 +992,16 @@ func TestProceed_OneToOne_CrashRecovery_ChildExists(t *testing.T) {
 	}
 
 	// Child already exists — transition was fully completed
-	childID := "us-task-1-us-to-coding"
+	childID := "epic-plan-1-us-to-coding"
 	child := models.Task{
 		ID:          childID,
-		Type:        models.TaskTypeCoding,
-		RolePair:    "code-planning-pair",
-		Description: "Code Planner task for: User authentication story",
-		Status:      models.TaskStatus("DRAFT_CODING_PLAN"),
+		Type:        models.TaskTypeArchitecture,
+		RolePair:    "architecture-pair",
+		Description: "Architect task consolidating 1 approved tasks from epic-plan-1",
+		Status:      models.TaskStatus("DRAFT_ARCHITECTURE"),
 		Priority:    1,
 		Created:     now,
-		ParentTasks: []string{parentID},
+		ParentTasks: []string{taskID},
 		SpecRef:     "specs/auth.md",
 		DoneWhen:    "done",
 		Scope:       "scope",
@@ -1010,12 +1009,12 @@ func TestProceed_OneToOne_CrashRecovery_ChildExists(t *testing.T) {
 	}
 
 	state.Tasks = append(state.Tasks, parentTask, child)
-	state.Sprint.Scope.Planned = []string{parentID}
+	state.Sprint.Scope.Planned = []string{taskID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := Proceed(tmpDir, parentID, "us-to-coding")
+	_, err := Proceed(tmpDir, taskID, "us-to-coding")
 	if err == nil {
-		t.Fatal("Expected error for repeated one-to-one transition")
+		t.Fatal("Expected error for repeated many-to-one transition")
 	}
 	if !strings.Contains(err.Error(), "already executed") {
 		t.Errorf("Error = %q, want to contain 'already executed'", err.Error())
@@ -1023,6 +1022,7 @@ func TestProceed_OneToOne_CrashRecovery_ChildExists(t *testing.T) {
 }
 
 func TestProceed_OneToOne_CrashRecovery_ChildMissing(t *testing.T) {
+	// us-to-coding is now many-to-one. Test crash recovery: transition marked, child missing.
 	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
@@ -1030,16 +1030,18 @@ func TestProceed_OneToOne_CrashRecovery_ChildMissing(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
-	parentID := "us-task-1"
+	cohortParentID := "epic-plan-1"
+	taskID := "us-task-1"
 	reviewCommit := "abc123"
 	parentTask := models.Task{
-		ID:                  parentID,
+		ID:                  taskID,
 		Type:                models.TaskTypeCoding,
 		RolePair:            "us-writing-pair",
 		Description:         "User authentication story",
 		Status:              models.TaskStatus("US_APPROVED"),
 		Priority:            1,
 		Created:             now,
+		ParentTasks:         []string{cohortParentID},
 		SpecRef:             "specs/auth.md",
 		DoneWhen:            "US approved",
 		Scope:               "auth module",
@@ -1050,10 +1052,10 @@ func TestProceed_OneToOne_CrashRecovery_ChildMissing(t *testing.T) {
 
 	// Crash scenario: transition marked but child NOT created
 	state.Tasks = append(state.Tasks, parentTask)
-	state.Sprint.Scope.Planned = []string{parentID}
+	state.Sprint.Scope.Planned = []string{taskID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := Proceed(tmpDir, parentID, "us-to-coding")
+	result, err := Proceed(tmpDir, taskID, "us-to-coding")
 	if err != nil {
 		t.Fatalf("Proceed() error (crash recovery): %v", err)
 	}
@@ -1062,7 +1064,7 @@ func TestProceed_OneToOne_CrashRecovery_ChildMissing(t *testing.T) {
 	if len(result.ChildTaskIDs) != 1 {
 		t.Fatalf("ChildTaskIDs count = %d, want 1", len(result.ChildTaskIDs))
 	}
-	expectedChildID := "us-task-1-us-to-coding"
+	expectedChildID := "epic-plan-1-us-to-coding"
 	if result.ChildTaskIDs[0] != expectedChildID {
 		t.Errorf("ChildTaskIDs[0] = %q, want %q", result.ChildTaskIDs[0], expectedChildID)
 	}
@@ -1197,6 +1199,7 @@ func TestAvailableManualTransitions_PipelineExcludesExecuted(t *testing.T) {
 // --- ExecuteAvailableTransitions tests ---
 
 func TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks(t *testing.T) {
+	// us-to-coding is now many-to-one. Test EAT with single-member cohort.
 	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
@@ -1204,17 +1207,19 @@ func TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks(t *testing.T)
 	state.Sprint.Status = models.SprintStatusInProgress
 
 	now := time.Now().UTC()
-	parentID := "us-task-1"
+	cohortParentID := "epic-plan-1"
+	taskID := "us-task-1"
 	reviewCommit := "abc123"
 	mergeCommit := "def456"
 	task := models.Task{
-		ID:           parentID,
+		ID:           taskID,
 		Type:         models.TaskTypeCoding,
 		RolePair:     "us-writing-pair",
 		Description:  "User authentication story",
 		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
+		ParentTasks:  []string{cohortParentID},
 		SpecRef:      "specs/auth.md",
 		DoneWhen:     "US approved",
 		Scope:        "auth module",
@@ -1223,7 +1228,7 @@ func TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks(t *testing.T)
 		History:      []models.TaskHistoryEntry{},
 	}
 	state.Tasks = append(state.Tasks, task)
-	state.Sprint.Scope.Planned = []string{parentID}
+	state.Sprint.Scope.Planned = []string{taskID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
@@ -1234,8 +1239,8 @@ func TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks(t *testing.T)
 	if len(results) != 1 {
 		t.Fatalf("results count = %d, want 1", len(results))
 	}
-	if results[0].SourceTaskID != parentID {
-		t.Errorf("SourceTaskID = %q, want %q", results[0].SourceTaskID, parentID)
+	if results[0].SourceTaskID != taskID {
+		t.Errorf("SourceTaskID = %q, want %q", results[0].SourceTaskID, taskID)
 	}
 	if results[0].TransitionName != "us-to-coding" {
 		t.Errorf("TransitionName = %q, want %q", results[0].TransitionName, "us-to-coding")
@@ -1256,27 +1261,20 @@ func TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks(t *testing.T)
 	if child == nil {
 		t.Fatal("Child task not found in state.Tasks")
 	}
-	if child.RolePair != "code-planning-pair" {
-		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "code-planning-pair")
+	if child.RolePair != "architecture-pair" {
+		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "architecture-pair")
 	}
-	if child.Status != models.TaskStatus("DRAFT_CODING_PLAN") {
-		t.Errorf("Child status = %v, want DRAFT_CODING_PLAN", child.Status)
+	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
+		t.Errorf("Child status = %v, want DRAFT_ARCHITECTURE", child.Status)
 	}
 
 	// Children MUST be in Sprint.Scope.Planned
-	found := false
-	for _, id := range readState.Sprint.Scope.Planned {
-		if id == childID {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(readState.Sprint.Scope.Planned, childID) {
 		t.Errorf("Child %q should be in Sprint.Scope.Planned", childID)
 	}
 
 	// Source task should have transition marked
-	srcTask := readState.FindTask(parentID)
+	srcTask := readState.FindTask(taskID)
 	if !srcTask.TransitionsExecuted["us-to-coding"] {
 		t.Error("transitions_executed should contain us-to-coding")
 	}
@@ -1459,17 +1457,19 @@ func TestExecuteAvailableTransitions_NoSprintGate(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusInProgress // NOT COMPLETED
 
 	now := time.Now().UTC()
-	parentID := "us-task-1"
+	cohortParentID := "epic-plan-1"
+	taskID := "us-task-1"
 	reviewCommit := "abc123"
 	mergeCommit := "def456"
 	task := models.Task{
-		ID:           parentID,
+		ID:           taskID,
 		Type:         models.TaskTypeCoding,
 		RolePair:     "us-writing-pair",
 		Description:  "User authentication story",
 		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
+		ParentTasks:  []string{cohortParentID},
 		SpecRef:      "specs/auth.md",
 		DoneWhen:     "US approved",
 		Scope:        "auth module",
@@ -1478,7 +1478,7 @@ func TestExecuteAvailableTransitions_NoSprintGate(t *testing.T) {
 		History:      []models.TaskHistoryEntry{},
 	}
 	state.Tasks = append(state.Tasks, task)
-	state.Sprint.Scope.Planned = []string{parentID}
+	state.Sprint.Scope.Planned = []string{taskID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// Should succeed even though sprint is IN_PROGRESS (not COMPLETED)
@@ -1890,6 +1890,9 @@ func TestProceed_ChildTasksGetPlanRefFromOutputEntry(t *testing.T) {
 }
 
 func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
+	// us-to-coding is now many-to-one (CP1). Many-to-one creates architecture
+	// tasks which don't inherit PlanRef — they produce arch_ref instead.
+	// This test verifies the child is created correctly.
 	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
@@ -1897,16 +1900,18 @@ func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
 	state.Sprint.Status = models.SprintStatusCompleted
 
 	now := time.Now().UTC()
-	parentID := "us-planref-1"
+	cohortParentID := "epic-plan-1"
+	taskID := "us-planref-1"
 	reviewCommit := "abc123"
 	task := models.Task{
-		ID:           parentID,
+		ID:           taskID,
 		Type:         models.TaskTypeCoding,
 		RolePair:     "us-writing-pair",
 		Description:  "US with plan_ref",
 		Status:       models.TaskStatus("US_APPROVED"),
 		Priority:     1,
 		Created:      now,
+		ParentTasks:  []string{cohortParentID},
 		SpecRef:      "specs/auth-epic.md",
 		PlanRef:      "specs/auth-epic.md",
 		DoneWhen:     "US approved",
@@ -1915,10 +1920,10 @@ func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
 		History:      []models.TaskHistoryEntry{},
 	}
 	state.Tasks = append(state.Tasks, task)
-	state.Sprint.Scope.Planned = []string{parentID}
+	state.Sprint.Scope.Planned = []string{taskID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := Proceed(tmpDir, parentID, "us-to-coding")
+	result, err := Proceed(tmpDir, taskID, "us-to-coding")
 	if err != nil {
 		t.Fatalf("Proceed() error: %v", err)
 	}
@@ -1933,8 +1938,13 @@ func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
 	if child == nil {
 		t.Fatal("Child task not found")
 	}
-	if child.PlanRef != "specs/auth-epic.md" {
-		t.Errorf("Child plan_ref = %q, want %q", child.PlanRef, "specs/auth-epic.md")
+	// Many-to-one child (architecture task) does not inherit PlanRef
+	if child.PlanRef != "" {
+		t.Errorf("Child plan_ref = %q, want empty (many-to-one architecture tasks don't inherit PlanRef)", child.PlanRef)
+	}
+	// But does inherit SpecRef
+	if child.SpecRef != "specs/auth-epic.md" {
+		t.Errorf("Child spec_ref = %q, want %q", child.SpecRef, "specs/auth-epic.md")
 	}
 }
 
@@ -3078,5 +3088,345 @@ func TestExecuteAvailableTransitions_NoBaseCommitOverwrite(t *testing.T) {
 	}
 	if *readState.Goal.BaseCommit != existingSHA {
 		t.Errorf("goal.BaseCommit = %q, want %q (should not be overwritten)", *readState.Goal.BaseCommit, existingSHA)
+	}
+}
+
+// --- Many-to-one transition tests ---
+
+// makeManyToOneCohort creates N sibling tasks sharing a parent_task with the same role_pair.
+func makeManyToOneCohort(parentID, rolePair string, status models.TaskStatus, specRef string, n int) []models.Task {
+	tasks := make([]models.Task, n)
+	for i := range n {
+		rc := "abc123"
+		tasks[i] = models.Task{
+			ID:           fmt.Sprintf("%s-us-%d", parentID, i),
+			Type:         models.TaskTypeCoding,
+			RolePair:     rolePair,
+			Description:  fmt.Sprintf("User story %d", i),
+			Status:       status,
+			Priority:     1,
+			ParentTasks:  []string{parentID},
+			SpecRef:      specRef,
+			DoneWhen:     "US approved",
+			Scope:        "auth module",
+			ReviewCommit: &rc,
+			Created:      time.Now().UTC(),
+			History:      []models.TaskHistoryEntry{},
+		}
+	}
+	return tasks
+}
+
+func TestProceedManyToOne_HappyPath(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	parentID := "epic-plan-1"
+	cohort := makeManyToOneCohort(parentID, "us-writing-pair", models.TaskStatusMerged, "specs/goal.md", 3)
+	for _, task := range cohort {
+		state.Tasks = append(state.Tasks, task)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, cohort[0].ID, "us-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	// Should create exactly one child
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1", len(result.ChildTaskIDs))
+	}
+
+	// Deterministic child ID: <parent>-<transition>
+	expectedChildID := "epic-plan-1-us-to-coding"
+	if result.ChildTaskIDs[0] != expectedChildID {
+		t.Errorf("ChildTaskIDs[0] = %q, want %q", result.ChildTaskIDs[0], expectedChildID)
+	}
+
+	// CohortTaskIDs contains all 3 sibling IDs
+	if len(result.CohortTaskIDs) != 3 {
+		t.Fatalf("CohortTaskIDs count = %d, want 3", len(result.CohortTaskIDs))
+	}
+
+	// Verify persisted state
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child := readState.FindTask(expectedChildID)
+	if child == nil {
+		t.Fatal("Child task not found")
+	}
+
+	// Child has ParentTasks containing all cohort member IDs
+	if len(child.ParentTasks) != 3 {
+		t.Fatalf("Child ParentTasks count = %d, want 3", len(child.ParentTasks))
+	}
+	for _, c := range cohort {
+		if !slices.Contains(child.ParentTasks, c.ID) {
+			t.Errorf("Child ParentTasks = %v, want to contain %q", child.ParentTasks, c.ID)
+		}
+	}
+
+	// Child has correct status (DRAFT_ARCHITECTURE)
+	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
+		t.Errorf("Child status = %v, want DRAFT_ARCHITECTURE", child.Status)
+	}
+
+	// Child has correct role_pair
+	if child.RolePair != "architecture-pair" {
+		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "architecture-pair")
+	}
+
+	// Child has correct task type
+	if child.Type != models.TaskTypeArchitecture {
+		t.Errorf("Child type = %q, want %q", child.Type, models.TaskTypeArchitecture)
+	}
+
+	// Child inherits spec_ref
+	if child.SpecRef != "specs/goal.md" {
+		t.Errorf("Child spec_ref = %q, want %q", child.SpecRef, "specs/goal.md")
+	}
+
+	// Child description contains doer display name
+	if !strings.Contains(child.Description, "Architect") {
+		t.Errorf("Child desc = %q, want to contain 'Architect'", child.Description)
+	}
+
+	// transitions_executed set on ALL cohort members
+	for _, c := range cohort {
+		srcTask := readState.FindTask(c.ID)
+		if !srcTask.TransitionsExecuted["us-to-coding"] {
+			t.Errorf("Task %s: transitions_executed should contain us-to-coding", c.ID)
+		}
+	}
+}
+
+func TestProceedManyToOne_CohortIncomplete(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	parentID := "epic-plan-1"
+	// 2 MERGED, 1 still in progress
+	cohort := makeManyToOneCohort(parentID, "us-writing-pair", models.TaskStatusMerged, "specs/goal.md", 3)
+	cohort[2].Status = models.TaskStatus("WRITING_US")
+	cohort[2].ReviewCommit = nil
+	for _, task := range cohort {
+		state.Tasks = append(state.Tasks, task)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, cohort[0].ID, "us-to-coding")
+	if err == nil {
+		t.Fatal("Proceed() should fail with incomplete cohort")
+	}
+	if !strings.Contains(err.Error(), "cohort incomplete") {
+		t.Errorf("error = %q, want to contain 'cohort incomplete'", err.Error())
+	}
+}
+
+func TestProceedManyToOne_MixedMergedAndApproved(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	parentID := "epic-plan-1"
+	// 2 MERGED, 1 US_APPROVED — all should be accepted
+	cohort := makeManyToOneCohort(parentID, "us-writing-pair", models.TaskStatusMerged, "specs/goal.md", 3)
+	cohort[1].Status = models.TaskStatus("US_APPROVED")
+	for _, task := range cohort {
+		state.Tasks = append(state.Tasks, task)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, cohort[0].ID, "us-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1", len(result.ChildTaskIDs))
+	}
+}
+
+func TestProceedManyToOne_Idempotent(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	parentID := "epic-plan-1"
+	cohort := makeManyToOneCohort(parentID, "us-writing-pair", models.TaskStatusMerged, "specs/goal.md", 3)
+	for _, task := range cohort {
+		state.Tasks = append(state.Tasks, task)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// First execution
+	_, err := Proceed(tmpDir, cohort[0].ID, "us-to-coding")
+	if err != nil {
+		t.Fatalf("First Proceed() error: %v", err)
+	}
+
+	// Second execution — should return errTransitionAlreadyExecuted
+	_, err = Proceed(tmpDir, cohort[0].ID, "us-to-coding")
+	if err == nil {
+		t.Fatal("Second Proceed() should return error")
+	}
+	if !strings.Contains(err.Error(), "transition already executed") {
+		t.Errorf("error = %q, want to contain 'transition already executed'", err.Error())
+	}
+}
+
+func TestProceedManyToOne_NoCohortParent(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	// Task with no parent
+	rc := "abc123"
+	task := models.Task{
+		ID:           "orphan-us",
+		Type:         models.TaskTypeCoding,
+		RolePair:     "us-writing-pair",
+		Description:  "Orphan US",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		SpecRef:      "specs/goal.md",
+		DoneWhen:     "done",
+		Scope:        "scope",
+		ReviewCommit: &rc,
+		Created:      time.Now().UTC(),
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, "orphan-us", "us-to-coding")
+	if err == nil {
+		t.Fatal("Proceed() should fail for task with no parent")
+	}
+	if !strings.Contains(err.Error(), "no parent_task") {
+		t.Errorf("error = %q, want to contain 'no parent_task'", err.Error())
+	}
+}
+
+func TestProceedManyToOne_SpecRefInheritance(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	parentID := "epic-plan-1"
+	specRef := "specs/goals/20260405-architecture-step.md"
+	cohort := makeManyToOneCohort(parentID, "us-writing-pair", models.TaskStatusMerged, specRef, 2)
+	for _, task := range cohort {
+		state.Tasks = append(state.Tasks, task)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, cohort[0].ID, "us-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child := readState.FindTask(result.ChildTaskIDs[0])
+	if child == nil {
+		t.Fatal("Child task not found")
+	}
+	if child.SpecRef != specRef {
+		t.Errorf("Child spec_ref = %q, want %q", child.SpecRef, specRef)
+	}
+}
+
+func TestComputeInheritedDeps_ManyToOne(t *testing.T) {
+	tmpDir, _ := setupPhase2PipelineProceedTest(t)
+
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+
+	parentID := "epic-plan-1"
+	childID := manyToOneChildID(parentID, "us-to-coding")
+
+	// Create state with cohort members that have executed the transition
+	// and the resulting child task
+	state := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:          "us-1",
+				RolePair:    "us-writing-pair",
+				ParentTasks: []string{parentID},
+				TransitionsExecuted: map[string]bool{
+					"us-to-coding": true,
+				},
+			},
+			{
+				ID:          "us-2",
+				RolePair:    "us-writing-pair",
+				ParentTasks: []string{parentID},
+				TransitionsExecuted: map[string]bool{
+					"us-to-coding": true,
+				},
+			},
+			{
+				ID:       childID,
+				RolePair: "architecture-pair",
+			},
+			// Downstream task that depends on both us-1 and us-2
+			{
+				ID:        "downstream-task",
+				DependsOn: []string{"us-1", "us-2"},
+			},
+		},
+	}
+
+	downstreamTask := state.FindTask("downstream-task")
+	inherited, err := computeInheritedDeps(state, downstreamTask, "us-to-coding", resolver)
+	if err != nil {
+		t.Fatalf("computeInheritedDeps: %v", err)
+	}
+
+	// Both us-1 and us-2 are in the same cohort, so they produce the same child ID
+	// Dedup should result in only one inherited dep
+	if len(inherited) != 1 {
+		t.Fatalf("inherited deps count = %d, want 1 (dedup same cohort child)", len(inherited))
+	}
+	if inherited[0] != childID {
+		t.Errorf("inherited[0] = %q, want %q", inherited[0], childID)
 	}
 }
