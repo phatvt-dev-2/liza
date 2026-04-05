@@ -193,6 +193,7 @@ type Task struct {
 	Iteration           int                `yaml:"iteration,omitempty"`
 	Output              []OutputEntry      `yaml:"output,omitempty"`
 	ParentTask          *string            `yaml:"parent_task,omitempty"`
+	ParentTasks         []string           `yaml:"parent_tasks,omitempty"`
 	TransitionsExecuted map[string]bool    `yaml:"transitions_executed,omitempty"`
 	Exit42RestartCount  int                `yaml:"exit42_restart_count,omitempty"`
 	ReviewCyclesCurrent int                `yaml:"review_cycles_current,omitempty"`
@@ -224,6 +225,20 @@ type Task struct {
 	Created             time.Time          `yaml:"created"`
 	History             []TaskHistoryEntry `yaml:"history"`
 	Extra               map[string]any     `yaml:",inline"`
+}
+
+// EffectiveParentTasks returns the list of parent task IDs.
+// Returns ParentTasks if non-empty. Otherwise, wraps ParentTask
+// into a single-element slice for backward compatibility.
+// Returns nil if the task has no parents.
+func (t *Task) EffectiveParentTasks() []string {
+	if len(t.ParentTasks) > 0 {
+		return t.ParentTasks
+	}
+	if t.ParentTask != nil && *t.ParentTask != "" {
+		return []string{*t.ParentTask}
+	}
+	return nil
 }
 
 // OutputEntry represents a structured subtask definition produced by a doer role.

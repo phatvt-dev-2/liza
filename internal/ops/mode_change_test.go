@@ -415,7 +415,7 @@ func TestResume_FromCompleted_AdvancesSprint(t *testing.T) {
 		Status:      models.TaskStatusDraft,
 		Priority:    1,
 		Created:     now,
-		ParentTask:  &parentID,
+		ParentTasks: []string{parentID},
 		History:     []models.TaskHistoryEntry{},
 	}
 	state.Tasks = append(state.Tasks, parentTask, childTask)

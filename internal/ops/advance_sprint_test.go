@@ -3,6 +3,7 @@ package ops
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -529,7 +530,7 @@ func TestResumeWithSprintAdvance_ExecutesTransitions(t *testing.T) {
 	// Children should be in the new sprint's planned scope
 	childCount := 0
 	for _, task := range readState.Tasks {
-		if task.ParentTask != nil && *task.ParentTask == "epic-planning-1" {
+		if slices.Contains(task.EffectiveParentTasks(), "epic-planning-1") {
 			childCount++
 		}
 	}

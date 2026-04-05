@@ -239,9 +239,11 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			}
 		}
 
-		// parent_task must reference an existing task
-		if task.ParentTask != nil && !taskIDs[*task.ParentTask] {
-			return fmt.Errorf("task %s has parent_task referencing non-existent task '%s'", task.ID, *task.ParentTask)
+		// parent_task / parent_tasks must reference existing tasks
+		for _, parentID := range task.EffectiveParentTasks() {
+			if !taskIDs[parentID] {
+				return fmt.Errorf("task %s has parent_task referencing non-existent task '%s'", task.ID, parentID)
+			}
 		}
 
 		if err := validateTaskOutput(&task); err != nil {

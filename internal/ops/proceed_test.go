@@ -98,8 +98,8 @@ func TestProceed_CreatesChildTasks(t *testing.T) {
 	if child0.Status != models.TaskStatus("DRAFT_CODE") {
 		t.Errorf("Child 0 status = %v, want DRAFT_CODE", child0.Status)
 	}
-	if child0.ParentTask == nil || *child0.ParentTask != parentID {
-		t.Errorf("Child 0 parent_task = %v, want %q", child0.ParentTask, parentID)
+	if !slices.Contains(child0.ParentTasks, parentID) {
+		t.Errorf("Child 0 parent_tasks = %v, want to contain %q", child0.ParentTasks, parentID)
 	}
 	if child0.Description != "Implement login" {
 		t.Errorf("Child 0 desc = %q, want %q", child0.Description, "Implement login")
@@ -122,8 +122,8 @@ func TestProceed_CreatesChildTasks(t *testing.T) {
 	if child1.Status != models.TaskStatus("DRAFT_CODE") {
 		t.Errorf("Child 1 status = %v, want DRAFT_CODE", child1.Status)
 	}
-	if child1.ParentTask == nil || *child1.ParentTask != parentID {
-		t.Errorf("Child 1 parent_task = %v, want %q", child1.ParentTask, parentID)
+	if !slices.Contains(child1.ParentTasks, parentID) {
+		t.Errorf("Child 1 parent_tasks = %v, want to contain %q", child1.ParentTasks, parentID)
 	}
 }
 
@@ -166,7 +166,7 @@ func TestProceed_RejectsRepeatedTransition(t *testing.T) {
 		Status:      models.TaskStatus("DRAFT_CODE"),
 		Priority:    1,
 		Created:     now,
-		ParentTask:  &parentID,
+		ParentTasks: []string{parentID},
 		SpecRef:     "README.md",
 		DoneWhen:    "Done",
 		Scope:       "s",
@@ -404,7 +404,7 @@ func TestProceed_CrashRecovery_CreatesMissingChildren(t *testing.T) {
 		Status:      models.TaskStatus("DRAFT_CODE"),
 		Priority:    1,
 		Created:     now,
-		ParentTask:  &parentID,
+		ParentTasks: []string{parentID},
 		SpecRef:     "README.md",
 		DoneWhen:    "Done 0",
 		Scope:       "s0",
@@ -482,7 +482,7 @@ func TestProceed_CrashRecovery_AllChildrenExist(t *testing.T) {
 		Status:      models.TaskStatus("DRAFT_CODE"),
 		Priority:    1,
 		Created:     now,
-		ParentTask:  &parentID,
+		ParentTasks: []string{parentID},
 		SpecRef:     "README.md",
 		DoneWhen:    "Done 0",
 		Scope:       "s0",
@@ -622,8 +622,8 @@ func TestProceed_PipelineCreatesChildTasksWithRolePair(t *testing.T) {
 	if child0.RolePair != "coding-pair" {
 		t.Errorf("Child 0 role_pair = %q, want %q", child0.RolePair, "coding-pair")
 	}
-	if child0.ParentTask == nil || *child0.ParentTask != parentID {
-		t.Errorf("Child 0 parent_task = %v, want %q", child0.ParentTask, parentID)
+	if !slices.Contains(child0.ParentTasks, parentID) {
+		t.Errorf("Child 0 parent_tasks = %v, want to contain %q", child0.ParentTasks, parentID)
 	}
 	if child0.Description != "Implement login" {
 		t.Errorf("Child 0 desc = %q, want %q", child0.Description, "Implement login")
@@ -643,8 +643,8 @@ func TestProceed_PipelineCreatesChildTasksWithRolePair(t *testing.T) {
 	if child1.RolePair != "coding-pair" {
 		t.Errorf("Child 1 role_pair = %q, want %q", child1.RolePair, "coding-pair")
 	}
-	if child1.ParentTask == nil || *child1.ParentTask != parentID {
-		t.Errorf("Child 1 parent_task = %v, want %q", child1.ParentTask, parentID)
+	if !slices.Contains(child1.ParentTasks, parentID) {
+		t.Errorf("Child 1 parent_tasks = %v, want to contain %q", child1.ParentTasks, parentID)
 	}
 
 	// Source task status should be unchanged
@@ -874,9 +874,9 @@ func TestProceed_OneToOne_CreatesSingleChild(t *testing.T) {
 	if child.RolePair != "code-planning-pair" {
 		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "code-planning-pair")
 	}
-	// Child has parent_task set
-	if child.ParentTask == nil || *child.ParentTask != parentID {
-		t.Errorf("Child parent_task = %v, want %q", child.ParentTask, parentID)
+	// Child has parent_tasks set
+	if !slices.Contains(child.ParentTasks, parentID) {
+		t.Errorf("Child parent_tasks = %v, want to contain %q", child.ParentTasks, parentID)
 	}
 	// Child desc contains doer display name and parent description
 	if !strings.Contains(child.Description, "Code Planner") {
@@ -1002,7 +1002,7 @@ func TestProceed_OneToOne_CrashRecovery_ChildExists(t *testing.T) {
 		Status:      models.TaskStatus("DRAFT_CODING_PLAN"),
 		Priority:    1,
 		Created:     now,
-		ParentTask:  &parentID,
+		ParentTasks: []string{parentID},
 		SpecRef:     "specs/auth.md",
 		DoneWhen:    "done",
 		Scope:       "scope",
@@ -1431,7 +1431,7 @@ func TestExecuteAvailableTransitions_Idempotent(t *testing.T) {
 		Status:      models.TaskStatus("DRAFT_CODING_PLAN"),
 		Priority:    1,
 		Created:     now,
-		ParentTask:  &parentID,
+		ParentTasks: []string{parentID},
 		SpecRef:     "specs/auth.md",
 		DoneWhen:    "done",
 		Scope:       "scope",

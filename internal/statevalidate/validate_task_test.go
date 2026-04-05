@@ -335,11 +335,22 @@ func TestValidateTaskInvariants_RejectsBrokenReferencesAndOutput(t *testing.T) {
 			wantErr: "task task-1 has duplicate agent IDs in failed_by",
 		},
 		{
-			name: "parent task must exist",
+			name: "legacy parent task must exist",
 			tasks: []models.Task{
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
 					task.ParentTask = testhelpers.StringPtr("missing-parent")
+					return task
+				}(),
+			},
+			wantErr: "task task-1 has parent_task referencing non-existent task 'missing-parent'",
+		},
+		{
+			name: "parent_tasks must reference existing tasks",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+					task.ParentTasks = []string{"missing-parent"}
 					return task
 				}(),
 			},
@@ -390,12 +401,23 @@ func TestValidateTaskInvariants_RejectsBrokenReferencesAndOutput(t *testing.T) {
 			wantErr: "task task-1 output[0] missing spec_ref",
 		},
 		{
-			name: "valid parent reference passes",
+			name: "valid legacy parent reference passes",
 			tasks: []models.Task{
 				testhelpers.BuildTaskByStatus("parent", models.TaskStatusMerged, time.Now().UTC()),
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("child", models.TaskStatusMerged, time.Now().UTC())
 					task.ParentTask = testhelpers.StringPtr("parent")
+					return task
+				}(),
+			},
+		},
+		{
+			name: "valid parent_tasks reference passes",
+			tasks: []models.Task{
+				testhelpers.BuildTaskByStatus("parent", models.TaskStatusMerged, time.Now().UTC()),
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("child", models.TaskStatusMerged, time.Now().UTC())
+					task.ParentTasks = []string{"parent"}
 					return task
 				}(),
 			},

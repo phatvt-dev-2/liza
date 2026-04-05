@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/commands"
@@ -513,8 +514,8 @@ func TestIntegrationPipelineWithFindings(t *testing.T) {
 		if child.Status != "DRAFT_CODE" {
 			t.Errorf("Child %s: expected DRAFT_CODE, got %s", childID, child.Status)
 		}
-		if child.ParentTask == nil || *child.ParentTask != taskID {
-			t.Errorf("Child %s: expected parent_task %s", childID, taskID)
+		if !slices.Contains(child.ParentTasks, taskID) {
+			t.Errorf("Child %s: expected parent_tasks to contain %s, got %v", childID, taskID, child.ParentTasks)
 		}
 	}
 

@@ -1854,3 +1854,56 @@ func TestGoalBaseCommitYAMLRoundTrip(t *testing.T) {
 		}
 	})
 }
+
+func TestEffectiveParentTasks(t *testing.T) {
+	parentID := "parent-1"
+	parentID2 := "parent-2"
+
+	tests := []struct {
+		name string
+		task Task
+		want []string
+	}{
+		{
+			name: "no parents returns nil",
+			task: Task{ID: "t1"},
+			want: nil,
+		},
+		{
+			name: "legacy ParentTask returns single-element slice",
+			task: Task{ID: "t1", ParentTask: &parentID},
+			want: []string{"parent-1"},
+		},
+		{
+			name: "ParentTasks returns ParentTasks",
+			task: Task{ID: "t1", ParentTasks: []string{"parent-1", "parent-2"}},
+			want: []string{"parent-1", "parent-2"},
+		},
+		{
+			name: "both set returns ParentTasks (precedence)",
+			task: Task{ID: "t1", ParentTask: &parentID2, ParentTasks: []string{"parent-1"}},
+			want: []string{"parent-1"},
+		},
+		{
+			name: "empty ParentTask string returns nil",
+			task: func() Task {
+				empty := ""
+				return Task{ID: "t1", ParentTask: &empty}
+			}(),
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.task.EffectiveParentTasks()
+			if len(got) != len(tt.want) {
+				t.Fatalf("EffectiveParentTasks() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("EffectiveParentTasks()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
