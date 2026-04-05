@@ -311,6 +311,341 @@ func TestTaskDependencyWorkflow(t *testing.T) {
 	t.Log("✓ Task dependency workflow test passed")
 }
 
+// TestIntegrationPipelineWithFindings tests the integration sub-pipeline when
+// the analyst produces findings: init -> add integration task -> analyst claims ->
+// sets output -> submits -> reviewer approves -> auto-transition creates fix tasks.
+func TestIntegrationPipelineWithFindings(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
+	projectDir, cleanup := setupTestProject(t)
+	defer cleanup()
+
+	// Step 1: Initialize project
+	t.Log("Step 1: Initialize project")
+	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
+
+	if err := commands.InitCommand("Integration test goal", "specs/feature.md", nil); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+
+	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
+	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
+	bb := db.New(statePath)
+
+	// Step 2: Add an integration-pair task
+	t.Log("Step 2: Add integration-pair task")
+	taskID := "integ-1"
+	taskInput := &commands.TaskInput{
+		ID:          taskID,
+		Type:        "integration",
+		RolePair:    "integration-pair",
+		Description: "Integration analysis for branch",
+		DoneWhen:    "All integration issues identified",
+		Scope:       "Full branch diff",
+		Priority:    1,
+		SpecRef:     "specs/feature.md",
+		DependsOn:   []string{},
+	}
+	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "orchestrator-1"); err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+
+	// Verify task was added with correct type and role-pair
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task := findTask(state.Tasks, taskID)
+	if task == nil {
+		t.Fatal("Integration task not found")
+	}
+	if task.RolePair != "integration-pair" {
+		t.Errorf("Expected role_pair integration-pair, got %s", task.RolePair)
+	}
+	if task.Type != models.TaskTypeIntegration {
+		t.Errorf("Expected type integration, got %s", task.Type)
+	}
+
+	// Step 3: Register integration-analyst and claim
+	t.Log("Step 3: Register integration-analyst and claim")
+	analystID := "integration-analyst-1"
+	testhelpers.RegisterTestAgent(t, bb, analystID, "integration-analyst")
+
+	if err := commands.ClaimTaskCommand(projectDir, taskID, analystID); err != nil {
+		t.Fatalf("ClaimTask failed: %v", err)
+	}
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task = findTask(state.Tasks, taskID)
+	if task.Status != "ANALYZING_INTEGRATION" {
+		t.Errorf("Expected ANALYZING_INTEGRATION, got %s", task.Status)
+	}
+	if task.Worktree == nil {
+		t.Fatal("Expected worktree to be set after claim")
+	}
+
+	// Step 4: Set output (findings) and submit for review
+	t.Log("Step 4: Set output and submit for review")
+	if err := ops.SetTaskOutput(projectDir, &ops.SetTaskOutputInput{
+		TaskID:  taskID,
+		AgentID: analystID,
+		Output: []models.OutputEntry{
+			{
+				Desc:     "Fix type alignment in handler.go",
+				DoneWhen: "Types match across handler and service layer",
+				Scope:    "internal/handler.go",
+				SpecRef:  "specs/feature.md",
+			},
+			{
+				Desc:     "Add missing serialization tag",
+				DoneWhen: "JSON tag present on Response.Status field",
+				Scope:    "internal/models/response.go",
+				SpecRef:  "specs/feature.md",
+			},
+		},
+	}); err != nil {
+		t.Fatalf("SetTaskOutput failed: %v", err)
+	}
+
+	// Write checkpoint (required before submission).
+	// Integration analyst doesn't modify code files but checkpoint requires at least one entry.
+	// Checkpoint doesn't validate file existence — it records intent, not actuality.
+	// TODO: WriteCheckpoint's files_to_modify requirement assumes coding tasks;
+	// integration/planning tasks that produce findings rather than code changes
+	// shouldn't need this field. Consider relaxing for non-coding task types.
+	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
+		TaskID: taskID, AgentID: analystID,
+		Intent: "Integration analysis", ValidationPlan: "Review findings",
+		FilesToModify: []string{"integration-analysis.md"},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint failed: %v", err)
+	}
+
+	// Get worktree HEAD for submit (analyst doesn't commit new code)
+	worktreePath := filepath.Join(projectDir, *task.Worktree)
+	output, err := exec.Command("git", "-C", worktreePath, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("Failed to get commit hash: %v", err)
+	}
+	reviewCommit := string(output[:len(output)-1]) // trim newline
+
+	if err := commands.SubmitForReviewCommand(projectDir, taskID, reviewCommit, analystID); err != nil {
+		t.Fatalf("SubmitForReview failed: %v", err)
+	}
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task = findTask(state.Tasks, taskID)
+	if task.Status != "INTEGRATION_ANALYSIS_TO_REVIEW" {
+		t.Errorf("Expected INTEGRATION_ANALYSIS_TO_REVIEW, got %s", task.Status)
+	}
+
+	// Step 5: Register integration-reviewer and approve
+	t.Log("Step 5: Register integration-reviewer and approve")
+	reviewerID := "integration-reviewer-1"
+	testhelpers.RegisterTestAgent(t, bb, reviewerID, "integration-reviewer")
+
+	// Transition to REVIEWING_INTEGRATION_ANALYSIS
+	leaseExpires := state.Agents[reviewerID].LeaseExpires
+	err = bb.Modify(func(state *models.State) error {
+		task := state.FindTask(taskID)
+		if task == nil {
+			return nil
+		}
+		task.Status = "REVIEWING_INTEGRATION_ANALYSIS"
+		task.ReviewingBy = &reviewerID
+		task.ReviewLeaseExpires = leaseExpires
+
+		if agent, ok := state.Agents[reviewerID]; ok {
+			agent.Status = models.AgentStatusWorking
+			agent.CurrentTask = &taskID
+			state.Agents[reviewerID] = agent
+		}
+		return nil
+	})
+	testhelpers.AssertNoError(t, err)
+
+	if err := commands.SubmitVerdictCommand(projectDir, taskID, "APPROVED", "", reviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict failed: %v", err)
+	}
+
+	// Verify task is approved (not clean — has output)
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task = findTask(state.Tasks, taskID)
+	if task.Status != "INTEGRATION_ANALYSIS_APPROVED" {
+		t.Errorf("Expected INTEGRATION_ANALYSIS_APPROVED, got %s", task.Status)
+	}
+
+	// Step 6: Execute auto-transitions — should create coding-pair fix tasks
+	t.Log("Step 6: Execute auto-transitions")
+	results, err := ops.ExecuteAvailableTransitions(projectDir, "auto")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions failed: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 transition result, got %d", len(results))
+	}
+	result := results[0]
+	if result.SourceTaskID != taskID {
+		t.Errorf("Expected source task %s, got %s", taskID, result.SourceTaskID)
+	}
+	if result.TransitionName != "integration-to-fix" {
+		t.Errorf("Expected transition integration-to-fix, got %s", result.TransitionName)
+	}
+	if len(result.ChildTaskIDs) != 2 {
+		t.Fatalf("Expected 2 child tasks (one per finding), got %d", len(result.ChildTaskIDs))
+	}
+
+	// Verify child tasks are coding-pair tasks in DRAFT_CODE state
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	for _, childID := range result.ChildTaskIDs {
+		child := findTask(state.Tasks, childID)
+		if child == nil {
+			t.Fatalf("Child task %s not found", childID)
+		}
+		if child.RolePair != "coding-pair" {
+			t.Errorf("Child %s: expected role_pair coding-pair, got %s", childID, child.RolePair)
+		}
+		if child.Status != "DRAFT_CODE" {
+			t.Errorf("Child %s: expected DRAFT_CODE, got %s", childID, child.Status)
+		}
+		if child.ParentTask == nil || *child.ParentTask != taskID {
+			t.Errorf("Child %s: expected parent_task %s", childID, taskID)
+		}
+	}
+
+	// Verify Goal.BaseCommit was snapshotted when coding-pair children were created.
+	// This is the diff base the integration analyst uses (goal.base_commit..HEAD).
+	if state.Goal.BaseCommit == nil {
+		t.Error("Expected Goal.BaseCommit to be set after coding-pair children created")
+	}
+}
+
+// TestIntegrationPipelineCleanScan tests the integration sub-pipeline when
+// the analyst finds no issues: analyst submits without output -> reviewer
+// approves -> routes to INTEGRATION_ANALYSIS_CLEAN terminal state.
+func TestIntegrationPipelineCleanScan(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
+	projectDir, cleanup := setupTestProject(t)
+	defer cleanup()
+
+	// Setup: init + spec + integration task
+	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature")
+
+	if err := commands.InitCommand("Clean scan goal", "specs/feature.md", nil); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+
+	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
+	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
+	bb := db.New(statePath)
+
+	taskID := "integ-clean-1"
+	taskInput := &commands.TaskInput{
+		ID:          taskID,
+		Type:        "integration",
+		RolePair:    "integration-pair",
+		Description: "Integration analysis — expecting clean",
+		DoneWhen:    "All integration issues identified",
+		Scope:       "Full branch diff",
+		Priority:    1,
+		SpecRef:     "specs/feature.md",
+		DependsOn:   []string{},
+	}
+	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "orchestrator-1"); err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+
+	// Claim with integration-analyst
+	analystID := "integration-analyst-1"
+	testhelpers.RegisterTestAgent(t, bb, analystID, "integration-analyst")
+
+	if err := commands.ClaimTaskCommand(projectDir, taskID, analystID); err != nil {
+		t.Fatalf("ClaimTask failed: %v", err)
+	}
+
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task := findTask(state.Tasks, taskID)
+	if task.Worktree == nil {
+		t.Fatal("Expected worktree after claim")
+	}
+
+	// Submit without setting output (clean scan — no findings).
+	// See TODO in TestIntegrationPipelineWithFindings re: files_to_modify for non-coding tasks.
+	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
+		TaskID: taskID, AgentID: analystID,
+		Intent: "Integration analysis", ValidationPlan: "Review findings",
+		FilesToModify: []string{"integration-analysis.md"},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint failed: %v", err)
+	}
+
+	worktreePath := filepath.Join(projectDir, *task.Worktree)
+	output, err := exec.Command("git", "-C", worktreePath, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("Failed to get commit hash: %v", err)
+	}
+	reviewCommit := string(output[:len(output)-1])
+
+	if err := commands.SubmitForReviewCommand(projectDir, taskID, reviewCommit, analystID); err != nil {
+		t.Fatalf("SubmitForReview failed: %v", err)
+	}
+
+	// Reviewer approves — should route to CLEAN (empty output)
+	reviewerID := "integration-reviewer-1"
+	testhelpers.RegisterTestAgent(t, bb, reviewerID, "integration-reviewer")
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	leaseExpires := state.Agents[reviewerID].LeaseExpires
+	err = bb.Modify(func(state *models.State) error {
+		task := state.FindTask(taskID)
+		if task == nil {
+			return nil
+		}
+		task.Status = "REVIEWING_INTEGRATION_ANALYSIS"
+		task.ReviewingBy = &reviewerID
+		task.ReviewLeaseExpires = leaseExpires
+
+		if agent, ok := state.Agents[reviewerID]; ok {
+			agent.Status = models.AgentStatusWorking
+			agent.CurrentTask = &taskID
+			state.Agents[reviewerID] = agent
+		}
+		return nil
+	})
+	testhelpers.AssertNoError(t, err)
+
+	if err := commands.SubmitVerdictCommand(projectDir, taskID, "APPROVED", "", reviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict failed: %v", err)
+	}
+
+	// Verify task routed to CLEAN terminal state
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task = findTask(state.Tasks, taskID)
+	if task.Status != "INTEGRATION_ANALYSIS_CLEAN" {
+		t.Errorf("Expected INTEGRATION_ANALYSIS_CLEAN, got %s", task.Status)
+	}
+
+	// Auto-transitions should produce nothing (clean is terminal)
+	results, err := ops.ExecuteAvailableTransitions(projectDir, "auto")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions failed: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("Expected 0 transition results for clean scan, got %d", len(results))
+	}
+}
+
 // findTask is a helper function to find a task by ID in a slice of tasks
 func findTask(tasks []models.Task, taskID string) *models.Task {
 	for i := range tasks {
