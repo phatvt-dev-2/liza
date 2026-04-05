@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
 )
@@ -330,6 +331,44 @@ func handleAutoTransitions(projectRoot string) error {
 			"children_created", len(r.ChildTaskIDs))
 	}
 
+	return nil
+}
+
+// handleCleanTaskCleanup removes worktrees for tasks at pipeline-defined clean
+// terminal states (e.g., INTEGRATION_ANALYSIS_CLEAN). These tasks bypass the
+// merge path that normally handles worktree cleanup.
+func handleCleanTaskCleanup(projectRoot string) error {
+	lp := paths.New(projectRoot)
+	bb := db.For(lp.StatePath())
+	state, err := bb.Read()
+	if err != nil {
+		return err
+	}
+
+	cfg, cfgErr := pipeline.LoadFrozen(projectRoot)
+	if cfgErr != nil {
+		return nil // no pipeline, skip
+	}
+	resolver := pipeline.NewResolver(cfg)
+
+	logger := GetLogger()
+	for _, task := range state.Tasks {
+		if task.Worktree == nil || task.RolePair == "" {
+			continue
+		}
+		cleanStatus, err := resolver.CleanStatus(task.RolePair)
+		if err != nil || task.Status != cleanStatus {
+			continue
+		}
+		result, err := ops.DeleteWorktree(projectRoot, task.ID)
+		if err != nil {
+			logger.Warn("Failed to cleanup clean task worktree", "task_id", task.ID, "error", err)
+			continue
+		}
+		if result.Existed {
+			logger.Info("Cleaned up worktree for clean-terminal task", "task_id", task.ID)
+		}
+	}
 	return nil
 }
 

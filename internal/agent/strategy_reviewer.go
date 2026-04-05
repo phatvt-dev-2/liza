@@ -66,6 +66,11 @@ func (s *reviewerStrategy) PreWork(_ context.Context, bb *db.Blackboard, config 
 		logger.Warn("Auto transition handler error", "error", err)
 	}
 
+	// Clean up worktrees for tasks at pipeline-defined clean terminal states.
+	if err := handleCleanTaskCleanup(config.ProjectRoot); err != nil {
+		logger.Warn("Clean task cleanup error", "error", err)
+	}
+
 	// If there are still pending merges (transient errors), retry with
 	// backoff up to a max count, then proceed to waitForWork
 	if prErr == nil && hasPendingMerges(bb, config.AgentID, pr) {

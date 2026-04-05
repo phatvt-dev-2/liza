@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
@@ -116,6 +117,63 @@ func TestDeleteWorktree_MergedWithWarning(t *testing.T) {
 	}
 	if result.Existed {
 		t.Error("Existed should be false")
+	}
+}
+
+func TestDeleteWorktree_CleanState(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Create a real git worktree
+	gw := git.New(tmpDir)
+	_, err := gw.CreateWorktree("task-1", "main")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+
+	wtPath := filepath.Join(tmpDir, ".worktrees", "task-1")
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Fatalf("worktree directory should exist: %v", err)
+	}
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatus("INTEGRATION_ANALYSIS_CLEAN"), now)
+	worktree := ".worktrees/task-1"
+	task.Worktree = &worktree
+	task.RolePair = "integration-pair"
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := DeleteWorktree(tmpDir, "task-1")
+	if err != nil {
+		t.Fatalf("DeleteWorktree() error: %v", err)
+	}
+	if !result.Existed {
+		t.Error("Existed should be true")
+	}
+	if result.PreviousStatus != models.TaskStatus("INTEGRATION_ANALYSIS_CLEAN") {
+		t.Errorf("PreviousStatus = %v, want INTEGRATION_ANALYSIS_CLEAN", result.PreviousStatus)
+	}
+
+	// Worktree directory should be removed
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Error("worktree directory should be removed")
+	}
+
+	// Verify task.Worktree is set to nil in state
+	bb := db.For(stateFile)
+	updatedState, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("failed to read state: %v", readErr)
+	}
+	updatedTask := updatedState.FindTask("task-1")
+	if updatedTask == nil {
+		t.Fatal("task not found in updated state")
+	}
+	if updatedTask.Worktree != nil {
+		t.Error("task.Worktree should be nil after deletion")
 	}
 }
 

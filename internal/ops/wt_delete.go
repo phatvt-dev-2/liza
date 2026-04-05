@@ -42,7 +42,10 @@ func DeleteWorktree(projectRoot, taskID string) (*DeleteWorktreeResult, error) {
 	case models.TaskStatusMerged:
 		warnings = append(warnings, fmt.Sprintf("Task %s is MERGED — worktree should already be cleaned", taskID))
 	default:
-		return nil, &PreconditionError{Reason: fmt.Sprintf("cannot delete worktree for task %s (status: %s), deletion only allowed for: BLOCKED, ABANDONED, SUPERSEDED, MERGED", taskID, task.Status)}
+		// Check if status is a pipeline-defined clean terminal state
+		if !isCleanTerminalState(task, projectRoot) {
+			return nil, &PreconditionError{Reason: fmt.Sprintf("cannot delete worktree for task %s (status: %s), deletion only allowed for: BLOCKED, ABANDONED, SUPERSEDED, MERGED, or pipeline clean states", taskID, task.Status)}
+		}
 	}
 
 	if task.Worktree == nil {
@@ -86,4 +89,18 @@ func DeleteWorktree(projectRoot, taskID string) (*DeleteWorktreeResult, error) {
 		Existed:        true,
 		Warnings:       warnings,
 	}, nil
+}
+
+// isCleanTerminalState checks whether a task is at a pipeline-defined clean
+// terminal state (e.g., INTEGRATION_ANALYSIS_CLEAN).
+func isCleanTerminalState(task *models.Task, projectRoot string) bool {
+	if task.RolePair == "" {
+		return false
+	}
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil {
+		return false
+	}
+	cleanStatus, err := resolver.CleanStatus(task.RolePair)
+	return err == nil && task.Status == cleanStatus
 }
