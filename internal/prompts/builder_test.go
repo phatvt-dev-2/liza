@@ -384,27 +384,29 @@ func TestRenderOrchestratorDashboard_EntryPoints(t *testing.T) {
 			},
 		},
 		{
-			name:       "explicit entry-point detailed-spec dispatches to code-planning-pair",
+			name:       "explicit entry-point detailed-spec dispatches to architecture-pair",
 			entryPoint: "detailed-spec",
 			wantContains: []string{
 				"WAKE TRIGGER: INITIAL_PLANNING",
-				"role_pair\": \"code-planning-pair\"",
-				"Code Planner",
+				"role_pair\": \"architecture-pair\"",
+				"Architect",
+				"\"type\": \"architecture\"",
 			},
 			wantNotContain: []string{
 				"classify",
 				"epic-planning-pair",
+				"\"type\": \"coding\"",
 			},
 		},
 		{
-			name:       "no entry-point shows classification instructions",
+			name:       "no entry-point shows classification with task types",
 			entryPoint: "",
 			wantContains: []string{
 				"WAKE TRIGGER: INITIAL_PLANNING",
 				"general-objective",
 				"detailed-spec",
 				"epic-planning-pair",
-				"code-planning-pair",
+				"architecture-pair",
 			},
 		},
 	}
@@ -433,6 +435,31 @@ func TestRenderOrchestratorDashboard_EntryPoints(t *testing.T) {
 				if strings.Contains(result, notWant) {
 					t.Errorf("unexpected content found: %q", notWant)
 				}
+			}
+		})
+	}
+}
+
+func TestResolveTaskType(t *testing.T) {
+	cfg, err := pipeline.LoadFromBytes(embedded.PipelineConfigContent())
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	resolver := pipeline.NewResolver(cfg)
+
+	tests := []struct {
+		rolePair string
+		want     string
+	}{
+		{"coding-pair", "coding"},
+		{"architecture-pair", "architecture"},
+		{"unknown-pair", "coding"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.rolePair, func(t *testing.T) {
+			got := resolveTaskType(resolver, tt.rolePair)
+			if got != tt.want {
+				t.Errorf("resolveTaskType(%q) = %q, want %q", tt.rolePair, got, tt.want)
 			}
 		})
 	}

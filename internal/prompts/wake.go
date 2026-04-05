@@ -21,6 +21,7 @@ type wakeEntryPointData struct {
 	Name        string // e.g., "general-objective"
 	RolePair    string // e.g., "epic-planning-pair"
 	DisplayName string // doer's display name, e.g., "Epic Planner"
+	TaskType    string // e.g., "coding", "architecture"
 }
 
 // wakeTemplateData is used by wake trigger templates that need GoalSpecRef
@@ -31,6 +32,7 @@ type wakeTemplateData struct {
 	ResolvedRolePair     string               // role-pair resolved from GoalEntryPoint
 	ResolvedDisplayName  string               // display name of the resolved role-pair's doer
 	ResolvedTaskIDPrefix string               // task ID prefix, e.g., "epic-planning" (role-pair without "-pair" suffix)
+	ResolvedTaskType     string               // resolved from doer role → TaskTypeForRole
 	EntryPoints          []wakeEntryPointData // available entry-points for LLM classification
 }
 
@@ -110,10 +112,12 @@ func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) (wak
 		}
 		rolePair := parts[1]
 		displayName := resolveDoerDisplayName(resolver, rolePair)
+		taskType := resolveTaskType(resolver, rolePair)
 		eps = append(eps, wakeEntryPointData{
 			Name:        epName,
 			RolePair:    rolePair,
 			DisplayName: displayName,
+			TaskType:    taskType,
 		})
 	}
 	sort.Slice(eps, func(i, j int) bool { return eps[i].Name < eps[j].Name })
@@ -130,6 +134,7 @@ func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) (wak
 			data.ResolvedRolePair = parts[1]
 			data.ResolvedDisplayName = resolveDoerDisplayName(resolver, parts[1])
 			data.ResolvedTaskIDPrefix = strings.TrimSuffix(parts[1], "-pair")
+			data.ResolvedTaskType = resolveTaskType(resolver, parts[1])
 		}
 	}
 
@@ -154,6 +159,19 @@ func resolveDoerDisplayName(resolver *pipeline.Resolver, rolePair string) string
 		return rolePair
 	}
 	return resolver.RoleDisplayName(rp.Doer)
+}
+
+// resolveTaskType looks up the task type for a role-pair's doer role.
+func resolveTaskType(resolver *pipeline.Resolver, rolePair string) string {
+	rp, err := resolver.RolePair(rolePair)
+	if err != nil {
+		return "coding" // safe default
+	}
+	tt := models.TaskTypeForRole(rp.Doer)
+	if tt == "" {
+		return "coding"
+	}
+	return string(tt)
 }
 
 func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeTemplateData, planningTasks []planningTaskData) (string, error) {

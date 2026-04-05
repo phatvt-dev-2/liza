@@ -37,7 +37,7 @@ Use liza_add_tasks once with ALL tasks:
       "scope": "Planning only: <phase 1 boundary>. No implementation.",
       "priority": 1,
       "depends": [],
-      "type": "coding",
+      "type": "{{.ResolvedTaskType}}",
       "role_pair": "{{.ResolvedRolePair}}"
     },
     {
@@ -48,7 +48,7 @@ Use liza_add_tasks once with ALL tasks:
       "scope": "Planning only: <phase 2 boundary>. No implementation.",
       "priority": 2,
       "depends": ["{{.ResolvedTaskIDPrefix}}-1"],
-      "type": "coding",
+      "type": "{{.ResolvedTaskType}}",
       "role_pair": "{{.ResolvedRolePair}}"
     }
   ],
@@ -66,7 +66,7 @@ No entry-point was specified. Classify the input document and choose the appropr
 
 AVAILABLE ENTRY-POINTS:
 {{- range .EntryPoints }}
-- "{{.Name}}" → role_pair: "{{.RolePair}}" (dispatches to {{.DisplayName}})
+- "{{.Name}}" → role_pair: "{{.RolePair}}", type: "{{.TaskType}}" (dispatches to {{.DisplayName}})
 {{- end }}
 
 CLASSIFICATION GUIDANCE:
@@ -86,7 +86,7 @@ After classifying, use liza_add_tasks once with the chosen role_pair:
       "scope": "Planning only: <phase 1 boundary>. No implementation.",
       "priority": 1,
       "depends": [],
-      "type": "coding",
+      "type": "<chosen-type>",
       "role_pair": "<chosen-role-pair>"
     },
     {
@@ -97,7 +97,7 @@ After classifying, use liza_add_tasks once with the chosen role_pair:
       "scope": "Planning only: <phase 2 boundary>. No implementation.",
       "priority": 2,
       "depends": ["<chosen-prefix>-1"],
-      "type": "coding",
+      "type": "<chosen-type>",
       "role_pair": "<chosen-role-pair>"
     }
   ],
