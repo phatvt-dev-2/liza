@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -130,6 +131,10 @@ func TestStop_AlreadyStopped(t *testing.T) {
 	if !strings.Contains(err.Error(), "already STOPPED") {
 		t.Errorf("Error = %q, want to contain 'already STOPPED'", err.Error())
 	}
+	var pe *PreconditionError
+	if !errors.As(err, &pe) {
+		t.Errorf("Expected PreconditionError, got %T", err)
+	}
 }
 
 // --- Pause ---
@@ -178,6 +183,10 @@ func TestPause_AlreadyPaused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "already PAUSED") {
 		t.Errorf("Error = %q, want to contain 'already PAUSED'", err.Error())
+	}
+	var pe *PreconditionError
+	if !errors.As(err, &pe) {
+		t.Errorf("Expected PreconditionError, got %T", err)
 	}
 }
 
@@ -468,6 +477,10 @@ func TestResume_FromStopped(t *testing.T) {
 	if !strings.Contains(err.Error(), "STOPPED") {
 		t.Errorf("Error = %q, want to contain 'STOPPED'", err.Error())
 	}
+	var pe *PreconditionError
+	if !errors.As(err, &pe) {
+		t.Errorf("Expected PreconditionError, got %T", err)
+	}
 }
 
 func TestResume_StoppedWithCheckpoint_RejectsBeforeSprintMutation(t *testing.T) {
@@ -544,5 +557,9 @@ func TestResume_NothingToResume(t *testing.T) {
 	_, err := Resume(tmpDir, "human")
 	if err == nil {
 		t.Fatal("Expected error when nothing to resume")
+	}
+	var pe *PreconditionError
+	if !errors.As(err, &pe) {
+		t.Errorf("Expected PreconditionError, got %T", err)
 	}
 }

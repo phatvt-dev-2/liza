@@ -50,7 +50,7 @@ func changeMode(projectRoot, reason, changedBy string, target models.SystemMode)
 		}
 
 		if err := previousMode.ValidateTransition(target); err != nil {
-			return err
+			return &PreconditionError{Reason: err.Error()}
 		}
 
 		s.Config.Mode = target
@@ -61,7 +61,7 @@ func changeMode(projectRoot, reason, changedBy string, target models.SystemMode)
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to change mode to %s: %w", target, err)
+		return nil, err
 	}
 
 	return &ModeChangeResult{
@@ -180,14 +180,14 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 
 		// Fail fast on STOPPED — no sprint mutations allowed while system is stopped.
 		if currentMode == models.SystemModeStopped {
-			return fmt.Errorf("cannot resume from STOPPED state (system must be restarted)")
+			return &PreconditionError{Reason: "cannot resume from STOPPED state (system must be restarted)"}
 		}
 
 		canResumeMode := currentMode == models.SystemModePaused || currentMode == models.SystemModeCircuitBreakerTripped
 		canResumeSprint := s.Sprint.Status == models.SprintStatusCheckpoint || s.Sprint.Status == models.SprintStatusCompleted
 
 		if !canResumeMode && !canResumeSprint {
-			return fmt.Errorf("system is not PAUSED, circuit breaker not tripped, and sprint is not at CHECKPOINT or COMPLETED (current mode: %s, sprint status: %s)", currentMode, s.Sprint.Status)
+			return &PreconditionError{Reason: fmt.Sprintf("system is not PAUSED, circuit breaker not tripped, and sprint is not at CHECKPOINT or COMPLETED (current mode: %s, sprint status: %s)", currentMode, s.Sprint.Status)}
 		}
 
 		resumedFrom = resumeSystemMode(s, timestamp, changedBy)

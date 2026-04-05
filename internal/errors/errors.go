@@ -58,3 +58,11 @@ func IsAgentCollision(err error) bool {
 	var ace *AgentCollisionError
 	return errors.As(err, &ace)
 }
+
+// ValidationError represents a client input validation failure (e.g. missing
+// or invalid field values). Mapped to HTTP 400 by the API layer.
+type ValidationError struct {
+	Message string
+}
+
+func (e *ValidationError) Error() string { return e.Message }

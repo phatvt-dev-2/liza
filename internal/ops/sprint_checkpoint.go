@@ -39,9 +39,9 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 	case models.SprintStatusCheckpoint:
 		return nil, ErrSprintAlreadyCheckpoint
 	case models.SprintStatusCompleted:
-		return nil, fmt.Errorf("cannot checkpoint: sprint is COMPLETED")
+		return nil, &PreconditionError{Reason: "cannot checkpoint: sprint is COMPLETED"}
 	case models.SprintStatusAborted:
-		return nil, fmt.Errorf("cannot checkpoint: sprint is ABORTED")
+		return nil, &PreconditionError{Reason: "cannot checkpoint: sprint is ABORTED"}
 	}
 
 	// Auto-detect PLANNING_COMPLETE when trigger is empty.
