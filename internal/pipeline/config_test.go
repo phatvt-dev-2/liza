@@ -2152,3 +2152,69 @@ func assertTransitions(t *testing.T, tm map[models.TaskStatus][]models.TaskStatu
 		}
 	}
 }
+
+func TestValidate_ManyToOneCardinality(t *testing.T) {
+	// Minimal two-sub-pipeline config for a pipeline-transition with many-to-one.
+	validYAML := `
+pipeline:
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: S1
+        executing: S2
+        submitted: S3
+        reviewing: S4
+        approved: S5
+        rejected: S6
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: T1
+        executing: T2
+        submitted: T3
+        reviewing: T4
+        approved: T5
+        rejected: T6
+  sub-pipelines:
+    sp1:
+      steps: [pair-a]
+      transitions: []
+    sp2:
+      steps: [pair-b]
+      transitions: []
+  pipeline-transitions:
+    - name: fan-in
+      from: sp1.pair-a.approved
+      to: sp2.pair-b.initial
+      trigger: manual
+      cardinality: many-to-one
+  entry-points: {}
+`
+
+	t.Run("many-to-one accepted", func(t *testing.T) {
+		_, err := LoadFromBytes([]byte(validYAML))
+		if err != nil {
+			t.Fatalf("expected many-to-one to be accepted, got error: %v", err)
+		}
+	})
+
+	t.Run("bogus cardinality rejected", func(t *testing.T) {
+		bogusYAML := strings.Replace(validYAML, "cardinality: many-to-one", "cardinality: bogus", 1)
+		_, err := LoadFromBytes([]byte(bogusYAML))
+		if err == nil {
+			t.Fatal("expected error for bogus cardinality")
+		}
+		assertContains(t, err.Error(), "cardinality")
+		assertContains(t, err.Error(), "bogus")
+	})
+}

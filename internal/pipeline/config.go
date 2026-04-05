@@ -115,7 +115,7 @@ type TransitionDef struct {
 	From        string `yaml:"from"`        // e.g., "code-planning-pair.approved"
 	To          string `yaml:"to"`          // e.g., "coding-pair.initial"
 	Trigger     string `yaml:"trigger"`     // "manual" or "auto"
-	Cardinality string `yaml:"cardinality"` // "per-subtask" or "one-to-one"
+	Cardinality string `yaml:"cardinality"` // "per-subtask", "one-to-one", or "many-to-one"
 }
 
 // LoadFrozen loads the frozen pipeline config from .liza/pipeline.yaml.
@@ -380,8 +380,8 @@ func validateTransitionHeader(t TransitionDef) error {
 	if t.Trigger != "manual" && t.Trigger != "auto" {
 		return fmt.Errorf("trigger must be %q or %q, got %q", "manual", "auto", t.Trigger)
 	}
-	if t.Cardinality != "per-subtask" && t.Cardinality != "one-to-one" {
-		return fmt.Errorf("cardinality must be %q or %q, got %q", "per-subtask", "one-to-one", t.Cardinality)
+	if t.Cardinality != "per-subtask" && t.Cardinality != "one-to-one" && t.Cardinality != "many-to-one" {
+		return fmt.Errorf("cardinality must be %q, %q, or %q, got %q", "per-subtask", "one-to-one", "many-to-one", t.Cardinality)
 	}
 	return nil
 }
