@@ -240,7 +240,6 @@ func validate(cfg *PipelineConfig) error {
 		}
 	}
 
-	rpSubPipeline := make(map[string]string)   // role-pair → sub-pipeline name
 	transitionOwner := make(map[string]string) // transition name → sub-pipeline name
 
 	for spName, sp := range p.SubPipelines {
@@ -251,10 +250,6 @@ func validate(cfg *PipelineConfig) error {
 			if _, ok := p.RolePairs[step]; !ok {
 				return fmt.Errorf("sub-pipeline %q: step %q not found in role-pairs", spName, step)
 			}
-			if existingSP, exists := rpSubPipeline[step]; exists {
-				return fmt.Errorf("role-pair %q appears in multiple sub-pipelines: %q and %q", step, existingSP, spName)
-			}
-			rpSubPipeline[step] = spName
 		}
 
 		for _, t := range sp.Transitions {

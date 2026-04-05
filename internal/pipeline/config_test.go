@@ -456,11 +456,9 @@ pipeline:
 `
 	cfg := writeTemp(t, yaml)
 	_, err := Load(cfg)
-	if err == nil {
-		t.Fatal("expected error for role-pair in multiple sub-pipelines")
+	if err != nil {
+		t.Fatalf("expected no error for role-pair in multiple sub-pipelines, got: %v", err)
 	}
-	assertContains(t, err.Error(), "shared-pair")
-	assertContains(t, err.Error(), "multiple sub-pipelines")
 }
 
 // Blocker fix 2: entry-point role-pair must be a step of the referenced sub-pipeline.
