@@ -1483,3 +1483,82 @@ func TestGetReviewerWorkDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectOrchestratorWakeTriggers_CodingComplete(t *testing.T) {
+	now := time.Now().UTC()
+	sha := "abc123"
+
+	state := testhelpers.CreateValidState()
+	state.Goal.BaseCommit = &sha
+	state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
+	}
+
+	result := DetectOrchestratorWakeTriggers(state, nil, nil)
+	if result.Trigger != WakeTriggerCodingComplete {
+		t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerCodingComplete)
+	}
+	if result.Count != 1 {
+		t.Errorf("count = %d, want 1", result.Count)
+	}
+}
+
+func TestDetectOrchestratorWakeTriggers_CodingComplete_NoBaseCommit(t *testing.T) {
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	// goal.BaseCommit is nil (no coding happened)
+	state.Sprint.Scope.Planned = []string{"task-1"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+	}
+
+	result := DetectOrchestratorWakeTriggers(state, nil, nil)
+	if result.Trigger != WakeTriggerSprintComplete {
+		t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerSprintComplete)
+	}
+}
+
+func TestDetectOrchestratorWakeTriggers_IntegrationExists(t *testing.T) {
+	now := time.Now().UTC()
+	sha := "abc123"
+
+	state := testhelpers.CreateValidState()
+	state.Goal.BaseCommit = &sha
+	// integration-pair task exists (also terminal)
+	integrationTask := testhelpers.BuildTaskByStatus("integration-1", models.TaskStatusMerged, now)
+	integrationTask.RolePair = "integration-pair"
+	state.Sprint.Scope.Planned = []string{"task-1", "integration-1"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+		integrationTask,
+	}
+
+	result := DetectOrchestratorWakeTriggers(state, nil, nil)
+	if result.Trigger != WakeTriggerSprintComplete {
+		t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerSprintComplete)
+	}
+}
+
+func TestDetectOrchestratorWakeTriggers_PlanningCompletePrecedence(t *testing.T) {
+	now := time.Now().UTC()
+	sha := "abc123"
+
+	state := testhelpers.CreateValidState()
+	state.Goal.BaseCommit = &sha
+	// Merged planning task with output[] — PlanningComplete should take priority
+	planningTask := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+	planningTask.RolePair = "code-planning-pair"
+	planningTask.Output = []models.OutputEntry{
+		{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
+	}
+	state.Sprint.Scope.Planned = []string{"task-1"}
+	state.Tasks = []models.Task{planningTask}
+
+	result := DetectOrchestratorWakeTriggers(state, nil, nil)
+	if result.Trigger != WakeTriggerPlanningComplete {
+		t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerPlanningComplete)
+	}
+}

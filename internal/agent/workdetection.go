@@ -14,6 +14,7 @@ const (
 	WakeTriggerHypothesisExhausted OrchestratorWakeTrigger = "HYPOTHESIS_EXHAUSTED"
 	WakeTriggerImmediateDiscovery  OrchestratorWakeTrigger = "IMMEDIATE_DISCOVERY"
 	WakeTriggerPlanningComplete    OrchestratorWakeTrigger = "PLANNING_COMPLETE"
+	WakeTriggerCodingComplete      OrchestratorWakeTrigger = "CODING_COMPLETE"
 	WakeTriggerSprintComplete      OrchestratorWakeTrigger = "SPRINT_COMPLETE"
 	WakeTriggerNone                OrchestratorWakeTrigger = "NONE"
 )
@@ -100,6 +101,14 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 			return OrchestratorWakeResult{
 				Trigger: WakeTriggerPlanningComplete,
 				Count:   n,
+			}
+		}
+		// Detect coding completion: all tasks terminal, coding happened (base_commit set),
+		// but no integration task exists yet.
+		if state.Goal.BaseCommit != nil && !hasIntegrationTask(state) {
+			return OrchestratorWakeResult{
+				Trigger: WakeTriggerCodingComplete,
+				Count:   1,
 			}
 		}
 		return OrchestratorWakeResult{
@@ -204,6 +213,17 @@ func countImmediateDiscoveries(state *models.State) int {
 		}
 	}
 	return count
+}
+
+// hasIntegrationTask checks if any planned task uses the integration-pair role-pair.
+func hasIntegrationTask(state *models.State) bool {
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if task != nil && task.RolePair == "integration-pair" {
+			return true
+		}
+	}
+	return false
 }
 
 // countMergedPlanningTasksWithOutput counts planned tasks with unconsumed
