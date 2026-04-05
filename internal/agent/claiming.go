@@ -312,6 +312,27 @@ func handleAvailableTransitions(projectRoot string) error {
 	return nil
 }
 
+// handleAutoTransitions executes only auto-trigger pipeline transitions
+// (e.g., integration-to-fix) for merged tasks. Called from reviewer PreWork
+// after merges, so children are created in the same PreWork cycle.
+// Manual transitions remain gated by the orchestrator checkpoint flow.
+func handleAutoTransitions(projectRoot string) error {
+	results, err := ops.ExecuteAvailableTransitions(projectRoot, "auto")
+	if err != nil {
+		return err
+	}
+
+	logger := GetLogger()
+	for _, r := range results {
+		logger.Info("Auto transition executed",
+			"source_task", r.SourceTaskID,
+			"transition", r.TransitionName,
+			"children_created", len(r.ChildTaskIDs))
+	}
+
+	return nil
+}
+
 func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string, pr models.PipelineResolver) error {
 	state, err := bb.Read()
 	if err != nil {
