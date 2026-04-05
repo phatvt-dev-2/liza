@@ -57,7 +57,9 @@ func (s *orchestratorStrategy) PreWork(_ context.Context, bb *db.Blackboard, con
 		return false, nil
 	}
 
-	if countMergedPlanningTasksWithOutput(state, detCtx.PlanningPairs) > 0 {
+	planningReady := countMergedPlanningTasksWithOutput(state, detCtx.PlanningPairs) > 0
+	m2oReady := countReadyManyToOneCohorts(state, detCtx.ManyToOneTransitions) > 0
+	if planningReady || m2oReady {
 		if err := handleAvailableTransitions(config.ProjectRoot); err != nil {
 			logger.Warn("Transition handler error", "error", err)
 		}

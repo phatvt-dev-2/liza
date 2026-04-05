@@ -1,0 +1,24 @@
+{{- define "wake_many_to_one_ready" -}}
+All tasks in a many-to-one cohort have been merged. The cohort is ready for transition.
+
+Pipeline transitions will execute automatically after checkpoint and human resume.
+No manual task creation is needed.
+
+⚠️  AUTONOMY NOTICE ⚠️
+You have FULL autonomy to execute MCP tools immediately.
+Do NOT wait for permission.
+
+--- MANY-TO-ONE COHORT READY. NOW EXECUTE. ---
+
+1. Run liza_update_sprint_metrics with {"agent_id": "{{.AgentID}}"}.
+
+2. Create checkpoint for human review: execute liza_sprint_checkpoint with {"agent_id": "{{.AgentID}}", "trigger": "PLANNING_COMPLETE"}.
+   The checkpoint will pause all agents and generate a sprint summary.
+
+SUCCESS CRITERIA:
+- Sprint checkpointed for human review.
+
+❌ INCORRECT (DO NOT DO THIS):
+1. Create tasks manually — the supervisor handles pipeline transitions after resume.
+2. Exit without checkpointing.
+{{- end -}}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -261,5 +262,82 @@ func TestVerifyOrchestratorStateChanges_CodingCompleteNoIntegration(t *testing.T
 	}
 	if err != nil && !strings.Contains(err.Error(), "integration-pair") {
 		t.Errorf("Expected error mentioning integration-pair, got: %v", err)
+	}
+}
+
+// TestVerifyOrchestratorStateChanges_ManyToOneReady verifies that
+// MANY_TO_ONE_READY trigger passes verification when sprint is checkpointed.
+func TestVerifyOrchestratorStateChanges_ManyToOneReady(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	checkpointAt := now
+	parentID := "epic-1"
+
+	m2oTransitions := []ops.ManyToOneTransitionInfo{
+		{Name: "us-to-coding", SourceRolePair: "us-writing-pair"},
+	}
+
+	// Build MERGED us-writing-pair tasks sharing a parent
+	us1 := testhelpers.BuildTaskByStatus("us-1", models.TaskStatusMerged, now)
+	us1.RolePair = "us-writing-pair"
+	us1.ParentTask = &parentID
+	us2 := testhelpers.BuildTaskByStatus("us-2", models.TaskStatusMerged, now)
+	us2.RolePair = "us-writing-pair"
+	us2.ParentTask = &parentID
+
+	// State before: complete m2o cohort, sprint in progress
+	stateBefore := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Agents: map[string]models.Agent{
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
+		},
+		Sprint: models.Sprint{
+			Number: 1,
+			Status: models.SprintStatusInProgress,
+			Scope:  models.SprintScope{Planned: []string{"us-1", "us-2"}},
+		},
+		Tasks:  []models.Task{us1, us2},
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	// State after: sprint checkpointed (orchestrator did its job)
+	stateAfter := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Agents: map[string]models.Agent{
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
+		},
+		Sprint: models.Sprint{
+			Number:   1,
+			Status:   models.SprintStatusCheckpoint,
+			Scope:    models.SprintScope{Planned: []string{"us-1", "us-2"}},
+			Timeline: models.SprintTimeline{CheckpointAt: &checkpointAt},
+		},
+		Tasks:  []models.Task{us1, us2},
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	testhelpers.WriteInitialState(t, statePath, stateAfter)
+	bb := db.New(statePath)
+
+	// Pipeline terminals: MERGED is terminal for this test
+	pipelineTerminals := []models.TaskStatus{models.TaskStatusMerged}
+
+	err := verifyOrchestratorStateChanges(bb, stateBefore, pipelineTerminals, nil, m2oTransitions)
+	if err != nil {
+		t.Errorf("Expected no error when sprint checkpointed for MANY_TO_ONE_READY trigger, got: %v", err)
 	}
 }

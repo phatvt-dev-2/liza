@@ -249,6 +249,16 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 		}
 		logger.Info("Orchestrator checkpointed planning completion")
 
+	case WakeTriggerManyToOneReady:
+		// MANY_TO_ONE_READY: expect sprint checkpointed so transitions execute after human resume.
+		if stateAfter.Sprint.Status != models.SprintStatusCheckpoint && stateAfter.Sprint.Status != models.SprintStatusCompleted {
+			return fmt.Errorf("orchestrator completed with MANY_TO_ONE_READY trigger but sprint status is %s (expected CHECKPOINT or COMPLETED)", stateAfter.Sprint.Status)
+		}
+		if stateAfter.Sprint.Timeline.CheckpointAt == nil {
+			return fmt.Errorf("orchestrator completed with MANY_TO_ONE_READY trigger but checkpoint_at is not set")
+		}
+		logger.Info("Orchestrator checkpointed many-to-one cohort readiness")
+
 	case WakeTriggerCodingComplete:
 		// CODING_COMPLETE: expect integration task to exist after orchestrator runs
 		hasIntegration := false

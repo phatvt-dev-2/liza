@@ -60,7 +60,7 @@ func collectMergedPlanningTasks(state *models.State, planningPairs map[string]bo
 	return result
 }
 
-func determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries int, sprintComplete, codingComplete bool, planningTasks []planningTaskData) string {
+func determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries int, sprintComplete, codingComplete bool, planningTasks []planningTaskData, m2oReadyCount int) string {
 	if totalTasks == 0 {
 		return "INITIAL_PLANNING"
 	}
@@ -75,6 +75,9 @@ func determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDis
 	}
 	if sprintComplete && len(planningTasks) > 0 {
 		return "PLANNING_COMPLETE"
+	}
+	if sprintComplete && m2oReadyCount > 0 {
+		return "MANY_TO_ONE_READY"
 	}
 	if sprintComplete && codingComplete {
 		return "CODING_COMPLETE"
@@ -191,6 +194,8 @@ func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeT
 			AgentID:       agentID,
 			PlanningTasks: planningTasks,
 		})
+	case "MANY_TO_ONE_READY":
+		return executeTemplate("wake_many_to_one_ready", agentData)
 	case "CODING_COMPLETE":
 		return executeTemplate("wake_coding_complete", agentData)
 	case "SPRINT_COMPLETE":

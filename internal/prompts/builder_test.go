@@ -1920,7 +1920,7 @@ func TestWakeTemplate_CodingComplete(t *testing.T) {
 
 func TestDetermineWakeTrigger_CodingComplete(t *testing.T) {
 	// sprintComplete=true, codingComplete=true → CODING_COMPLETE
-	got := determineWakeTrigger(5, 0, 0, 0, true, true, nil)
+	got := determineWakeTrigger(5, 0, 0, 0, true, true, nil, 0)
 	if got != "CODING_COMPLETE" {
 		t.Errorf("expected CODING_COMPLETE, got %s", got)
 	}
@@ -2048,8 +2048,49 @@ func TestBuildRoleContext_ArchRef(t *testing.T) {
 
 func TestDetermineWakeTrigger_SprintCompleteNotCoding(t *testing.T) {
 	// sprintComplete=true, codingComplete=false → SPRINT_COMPLETE
-	got := determineWakeTrigger(5, 0, 0, 0, true, false, nil)
+	got := determineWakeTrigger(5, 0, 0, 0, true, false, nil, 0)
 	if got != "SPRINT_COMPLETE" {
 		t.Errorf("expected SPRINT_COMPLETE, got %s", got)
+	}
+}
+
+func TestRenderOrchestratorDashboard_ManyToOneReady(t *testing.T) {
+	projectRoot := setupPipelineConfig(t)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	parentID := "epic-1"
+	us1 := testhelpers.BuildTaskByStatus("us-1", models.TaskStatusMerged, now)
+	us1.RolePair = "us-writing-pair"
+	us1.ParentTask = &parentID
+	us2 := testhelpers.BuildTaskByStatus("us-2", models.TaskStatusMerged, now)
+	us2.RolePair = "us-writing-pair"
+	us2.ParentTask = &parentID
+	us3 := testhelpers.BuildTaskByStatus("us-3", models.TaskStatusMerged, now)
+	us3.RolePair = "us-writing-pair"
+	us3.ParentTask = &parentID
+	state.Tasks = []models.Task{us1, us2, us3}
+	state.Sprint.Scope.Planned = []string{"us-1", "us-2", "us-3"}
+
+	dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+	if err != nil {
+		t.Fatalf("RenderOrchestratorDashboard: %v", err)
+	}
+	if !strings.Contains(dashboard, "WAKE TRIGGER: MANY_TO_ONE_READY") {
+		t.Errorf("dashboard missing MANY_TO_ONE_READY trigger\ngot dashboard:\n%s", dashboard)
+	}
+	if !strings.Contains(wakeInstr, "checkpoint") {
+		t.Errorf("wake instructions missing checkpoint guidance\ngot:\n%s", wakeInstr)
+	}
+}
+
+func TestBuildInstructionsForWakeTrigger_ManyToOneReady(t *testing.T) {
+	wakeData := wakeTemplateData{AgentID: "orchestrator-1"}
+	instructions, err := buildInstructionsForWakeTrigger("MANY_TO_ONE_READY", "orchestrator-1", wakeData, nil)
+	if err != nil {
+		t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
+	}
+	if instructions == "" {
+		t.Error("expected non-empty instructions for MANY_TO_ONE_READY")
 	}
 }

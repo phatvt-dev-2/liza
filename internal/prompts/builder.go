@@ -55,9 +55,11 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	detCtx, detErr := ops.LoadDetectionContext(projectRoot)
 	var sprintTerminals []models.TaskStatus
 	var planningPairs map[string]bool
+	var m2oTransitions []ops.ManyToOneTransitionInfo
 	if detErr == nil {
 		sprintTerminals = detCtx.SprintTerminals
 		planningPairs = detCtx.PlanningPairs
+		m2oTransitions = detCtx.ManyToOneTransitions
 	}
 
 	cycleBlocked := countCycleBlockedPlanning(state.Tasks, planningPairs)
@@ -71,7 +73,12 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 
 	codingComplete := state.Goal.BaseCommit != nil && !hasIntegrationTaskInSprint(state)
 
-	wakeTrigger := determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, sprintComplete, codingComplete, planningTasks)
+	var m2oReadyCount int
+	if sprintComplete {
+		m2oReadyCount = countReadyM2OCohorts(state, m2oTransitions)
+	}
+
+	wakeTrigger := determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, sprintComplete, codingComplete, planningTasks, m2oReadyCount)
 
 	wakeData, wakeErr := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, projectRoot)
 	if wakeErr != nil {
@@ -206,6 +213,32 @@ func countCycleBlockedPlanning(tasks []models.Task, planningPairs map[string]boo
 		}
 	}
 	return count
+}
+
+// countReadyM2OCohorts counts unique many-to-one cohorts where all siblings are
+// MERGED with unfired transitions. Mirrors agent.countReadyManyToOneCohorts logic.
+func countReadyM2OCohorts(state *models.State, m2oTransitions []ops.ManyToOneTransitionInfo) int {
+	type cohortKey struct {
+		parentID       string
+		transitionName string
+	}
+	seen := make(map[cohortKey]bool)
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if !ops.IsManyToOneReady(task, state, m2oTransitions) {
+			continue
+		}
+		parents := task.EffectiveParentTasks()
+		if len(parents) == 0 {
+			continue
+		}
+		for _, m2o := range m2oTransitions {
+			if task.RolePair == m2o.SourceRolePair {
+				seen[cohortKey{parents[0], m2o.Name}] = true
+			}
+		}
+	}
+	return len(seen)
 }
 
 // hasIntegrationTaskInSprint checks if any planned task uses the integration-pair role-pair.

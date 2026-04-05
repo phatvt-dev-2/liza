@@ -822,6 +822,54 @@ func TestOrchestratorPreWork_PlanningComplete_Resumed(t *testing.T) {
 	}
 }
 
+// TestOrchestratorPreWork_ManyToOneCohort verifies that PreWork calls
+// handleAvailableTransitions when a ready many-to-one cohort exists
+// but no planning tasks with output.
+func TestOrchestratorPreWork_ManyToOneCohort(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.CheckpointTrigger = "PLANNING_COMPLETE"
+
+	// Build m2o-ready tasks: MERGED us-writing-pair tasks sharing a parent, no output
+	parentID := "epic-1"
+	us1 := testhelpers.BuildTaskByStatus("us-1", models.TaskStatusMerged, now)
+	us1.RolePair = "us-writing-pair"
+	us1.ParentTask = &parentID
+	us2 := testhelpers.BuildTaskByStatus("us-2", models.TaskStatusMerged, now)
+	us2.RolePair = "us-writing-pair"
+	us2.ParentTask = &parentID
+	state.Sprint.Scope.Planned = []string{"us-1", "us-2"}
+	state.Tasks = []models.Task{us1, us2}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+	resolver := testResolver(t)
+	s, err := NewRoleStrategy("orchestrator", resolver)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy() error = %v", err)
+	}
+	shouldContinue, err := s.PreWork(context.Background(), bb, SupervisorConfig{ProjectRoot: tmpDir})
+	if err != nil {
+		t.Errorf("PreWork() error = %v", err)
+	}
+	if shouldContinue {
+		t.Error("PreWork() shouldContinue = true, want false")
+	}
+
+	// Verify the gate fired: checkpoint_trigger should be cleared
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.CheckpointTrigger != "" {
+		t.Errorf("CheckpointTrigger = %q after PreWork, want empty (gate should have fired and cleared it)", readState.Sprint.CheckpointTrigger)
+	}
+}
+
 // TestOrchestratorClaimTask_ReturnsEmpty verifies orchestrator ClaimTask returns ("", "", nil).
 func TestOrchestratorClaimTask_ReturnsEmpty(t *testing.T) {
 	resolver := testResolver(t)
