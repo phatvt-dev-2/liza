@@ -290,7 +290,7 @@ The human reviews the sprint summary and decides:
 | Pause for manual work | (no command) | Want to make manual changes before continuing                                                        |
 | Abort | `liza stop` | Want to stop entirely                                                                                |
 
-**`liza proceed`** creates child tasks from a completed task's `output[]` entries based on the pipeline transition's cardinality (`per-subtask`: one child per output entry, `one-to-one`: single child from parent). Use `liza status` to see available transitions for tasks at terminal states. After `proceed`, run `liza resume` to start the next sprint.
+**`liza proceed`** creates child tasks from a completed task's `output[]` entries based on the pipeline transition's cardinality (`per-subtask`: one child per output entry, `one-to-one`: single child from parent, `many-to-one`: all sibling tasks in a cohort must reach approved status, then one child is created linked to all parents — used by the `us-to-coding` transition to fan N approved user stories into one architecture task). Use `liza status` to see available transitions for tasks at terminal states. After `proceed`, run `liza resume` to start the next sprint.
 
 #### Replanning at Checkpoint
 

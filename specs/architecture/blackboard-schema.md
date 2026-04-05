@@ -252,7 +252,7 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
 | `output` | `[]OutputEntry` | Doer agent | Structured subtask definitions for next role pair |
 | `parent_task` | `*string` | `liza proceed` / orchestrator | Back-reference from child to parent task (deprecated: use `parent_tasks`) |
 | `parent_tasks` | `[]string` | `liza proceed` / orchestrator | Multi-parent back-references (used by many-to-one transitions; supersedes `parent_task`) |
-| `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions |
+| `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions. For `many-to-one` transitions, set on **all** cohort members (not just the trigger task) to prevent re-firing from any member |
 
 **OutputEntry fields** (all required):
 - `desc`: Task description for the child task
@@ -262,10 +262,16 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
 
 **Available transitions:**
 
-| Name | Source Status | Effect |
-|------|-------------|--------|
-| `architecture-to-code-plan` | `ARCHITECTURE_APPROVED` | Creates child code-planning tasks at DRAFT from `output[]` |
-| `code-plan-to-coding` | `CODING_PLAN_APPROVED` | Creates child coding tasks at DRAFT from `output[]` |
+| Name | Source Status | Cardinality | Effect |
+|------|-------------|-------------|--------|
+| `us-to-coding` | `US_APPROVED` | `many-to-one` | When all cohort siblings reach approved, creates **one** child architecture task linked to all N parents |
+| `architecture-to-code-plan` | `ARCHITECTURE_APPROVED` | `per-subtask` | Creates child code-planning tasks at DRAFT from `output[]` |
+| `code-plan-to-coding` | `CODING_PLAN_APPROVED` | `per-subtask` | Creates child coding tasks at DRAFT from `output[]` |
+
+**Transition cardinalities:**
+- `per-subtask`: One child task per `output[]` entry. Child ID: `{parent-id}-{transition-name}-{index}`.
+- `one-to-one`: One child task from the parent task itself. Child ID: `{parent-id}-{transition-name}`.
+- `many-to-one`: All sibling tasks sharing a `parent_task` must reach the `from` status. Creates one child linked to all N parents via `parent_tasks`. Child ID: deterministic from the cohort (transition name + shared parent task ID). `transitions_executed` is set on **all** cohort members for idempotency and crash recovery.
 
 **Child task ID format:** `{parent-id}-{transition-name}-{index}` (deterministic, namespaced by transition for crash recovery). Example: `task-1-code-plan-to-coding-0`.
 
