@@ -2803,20 +2803,18 @@ func TestExecuteAvailableTransitions_AutoTransition(t *testing.T) {
 	now := time.Now().UTC()
 	parentID := "integration-task-1"
 	reviewCommit := "abc123"
-	mergeCommit := "def456"
 	task := models.Task{
 		ID:           parentID,
 		Type:         models.TaskTypeIntegration,
 		RolePair:     "integration-pair",
 		Description:  "Integration analysis for goal",
-		Status:       models.TaskStatusMerged,
+		Status:       models.TaskStatus("INTEGRATION_ANALYSIS_APPROVED"),
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "specs/goals/test.md",
 		DoneWhen:     "Analysis approved",
 		Scope:        "full branch",
 		ReviewCommit: &reviewCommit,
-		MergeCommit:  &mergeCommit,
 		Output: []models.OutputEntry{
 			{Desc: "Fix type alignment in auth", DoneWhen: "Types match across modules", Scope: "internal/auth", SpecRef: "specs/goals/test.md"},
 			{Desc: "Fix error mapping in handler", DoneWhen: "All errors propagated", Scope: "internal/handler", SpecRef: "specs/goals/test.md"},

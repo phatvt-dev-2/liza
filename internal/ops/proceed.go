@@ -534,7 +534,23 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 		// Phase 1a: Collect available transitions based on trigger filter.
 		for i := range s.Tasks {
 			task := &s.Tasks[i]
-			if task.Status != models.TaskStatusMerged || task.RolePair == "" {
+			if task.RolePair == "" {
+				continue
+			}
+
+			// Integration tasks bypass merge — fan out from approved state directly.
+			// All other tasks fan out from MERGED (after merge handler).
+			var triggerStatus models.TaskStatus
+			if task.EffectiveType() == models.TaskTypeIntegration {
+				as, asErr := resolver.ApprovedStatus(task.RolePair)
+				if asErr != nil {
+					continue
+				}
+				triggerStatus = as
+			} else {
+				triggerStatus = models.TaskStatusMerged
+			}
+			if task.Status != triggerStatus {
 				continue
 			}
 
@@ -560,7 +576,7 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 					log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", task.ID, transitionName, err)
 					continue
 				}
-				tDef.requiredStatus = models.TaskStatusMerged
+				tDef.requiredStatus = triggerStatus
 
 				pending = append(pending, pendingTx{
 					taskID: task.ID, taskIdx: i, name: transitionName,
@@ -573,7 +589,22 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 		// Phase 1b: Collect incomplete transitions (crash recovery)
 		for i := range s.Tasks {
 			task := &s.Tasks[i]
-			if task.Status != models.TaskStatusMerged || task.RolePair == "" {
+			if task.RolePair == "" {
+				continue
+			}
+			// Same trigger-status logic as Phase 1a: integration tasks
+			// recover from approved state, others from MERGED.
+			var recoveryStatus models.TaskStatus
+			if task.EffectiveType() == models.TaskTypeIntegration {
+				as, asErr := resolver.ApprovedStatus(task.RolePair)
+				if asErr != nil {
+					continue
+				}
+				recoveryStatus = as
+			} else {
+				recoveryStatus = models.TaskStatusMerged
+			}
+			if task.Status != recoveryStatus {
 				continue
 			}
 			for transName := range task.TransitionsExecuted {
@@ -587,7 +618,7 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 				if err != nil {
 					continue
 				}
-				tDef.requiredStatus = models.TaskStatusMerged
+				tDef.requiredStatus = recoveryStatus
 				pending = append(pending, pendingTx{
 					taskID: task.ID, taskIdx: i, name: transName,
 					tDef: tDef, origIdx: origIdx,
