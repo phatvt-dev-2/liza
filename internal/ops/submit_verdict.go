@@ -142,6 +142,9 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 	// Resolve quorum states (optional — may not exist if quorum is always 1)
 	partiallyApprovedStatus, _ := resolver.PartiallyApprovedStatus(task.RolePair)
 
+	// Resolve clean state (optional — only integration-pair declares this)
+	cleanStatus, _ := resolver.CleanStatus(task.RolePair)
+
 	pipelineTransitions := BuildPipelineTransitions(resolver)
 
 	// Fast-fail before git operations; re-checked authoritatively inside Modify.
@@ -243,8 +246,12 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 					return err
 				}
 			} else {
-				// Quorum met — transition to approved
-				if err := transitionTask(approvedStatus); err != nil {
+				// Quorum met — route to clean or approved
+				targetStatus := approvedStatus
+				if cleanStatus != "" && len(task.Output) == 0 {
+					targetStatus = cleanStatus
+				}
+				if err := transitionTask(targetStatus); err != nil {
 					return err
 				}
 			}

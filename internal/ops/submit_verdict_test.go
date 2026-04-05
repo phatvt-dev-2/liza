@@ -1127,6 +1127,209 @@ func TestQuorumEvaluation(t *testing.T) {
 	})
 }
 
+func TestSubmitVerdict_CleanScanRouting(t *testing.T) {
+	// Pipeline with integration-pair declaring a clean state
+	cleanPipeline := `pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: Coder
+      timeouts: {execution: 2h, poll-interval: 30s, max-wait: 30m}
+      context-sections: [assigned-task]
+      allowed-operations: [write-checkpoint, submit-for-review, mark-blocked, handoff, set-task-output, await-verdict]
+    code-reviewer:
+      type: reviewer
+      display-name: Code Reviewer
+      timeouts: {execution: 30m, poll-interval: 30s, max-wait: 30m}
+      context-sections: [review-task]
+      allowed-operations: [submit-verdict, await-resubmission]
+    integration-analyst:
+      type: doer
+      display-name: Integration Analyst
+      timeouts: {execution: 2h, poll-interval: 30s, max-wait: 30m}
+      context-sections: [assigned-task]
+      allowed-operations: [write-checkpoint, submit-for-review, mark-blocked, handoff, set-task-output, await-verdict]
+    integration-reviewer:
+      type: reviewer
+      display-name: Integration Reviewer
+      timeouts: {execution: 30m, poll-interval: 30s, max-wait: 30m}
+      context-sections: [review-task]
+      allowed-operations: [submit-verdict, await-resubmission]
+    orchestrator:
+      type: orchestrator
+      display-name: Orchestrator
+      max-instances: 1
+      timeouts: {execution: 4h, poll-interval: 60s, max-wait: 30m}
+      context-sections: [orchestrator-dashboard]
+      allowed-operations: [add-tasks, sprint-checkpoint]
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+    integration-pair:
+      doer: integration-analyst
+      reviewer: integration-reviewer
+      states:
+        initial: DRAFT_INTEGRATION_ANALYSIS
+        executing: ANALYZING_INTEGRATION
+        submitted: INTEGRATION_ANALYSIS_TO_REVIEW
+        reviewing: REVIEWING_INTEGRATION_ANALYSIS
+        approved: INTEGRATION_ANALYSIS_APPROVED
+        rejected: INTEGRATION_ANALYSIS_REJECTED
+        clean: INTEGRATION_ANALYSIS_CLEAN
+  sub-pipelines:
+    integration-subpipeline:
+      steps: [integration-pair, coding-pair]
+      transitions:
+        - name: integration-to-fix
+          from: integration-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+  entry-points:
+    detailed-spec: integration-subpipeline.integration-pair
+`
+
+	setupCleanTest := func(t *testing.T, rolePair string, reviewingStatus models.TaskStatus, output []models.OutputEntry) (string, string) {
+		t.Helper()
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		// Overwrite with clean-aware pipeline
+		pipelinePath := filepath.Join(tmpDir, ".liza", "pipeline.yaml")
+		if err := os.WriteFile(pipelinePath, []byte(cleanPipeline), 0644); err != nil {
+			t.Fatalf("Failed to write pipeline config: %v", err)
+		}
+
+		now := time.Now().UTC()
+		reviewCommit := "abc123"
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{
+			{
+				ID:           "task-1",
+				Status:       reviewingStatus,
+				RolePair:     rolePair,
+				Priority:     1,
+				ReviewCommit: &reviewCommit,
+				Output:       output,
+				History:      []models.TaskHistoryEntry{},
+				Created:      now,
+				SpecRef:      "README.md",
+				DoneWhen:     "Task is complete",
+				Scope:        "Test scope",
+			},
+		}
+
+		reviewerAgent := "integration-reviewer-1"
+		if rolePair == "coding-pair" {
+			reviewerAgent = "code-reviewer-1"
+		}
+		state.Agents[reviewerAgent] = models.Agent{
+			Role:   strings.TrimSuffix(reviewerAgent, "-1"),
+			Status: models.AgentStatusReviewing,
+		}
+		testhelpers.WriteInitialState(t, stateFile, state)
+		return tmpDir, reviewerAgent
+	}
+
+	t.Run("empty output with clean-declared pair transitions to clean", func(t *testing.T) {
+		tmpDir, agentID := setupCleanTest(t,
+			"integration-pair",
+			models.TaskStatus("REVIEWING_INTEGRATION_ANALYSIS"),
+			nil, // empty output
+		)
+
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", agentID, "")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "APPROVED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+		}
+
+		bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+		readState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("Failed to read state: %v", err)
+		}
+		task := readState.FindTask("task-1")
+		if task == nil {
+			t.Fatal("Task not found")
+		}
+		wantStatus := models.TaskStatus("INTEGRATION_ANALYSIS_CLEAN")
+		if task.Status != wantStatus {
+			t.Errorf("Status = %v, want %v", task.Status, wantStatus)
+		}
+	})
+
+	t.Run("non-empty output with clean-declared pair transitions to approved", func(t *testing.T) {
+		tmpDir, agentID := setupCleanTest(t,
+			"integration-pair",
+			models.TaskStatus("REVIEWING_INTEGRATION_ANALYSIS"),
+			[]models.OutputEntry{{Desc: "fix type alignment", DoneWhen: "types match", Scope: "pkg/", SpecRef: "spec.md"}},
+		)
+
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", agentID, "")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "APPROVED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+		}
+
+		bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+		readState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("Failed to read state: %v", err)
+		}
+		task := readState.FindTask("task-1")
+		if task == nil {
+			t.Fatal("Task not found")
+		}
+		wantStatus := models.TaskStatus("INTEGRATION_ANALYSIS_APPROVED")
+		if task.Status != wantStatus {
+			t.Errorf("Status = %v, want %v", task.Status, wantStatus)
+		}
+	})
+
+	t.Run("no clean state declared transitions to approved regardless of output", func(t *testing.T) {
+		tmpDir, agentID := setupCleanTest(t,
+			"coding-pair",
+			models.TaskStatus("REVIEWING_CODE"),
+			nil, // empty output — should still go to approved
+		)
+
+		result, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", agentID, "")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		if result.Verdict != "APPROVED" {
+			t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+		}
+
+		bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+		readState, err := bb.Read()
+		if err != nil {
+			t.Fatalf("Failed to read state: %v", err)
+		}
+		task := readState.FindTask("task-1")
+		if task == nil {
+			t.Fatal("Task not found")
+		}
+		wantStatus := models.TaskStatus("CODE_APPROVED")
+		if task.Status != wantStatus {
+			t.Errorf("Status = %v, want %v", task.Status, wantStatus)
+		}
+	})
+}
+
 func assertReleasedAgent(t *testing.T, state *models.State, agentID string) {
 	t.Helper()
 
