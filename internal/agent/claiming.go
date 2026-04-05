@@ -296,7 +296,7 @@ func hasPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResol
 // and adds them to the current sprint's scope.
 // Called from orchestrator PreWork after checkpoint acknowledgment.
 func handleAvailableTransitions(projectRoot string) error {
-	results, err := ops.ExecuteAvailableTransitions(projectRoot)
+	results, err := ops.ExecuteAvailableTransitions(projectRoot, "")
 	if err != nil {
 		return err
 	}

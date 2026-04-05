@@ -220,7 +220,7 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 	var transitionsExecuted int
 	var transitionError string
 	if advanceResult != nil {
-		if results, err := ExecuteAvailableTransitions(projectRoot); err != nil {
+		if results, err := ExecuteAvailableTransitions(projectRoot, ""); err != nil {
 			transitionError = err.Error()
 		} else {
 			transitionsExecuted = len(results)

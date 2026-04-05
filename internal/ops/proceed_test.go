@@ -1226,7 +1226,7 @@ func TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks(t *testing.T)
 	state.Sprint.Scope.Planned = []string{parentID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
 	}
@@ -1316,7 +1316,7 @@ func TestExecuteAvailableTransitions_PerSubtask(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{parentID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
 	}
@@ -1386,7 +1386,7 @@ func TestExecuteAvailableTransitions_NoopWhenNoTransitions(t *testing.T) {
 	state.Tasks = append(state.Tasks, task)
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
 	}
@@ -1440,7 +1440,7 @@ func TestExecuteAvailableTransitions_Idempotent(t *testing.T) {
 	state.Tasks = append(state.Tasks, task, child)
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
 	}
@@ -1482,7 +1482,7 @@ func TestExecuteAvailableTransitions_NoSprintGate(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// Should succeed even though sprint is IN_PROGRESS (not COMPLETED)
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
 	}
@@ -1538,7 +1538,7 @@ func TestExecuteAvailableTransitions_ScopeDedupGuard(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{parentID, child0ID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
 	}
@@ -2134,7 +2134,7 @@ func TestEAT_TopoOrdering_UpstreamBeforeDownstream(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{"plan-2", "plan-1"}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions: %v", err)
 	}
@@ -2176,7 +2176,7 @@ func TestEAT_StableOrdering_UnrelatedTasksPreserveArrayOrder(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{"plan-a", "plan-b"}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions: %v", err)
 	}
@@ -2220,7 +2220,7 @@ func TestEAT_CycleDetection_CyclicTasksGetHistoryEvent(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{"plan-a", "plan-b"}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions: %v", err)
 	}
@@ -2284,8 +2284,8 @@ func TestEAT_CycleDetection_Idempotent(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// Run twice
-	_, _ = ExecuteAvailableTransitions(tmpDir)
-	_, _ = ExecuteAvailableTransitions(tmpDir)
+	_, _ = ExecuteAvailableTransitions(tmpDir, "manual")
+	_, _ = ExecuteAvailableTransitions(tmpDir, "manual")
 
 	bb := db.New(stateFile)
 	readState, err := bb.Read()
@@ -2340,7 +2340,7 @@ func TestEAT_CycleDetection_DownstreamBlockedTransitively(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{"plan-a", "plan-b", "plan-c", "plan-d"}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions: %v", err)
 	}
@@ -2425,7 +2425,7 @@ func TestEAT_CycleDetection_IndependentCyclesSeparated(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{"plan-a", "plan-b", "plan-c", "plan-d"}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := ExecuteAvailableTransitions(tmpDir)
+	_, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions: %v", err)
 	}
@@ -2490,7 +2490,7 @@ func TestEAT_CrashRecoveryThroughEAT(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{"plan-1", child0.ID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions: %v", err)
 	}
@@ -2548,7 +2548,7 @@ func TestEAT_PhaseGatePropagation(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{"plan-1", child0.ID, child1.ID, child2.ID, "plan-2"}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions: %v", err)
 	}
@@ -2735,7 +2735,7 @@ func TestEAT_CrashRecovery_PatchesExistingChildrenWithInheritedDeps(t *testing.T
 	state.Sprint.Scope.Planned = []string{"plan-1", upstreamChild.ID, "plan-2", existingChild.ID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	results, err := ExecuteAvailableTransitions(tmpDir)
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
 	if err != nil {
 		t.Fatalf("ExecuteAvailableTransitions: %v", err)
 	}
@@ -2770,5 +2770,168 @@ func TestEAT_CrashRecovery_PatchesExistingChildrenWithInheritedDeps(t *testing.T
 	}
 	if !slices.Contains(recovered.DependsOn, upstreamChild.ID) {
 		t.Errorf("recovered child missing inherited dep %s; DependsOn = %v", upstreamChild.ID, recovered.DependsOn)
+	}
+}
+
+// --- ExecuteAvailableTransitions: trigger filter ---
+
+// setupIntegrationPipelineProceedTest creates a temp dir with the valid-with-clean.yaml
+// pipeline config (includes integration-subpipeline with auto transition).
+func setupIntegrationPipelineProceedTest(t *testing.T) (string, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	src, err := os.ReadFile(filepath.Join(testhelpers.FindRepoRoot(t), "internal", "pipeline", "testdata", "valid-with-clean.yaml"))
+	if err != nil {
+		t.Fatalf("Failed to read pipeline testdata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".liza", "pipeline.yaml"), src, 0o644); err != nil {
+		t.Fatalf("Failed to write frozen pipeline config: %v", err)
+	}
+
+	return tmpDir, stateFile
+}
+
+func TestExecuteAvailableTransitions_AutoTransition(t *testing.T) {
+	tmpDir, stateFile := setupIntegrationPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	parentID := "integration-task-1"
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeIntegration,
+		RolePair:     "integration-pair",
+		Description:  "Integration analysis for goal",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "specs/goals/test.md",
+		DoneWhen:     "Analysis approved",
+		Scope:        "full branch",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Fix type alignment in auth", DoneWhen: "Types match across modules", Scope: "internal/auth", SpecRef: "specs/goals/test.md"},
+			{Desc: "Fix error mapping in handler", DoneWhen: "All errors propagated", Scope: "internal/handler", SpecRef: "specs/goals/test.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir, "auto")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions(auto) error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+	if results[0].TransitionName != "integration-to-fix" {
+		t.Errorf("TransitionName = %q, want %q", results[0].TransitionName, "integration-to-fix")
+	}
+	if len(results[0].ChildTaskIDs) != 2 {
+		t.Fatalf("ChildTaskIDs count = %d, want 2", len(results[0].ChildTaskIDs))
+	}
+
+	// Verify children
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for i, childID := range results[0].ChildTaskIDs {
+		child := readState.FindTask(childID)
+		if child == nil {
+			t.Fatalf("Child task %q not found", childID)
+		}
+		if child.Status != "DRAFT_CODE" {
+			t.Errorf("Child[%d] status = %q, want DRAFT_CODE", i, child.Status)
+		}
+		if child.RolePair != "coding-pair" {
+			t.Errorf("Child[%d] role_pair = %q, want coding-pair", i, child.RolePair)
+		}
+		// Verify child is in sprint scope
+		if !slices.Contains(readState.Sprint.Scope.Planned, childID) {
+			t.Errorf("Child %q not in Sprint.Scope.Planned", childID)
+		}
+	}
+
+	// Verify parent's TransitionsExecuted includes integration-to-fix
+	parent := readState.FindTask(parentID)
+	if parent == nil {
+		t.Fatal("Parent task not found after transition")
+	}
+	if !parent.TransitionsExecuted["integration-to-fix"] {
+		t.Errorf("Parent TransitionsExecuted missing 'integration-to-fix': %v", parent.TransitionsExecuted)
+	}
+}
+
+func TestExecuteAvailableTransitions_ManualFilterIgnoresAuto(t *testing.T) {
+	tmpDir, stateFile := setupIntegrationPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+
+	// Integration task with auto transition available
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	integrationTask := models.Task{
+		ID:           "integration-task-1",
+		Type:         models.TaskTypeIntegration,
+		RolePair:     "integration-pair",
+		Description:  "Integration analysis",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "specs/goals/test.md",
+		DoneWhen:     "Analysis approved",
+		Scope:        "full branch",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Fix type alignment", DoneWhen: "Types match", Scope: "internal/auth", SpecRef: "specs/goals/test.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, integrationTask)
+	state.Sprint.Scope.Planned = []string{"integration-task-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions(manual) error: %v", err)
+	}
+
+	// Manual filter should produce no results since integration-to-fix is auto
+	if len(results) != 0 {
+		t.Errorf("results count = %d, want 0 (manual filter should ignore auto transitions)", len(results))
+	}
+
+	// Verify no children were created
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	parent := readState.FindTask("integration-task-1")
+	if parent == nil {
+		t.Fatal("Parent task not found")
+	}
+	if parent.TransitionsExecuted["integration-to-fix"] {
+		t.Error("integration-to-fix should NOT be in TransitionsExecuted with manual filter")
 	}
 }
