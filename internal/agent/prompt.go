@@ -129,6 +129,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		SpecRef:      task.SpecRef,
 		PlanRef:      worktreeRelPath(splitPlanRefFile(task.PlanRef), resolveWorktreePath(config.ProjectRoot, task.Worktree)),
 		PlanSection:  splitPlanRefSection(task.PlanRef),
+		ArchRef:      worktreeRelPath(task.ArchRef, resolveWorktreePath(config.ProjectRoot, task.Worktree)),
 		Worktree:     resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		IterationNum: task.Iteration,
 		AttemptNum:   task.EffectiveAttempt(),
@@ -205,6 +206,22 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 	}
 	if mandatoryDocs, err := resolver.MandatoryDocs(config.Role); err == nil {
 		data.MandatoryDocs = mandatoryDocs
+	}
+
+	// Architect-specific: parent task contexts
+	if config.Role == roles.Architect {
+		for _, parentID := range task.EffectiveParentTasks() {
+			parent := state.FindTask(parentID)
+			if parent != nil {
+				data.ParentTaskContexts = append(data.ParentTaskContexts, prompts.ParentTaskContext{
+					ID:          parent.ID,
+					Description: truncateDescription(parent.Description, 500),
+					DoneWhen:    parent.DoneWhen,
+					SpecRef:     parent.SpecRef,
+					PlanRef:     parent.PlanRef,
+				})
+			}
+		}
 	}
 
 	return data

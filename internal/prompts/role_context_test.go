@@ -320,6 +320,87 @@ func TestRoleContextData_OrchestratorPopulation(t *testing.T) {
 	}
 }
 
+func TestRoleContextData_Architect(t *testing.T) {
+	data := RoleContextData{
+		// Identity
+		Role:     "architect",
+		AgentID:  "architect-1",
+		RoleType: "doer",
+
+		// Task
+		TaskID:      "arch-task-1",
+		Description: "Design component boundaries for feature X",
+		DoneWhen:    "Architecture document produced",
+		Scope:       "specs/arch-plan/",
+		SpecRef:     "specs/goals/feature-x.md",
+		Worktree:    "/project/.worktrees/arch-task-1",
+
+		// Architecture-specific
+		ArchRef: "/project/.worktrees/arch-task-1/specs/arch-plan/feature-x.md",
+		ParentTaskContexts: []ParentTaskContext{
+			{
+				ID:          "us-1",
+				Description: "User can sign up",
+				DoneWhen:    "Signup flow works end-to-end",
+				SpecRef:     "specs/goals/feature-x.md",
+				PlanRef:     "specs/plans/signup.md",
+			},
+			{
+				ID:          "us-2",
+				Description: "User can reset password",
+				DoneWhen:    "Password reset sends email",
+				SpecRef:     "specs/goals/feature-x.md",
+				PlanRef:     "",
+			},
+		},
+
+		// Config/state
+		ProjectRoot: "/project",
+		StatePath:   "/project/.liza/state.yaml",
+		SpecsDir:    "/project/specs",
+		GoalDesc:    "Build user management",
+	}
+
+	// Verify ArchRef is populated
+	if data.ArchRef != "/project/.worktrees/arch-task-1/specs/arch-plan/feature-x.md" {
+		t.Errorf("ArchRef = %q, want %q", data.ArchRef, "/project/.worktrees/arch-task-1/specs/arch-plan/feature-x.md")
+	}
+
+	// Verify ParentTaskContexts populated with 2 entries
+	if len(data.ParentTaskContexts) != 2 {
+		t.Fatalf("ParentTaskContexts length = %d, want 2", len(data.ParentTaskContexts))
+	}
+	if data.ParentTaskContexts[0].ID != "us-1" {
+		t.Errorf("ParentTaskContexts[0].ID = %q, want %q", data.ParentTaskContexts[0].ID, "us-1")
+	}
+	if data.ParentTaskContexts[0].Description != "User can sign up" {
+		t.Errorf("ParentTaskContexts[0].Description = %q, want %q", data.ParentTaskContexts[0].Description, "User can sign up")
+	}
+	if data.ParentTaskContexts[0].DoneWhen != "Signup flow works end-to-end" {
+		t.Errorf("ParentTaskContexts[0].DoneWhen = %q, want %q", data.ParentTaskContexts[0].DoneWhen, "Signup flow works end-to-end")
+	}
+	if data.ParentTaskContexts[0].SpecRef != "specs/goals/feature-x.md" {
+		t.Errorf("ParentTaskContexts[0].SpecRef = %q, want %q", data.ParentTaskContexts[0].SpecRef, "specs/goals/feature-x.md")
+	}
+	if data.ParentTaskContexts[0].PlanRef != "specs/plans/signup.md" {
+		t.Errorf("ParentTaskContexts[0].PlanRef = %q, want %q", data.ParentTaskContexts[0].PlanRef, "specs/plans/signup.md")
+	}
+	if data.ParentTaskContexts[1].ID != "us-2" {
+		t.Errorf("ParentTaskContexts[1].ID = %q, want %q", data.ParentTaskContexts[1].ID, "us-2")
+	}
+	if data.ParentTaskContexts[1].PlanRef != "" {
+		t.Errorf("ParentTaskContexts[1].PlanRef = %q, want empty", data.ParentTaskContexts[1].PlanRef)
+	}
+
+	// Verify orchestrator and review fields are zero-valued for architect
+	if data.DashboardOutput != "" {
+		t.Errorf("DashboardOutput should be empty for architect, got %q", data.DashboardOutput)
+	}
+	if data.ReviewCycles != 0 {
+		t.Errorf("ReviewCycles should be 0 for architect, got %d", data.ReviewCycles)
+	}
+}
+
 func TestRoleContextData_PlanRefAndValidationPlan(t *testing.T) {
 	// Coder gets PlanRef but not ValidationPlan
 	coderData := RoleContextData{

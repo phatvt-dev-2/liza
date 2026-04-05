@@ -1723,5 +1723,228 @@ func TestBuildTaskRoleContextData_CoderNoIntegrationFields(t *testing.T) {
 	}
 }
 
+// architectTestPipelineYAML is a minimal pipeline config with architect role
+// for testing ArchRef and ParentTaskContexts population in buildTaskRoleContextData.
+var architectTestPipelineYAML = `pipeline:
+  roles:
+    architect:
+      type: doer
+      display-name: "Architect"
+      context-sections:
+        - assigned-task
+    architecture-reviewer:
+      type: reviewer
+      display-name: "Architecture Reviewer"
+      context-sections:
+        - review-task
+    coder:
+      type: doer
+      display-name: "Coder"
+      context-sections:
+        - assigned-task
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      context-sections:
+        - review-task
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+      context-sections:
+        - orchestrator-dashboard
+  role-pairs:
+    architecture-pair:
+      doer: architect
+      reviewer: architecture-reviewer
+      states:
+        initial: DRAFT_ARCHITECTURE
+        executing: ARCHITECTING
+        submitted: ARCHITECTURE_TO_REVIEW
+        reviewing: REVIEWING_ARCHITECTURE
+        approved: ARCHITECTURE_APPROVED
+        rejected: ARCHITECTURE_REJECTED
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - architecture-pair
+        - coding-pair
+      transitions:
+        - name: architecture-to-coding
+          from: architecture-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+  entry-points:
+    detailed-spec: coding-subpipeline.architecture-pair
+`
+
+func TestBuildTaskRoleContextData_ArchRef(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, architectTestPipelineYAML)
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "arch-task-1",
+				Description: "Design feature X",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				DoneWhen:    "Architecture document produced",
+				ArchRef:     "specs/arch-plan/feature-x.md",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	worktree := ".worktrees/arch-task-1"
+	state.Tasks[0].Worktree = &worktree
+
+	config := SupervisorConfig{
+		Role:        "architect",
+		AgentID:     "architect-1",
+		ProjectRoot: "/project",
+	}
+
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+
+	// ArchRef should be worktree-prefixed
+	want := "/project/.worktrees/arch-task-1/specs/arch-plan/feature-x.md"
+	if data.ArchRef != want {
+		t.Errorf("ArchRef = %q, want %q", data.ArchRef, want)
+	}
+}
+
+func TestBuildTaskRoleContextData_ParentTaskContexts(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, architectTestPipelineYAML)
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "arch-task-1",
+				Description: "Design feature X",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				DoneWhen:    "Architecture document produced",
+				ParentTasks: []string{"us-1", "us-2"},
+				Created:     now,
+			},
+			{
+				ID:          "us-1",
+				Description: "User can sign up with email and password",
+				Status:      models.TaskStatusMerged,
+				Priority:    2,
+				Iteration:   1,
+				DoneWhen:    "Signup flow works end-to-end",
+				SpecRef:     "specs/goals/feature-x.md",
+				PlanRef:     "specs/plans/signup.md",
+				Created:     now,
+			},
+			{
+				ID:          "us-2",
+				Description: "User can reset password via email link",
+				Status:      models.TaskStatusMerged,
+				Priority:    3,
+				Iteration:   1,
+				DoneWhen:    "Password reset sends email and updates password",
+				SpecRef:     "specs/goals/feature-x.md",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	config := SupervisorConfig{
+		Role:        "architect",
+		AgentID:     "architect-1",
+		ProjectRoot: "/project",
+	}
+
+	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+
+	// Should have 2 parent task contexts
+	if len(data.ParentTaskContexts) != 2 {
+		t.Fatalf("ParentTaskContexts length = %d, want 2", len(data.ParentTaskContexts))
+	}
+
+	// Verify first parent task context
+	ptc0 := data.ParentTaskContexts[0]
+	if ptc0.ID != "us-1" {
+		t.Errorf("ParentTaskContexts[0].ID = %q, want %q", ptc0.ID, "us-1")
+	}
+	if ptc0.Description != "User can sign up with email and password" {
+		t.Errorf("ParentTaskContexts[0].Description = %q, want %q", ptc0.Description, "User can sign up with email and password")
+	}
+	if ptc0.DoneWhen != "Signup flow works end-to-end" {
+		t.Errorf("ParentTaskContexts[0].DoneWhen = %q, want %q", ptc0.DoneWhen, "Signup flow works end-to-end")
+	}
+	if ptc0.SpecRef != "specs/goals/feature-x.md" {
+		t.Errorf("ParentTaskContexts[0].SpecRef = %q, want %q", ptc0.SpecRef, "specs/goals/feature-x.md")
+	}
+	if ptc0.PlanRef != "specs/plans/signup.md" {
+		t.Errorf("ParentTaskContexts[0].PlanRef = %q, want %q", ptc0.PlanRef, "specs/plans/signup.md")
+	}
+
+	// Verify second parent task context
+	ptc1 := data.ParentTaskContexts[1]
+	if ptc1.ID != "us-2" {
+		t.Errorf("ParentTaskContexts[1].ID = %q, want %q", ptc1.ID, "us-2")
+	}
+	if ptc1.Description != "User can reset password via email link" {
+		t.Errorf("ParentTaskContexts[1].Description = %q, want %q", ptc1.Description, "User can reset password via email link")
+	}
+	if ptc1.DoneWhen != "Password reset sends email and updates password" {
+		t.Errorf("ParentTaskContexts[1].DoneWhen = %q, want %q", ptc1.DoneWhen, "Password reset sends email and updates password")
+	}
+	if ptc1.SpecRef != "specs/goals/feature-x.md" {
+		t.Errorf("ParentTaskContexts[1].SpecRef = %q, want %q", ptc1.SpecRef, "specs/goals/feature-x.md")
+	}
+	if ptc1.PlanRef != "" {
+		t.Errorf("ParentTaskContexts[1].PlanRef = %q, want empty", ptc1.PlanRef)
+	}
+
+	// Verify ParentTaskContexts is NOT populated for non-architect roles
+	coderConfig := SupervisorConfig{
+		Role:        "coder",
+		AgentID:     "coder-1",
+		ProjectRoot: "/project",
+	}
+	coderData := buildTaskRoleContextData(&state.Tasks[0], state, coderConfig, resolver)
+	if len(coderData.ParentTaskContexts) != 0 {
+		t.Errorf("ParentTaskContexts for coder = %d, want 0", len(coderData.ParentTaskContexts))
+	}
+}
+
 // Ensure pipeline import is used (linter guard).
 var _ = pipeline.NewResolver

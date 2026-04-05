@@ -10,6 +10,15 @@ type CompletedTaskSummary struct {
 	SpecRef     string
 }
 
+// ParentTaskContext provides context about a parent task for architecture consolidation.
+type ParentTaskContext struct {
+	ID          string
+	Description string
+	DoneWhen    string
+	SpecRef     string
+	PlanRef     string
+}
+
 // RoleContextData is the unified template data type for all role template blocks.
 // Each field group is populated as appropriate for the role being rendered.
 // Fields not relevant to a particular role remain at their zero value.
@@ -27,6 +36,7 @@ type RoleContextData struct {
 	SpecRef               string
 	PlanRef               string // file path only (no fragment)
 	PlanSection           string // anchor fragment (e.g., "capability-cap-001---task-creation"), empty if none
+	ArchRef               string // path to architecture document, empty if none
 	ValidationPlan        string
 	Worktree              string // resolved absolute path
 	IterationNum          int
@@ -49,6 +59,9 @@ type RoleContextData struct {
 	TaskOrdinal    int // 1-based position in sprint plan
 	DependsOn      []string
 	TaskRolePair   string
+
+	// Architecture-specific (populated for architect role)
+	ParentTaskContexts []ParentTaskContext
 
 	// Integration-specific (populated for integration-analyst and integration-reviewer)
 	GoalBaseCommit string
