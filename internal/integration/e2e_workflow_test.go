@@ -6,6 +6,7 @@ package integration
 // used in sequence.
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -998,6 +999,414 @@ func TestArchitecturePairWorkflow(t *testing.T) {
 	}
 
 	t.Log("TestArchitecturePairWorkflow passed — all 6 states visited, child tasks verified")
+}
+
+// walkTaskToMerged is a helper that walks a task through the full lifecycle:
+// claim → checkpoint → commit → submit → reviewer claims → approve → merge.
+// The task must already exist in the initial state of its role-pair.
+func walkTaskToMerged(t *testing.T, projectDir string, bb *db.Blackboard, taskID, doerID, doerRole, reviewerID, reviewerRole string, reviewingStatus models.TaskStatus) {
+	t.Helper()
+
+	// Register agents
+	testhelpers.RegisterTestAgent(t, bb, doerID, doerRole)
+	testhelpers.RegisterTestAgent(t, bb, reviewerID, reviewerRole)
+
+	// Claim
+	if err := commands.ClaimTaskCommand(projectDir, taskID, doerID); err != nil {
+		t.Fatalf("ClaimTask %s failed: %v", taskID, err)
+	}
+
+	// Write checkpoint
+	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
+		TaskID: taskID, AgentID: doerID,
+		Intent: "Implement " + taskID, ValidationPlan: "tests pass",
+		FilesToModify: []string{"work.md"},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint %s failed: %v", taskID, err)
+	}
+
+	// Read worktree path, create a commit
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task := findTask(state.Tasks, taskID)
+	if task == nil || task.Worktree == nil {
+		t.Fatalf("Task %s has no worktree after claim", taskID)
+	}
+	worktreePath := filepath.Join(projectDir, *task.Worktree)
+	workFile := filepath.Join(worktreePath, taskID+".go")
+	if err := os.WriteFile(workFile, []byte("package main\n"), 0644); err != nil {
+		t.Fatalf("Failed to create work file for %s: %v", taskID, err)
+	}
+	testFile := filepath.Join(worktreePath, taskID+"_test.go")
+	if err := os.WriteFile(testFile, []byte("package main\n"), 0644); err != nil {
+		t.Fatalf("Failed to create test file for %s: %v", taskID, err)
+	}
+	if err := exec.Command("git", "-C", worktreePath, "add", taskID+".go", taskID+"_test.go").Run(); err != nil {
+		t.Fatalf("git add for %s failed: %v", taskID, err)
+	}
+	if err := exec.Command("git", "-C", worktreePath, "commit", "-m", "Work on "+taskID).Run(); err != nil {
+		t.Fatalf("git commit for %s failed: %v", taskID, err)
+	}
+
+	// Submit for review
+	output, err := exec.Command("git", "-C", worktreePath, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse for %s failed: %v", taskID, err)
+	}
+	commitSHA := string(output[:len(output)-1])
+	if err := commands.SubmitForReviewCommand(projectDir, taskID, commitSHA, doerID); err != nil {
+		t.Fatalf("SubmitForReview %s failed: %v", taskID, err)
+	}
+
+	// Reviewer claims (transition to reviewing)
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	leaseExpires := state.Agents[reviewerID].LeaseExpires
+	err = bb.Modify(func(s *models.State) error {
+		tk := s.FindTask(taskID)
+		if tk == nil {
+			return nil
+		}
+		tk.Status = reviewingStatus
+		tk.ReviewingBy = &reviewerID
+		tk.ReviewLeaseExpires = leaseExpires
+		if agent, ok := s.Agents[reviewerID]; ok {
+			agent.Status = models.AgentStatusWorking
+			agent.CurrentTask = &taskID
+			s.Agents[reviewerID] = agent
+		}
+		return nil
+	})
+	testhelpers.AssertNoError(t, err)
+
+	// Approve
+	if err := commands.SubmitVerdictCommand(projectDir, taskID, "APPROVED", "", reviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict APPROVED %s failed: %v", taskID, err)
+	}
+
+	// Merge
+	os.Setenv("LIZA_AGENT_ID", reviewerID)
+	if err := commands.WtMergeCommand(projectDir, taskID, reviewerID); err != nil {
+		t.Fatalf("WtMerge %s failed: %v", taskID, err)
+	}
+	os.Unsetenv("LIZA_AGENT_ID")
+
+	// Verify MERGED
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task = findTask(state.Tasks, taskID)
+	if task.Status != models.TaskStatusMerged {
+		t.Fatalf("Expected %s to be MERGED, got %s", taskID, task.Status)
+	}
+}
+
+func TestManyToOneTransitionLifecycle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
+	projectDir, cleanup := setupTestProject(t)
+	defer cleanup()
+
+	// Step 1: Initialize project
+	t.Log("Step 1: Initialize project")
+	testhelpers.CreateSpecFile(t, projectDir, "feature.md", "# Feature Spec")
+
+	if err := commands.InitCommand("Many-to-one test goal", "specs/feature.md", nil); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+
+	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
+	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
+	bb := db.New(statePath)
+
+	// Step 2: Create parent epic-plan task with 3 output entries
+	t.Log("Step 2: Create parent epic-plan task")
+	parentID := "epic-plan-1"
+	taskInput := &commands.TaskInput{
+		ID:          parentID,
+		RolePair:    "epic-planning-pair",
+		Description: "Epic plan for feature",
+		DoneWhen:    "Plan approved",
+		Scope:       "Full feature",
+		Priority:    1,
+		SpecRef:     "specs/feature.md",
+	}
+	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "orchestrator-1"); err != nil {
+		t.Fatalf("AddTask epic-plan failed: %v", err)
+	}
+
+	// Register epic-planner and claim
+	epicPlannerID := "epic-planner-1"
+	testhelpers.RegisterTestAgent(t, bb, epicPlannerID, "epic-planner")
+	if err := commands.ClaimTaskCommand(projectDir, parentID, epicPlannerID); err != nil {
+		t.Fatalf("ClaimTask epic-plan failed: %v", err)
+	}
+
+	// Set 3 output entries
+	if err := ops.SetTaskOutput(projectDir, &ops.SetTaskOutputInput{
+		TaskID:  parentID,
+		AgentID: epicPlannerID,
+		Output: []models.OutputEntry{
+			{Desc: "User story A", DoneWhen: "Story A done", Scope: "module-a/", SpecRef: "specs/feature.md"},
+			{Desc: "User story B", DoneWhen: "Story B done", Scope: "module-b/", SpecRef: "specs/feature.md"},
+			{Desc: "User story C", DoneWhen: "Story C done", Scope: "module-c/", SpecRef: "specs/feature.md"},
+		},
+	}); err != nil {
+		t.Fatalf("SetTaskOutput failed: %v", err)
+	}
+
+	// Write checkpoint, commit, submit, review, approve, merge the epic-plan task
+	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
+		TaskID: parentID, AgentID: epicPlannerID,
+		Intent: "Epic plan", ValidationPlan: "review plan",
+		FilesToModify: []string{"plan.md"},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint epic-plan failed: %v", err)
+	}
+
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+	parentTask := findTask(state.Tasks, parentID)
+	worktreePath := filepath.Join(projectDir, *parentTask.Worktree)
+	planFile := filepath.Join(worktreePath, "plan.go")
+	if err := os.WriteFile(planFile, []byte("package main\n"), 0644); err != nil {
+		t.Fatalf("Failed to create plan file: %v", err)
+	}
+	planTestFile := filepath.Join(worktreePath, "plan_test.go")
+	if err := os.WriteFile(planTestFile, []byte("package main\n"), 0644); err != nil {
+		t.Fatalf("Failed to create plan test file: %v", err)
+	}
+	if err := exec.Command("git", "-C", worktreePath, "add", "plan.go", "plan_test.go").Run(); err != nil {
+		t.Fatalf("git add plan failed: %v", err)
+	}
+	if err := exec.Command("git", "-C", worktreePath, "commit", "-m", "Epic plan").Run(); err != nil {
+		t.Fatalf("git commit plan failed: %v", err)
+	}
+	output, err := exec.Command("git", "-C", worktreePath, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse plan failed: %v", err)
+	}
+	commitSHA := string(output[:len(output)-1])
+	if err := commands.SubmitForReviewCommand(projectDir, parentID, commitSHA, epicPlannerID); err != nil {
+		t.Fatalf("SubmitForReview epic-plan failed: %v", err)
+	}
+
+	// Reviewer approves epic-plan
+	epicReviewerID := "epic-plan-reviewer-1"
+	testhelpers.RegisterTestAgent(t, bb, epicReviewerID, "epic-plan-reviewer")
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	leaseExpires := state.Agents[epicReviewerID].LeaseExpires
+	err = bb.Modify(func(s *models.State) error {
+		tk := s.FindTask(parentID)
+		if tk == nil {
+			return nil
+		}
+		tk.Status = "REVIEWING_EPIC_PLAN"
+		tk.ReviewingBy = &epicReviewerID
+		tk.ReviewLeaseExpires = leaseExpires
+		if agent, ok := s.Agents[epicReviewerID]; ok {
+			agent.Status = models.AgentStatusWorking
+			agent.CurrentTask = &parentID
+			s.Agents[epicReviewerID] = agent
+		}
+		return nil
+	})
+	testhelpers.AssertNoError(t, err)
+	if err := commands.SubmitVerdictCommand(projectDir, parentID, "APPROVED", "", epicReviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict epic-plan failed: %v", err)
+	}
+
+	// Merge epic-plan
+	os.Setenv("LIZA_AGENT_ID", epicReviewerID)
+	if err := commands.WtMergeCommand(projectDir, parentID, epicReviewerID); err != nil {
+		t.Fatalf("WtMerge epic-plan failed: %v", err)
+	}
+	os.Unsetenv("LIZA_AGENT_ID")
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	parentTask = findTask(state.Tasks, parentID)
+	if parentTask.Status != models.TaskStatusMerged {
+		t.Fatalf("Expected epic-plan MERGED, got %s", parentTask.Status)
+	}
+
+	// Step 3: Execute per-subtask fan-out (epic-to-us) → 3 US children
+	t.Log("Step 3: Execute epic-to-us per-subtask transition")
+	results, err := ops.ExecuteAvailableTransitions(projectDir, "manual")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions (epic-to-us) failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 transition result, got %d", len(results))
+	}
+	if len(results[0].ChildTaskIDs) != 3 {
+		t.Fatalf("Expected 3 children from per-subtask, got %d", len(results[0].ChildTaskIDs))
+	}
+	childIDs := results[0].ChildTaskIDs
+	t.Logf("Created US children: %v", childIDs)
+
+	// Step 4: Walk each US child through lifecycle to MERGED
+	t.Log("Step 4: Walk US children to MERGED")
+	for i, childID := range childIDs {
+		t.Logf("  Walking child %d: %s", i, childID)
+		doerID := fmt.Sprintf("us-writer-%d", i)
+		reviewerID := fmt.Sprintf("us-reviewer-%d", i)
+		walkTaskToMerged(t, projectDir, bb, childID, doerID, "us-writer", reviewerID, "us-reviewer", "REVIEWING_US")
+	}
+
+	// Step 5: Verify all 3 children are MERGED
+	t.Log("Step 5: Verify all children MERGED")
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	for _, childID := range childIDs {
+		child := findTask(state.Tasks, childID)
+		if child == nil {
+			t.Fatalf("Child %s not found", childID)
+		}
+		if child.Status != models.TaskStatusMerged {
+			t.Fatalf("Child %s expected MERGED, got %s", childID, child.Status)
+		}
+	}
+
+	// Step 6: Execute many-to-one fan-in (us-to-coding) → 1 grandchild
+	t.Log("Step 6: Execute us-to-coding many-to-one transition")
+	results, err = ops.ExecuteAvailableTransitions(projectDir, "manual")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions (us-to-coding) failed: %v", err)
+	}
+
+	// Filter for us-to-coding results (there should be exactly 1)
+	var manyToOneResult *ops.ProceedResult
+	for i := range results {
+		if results[i].TransitionName == "us-to-coding" {
+			manyToOneResult = &results[i]
+			break
+		}
+	}
+	if manyToOneResult == nil {
+		t.Fatalf("No us-to-coding transition result found in %d results", len(results))
+	}
+
+	// Step 7: Assert 1 grandchild created
+	t.Log("Step 7: Verify grandchild task")
+	if len(manyToOneResult.ChildTaskIDs) != 1 {
+		t.Fatalf("Expected 1 grandchild from many-to-one, got %d", len(manyToOneResult.ChildTaskIDs))
+	}
+	grandchildID := manyToOneResult.ChildTaskIDs[0]
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	grandchild := findTask(state.Tasks, grandchildID)
+	if grandchild == nil {
+		t.Fatalf("Grandchild %s not found", grandchildID)
+	}
+
+	// Step 8: Assert ParentTasks contains all 3 children IDs
+	t.Log("Step 8: Verify ParentTasks")
+	if len(grandchild.ParentTasks) != 3 {
+		t.Fatalf("Expected 3 ParentTasks, got %d: %v", len(grandchild.ParentTasks), grandchild.ParentTasks)
+	}
+	for _, childID := range childIDs {
+		if !slices.Contains(grandchild.ParentTasks, childID) {
+			t.Errorf("Grandchild ParentTasks %v missing child %s", grandchild.ParentTasks, childID)
+		}
+	}
+
+	// Step 9: Assert correct role_pair, status, spec_ref
+	t.Log("Step 9: Verify grandchild properties")
+	if grandchild.RolePair != "architecture-pair" {
+		t.Errorf("Expected role_pair architecture-pair, got %s", grandchild.RolePair)
+	}
+	if grandchild.Status != "DRAFT_ARCHITECTURE" {
+		t.Errorf("Expected status DRAFT_ARCHITECTURE, got %s", grandchild.Status)
+	}
+	if grandchild.SpecRef != "specs/feature.md" {
+		t.Errorf("Expected spec_ref specs/feature.md, got %s", grandchild.SpecRef)
+	}
+	if grandchild.Type != models.TaskTypeArchitecture {
+		t.Errorf("Expected type architecture, got %s", grandchild.Type)
+	}
+
+	// Step 10: Assert deterministic child ID = <parent>-<transition>
+	t.Log("Step 10: Verify deterministic child ID")
+	expectedID := parentID + "-us-to-coding"
+	if grandchildID != expectedID {
+		t.Errorf("Expected grandchild ID %q, got %q", expectedID, grandchildID)
+	}
+
+	// Step 11: Assert transitions_executed on all 3 children
+	t.Log("Step 11: Verify transitions_executed on children")
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	for _, childID := range childIDs {
+		child := findTask(state.Tasks, childID)
+		if !child.TransitionsExecuted["us-to-coding"] {
+			t.Errorf("Child %s missing transitions_executed[us-to-coding]", childID)
+		}
+	}
+
+	// Step 12: Re-execute — assert idempotent (no new tasks)
+	t.Log("Step 12: Verify idempotency")
+	taskCountBefore := len(state.Tasks)
+	results, err = ops.ExecuteAvailableTransitions(projectDir, "manual")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions (idempotency) failed: %v", err)
+	}
+	// us-to-coding should not produce new children
+	for _, r := range results {
+		if r.TransitionName == "us-to-coding" {
+			t.Errorf("us-to-coding fired again — idempotency violated, children: %v", r.ChildTaskIDs)
+		}
+	}
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	if len(state.Tasks) != taskCountBefore {
+		t.Errorf("Idempotency: task count changed from %d to %d", taskCountBefore, len(state.Tasks))
+	}
+
+	// Step 13: Crash recovery — remove grandchild, keep transitions_executed, re-execute
+	t.Log("Step 13: Verify crash recovery")
+	err = bb.Modify(func(s *models.State) error {
+		// Remove grandchild while keeping transitions_executed on children
+		for i := range s.Tasks {
+			if s.Tasks[i].ID == grandchildID {
+				s.Tasks = append(s.Tasks[:i], s.Tasks[i+1:]...)
+				break
+			}
+		}
+		return nil
+	})
+	testhelpers.AssertNoError(t, err)
+
+	// Verify grandchild is gone
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	if findTask(state.Tasks, grandchildID) != nil {
+		t.Fatal("Grandchild should have been removed for crash recovery test")
+	}
+
+	// Re-execute transitions — crash recovery should re-create grandchild
+	_, err = ops.ExecuteAvailableTransitions(projectDir, "manual")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions (crash recovery) failed: %v", err)
+	}
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	recoveredGrandchild := findTask(state.Tasks, grandchildID)
+	if recoveredGrandchild == nil {
+		t.Fatal("Crash recovery failed: grandchild not re-created")
+	}
+	if len(recoveredGrandchild.ParentTasks) != 3 {
+		t.Errorf("Recovered grandchild: expected 3 ParentTasks, got %d", len(recoveredGrandchild.ParentTasks))
+	}
+	if recoveredGrandchild.RolePair != "architecture-pair" {
+		t.Errorf("Recovered grandchild: expected architecture-pair, got %s", recoveredGrandchild.RolePair)
+	}
+
+	t.Log("TestManyToOneTransitionLifecycle passed")
 }
 
 // findTask is a helper function to find a task by ID in a slice of tasks
