@@ -213,6 +213,14 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 				return fmt.Errorf("plan_ref: %w (task: %s)", err, task.ID)
 			}
 		}
+		if task.ArchRef != "" && strings.Contains(task.ArchRef, ".worktrees/") {
+			return fmt.Errorf("task %s arch_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.ArchRef)
+		}
+		if !skipSpecFileCheck && task.ArchRef != "" {
+			if err := checkSpecFileExists(projectRoot, task.ArchRef, state.Config.IntegrationBranch); err != nil {
+				return fmt.Errorf("arch_ref: %w (task: %s)", err, task.ID)
+			}
+		}
 
 		// Task with integration_fix must have INTEGRATION_FAILED in history
 		if task.IntegrationFix {
@@ -370,6 +378,9 @@ func validateTaskOutput(task *models.Task) error {
 		}
 		if entry.PlanRef != "" && strings.Contains(entry.PlanRef, ".worktrees/") {
 			return fmt.Errorf("task %s output[%d] plan_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.PlanRef)
+		}
+		if entry.ArchRef != "" && strings.Contains(entry.ArchRef, ".worktrees/") {
+			return fmt.Errorf("task %s output[%d] arch_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.ArchRef)
 		}
 	}
 	return nil

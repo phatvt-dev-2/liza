@@ -1,6 +1,7 @@
 package statevalidate
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -637,6 +638,55 @@ func TestValidateTaskInvariants_AttemptValidation(t *testing.T) {
 			}
 			assertErrorContains(t, err, tc.wantErr)
 		})
+	}
+}
+
+func TestValidate_ArchRefWorktreePrefix(t *testing.T) {
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+	task.ArchRef = "/project/.worktrees/t1/specs/arch-plan/feature.md"
+	err := validateTaskInvariants(stateWithTasks(task), "", true, nil, nil)
+	assertErrorContains(t, err, "arch_ref contains worktree prefix")
+}
+
+func TestValidate_ArchRefFileExistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create README.md so spec_ref validation passes
+	if err := os.WriteFile(tmpDir+"/README.md", []byte("# README"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+	task.ArchRef = "specs/arch-plan/nonexistent.md"
+	err := validateTaskInvariants(stateWithTasks(task), tmpDir, false, nil, nil)
+	assertErrorContains(t, err, "arch_ref")
+	assertErrorContains(t, err, "file not found")
+}
+
+func TestValidate_ArchRefOutputWorktreePrefix(t *testing.T) {
+	task := validOutputTask("task-1")
+	task.Output[0].ArchRef = "/project/.worktrees/t1/specs/arch-plan/feature.md"
+	err := validateTaskInvariants(stateWithTasks(task), "", true, nil, nil)
+	assertErrorContains(t, err, "arch_ref contains worktree prefix")
+}
+
+func TestValidate_ArchRefValidPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create README.md so spec_ref validation passes
+	if err := os.WriteFile(tmpDir+"/README.md", []byte("# README"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Create the arch_ref file so it passes file-existence check
+	archDir := tmpDir + "/specs/arch-plan"
+	if err := os.MkdirAll(archDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(archDir+"/feature.md", []byte("# Architecture"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+	task.ArchRef = "specs/arch-plan/feature.md"
+	err := validateTaskInvariants(stateWithTasks(task), tmpDir, false, nil, nil)
+	if err != nil {
+		t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
 	}
 }
 
