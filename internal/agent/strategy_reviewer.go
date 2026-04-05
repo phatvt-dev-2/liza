@@ -60,6 +60,12 @@ func (s *reviewerStrategy) PreWork(_ context.Context, bb *db.Blackboard, config 
 		}
 	}
 
+	// Execute auto transitions for newly-merged tasks (e.g., integration-to-fix).
+	// Manual transitions remain gated by orchestrator PLANNING_COMPLETE checkpoint.
+	if err := handleAutoTransitions(config.ProjectRoot); err != nil {
+		logger.Warn("Auto transition handler error", "error", err)
+	}
+
 	// If there are still pending merges (transient errors), retry with
 	// backoff up to a max count, then proceed to waitForWork
 	if prErr == nil && hasPendingMerges(bb, config.AgentID, pr) {
