@@ -64,38 +64,38 @@ func TestResolver_Transition_SubPipelineStillWorks(t *testing.T) {
 	}
 }
 
-func TestResolver_AvailableTransitions_PipelineTransition(t *testing.T) {
+func TestResolver_AvailableManualTransitions_PipelineTransition(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 
 	// US_APPROVED should have "us-to-coding" available.
-	got := r.AvailableTransitions("US_APPROVED", nil)
+	got := r.AvailableManualTransitions("US_APPROVED", nil)
 	want := []string{"us-to-coding"}
 	if len(got) != len(want) || got[0] != want[0] {
 		t.Errorf("AvailableTransitions(US_APPROVED, nil) = %v, want %v", got, want)
 	}
 
 	// Already executed — should return empty.
-	got = r.AvailableTransitions("US_APPROVED", map[string]bool{"us-to-coding": true})
+	got = r.AvailableManualTransitions("US_APPROVED", map[string]bool{"us-to-coding": true})
 	if len(got) != 0 {
 		t.Errorf("AvailableTransitions with executed = %v, want []", got)
 	}
 
 	// EPIC_PLAN_APPROVED should have "epic-to-us" available.
-	got = r.AvailableTransitions("EPIC_PLAN_APPROVED", nil)
+	got = r.AvailableManualTransitions("EPIC_PLAN_APPROVED", nil)
 	want = []string{"epic-to-us"}
 	if len(got) != len(want) || got[0] != want[0] {
 		t.Errorf("AvailableTransitions(EPIC_PLAN_APPROVED, nil) = %v, want %v", got, want)
 	}
 
 	// CODING_PLAN_APPROVED should have "code-plan-to-coding" available.
-	got = r.AvailableTransitions("CODING_PLAN_APPROVED", nil)
+	got = r.AvailableManualTransitions("CODING_PLAN_APPROVED", nil)
 	want = []string{"code-plan-to-coding"}
 	if len(got) != len(want) || got[0] != want[0] {
 		t.Errorf("AvailableTransitions(CODING_PLAN_APPROVED, nil) = %v, want %v", got, want)
 	}
 
 	// DRAFT_CODE should have no transitions.
-	got = r.AvailableTransitions("DRAFT_CODE", nil)
+	got = r.AvailableManualTransitions("DRAFT_CODE", nil)
 	if len(got) != 0 {
 		t.Errorf("AvailableTransitions(DRAFT_CODE, nil) = %v, want []", got)
 	}
@@ -1124,7 +1124,7 @@ func TestResolver_AvailableAutoTransitions(t *testing.T) {
 	})
 
 	t.Run("manual-only filter preserved", func(t *testing.T) {
-		got := r.AvailableTransitions("INTEGRATION_ANALYSIS_APPROVED", nil)
+		got := r.AvailableManualTransitions("INTEGRATION_ANALYSIS_APPROVED", nil)
 		if len(got) != 0 {
 			t.Errorf("AvailableTransitions(INTEGRATION_ANALYSIS_APPROVED, nil) = %v, want [] (no manual transitions)", got)
 		}

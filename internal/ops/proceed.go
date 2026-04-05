@@ -564,9 +564,9 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 			case "auto":
 				available = resolver.AvailableAutoTransitions(approvedStatus, task.TransitionsExecuted)
 			case "manual":
-				available = resolver.AvailableTransitions(approvedStatus, task.TransitionsExecuted)
+				available = resolver.AvailableManualTransitions(approvedStatus, task.TransitionsExecuted)
 			default: // "" — both
-				available = resolver.AvailableTransitions(approvedStatus, task.TransitionsExecuted)
+				available = resolver.AvailableManualTransitions(approvedStatus, task.TransitionsExecuted)
 				available = append(available, resolver.AvailableAutoTransitions(approvedStatus, task.TransitionsExecuted)...)
 			}
 			for _, transitionName := range available {
@@ -894,15 +894,15 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 	return inherited, nil
 }
 
-// AvailableTransitions returns the available manual transitions for a task.
+// AvailableManualTransitions returns the available manual transitions for a task.
 // Transitions are read from the frozen pipeline config.
 // Returns nil if no transitions are available.
-func AvailableTransitions(task *models.Task, projectRoot string) []string {
+func AvailableManualTransitions(task *models.Task, projectRoot string) []string {
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
 		return nil
 	}
-	return resolver.AvailableTransitions(task.Status, task.TransitionsExecuted)
+	return resolver.AvailableManualTransitions(task.Status, task.TransitionsExecuted)
 }
 
 // resolveTransitionDefFrom validates and resolves a manual transition definition

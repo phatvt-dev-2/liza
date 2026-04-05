@@ -162,7 +162,7 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable, pr)
 
 	for i := range state.Tasks {
-		avail := ops.AvailableTransitions(&state.Tasks[i], projectRoot)
+		avail := ops.AvailableManualTransitions(&state.Tasks[i], projectRoot)
 		if len(avail) > 0 {
 			data.PendingTransitions = append(data.PendingTransitions, pendingTransition{
 				TaskID:      state.Tasks[i].ID,

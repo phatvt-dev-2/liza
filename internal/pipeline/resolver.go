@@ -464,9 +464,9 @@ func (r *Resolver) Transition(name string) (*TransitionDef, error) {
 	return nil, fmt.Errorf("unknown transition %q", name)
 }
 
-// AvailableTransitions returns manual transition names available for a task at
+// AvailableManualTransitions returns manual transition names available for a task at
 // the given status, excluding transitions already executed.
-func (r *Resolver) AvailableTransitions(status models.TaskStatus, transitionsExecuted map[string]bool) []string {
+func (r *Resolver) AvailableManualTransitions(status models.TaskStatus, transitionsExecuted map[string]bool) []string {
 	return r.availableTransitionsByTrigger("manual", status, transitionsExecuted)
 }
 

@@ -886,23 +886,23 @@ func TestResolver_TransitionUnknown(t *testing.T) {
 	}
 }
 
-func TestResolver_AvailableTransitions(t *testing.T) {
+func TestResolver_AvailableManualTransitions(t *testing.T) {
 	r := NewResolver(loadTestConfig(t))
 
 	// CODING_PLAN_APPROVED with no executed transitions — auto transition excluded.
-	got := r.AvailableTransitions("CODING_PLAN_APPROVED", nil)
+	got := r.AvailableManualTransitions("CODING_PLAN_APPROVED", nil)
 	if len(got) != 1 || got[0] != "code-plan-to-coding" {
 		t.Errorf("AvailableTransitions(CODING_PLAN_APPROVED, nil) = %v, want [code-plan-to-coding] (auto-code-plan-to-coding should be excluded)", got)
 	}
 
 	// Already executed.
-	got = r.AvailableTransitions("CODING_PLAN_APPROVED", map[string]bool{"code-plan-to-coding": true})
+	got = r.AvailableManualTransitions("CODING_PLAN_APPROVED", map[string]bool{"code-plan-to-coding": true})
 	if len(got) != 0 {
 		t.Errorf("AvailableTransitions with executed = %v, want []", got)
 	}
 
 	// State with no transitions.
-	got = r.AvailableTransitions("DRAFT_CODE", nil)
+	got = r.AvailableManualTransitions("DRAFT_CODE", nil)
 	if len(got) != 0 {
 		t.Errorf("AvailableTransitions(DRAFT_CODE, nil) = %v, want []", got)
 	}

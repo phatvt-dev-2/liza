@@ -657,7 +657,7 @@ func TestProceed_PipelineCreatesChildTasksWithRolePair(t *testing.T) {
 	}
 }
 
-func TestAvailableTransitions_PipelineTask(t *testing.T) {
+func TestAvailableManualTransitions_PipelineTask(t *testing.T) {
 	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
@@ -679,7 +679,7 @@ func TestAvailableTransitions_PipelineTask(t *testing.T) {
 	state.Tasks = append(state.Tasks, task)
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	avail := AvailableTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
+	avail := AvailableManualTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
 	if len(avail) != 1 || avail[0] != "code-plan-to-coding" {
 		t.Errorf("AvailableTransitions = %v, want [code-plan-to-coding]", avail)
 	}
@@ -1137,7 +1137,7 @@ func TestResolvePhaseRef_2PartRef_StillWorks(t *testing.T) {
 
 // --- AvailableTransitions: pipeline-transitions ---
 
-func TestAvailableTransitions_PipelineTransition_USApproved(t *testing.T) {
+func TestAvailableManualTransitions_PipelineTransition_USApproved(t *testing.T) {
 	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
@@ -1159,13 +1159,13 @@ func TestAvailableTransitions_PipelineTransition_USApproved(t *testing.T) {
 	state.Tasks = append(state.Tasks, task)
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	avail := AvailableTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
+	avail := AvailableManualTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
 	if len(avail) != 1 || avail[0] != "us-to-coding" {
 		t.Errorf("AvailableTransitions = %v, want [us-to-coding]", avail)
 	}
 }
 
-func TestAvailableTransitions_PipelineExcludesExecuted(t *testing.T) {
+func TestAvailableManualTransitions_PipelineExcludesExecuted(t *testing.T) {
 	tmpDir, stateFile := setupPipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
@@ -1188,7 +1188,7 @@ func TestAvailableTransitions_PipelineExcludesExecuted(t *testing.T) {
 	state.Tasks = append(state.Tasks, task)
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	avail := AvailableTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
+	avail := AvailableManualTransitions(&state.Tasks[len(state.Tasks)-1], tmpDir)
 	if len(avail) != 0 {
 		t.Errorf("AvailableTransitions = %v, want [] (already executed)", avail)
 	}
