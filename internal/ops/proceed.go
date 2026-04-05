@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -510,6 +511,19 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 	statePath := paths.New(projectRoot).StatePath()
 	blackboard := db.For(statePath)
 
+	// Pre-read state to check if goal.base_commit needs snapshotting.
+	// Git operation must happen outside Modify callback.
+	var integrationHEAD string
+	preState, preErr := blackboard.Read()
+	if preErr == nil && preState.Goal.BaseCommit == nil {
+		branchName := preState.Config.IntegrationBranch
+		if branchName == "" {
+			branchName = "integration"
+		}
+		gw := git.New(projectRoot)
+		integrationHEAD, _ = gw.GetCommitSHA(branchName)
+	}
+
 	now := time.Now().UTC()
 	var results []ProceedResult
 
@@ -651,6 +665,17 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 			}
 
 			results = append(results, result)
+		}
+
+		// Snapshot goal.base_commit if this is the first time coding-pair children are created.
+		if integrationHEAD != "" && s.Goal.BaseCommit == nil {
+			for _, r := range results {
+				tDef, tdErr := buildTransitionDefFromPipeline(resolver, r.TransitionName)
+				if tdErr == nil && tDef.targetRolePair == "coding-pair" && len(r.ChildTaskIDs) > 0 {
+					s.Goal.BaseCommit = &integrationHEAD
+					break
+				}
+			}
 		}
 
 		// Add children to sprint scope (dedup guard for crash recovery idempotency)

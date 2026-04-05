@@ -2935,3 +2935,150 @@ func TestExecuteAvailableTransitions_ManualFilterIgnoresAuto(t *testing.T) {
 		t.Error("integration-to-fix should NOT be in TransitionsExecuted with manual filter")
 	}
 }
+
+// setupPhase2GitProceedTest creates a test environment with both a real git repo
+// (with integration branch) and the Phase 2 pipeline config. This is needed for
+// tests that exercise goal.BaseCommit snapshotting, which calls git rev-parse.
+func setupPhase2GitProceedTest(t *testing.T) (string, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+
+	// Initialize a real git repo with an integration branch.
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+
+	// Set up .liza dir (state.yaml, lock file).
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Copy the Phase 2 pipeline YAML (has code-plan-to-coding targeting coding-pair).
+	src, err := os.ReadFile(filepath.Join(testhelpers.FindRepoRoot(t), "internal", "pipeline", "testdata", "valid-phase2-full.yaml"))
+	if err != nil {
+		t.Fatalf("Failed to read pipeline testdata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".liza", "pipeline.yaml"), src, 0o644); err != nil {
+		t.Fatalf("Failed to write frozen pipeline config: %v", err)
+	}
+
+	return tmpDir, stateFile
+}
+
+func TestExecuteAvailableTransitions_SnapshotsGoalBaseCommit(t *testing.T) {
+	tmpDir, stateFile := setupPhase2GitProceedTest(t)
+
+	// Get actual integration branch HEAD SHA for assertion.
+	expectedSHA := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+	// goal.BaseCommit is nil (default from CreateValidState).
+
+	now := time.Now().UTC()
+	parentID := "plan-task-1"
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypePlanning,
+		RolePair:     "code-planning-pair",
+		Description:  "Code planning task",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "specs/goals/test.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "internal/ops",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Implement feature A", DoneWhen: "Tests pass", Scope: "internal/ops", SpecRef: "specs/goals/test.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir, "")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+
+	// Verify transition executed and created coding-pair children.
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+	if results[0].TransitionName != "code-plan-to-coding" {
+		t.Errorf("TransitionName = %q, want %q", results[0].TransitionName, "code-plan-to-coding")
+	}
+
+	// Verify goal.BaseCommit was set to integration HEAD SHA.
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	if readState.Goal.BaseCommit == nil {
+		t.Fatal("goal.BaseCommit should be set after first coding-pair children created")
+	}
+	if *readState.Goal.BaseCommit != expectedSHA {
+		t.Errorf("goal.BaseCommit = %q, want %q (integration HEAD)", *readState.Goal.BaseCommit, expectedSHA)
+	}
+}
+
+func TestExecuteAvailableTransitions_NoBaseCommitOverwrite(t *testing.T) {
+	tmpDir, stateFile := setupPhase2GitProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// Pre-set goal.BaseCommit to an existing value.
+	existingSHA := "abcdef1234567890abcdef1234567890abcdef12"
+	state.Goal.BaseCommit = &existingSHA
+
+	now := time.Now().UTC()
+	parentID := "plan-task-2"
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypePlanning,
+		RolePair:     "code-planning-pair",
+		Description:  "Another code planning task",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "specs/goals/test.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "internal/ops",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Implement feature B", DoneWhen: "Tests pass", Scope: "internal/ops", SpecRef: "specs/goals/test.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ExecuteAvailableTransitions(tmpDir, "")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+
+	// Verify goal.BaseCommit was NOT overwritten.
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	if readState.Goal.BaseCommit == nil {
+		t.Fatal("goal.BaseCommit should still be set")
+	}
+	if *readState.Goal.BaseCommit != existingSHA {
+		t.Errorf("goal.BaseCommit = %q, want %q (should not be overwritten)", *readState.Goal.BaseCommit, existingSHA)
+	}
+}
