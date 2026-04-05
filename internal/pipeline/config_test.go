@@ -1942,6 +1942,116 @@ pipeline:
 	}
 }
 
+func TestLoad_CleanState_Parses(t *testing.T) {
+	yaml := `
+pipeline:
+  roles:
+    analyst:
+      type: doer
+      display-name: "Analyst"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    integration-pair:
+      doer: analyst
+      reviewer: reviewer
+      states:
+        initial: DRAFT_INTEGRATION_ANALYSIS
+        executing: ANALYZING_INTEGRATION
+        submitted: INTEGRATION_ANALYSIS_TO_REVIEW
+        reviewing: REVIEWING_INTEGRATION_ANALYSIS
+        approved: INTEGRATION_ANALYSIS_APPROVED
+        rejected: INTEGRATION_ANALYSIS_REJECTED
+        clean: INTEGRATION_ANALYSIS_CLEAN
+  sub-pipelines:
+    integration:
+      steps: [integration-pair]
+      transitions: []
+  entry-points: {}
+`
+	cfg := writeTemp(t, yaml)
+	config, err := Load(cfg)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	rp := config.Pipeline.RolePairs["integration-pair"]
+	if rp.States.Clean != "INTEGRATION_ANALYSIS_CLEAN" {
+		t.Errorf("Clean = %q, want %q", rp.States.Clean, "INTEGRATION_ANALYSIS_CLEAN")
+	}
+}
+
+func TestLoad_CleanState_DuplicateAcrossRolePairs(t *testing.T) {
+	yaml := `
+pipeline:
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_A
+        executing: EXEC_A
+        submitted: SUB_A
+        reviewing: REV_A
+        approved: APP_A
+        rejected: REJ_A
+        clean: SHARED_CLEAN
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_B
+        executing: EXEC_B
+        submitted: SUB_B
+        reviewing: REV_B
+        approved: APP_B
+        rejected: REJ_B
+        clean: SHARED_CLEAN
+  sub-pipelines:
+    sp1:
+      steps: [pair-a]
+      transitions: []
+    sp2:
+      steps: [pair-b]
+      transitions: []
+  entry-points: {}
+`
+	cfg := writeTemp(t, yaml)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error for duplicate clean state name")
+	}
+	assertContains(t, err.Error(), "duplicate state name")
+	assertContains(t, err.Error(), "SHARED_CLEAN")
+}
+
+func TestLoad_CleanState_BackwardCompat(t *testing.T) {
+	// Pipeline YAML without clean field should still parse.
+	cfg, err := Load("testdata/valid-coding-subpipeline.yaml")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	// Existing role-pairs should have empty Clean.
+	for name, rp := range cfg.Pipeline.RolePairs {
+		if rp.States.Clean != "" {
+			t.Errorf("role-pair %q: Clean = %q, want empty", name, rp.States.Clean)
+		}
+	}
+}
+
+func TestValidPhases_IncludesClean(t *testing.T) {
+	if !validPhases["clean"] {
+		t.Error("validPhases[\"clean\"] is false, want true")
+	}
+}
+
 func TestQuorumStatesRequiredForBaseQuorum(t *testing.T) {
 	// Base quorum 2, missing quorum states → rejected.
 	yaml := `
