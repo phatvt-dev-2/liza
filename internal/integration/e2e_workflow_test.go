@@ -1409,6 +1409,376 @@ func TestManyToOneTransitionLifecycle(t *testing.T) {
 	t.Log("TestManyToOneTransitionLifecycle passed")
 }
 
+// TestArchRefPropagation verifies the full arch_ref data flow:
+// 1. Architect sets arch_ref on output[] entries → code-planning children receive it (first hop)
+// 2. Code-planning task carries arch_ref but its output[] entries omit it → coding children inherit from parent (second hop)
+func TestArchRefPropagation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
+	projectDir, cleanup := setupTestProject(t)
+	defer cleanup()
+
+	// Step 1: Initialize project
+	t.Log("Step 1: Initialize project")
+	testhelpers.CreateSpecFile(t, projectDir, "arch-prop.md", "# Arch Ref Propagation Feature")
+
+	if err := commands.InitCommand("Arch ref propagation test", "specs/arch-prop.md", nil); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+
+	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
+	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
+	bb := db.New(statePath)
+
+	// Step 2: Add architecture task
+	t.Log("Step 2: Add architecture task")
+	archTaskID := "arch-prop-1"
+	taskInput := &commands.TaskInput{
+		ID:          archTaskID,
+		Type:        "architecture",
+		RolePair:    "architecture-pair",
+		Description: "Architecture for arch-ref propagation feature",
+		DoneWhen:    "Architecture defined",
+		Scope:       "Full feature",
+		Priority:    1,
+		SpecRef:     "specs/arch-prop.md",
+		DependsOn:   []string{},
+	}
+	if err := commands.AddTaskCommand(statePath, logPath, taskInput, "orchestrator-1"); err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+
+	// Step 3: Architect claims and sets output with arch_ref
+	t.Log("Step 3: Architect claims and sets output with arch_ref")
+	architectID := "architect-10"
+	testhelpers.RegisterTestAgent(t, bb, architectID, "architect")
+
+	if err := commands.ClaimTaskCommand(projectDir, archTaskID, architectID); err != nil {
+		t.Fatalf("ClaimTask failed: %v", err)
+	}
+
+	// Create the architecture document in the worktree so it can be committed
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+	archTask := findTask(state.Tasks, archTaskID)
+	if archTask == nil || archTask.Worktree == nil {
+		t.Fatal("Architecture task has no worktree after claim")
+	}
+	worktreePath := filepath.Join(projectDir, *archTask.Worktree)
+
+	// Create specs/arch-plan directory and document
+	archPlanDir := filepath.Join(worktreePath, "specs", "arch-plan")
+	if err := os.MkdirAll(archPlanDir, 0755); err != nil {
+		t.Fatalf("Failed to create arch-plan dir: %v", err)
+	}
+	archDocPath := filepath.Join(archPlanDir, "feature.md")
+	if err := os.WriteFile(archDocPath, []byte("# Architecture Plan\n\n## Components\n"), 0644); err != nil {
+		t.Fatalf("Failed to create arch doc: %v", err)
+	}
+
+	// Set output entries with arch_ref pointing to the architecture document
+	archRef := "specs/arch-plan/feature.md"
+	if err := ops.SetTaskOutput(projectDir, &ops.SetTaskOutputInput{
+		TaskID:  archTaskID,
+		AgentID: architectID,
+		Output: []models.OutputEntry{
+			{
+				Desc:     "Implement auth module",
+				DoneWhen: "Auth module complete",
+				Scope:    "internal/auth/",
+				SpecRef:  "specs/arch-prop.md",
+				ArchRef:  archRef,
+			},
+			{
+				Desc:     "Implement storage layer",
+				DoneWhen: "Storage layer complete",
+				Scope:    "internal/storage/",
+				SpecRef:  "specs/arch-prop.md",
+				ArchRef:  archRef,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("SetTaskOutput failed: %v", err)
+	}
+
+	// Step 4: Walk architecture task through review and merge
+	t.Log("Step 4: Submit, review, approve, merge architecture task")
+	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
+		TaskID: archTaskID, AgentID: architectID,
+		Intent: "Architecture definition", ValidationPlan: "Review architecture",
+		FilesToModify: []string{"specs/arch-plan/feature.md"},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint failed: %v", err)
+	}
+
+	if err := exec.Command("git", "-C", worktreePath, "add", "specs/arch-plan/feature.md").Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
+	if err := exec.Command("git", "-C", worktreePath, "commit", "-m", "Define architecture").Run(); err != nil {
+		t.Fatalf("git commit failed: %v", err)
+	}
+
+	output, err := exec.Command("git", "-C", worktreePath, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse failed: %v", err)
+	}
+	reviewCommit := string(output[:len(output)-1])
+
+	if err := commands.SubmitForReviewCommand(projectDir, archTaskID, reviewCommit, architectID); err != nil {
+		t.Fatalf("SubmitForReview failed: %v", err)
+	}
+
+	// Reviewer approves
+	archReviewerID := "architecture-reviewer-10"
+	testhelpers.RegisterTestAgent(t, bb, archReviewerID, "architecture-reviewer")
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	leaseExpires := state.Agents[archReviewerID].LeaseExpires
+	err = bb.Modify(func(s *models.State) error {
+		tk := s.FindTask(archTaskID)
+		if tk == nil {
+			return nil
+		}
+		tk.Status = "REVIEWING_ARCHITECTURE"
+		tk.ReviewingBy = &archReviewerID
+		tk.ReviewLeaseExpires = leaseExpires
+		if agent, ok := s.Agents[archReviewerID]; ok {
+			agent.Status = models.AgentStatusWorking
+			agent.CurrentTask = &archTaskID
+			s.Agents[archReviewerID] = agent
+		}
+		return nil
+	})
+	testhelpers.AssertNoError(t, err)
+
+	if err := commands.SubmitVerdictCommand(projectDir, archTaskID, "APPROVED", "", archReviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict (APPROVED) failed: %v", err)
+	}
+
+	// Merge
+	os.Setenv("LIZA_AGENT_ID", archReviewerID)
+	if err := commands.WtMergeCommand(projectDir, archTaskID, archReviewerID); err != nil {
+		t.Fatalf("WtMerge failed: %v", err)
+	}
+	os.Unsetenv("LIZA_AGENT_ID")
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	archTask = findTask(state.Tasks, archTaskID)
+	if archTask.Status != models.TaskStatusMerged {
+		t.Fatalf("Expected MERGED, got %s", archTask.Status)
+	}
+
+	// Step 5: Execute architecture-to-code-plan transition
+	t.Log("Step 5: Execute architecture-to-code-plan transition")
+	results, err := ops.ExecuteAvailableTransitions(projectDir, "manual")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions failed: %v", err)
+	}
+
+	var archToCodePlanResult *ops.ProceedResult
+	for i := range results {
+		if results[i].TransitionName == "architecture-to-code-plan" {
+			archToCodePlanResult = &results[i]
+			break
+		}
+	}
+	if archToCodePlanResult == nil {
+		t.Fatalf("No architecture-to-code-plan transition result found in %d results", len(results))
+	}
+	if len(archToCodePlanResult.ChildTaskIDs) != 2 {
+		t.Fatalf("Expected 2 code-planning children, got %d", len(archToCodePlanResult.ChildTaskIDs))
+	}
+
+	// Step 6: FIRST HOP ASSERTION — code-planning tasks receive arch_ref from output[] entries
+	t.Log("Step 6: Assert code-planning children have arch_ref from output[] entries")
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+
+	codePlanIDs := archToCodePlanResult.ChildTaskIDs
+	for _, cpID := range codePlanIDs {
+		child := findTask(state.Tasks, cpID)
+		if child == nil {
+			t.Fatalf("Code-planning child %s not found", cpID)
+		}
+		if child.ArchRef != archRef {
+			t.Errorf("Code-planning child %s: expected arch_ref %q, got %q", cpID, archRef, child.ArchRef)
+		}
+		if child.RolePair != "code-planning-pair" {
+			t.Errorf("Code-planning child %s: expected role_pair code-planning-pair, got %s", cpID, child.RolePair)
+		}
+		if child.SpecRef != "specs/arch-prop.md" {
+			t.Errorf("Code-planning child %s: expected spec_ref specs/arch-prop.md, got %s", cpID, child.SpecRef)
+		}
+	}
+
+	// Step 7: Walk first code-planning child through lifecycle with output[] entries that LACK arch_ref
+	t.Log("Step 7: Walk code-planning child through lifecycle (output without arch_ref)")
+	cpTaskID := codePlanIDs[0]
+	cpDoerID := "code-planner-10"
+	cpReviewerID := "code-plan-reviewer-10"
+	testhelpers.RegisterTestAgent(t, bb, cpDoerID, "code-planner")
+	testhelpers.RegisterTestAgent(t, bb, cpReviewerID, "code-plan-reviewer")
+
+	if err := commands.ClaimTaskCommand(projectDir, cpTaskID, cpDoerID); err != nil {
+		t.Fatalf("ClaimTask code-planning failed: %v", err)
+	}
+
+	// Set output entries WITHOUT arch_ref — testing second-hop inheritance
+	if err := ops.SetTaskOutput(projectDir, &ops.SetTaskOutputInput{
+		TaskID:  cpTaskID,
+		AgentID: cpDoerID,
+		Output: []models.OutputEntry{
+			{
+				Desc:     "Implement auth handler",
+				DoneWhen: "Handler tests pass",
+				Scope:    "internal/auth/handler.go",
+				SpecRef:  "specs/arch-prop.md",
+				// No ArchRef — testing parent inheritance
+			},
+			{
+				Desc:     "Implement auth middleware",
+				DoneWhen: "Middleware tests pass",
+				Scope:    "internal/auth/middleware.go",
+				SpecRef:  "specs/arch-prop.md",
+				// No ArchRef — testing parent inheritance
+			},
+		},
+	}); err != nil {
+		t.Fatalf("SetTaskOutput code-planning failed: %v", err)
+	}
+
+	// Checkpoint, commit, submit, review, approve, merge
+	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
+		TaskID: cpTaskID, AgentID: cpDoerID,
+		Intent: "Code plan for auth module", ValidationPlan: "tests pass",
+		FilesToModify: []string{"plan.md"},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint code-planning failed: %v", err)
+	}
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	cpTask := findTask(state.Tasks, cpTaskID)
+	if cpTask == nil || cpTask.Worktree == nil {
+		t.Fatal("Code-planning task has no worktree after claim")
+	}
+	cpWorktreePath := filepath.Join(projectDir, *cpTask.Worktree)
+
+	// Create plan file and commit
+	planFile := filepath.Join(cpWorktreePath, "plan.md")
+	if err := os.WriteFile(planFile, []byte("# Code Plan\n"), 0644); err != nil {
+		t.Fatalf("Failed to create plan file: %v", err)
+	}
+	if err := exec.Command("git", "-C", cpWorktreePath, "add", "plan.md").Run(); err != nil {
+		t.Fatalf("git add plan failed: %v", err)
+	}
+	if err := exec.Command("git", "-C", cpWorktreePath, "commit", "-m", "Code plan").Run(); err != nil {
+		t.Fatalf("git commit plan failed: %v", err)
+	}
+
+	output, err = exec.Command("git", "-C", cpWorktreePath, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse code-planning failed: %v", err)
+	}
+	cpCommit := string(output[:len(output)-1])
+
+	if err := commands.SubmitForReviewCommand(projectDir, cpTaskID, cpCommit, cpDoerID); err != nil {
+		t.Fatalf("SubmitForReview code-planning failed: %v", err)
+	}
+
+	// Reviewer approves
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	leaseExpires = state.Agents[cpReviewerID].LeaseExpires
+	err = bb.Modify(func(s *models.State) error {
+		tk := s.FindTask(cpTaskID)
+		if tk == nil {
+			return nil
+		}
+		tk.Status = "REVIEWING_CODING_PLAN"
+		tk.ReviewingBy = &cpReviewerID
+		tk.ReviewLeaseExpires = leaseExpires
+		if agent, ok := s.Agents[cpReviewerID]; ok {
+			agent.Status = models.AgentStatusWorking
+			agent.CurrentTask = &cpTaskID
+			s.Agents[cpReviewerID] = agent
+		}
+		return nil
+	})
+	testhelpers.AssertNoError(t, err)
+
+	if err := commands.SubmitVerdictCommand(projectDir, cpTaskID, "APPROVED", "", cpReviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict code-planning APPROVED failed: %v", err)
+	}
+
+	// Merge code-planning task
+	os.Setenv("LIZA_AGENT_ID", cpReviewerID)
+	if err := commands.WtMergeCommand(projectDir, cpTaskID, cpReviewerID); err != nil {
+		t.Fatalf("WtMerge code-planning failed: %v", err)
+	}
+	os.Unsetenv("LIZA_AGENT_ID")
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	cpTask = findTask(state.Tasks, cpTaskID)
+	if cpTask.Status != models.TaskStatusMerged {
+		t.Fatalf("Expected code-planning MERGED, got %s", cpTask.Status)
+	}
+
+	// Verify code-planning task still carries arch_ref
+	if cpTask.ArchRef != archRef {
+		t.Fatalf("Code-planning task lost arch_ref after merge: expected %q, got %q", archRef, cpTask.ArchRef)
+	}
+
+	// Step 8: Execute code-plan-to-coding transition
+	t.Log("Step 8: Execute code-plan-to-coding transition")
+	results, err = ops.ExecuteAvailableTransitions(projectDir, "manual")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions (code-plan-to-coding) failed: %v", err)
+	}
+
+	var codePlanToCodingResult *ops.ProceedResult
+	for i := range results {
+		if results[i].TransitionName == "code-plan-to-coding" {
+			codePlanToCodingResult = &results[i]
+			break
+		}
+	}
+	if codePlanToCodingResult == nil {
+		t.Fatalf("No code-plan-to-coding transition result found in %d results", len(results))
+	}
+	if len(codePlanToCodingResult.ChildTaskIDs) != 2 {
+		t.Fatalf("Expected 2 coding children, got %d", len(codePlanToCodingResult.ChildTaskIDs))
+	}
+
+	// Step 9: SECOND HOP ASSERTION — coding tasks inherit arch_ref from parent code-planning task
+	t.Log("Step 9: Assert coding children inherit arch_ref from parent code-planning task")
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+
+	for _, codingID := range codePlanToCodingResult.ChildTaskIDs {
+		codingTask := findTask(state.Tasks, codingID)
+		if codingTask == nil {
+			t.Fatalf("Coding child %s not found", codingID)
+		}
+		if codingTask.ArchRef != archRef {
+			t.Errorf("Coding child %s: expected arch_ref %q (inherited from parent), got %q", codingID, archRef, codingTask.ArchRef)
+		}
+		if codingTask.RolePair != "coding-pair" {
+			t.Errorf("Coding child %s: expected role_pair coding-pair, got %s", codingID, codingTask.RolePair)
+		}
+		if codingTask.SpecRef != "specs/arch-prop.md" {
+			t.Errorf("Coding child %s: expected spec_ref specs/arch-prop.md, got %s", codingID, codingTask.SpecRef)
+		}
+	}
+
+	t.Log("TestArchRefPropagation passed — first hop and second hop arch_ref propagation verified")
+}
+
 // findTask is a helper function to find a task by ID in a slice of tasks
 func findTask(tasks []models.Task, taskID string) *models.Task {
 	for i := range tasks {
