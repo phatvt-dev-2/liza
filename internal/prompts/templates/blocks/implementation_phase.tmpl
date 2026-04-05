@@ -5,6 +5,9 @@
 {{- if ne .PlanRef ""}}
 Read the implementation plan at {{.PlanRef}} for task decomposition context.
 {{- end}}
+{{- if ne .ArchRef ""}}
+Read the architecture document at {{.ArchRef}} for structural context and component boundaries.
+{{- end}}
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
 3. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Invoke skill: testing.
@@ -21,6 +24,10 @@ Read the implementation plan at {{.PlanRef}} for task decomposition context.
 {{- else if eq .Role "code-planner"}}
 
 IMPLEMENTATION PHASE:
+{{- if ne .ArchRef ""}}
+ARCHITECTURE REFERENCE: {{.ArchRef}}
+Read the architecture document for structural context before planning.
+{{- end}}
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Plan file location:
    Run: mkdir -p {{.Worktree}}/specs/plans

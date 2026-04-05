@@ -1756,6 +1756,126 @@ func TestDetermineWakeTrigger_CodingComplete(t *testing.T) {
 	}
 }
 
+func TestBuildRoleContext_ArchRef(t *testing.T) {
+	projectRoot := setupPipelineConfig(t)
+	resolver := testPipelineResolver(t)
+
+	t.Run("coder with ArchRef renders architecture document reference", func(t *testing.T) {
+		data := &RoleContextData{
+			Role: "coder", AgentID: "coder-1", RoleType: "doer",
+			TaskID: "task-1", Description: "Implement feature X",
+			DoneWhen: "Feature X works", Scope: "internal/feature",
+			Worktree:          projectRoot + "/.worktrees/task-1",
+			IterationNum:      1,
+			IntegrationBranch: "integration",
+			ArchRef:           "specs/arch-plan/feature.md",
+			ProjectRoot:       projectRoot,
+		}
+		sections, _ := resolver.ContextSections("coder")
+		output, err := BuildRoleContext("coder", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+		if !strings.Contains(output, "architecture document at") {
+			t.Error("coder output missing 'architecture document at' when ArchRef is set")
+		}
+		if !strings.Contains(output, "specs/arch-plan/feature.md") {
+			t.Error("coder output missing ArchRef path")
+		}
+	})
+
+	t.Run("coder without ArchRef omits architecture document", func(t *testing.T) {
+		data := &RoleContextData{
+			Role: "coder", AgentID: "coder-1", RoleType: "doer",
+			TaskID: "task-1", Description: "Implement feature X",
+			DoneWhen: "Feature X works", Scope: "internal/feature",
+			Worktree:          projectRoot + "/.worktrees/task-1",
+			IterationNum:      1,
+			IntegrationBranch: "integration",
+			ProjectRoot:       projectRoot,
+		}
+		sections, _ := resolver.ContextSections("coder")
+		output, err := BuildRoleContext("coder", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+		if strings.Contains(output, "architecture document") {
+			t.Error("coder output should NOT contain 'architecture document' when ArchRef is empty")
+		}
+	})
+
+	t.Run("code-reviewer with ArchRef includes architectural decisions", func(t *testing.T) {
+		data := &RoleContextData{
+			Role: "code-reviewer", AgentID: "code-reviewer-1", RoleType: "reviewer",
+			TaskID: "task-1", Description: "Implement feature X",
+			DoneWhen: "Feature X works", Scope: "internal/feature",
+			Worktree:     projectRoot + "/.worktrees/task-1",
+			IterationNum: 1,
+			BaseCommit:   "abc", ReviewCommit: "def", AssignedTo: "coder-1",
+			ArchRef:     "specs/arch-plan/feature.md",
+			ProjectRoot: projectRoot,
+		}
+		sections, _ := resolver.ContextSections("code-reviewer")
+		output, err := BuildRoleContext("code-reviewer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+		if !strings.Contains(output, "architectural decisions") {
+			t.Error("code-reviewer output missing 'architectural decisions' when ArchRef is set")
+		}
+		if !strings.Contains(output, "specs/arch-plan/feature.md") {
+			t.Error("code-reviewer output missing ArchRef path")
+		}
+	})
+
+	t.Run("code-plan-reviewer with ArchRef includes ARCHITECTURE REFERENCE", func(t *testing.T) {
+		data := &RoleContextData{
+			Role: "code-plan-reviewer", AgentID: "code-plan-reviewer-1", RoleType: "reviewer",
+			TaskID: "task-1", Description: "Plan feature X",
+			DoneWhen: "Plan approved", Scope: "internal/feature",
+			Worktree:     projectRoot + "/.worktrees/task-1",
+			IterationNum: 1,
+			BaseCommit:   "abc", ReviewCommit: "def", AssignedTo: "code-planner-1",
+			ArchRef:     "specs/arch-plan/feature.md",
+			ProjectRoot: projectRoot,
+		}
+		sections, _ := resolver.ContextSections("code-plan-reviewer")
+		output, err := BuildRoleContext("code-plan-reviewer", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+		if !strings.Contains(output, "ARCHITECTURE REFERENCE") {
+			t.Error("code-plan-reviewer output missing 'ARCHITECTURE REFERENCE' when ArchRef is set")
+		}
+		if !strings.Contains(output, "specs/arch-plan/feature.md") {
+			t.Error("code-plan-reviewer output missing ArchRef path")
+		}
+	})
+
+	t.Run("code-planner with ArchRef includes ARCHITECTURE REFERENCE", func(t *testing.T) {
+		data := &RoleContextData{
+			Role: "code-planner", AgentID: "code-planner-1", RoleType: "doer",
+			TaskID: "task-1", Description: "Plan feature X",
+			DoneWhen: "Plan approved", Scope: "internal/feature",
+			Worktree:     projectRoot + "/.worktrees/task-1",
+			IterationNum: 1,
+			ArchRef:      "specs/arch-plan/feature.md",
+			ProjectRoot:  projectRoot,
+		}
+		sections, _ := resolver.ContextSections("code-planner")
+		output, err := BuildRoleContext("code-planner", sections, data)
+		if err != nil {
+			t.Fatalf("BuildRoleContext: %v", err)
+		}
+		if !strings.Contains(output, "ARCHITECTURE REFERENCE") {
+			t.Error("code-planner output missing 'ARCHITECTURE REFERENCE' when ArchRef is set")
+		}
+		if !strings.Contains(output, "specs/arch-plan/feature.md") {
+			t.Error("code-planner output missing ArchRef path")
+		}
+	})
+}
+
 func TestDetermineWakeTrigger_SprintCompleteNotCoding(t *testing.T) {
 	// sprintComplete=true, codingComplete=false → SPRINT_COMPLETE
 	got := determineWakeTrigger(5, 0, 0, 0, true, false, nil)
