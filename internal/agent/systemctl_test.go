@@ -192,3 +192,74 @@ func TestVerifyOrchestratorStateChanges_HypothesisExhaustedNotResolved(t *testin
 		t.Errorf("Expected no error for no-op HYPOTHESIS_EXHAUSTED exit (may require human intervention), got: %v", err)
 	}
 }
+
+// TestVerifyOrchestratorStateChanges_CodingCompleteNoIntegration verifies that
+// CODING_COMPLETE wake rejects when no integration-pair task was created.
+func TestVerifyOrchestratorStateChanges_CodingCompleteNoIntegration(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	baseCommit := "abc123"
+
+	// State before: all tasks terminal, base_commit set, no integration task
+	stateBefore := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+			BaseCommit:  &baseCommit,
+		},
+		Agents: map[string]models.Agent{
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusPlanning, Heartbeat: now},
+		},
+		Sprint: models.Sprint{
+			Number: 1,
+			Status: models.SprintStatusInProgress,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+		},
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	// State after: still no integration-pair task (orchestrator failed to create one)
+	stateAfter := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+			BaseCommit:  &baseCommit,
+		},
+		Agents: map[string]models.Agent{
+			"orchestrator-1": {Role: "orchestrator", Status: models.AgentStatusIdle, Heartbeat: now},
+		},
+		Sprint: models.Sprint{
+			Number: 1,
+			Status: models.SprintStatusInProgress,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+		},
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	testhelpers.WriteInitialState(t, statePath, stateAfter)
+
+	bb := db.New(statePath)
+
+	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil)
+	if err == nil {
+		t.Error("Expected error when CODING_COMPLETE trigger but no integration-pair task created")
+	}
+	if err != nil && !strings.Contains(err.Error(), "integration-pair") {
+		t.Errorf("Expected error mentioning integration-pair, got: %v", err)
+	}
+}

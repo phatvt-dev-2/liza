@@ -1706,3 +1706,33 @@ func TestBlockReviewInstructions_IntegrationReviewer(t *testing.T) {
 		t.Error("expected output[] references")
 	}
 }
+
+func TestWakeTemplate_CodingComplete(t *testing.T) {
+	data := wakeTemplateData{AgentID: "orchestrator-1"}
+	result, err := executeTemplate("wake_coding_complete", data)
+	if err != nil {
+		t.Fatalf("executeTemplate(wake_coding_complete) error: %v", err)
+	}
+
+	for _, want := range []string{"integration-pair", "integration", "goal.base_commit", "BLOCKED ESCALATION"} {
+		if !strings.Contains(result, want) {
+			t.Errorf("wake_coding_complete output missing %q", want)
+		}
+	}
+}
+
+func TestDetermineWakeTrigger_CodingComplete(t *testing.T) {
+	// sprintComplete=true, codingComplete=true → CODING_COMPLETE
+	got := determineWakeTrigger(5, 0, 0, 0, true, true, nil)
+	if got != "CODING_COMPLETE" {
+		t.Errorf("expected CODING_COMPLETE, got %s", got)
+	}
+}
+
+func TestDetermineWakeTrigger_SprintCompleteNotCoding(t *testing.T) {
+	// sprintComplete=true, codingComplete=false → SPRINT_COMPLETE
+	got := determineWakeTrigger(5, 0, 0, 0, true, false, nil)
+	if got != "SPRINT_COMPLETE" {
+		t.Errorf("expected SPRINT_COMPLETE, got %s", got)
+	}
+}

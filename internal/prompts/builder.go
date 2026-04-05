@@ -69,7 +69,9 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 		planningTasks = collectMergedPlanningTasks(state, planningPairs)
 	}
 
-	wakeTrigger := determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, sprintComplete, planningTasks)
+	codingComplete := state.Goal.BaseCommit != nil && !hasIntegrationTaskInSprint(state)
+
+	wakeTrigger := determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, sprintComplete, codingComplete, planningTasks)
 
 	wakeData, wakeErr := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, projectRoot)
 	if wakeErr != nil {
@@ -204,6 +206,17 @@ func countCycleBlockedPlanning(tasks []models.Task, planningPairs map[string]boo
 		}
 	}
 	return count
+}
+
+// hasIntegrationTaskInSprint checks if any planned task uses the integration-pair role-pair.
+func hasIntegrationTaskInSprint(state *models.State) bool {
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if task != nil && task.RolePair == "integration-pair" {
+			return true
+		}
+	}
+	return false
 }
 
 // BuildRoleContext assembles role-specific context by rendering the named template

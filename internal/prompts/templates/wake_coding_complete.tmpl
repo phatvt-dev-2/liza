@@ -1,0 +1,24 @@
+{{- define "wake_coding_complete" -}}
+All coding tasks for this goal have been merged. Integration analysis is needed.
+
+Spawn a single integration-analyst task scoped to the full branch diff since goal.base_commit.
+
+1. Read the goal spec: liza_get {"query": "goal"}
+2. Create integration task: liza_add_tasks with:
+   {"tasks": [{
+     "id": "integration-1",
+     "type": "integration",
+     "role_pair": "integration-pair",
+     "desc": "Integration analysis: scan full branch diff for cross-task consistency issues (type alignment, serialization completeness, error mapping, API surface coherence, test/code agreement, code organization)",
+     "spec": "<goal spec_ref>",
+     "done": "Branch diff from goal.base_commit analyzed. Either: (a) fix-task definitions produced as output[] entries, each with single intent, falsifiable done_when, and correct scope; or (b) clean scan confirmed with empty output[] and INTEGRATION_ANALYSIS_CLEAN terminal state.",
+     "scope": "Full branch diff analysis from goal.base_commit to integration HEAD. Read-only analysis producing fix-task definitions, not code changes.",
+     "priority": 1
+   }], "agent_id": "{{.AgentID}}"}
+3. Update sprint metrics: liza_update_sprint_metrics {"agent_id": "{{.AgentID}}"}
+
+BLOCKED ESCALATION:
+If a fix task is BLOCKED by a coder because the fix requires non-trivial work (e.g., type alignment across many files, new error type + propagation), you will wake on BLOCKED_TASKS. At that point, supersede the fix task and create a full code-planning task in the coding sub-pipeline.
+
+Do NOT create a sprint checkpoint — integration proceeds without human gate.
+{{- end -}}

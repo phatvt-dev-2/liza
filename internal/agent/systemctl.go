@@ -249,6 +249,20 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 		}
 		logger.Info("Orchestrator checkpointed planning completion")
 
+	case WakeTriggerCodingComplete:
+		// CODING_COMPLETE: expect integration task to exist after orchestrator runs
+		hasIntegration := false
+		for _, task := range stateAfter.Tasks {
+			if task.RolePair == "integration-pair" {
+				hasIntegration = true
+				break
+			}
+		}
+		if !hasIntegration {
+			return fmt.Errorf("orchestrator completed with CODING_COMPLETE trigger but no integration-pair task was created")
+		}
+		logger.Info("Orchestrator spawned integration task")
+
 	case WakeTriggerSprintComplete:
 		// SPRINT_COMPLETE: expect sprint status to be CHECKPOINT (or COMPLETED)
 		if stateAfter.Sprint.Status != models.SprintStatusCheckpoint && stateAfter.Sprint.Status != models.SprintStatusCompleted {
