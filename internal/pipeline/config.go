@@ -100,6 +100,7 @@ type RolePairStates struct {
 	Rejected          string `yaml:"rejected"`
 	PartiallyApproved string `yaml:"partially-approved,omitempty"`
 	Reviewing2        string `yaml:"reviewing-2,omitempty"`
+	Clean             string `yaml:"clean,omitempty"`
 }
 
 // SubPipeline defines an ordered sequence of role-pair steps and transitions between them.
@@ -223,6 +224,7 @@ func validate(cfg *PipelineConfig) error {
 			{"rejected", rp.States.Rejected, true},
 			{"partially-approved", rp.States.PartiallyApproved, false},
 			{"reviewing-2", rp.States.Reviewing2, false},
+			{"clean", rp.States.Clean, false},
 		}
 		for _, s := range states {
 			if s.required && s.value == "" {
@@ -368,6 +370,7 @@ var validPhases = map[string]bool{
 	"initial": true, "executing": true, "submitted": true,
 	"reviewing": true, "approved": true, "rejected": true,
 	"partially-approved": true, "reviewing-2": true,
+	"clean": true,
 }
 
 // validateTransitionHeader checks the common fields shared by all transition types:
