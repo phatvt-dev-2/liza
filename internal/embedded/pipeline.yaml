@@ -277,6 +277,68 @@ pipeline:
         - software-architecture-review
       mandatory-docs: []
 
+    integration-analyst:
+      type: doer
+      display-name: "Integration Analyst"
+      description: "Scans full branch diff, produces mechanical integration findings"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+        - await-verdict
+      context-sections:
+        - assigned-task
+        - worktree-rules
+        - branch-integration-context
+        - prior-rejection
+        - prior-attempt
+        - doer-state-transitions
+        - doer-tools
+        - anomaly-logging
+        - blocking-protocol
+        - submission-phase
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - code-review
+        - clean-code
+      mandatory-docs: []
+
+    integration-reviewer:
+      type: reviewer
+      display-name: "Integration Reviewer"
+      description: "Validates and enriches findings with systemic analysis"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - submit-verdict
+        - await-resubmission
+      context-sections:
+        - review-task
+        - worktree-rules
+        - branch-integration-context
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - systemic-thinking
+        - software-architecture-review
+      mandatory-docs: []
+
   role-pairs:
     epic-planning-pair:
       doer: epic-planner
@@ -326,6 +388,18 @@ pipeline:
         partially-approved: CODE_PARTIALLY_APPROVED
         reviewing-2: REVIEWING_CODE_2
 
+    integration-pair:
+      doer: integration-analyst
+      reviewer: integration-reviewer
+      states:
+        initial: DRAFT_INTEGRATION_ANALYSIS
+        executing: ANALYZING_INTEGRATION
+        submitted: INTEGRATION_ANALYSIS_TO_REVIEW
+        reviewing: REVIEWING_INTEGRATION_ANALYSIS
+        approved: INTEGRATION_ANALYSIS_APPROVED
+        rejected: INTEGRATION_ANALYSIS_REJECTED
+        clean: INTEGRATION_ANALYSIS_CLEAN
+
   sub-pipelines:
     epic-spec-subpipeline:
       steps:
@@ -348,6 +422,17 @@ pipeline:
           to: coding-pair.initial
           trigger: manual  # human validates implementation plan before coding begins
           cardinality: per-subtask  # supervisor creates one downstream task per entry in output[]
+
+    integration-subpipeline:
+      steps:
+        - integration-pair
+        - coding-pair
+      transitions:
+        - name: integration-to-fix
+          from: integration-pair.approved
+          to: coding-pair.initial
+          trigger: auto
+          cardinality: per-subtask
 
   pipeline-transitions:
     - name: us-to-coding

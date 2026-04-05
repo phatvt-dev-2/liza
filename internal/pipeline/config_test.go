@@ -1736,20 +1736,22 @@ func TestLoad_EmbeddedPipelineRoles(t *testing.T) {
 		t.Fatalf("LoadFromBytes failed: %v", err)
 	}
 
-	if len(cfg.Pipeline.Roles) != 9 {
-		t.Fatalf("expected 9 roles, got %d", len(cfg.Pipeline.Roles))
+	if len(cfg.Pipeline.Roles) != 11 {
+		t.Fatalf("expected 11 roles, got %d", len(cfg.Pipeline.Roles))
 	}
 
 	expectedRoles := map[string]string{
-		"coder":              "doer",
-		"code-reviewer":      "reviewer",
-		"orchestrator":       "orchestrator",
-		"epic-planner":       "doer",
-		"epic-plan-reviewer": "reviewer",
-		"us-writer":          "doer",
-		"us-reviewer":        "reviewer",
-		"code-planner":       "doer",
-		"code-plan-reviewer": "reviewer",
+		"coder":                "doer",
+		"code-reviewer":        "reviewer",
+		"orchestrator":         "orchestrator",
+		"epic-planner":         "doer",
+		"epic-plan-reviewer":   "reviewer",
+		"us-writer":            "doer",
+		"us-reviewer":          "reviewer",
+		"code-planner":         "doer",
+		"code-plan-reviewer":   "reviewer",
+		"integration-analyst":  "doer",
+		"integration-reviewer": "reviewer",
 	}
 	for name, wantType := range expectedRoles {
 		role, ok := cfg.Pipeline.Roles[name]
