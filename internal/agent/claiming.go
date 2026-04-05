@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -375,6 +376,31 @@ func handleCleanTaskCleanup(projectRoot string) error {
 		}
 		if result.Existed {
 			logger.Info("Cleaned up worktree for clean-terminal task", "task_id", task.ID)
+		}
+
+		// Finalize: mirror non-git cleanup from the merge path.
+		// Records completion handoff event and releases the assigned agent.
+		taskID := task.ID
+		if err := bb.Modify(func(s *models.State) error {
+			t := s.FindTask(taskID)
+			if t == nil {
+				return nil
+			}
+			if t.AssignedTo != nil {
+				if a, ok := s.Agents[*t.AssignedTo]; ok {
+					if a.CurrentTask != nil && *a.CurrentTask == taskID {
+						s.ReleaseAgent(*t.AssignedTo)
+					}
+				}
+			}
+			t.HandoffEvents = append(t.HandoffEvents, models.HandoffEvent{
+				Timestamp: time.Now(),
+				Agent:     "system",
+				Trigger:   models.HandoffTriggerCompletion,
+			})
+			return nil
+		}); err != nil {
+			logger.Warn("Failed to finalize clean-terminal task", "task_id", taskID, "error", err)
 		}
 	}
 	return nil
