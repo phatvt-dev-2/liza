@@ -112,9 +112,11 @@ rtk proxy <cmd>
 ```
 
 **Do NOT:**
-- Use rtk proxy as a first response to unexpected output.
+- Use rtk proxy as a first response to unexpected output or when the error is in your command (wrong flags, wrong path) — fix the command.
 - Invent workarounds (subshells, echo debugging) to speculative errors.
 - Rationalize away unexpected output ("nothing to stash" when there are changes)
+- Read RTK tee files (`~/.local/share/rtk/tee/*.log`) — the compressed summary is the authoritative output.
+- Re-run passing tests "to see full output" — if RTK says it passed, it passed.
 
 ---
 
