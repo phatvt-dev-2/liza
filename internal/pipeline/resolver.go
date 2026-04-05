@@ -107,6 +107,19 @@ func (r *Resolver) Reviewing2Status(rolePair string) (models.TaskStatus, error) 
 	return models.TaskStatus(s.Reviewing2), nil
 }
 
+// CleanStatus returns the clean (terminal) state for the given role-pair.
+// Returns an error if the role-pair does not declare a clean state.
+func (r *Resolver) CleanStatus(rolePair string) (models.TaskStatus, error) {
+	s, err := r.lookupStates(rolePair)
+	if err != nil {
+		return "", err
+	}
+	if s.Clean == "" {
+		return "", fmt.Errorf("role-pair %q has no clean state declared", rolePair)
+	}
+	return models.TaskStatus(s.Clean), nil
+}
+
 // ResolvedTimeouts holds parsed timeout durations for a role.
 type ResolvedTimeouts struct {
 	Execution    time.Duration
@@ -328,6 +341,11 @@ func (r *Resolver) TransitionMap() map[models.TaskStatus][]models.TaskStatus {
 		tm[rejected] = []models.TaskStatus{initial}
 		tm[approved] = []models.TaskStatus{} // terminal within the pair
 
+		if s.Clean != "" {
+			clean := models.TaskStatus(s.Clean)
+			tm[clean] = []models.TaskStatus{} // terminal within the pair
+		}
+
 		// Quorum state transitions when partially-approved and reviewing-2 are declared.
 		if s.PartiallyApproved != "" && s.Reviewing2 != "" {
 			partiallyApproved := models.TaskStatus(s.PartiallyApproved)
@@ -360,6 +378,9 @@ func (r *Resolver) AllDeclaredStates() []models.TaskStatus {
 		if s.Reviewing2 != "" {
 			states = append(states, models.TaskStatus(s.Reviewing2))
 		}
+		if s.Clean != "" {
+			states = append(states, models.TaskStatus(s.Clean))
+		}
 	}
 	return states
 }
@@ -376,6 +397,9 @@ func (r *Resolver) SprintTerminalStates() []models.TaskStatus {
 	for name, rp := range r.config.Pipeline.RolePairs {
 		if sources[name] {
 			states = append(states, models.TaskStatus(rp.States.Approved))
+		}
+		if rp.States.Clean != "" {
+			states = append(states, models.TaskStatus(rp.States.Clean))
 		}
 	}
 
@@ -519,6 +543,8 @@ func (r *Resolver) resolvePhase(rolePair, phase string) models.TaskStatus {
 		return models.TaskStatus(rp.States.PartiallyApproved)
 	case "reviewing-2":
 		return models.TaskStatus(rp.States.Reviewing2)
+	case "clean":
+		return models.TaskStatus(rp.States.Clean)
 	default:
 		return ""
 	}

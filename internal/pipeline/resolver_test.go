@@ -1022,3 +1022,100 @@ pipeline:
 		t.Errorf("ProviderDiversity(significant) = %q, want %q (fall through to base)", got, "preferred")
 	}
 }
+
+func loadCleanConfig(t *testing.T) *PipelineConfig {
+	t.Helper()
+	cfg, err := Load("testdata/valid-with-clean.yaml")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	return cfg
+}
+
+func TestResolver_CleanStatus(t *testing.T) {
+	r := NewResolver(loadCleanConfig(t))
+
+	t.Run("declared clean state", func(t *testing.T) {
+		got, err := r.CleanStatus("integration-pair")
+		if err != nil {
+			t.Fatalf("CleanStatus(integration-pair): unexpected error: %v", err)
+		}
+		if got != "INTEGRATION_ANALYSIS_CLEAN" {
+			t.Errorf("CleanStatus(integration-pair) = %q, want %q", got, "INTEGRATION_ANALYSIS_CLEAN")
+		}
+	})
+
+	t.Run("no clean state declared", func(t *testing.T) {
+		_, err := r.CleanStatus("coding-pair")
+		if err == nil {
+			t.Fatal("CleanStatus(coding-pair): expected error for role-pair without clean state")
+		}
+	})
+
+	t.Run("unknown role-pair", func(t *testing.T) {
+		_, err := r.CleanStatus("nonexistent-pair")
+		if err == nil {
+			t.Fatal("CleanStatus(nonexistent-pair): expected error for unknown role-pair")
+		}
+	})
+}
+
+func TestResolver_TransitionMap_CleanTerminal(t *testing.T) {
+	r := NewResolver(loadCleanConfig(t))
+	tm := r.TransitionMap()
+
+	clean := models.TaskStatus("INTEGRATION_ANALYSIS_CLEAN")
+	successors, ok := tm[clean]
+	if !ok {
+		t.Fatal("TransitionMap missing INTEGRATION_ANALYSIS_CLEAN")
+	}
+	if len(successors) != 0 {
+		t.Errorf("TransitionMap[INTEGRATION_ANALYSIS_CLEAN] = %v, want empty (terminal)", successors)
+	}
+}
+
+func TestResolver_AllDeclaredStates_IncludesClean(t *testing.T) {
+	r := NewResolver(loadCleanConfig(t))
+	states := r.AllDeclaredStates()
+
+	clean := models.TaskStatus("INTEGRATION_ANALYSIS_CLEAN")
+	if !slices.Contains(states, clean) {
+		t.Errorf("AllDeclaredStates() missing INTEGRATION_ANALYSIS_CLEAN, got: %v", states)
+	}
+}
+
+func TestResolver_SprintTerminalStates_IncludesClean(t *testing.T) {
+	r := NewResolver(loadCleanConfig(t))
+	states := r.SprintTerminalStates()
+
+	clean := models.TaskStatus("INTEGRATION_ANALYSIS_CLEAN")
+	if !slices.Contains(states, clean) {
+		t.Errorf("SprintTerminalStates() missing INTEGRATION_ANALYSIS_CLEAN, got: %v", states)
+	}
+
+	// Also verify approved state of transition source is included
+	approved := models.TaskStatus("INTEGRATION_ANALYSIS_APPROVED")
+	if !slices.Contains(states, approved) {
+		t.Errorf("SprintTerminalStates() missing INTEGRATION_ANALYSIS_APPROVED (transition source), got: %v", states)
+	}
+
+	// MERGED always included
+	if !slices.Contains(states, models.TaskStatusMerged) {
+		t.Errorf("SprintTerminalStates() missing MERGED, got: %v", states)
+	}
+}
+
+func TestResolver_resolvePhase_Clean(t *testing.T) {
+	r := NewResolver(loadCleanConfig(t))
+
+	got := r.resolvePhase("integration-pair", "clean")
+	if got != "INTEGRATION_ANALYSIS_CLEAN" {
+		t.Errorf("resolvePhase(integration-pair, clean) = %q, want %q", got, "INTEGRATION_ANALYSIS_CLEAN")
+	}
+
+	// Role-pair without clean state returns empty string
+	got = r.resolvePhase("coding-pair", "clean")
+	if got != "" {
+		t.Errorf("resolvePhase(coding-pair, clean) = %q, want empty", got)
+	}
+}

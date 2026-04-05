@@ -1,0 +1,105 @@
+pipeline:
+  roles:
+    coder:
+      type: doer
+      display-name: "Coder"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+        - await-verdict
+      context-sections:
+        - assigned-task
+      skills: []
+      mandatory-docs: []
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - submit-verdict
+        - await-resubmission
+      context-sections:
+        - review-task
+      skills: []
+      mandatory-docs: []
+    integration-analyst:
+      type: doer
+      display-name: "Integration Analyst"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+        - await-verdict
+      context-sections:
+        - assigned-task
+      skills: []
+      mandatory-docs: []
+    integration-reviewer:
+      type: reviewer
+      display-name: "Integration Reviewer"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - submit-verdict
+        - await-resubmission
+      context-sections:
+        - review-task
+      skills: []
+      mandatory-docs: []
+
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+
+    integration-pair:
+      doer: integration-analyst
+      reviewer: integration-reviewer
+      states:
+        initial: DRAFT_INTEGRATION_ANALYSIS
+        executing: ANALYZING_INTEGRATION
+        submitted: INTEGRATION_ANALYSIS_TO_REVIEW
+        reviewing: REVIEWING_INTEGRATION_ANALYSIS
+        approved: INTEGRATION_ANALYSIS_APPROVED
+        rejected: INTEGRATION_ANALYSIS_REJECTED
+        clean: INTEGRATION_ANALYSIS_CLEAN
+
+  sub-pipelines:
+    integration-subpipeline:
+      steps:
+        - integration-pair
+        - coding-pair
+      transitions:
+        - name: integration-to-fix
+          from: integration-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+
+  entry-points:
+    detailed-spec: integration-subpipeline.integration-pair
