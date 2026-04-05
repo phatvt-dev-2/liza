@@ -6,7 +6,7 @@ Spawn a single integration-analyst task scoped to the full branch diff since goa
 1. Read the goal spec: liza_get {"query": "goal"}
 2. Create integration task: liza_add_tasks with:
    {"tasks": [{
-     "id": "integration-1",
+     "id": "<unique-id>",  {{/* e.g., "integration-auth-refactor-1" — must be unique across sprints, avoid static IDs */}}
      "type": "integration",
      "role_pair": "integration-pair",
      "desc": "Integration analysis: scan full branch diff for cross-task consistency issues (type alignment, serialization completeness, error mapping, API surface coherence, test/code agreement, code organization)",
