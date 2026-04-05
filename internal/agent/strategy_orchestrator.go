@@ -79,14 +79,16 @@ func (s *orchestratorStrategy) WaitForWork(ctx context.Context, bb *db.Blackboar
 	detCtx, detErr := ops.LoadDetectionContext(config.ProjectRoot)
 	var pipelineTerminals []models.TaskStatus
 	var planningPairs map[string]bool
+	var m2oTransitions []ops.ManyToOneTransitionInfo
 	if detErr == nil {
 		pipelineTerminals = detCtx.SprintTerminals
 		planningPairs = detCtx.PlanningPairs
+		m2oTransitions = detCtx.ManyToOneTransitions
 	}
 
 	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pollInterval, maxWait,
 		func(state *models.State) (bool, string) {
-			result := DetectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs)
+			result := DetectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions)
 			if result.Trigger != WakeTriggerNone {
 				return true, fmt.Sprintf("Orchestrator wake trigger: %s (count: %d)", result.Trigger, result.Count)
 			}
@@ -110,14 +112,16 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 	detCtx, detErr := ops.LoadDetectionContext(config.ProjectRoot)
 	var pipelineTerminals []models.TaskStatus
 	var planningPairs map[string]bool
+	var m2oTransitions []ops.ManyToOneTransitionInfo
 	if detErr != nil {
 		GetLogger().Warn("Failed to load detection context", "error", detErr)
 	} else {
 		pipelineTerminals = detCtx.SprintTerminals
 		planningPairs = detCtx.PlanningPairs
+		m2oTransitions = detCtx.ManyToOneTransitions
 	}
 
-	if err := verifyOrchestratorStateChanges(bb, stateBefore, pipelineTerminals, planningPairs); err != nil {
+	if err := verifyOrchestratorStateChanges(bb, stateBefore, pipelineTerminals, planningPairs, m2oTransitions); err != nil {
 		GetLogger().Warn("Orchestrator state verification failed",
 			"error", err,
 			"hint", "Agent may not have executed required commands - check prompt file")

@@ -280,11 +280,13 @@ func buildOrchestratorStatus(state *models.State, projectRoot string) orchestrat
 	detCtx, detErr := ops.LoadDetectionContext(projectRoot)
 	var pipelineTerminals []models.TaskStatus
 	var planningPairs map[string]bool
+	var m2oTransitions []ops.ManyToOneTransitionInfo
 	if detErr == nil {
 		pipelineTerminals = detCtx.SprintTerminals
 		planningPairs = detCtx.PlanningPairs
+		m2oTransitions = detCtx.ManyToOneTransitions
 	}
-	result := agent.DetectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs)
+	result := agent.DetectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions)
 	trigger := string(result.Trigger)
 	count := result.Count
 

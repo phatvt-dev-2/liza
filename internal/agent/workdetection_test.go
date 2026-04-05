@@ -6,6 +6,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -878,7 +879,7 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectOrchestratorWakeTriggers(tt.state, nil, nil)
+			result := DetectOrchestratorWakeTriggers(tt.state, nil, nil, nil)
 			if result.Trigger != tt.wantTrigger {
 				t.Errorf("DetectOrchestratorWakeTriggers() trigger = %v, want %v", result.Trigger, tt.wantTrigger)
 			}
@@ -1086,7 +1087,7 @@ func TestDetectOrchestratorWakeTriggers_PipelineTerminals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectOrchestratorWakeTriggers(tt.state, tt.pipelineTerminals, tt.planningPairs)
+			result := DetectOrchestratorWakeTriggers(tt.state, tt.pipelineTerminals, tt.planningPairs, nil)
 			if result.Trigger != tt.wantTrigger {
 				t.Errorf("DetectOrchestratorWakeTriggers() trigger = %v, want %v", result.Trigger, tt.wantTrigger)
 			}
@@ -1259,7 +1260,7 @@ func TestHasOrchestratorWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectOrchestratorWakeTriggers(tt.state, nil, nil)
+			result := DetectOrchestratorWakeTriggers(tt.state, nil, nil, nil)
 			got := result.Trigger != WakeTriggerNone
 			if got != tt.want {
 				t.Errorf("HasOrchestratorWork() = %v, want %v", got, tt.want)
@@ -1496,7 +1497,7 @@ func TestDetectOrchestratorWakeTriggers_CodingComplete(t *testing.T) {
 		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusMerged, now),
 	}
 
-	result := DetectOrchestratorWakeTriggers(state, nil, nil)
+	result := DetectOrchestratorWakeTriggers(state, nil, nil, nil)
 	if result.Trigger != WakeTriggerCodingComplete {
 		t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerCodingComplete)
 	}
@@ -1515,7 +1516,7 @@ func TestDetectOrchestratorWakeTriggers_CodingComplete_NoBaseCommit(t *testing.T
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
 	}
 
-	result := DetectOrchestratorWakeTriggers(state, nil, nil)
+	result := DetectOrchestratorWakeTriggers(state, nil, nil, nil)
 	if result.Trigger != WakeTriggerSprintComplete {
 		t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerSprintComplete)
 	}
@@ -1536,7 +1537,7 @@ func TestDetectOrchestratorWakeTriggers_IntegrationExists(t *testing.T) {
 		integrationTask,
 	}
 
-	result := DetectOrchestratorWakeTriggers(state, nil, nil)
+	result := DetectOrchestratorWakeTriggers(state, nil, nil, nil)
 	if result.Trigger != WakeTriggerSprintComplete {
 		t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerSprintComplete)
 	}
@@ -1557,8 +1558,106 @@ func TestDetectOrchestratorWakeTriggers_PlanningCompletePrecedence(t *testing.T)
 	state.Sprint.Scope.Planned = []string{"task-1"}
 	state.Tasks = []models.Task{planningTask}
 
-	result := DetectOrchestratorWakeTriggers(state, nil, nil)
+	result := DetectOrchestratorWakeTriggers(state, nil, nil, nil)
 	if result.Trigger != WakeTriggerPlanningComplete {
 		t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerPlanningComplete)
+	}
+}
+
+func TestDetectOrchestratorWakeTriggers_ManyToOneReady(t *testing.T) {
+	now := time.Now().UTC()
+
+	m2oTransitions := []ops.ManyToOneTransitionInfo{
+		{Name: "us-to-coding", SourceRolePair: "us-writing-pair"},
+	}
+
+	// Helper to build a MERGED us-writing-pair task with shared parent.
+	buildUSTask := func(id, parentID string) models.Task {
+		task := testhelpers.BuildTaskByStatus(id, models.TaskStatusMerged, now)
+		task.RolePair = "us-writing-pair"
+		task.ParentTask = &parentID
+		return task
+	}
+
+	t.Run("complete cohort triggers ManyToOneReady", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		us1 := buildUSTask("us-1", "epic-1")
+		us2 := buildUSTask("us-2", "epic-1")
+		us3 := buildUSTask("us-3", "epic-1")
+		state.Tasks = []models.Task{us1, us2, us3}
+		state.Sprint.Scope.Planned = []string{"us-1", "us-2", "us-3"}
+
+		result := DetectOrchestratorWakeTriggers(state, []models.TaskStatus{models.TaskStatusMerged}, nil, m2oTransitions)
+		if result.Trigger != WakeTriggerManyToOneReady {
+			t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerManyToOneReady)
+		}
+		if result.Count != 1 {
+			t.Errorf("count = %d, want 1", result.Count)
+		}
+	})
+
+	t.Run("incomplete cohort does not trigger", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		us1 := buildUSTask("us-1", "epic-1")
+		us2 := buildUSTask("us-2", "epic-1")
+		// us3 is not MERGED — still in progress
+		us3 := testhelpers.BuildTaskByStatus("us-3", models.TaskStatusImplementing, now)
+		us3.RolePair = "us-writing-pair"
+		parentID := "epic-1"
+		us3.ParentTask = &parentID
+		state.Tasks = []models.Task{us1, us2, us3}
+		state.Sprint.Scope.Planned = []string{"us-1", "us-2", "us-3"}
+
+		result := DetectOrchestratorWakeTriggers(state, nil, nil, m2oTransitions)
+		if result.Trigger == WakeTriggerManyToOneReady {
+			t.Errorf("trigger = %v, should not be ManyToOneReady for incomplete cohort", result.Trigger)
+		}
+	})
+
+	t.Run("already-executed cohort does not trigger", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		us1 := buildUSTask("us-1", "epic-1")
+		us1.TransitionsExecuted = map[string]bool{"us-to-coding": true}
+		us2 := buildUSTask("us-2", "epic-1")
+		us2.TransitionsExecuted = map[string]bool{"us-to-coding": true}
+		us3 := buildUSTask("us-3", "epic-1")
+		us3.TransitionsExecuted = map[string]bool{"us-to-coding": true}
+		state.Tasks = []models.Task{us1, us2, us3}
+		state.Sprint.Scope.Planned = []string{"us-1", "us-2", "us-3"}
+
+		result := DetectOrchestratorWakeTriggers(state, []models.TaskStatus{models.TaskStatusMerged}, nil, m2oTransitions)
+		if result.Trigger == WakeTriggerManyToOneReady {
+			t.Errorf("trigger = %v, should not be ManyToOneReady for already-executed cohort", result.Trigger)
+		}
+	})
+}
+
+func TestCountReadyManyToOneCohorts_TwoCohorts(t *testing.T) {
+	now := time.Now().UTC()
+
+	m2oTransitions := []ops.ManyToOneTransitionInfo{
+		{Name: "us-to-coding", SourceRolePair: "us-writing-pair"},
+	}
+
+	buildUSTask := func(id, parentID string) models.Task {
+		task := testhelpers.BuildTaskByStatus(id, models.TaskStatusMerged, now)
+		task.RolePair = "us-writing-pair"
+		task.ParentTask = &parentID
+		return task
+	}
+
+	state := testhelpers.CreateValidState()
+	// Cohort 1: epic-1
+	us1 := buildUSTask("us-1", "epic-1")
+	us2 := buildUSTask("us-2", "epic-1")
+	// Cohort 2: epic-2
+	us3 := buildUSTask("us-3", "epic-2")
+	us4 := buildUSTask("us-4", "epic-2")
+	state.Tasks = []models.Task{us1, us2, us3, us4}
+	state.Sprint.Scope.Planned = []string{"us-1", "us-2", "us-3", "us-4"}
+
+	count := countReadyManyToOneCohorts(state, m2oTransitions)
+	if count != 2 {
+		t.Errorf("countReadyManyToOneCohorts() = %d, want 2", count)
 	}
 }

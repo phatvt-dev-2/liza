@@ -14,6 +14,7 @@ const (
 	WakeTriggerHypothesisExhausted OrchestratorWakeTrigger = "HYPOTHESIS_EXHAUSTED"
 	WakeTriggerImmediateDiscovery  OrchestratorWakeTrigger = "IMMEDIATE_DISCOVERY"
 	WakeTriggerPlanningComplete    OrchestratorWakeTrigger = "PLANNING_COMPLETE"
+	WakeTriggerManyToOneReady      OrchestratorWakeTrigger = "MANY_TO_ONE_READY"
 	WakeTriggerCodingComplete      OrchestratorWakeTrigger = "CODING_COMPLETE"
 	WakeTriggerSprintComplete      OrchestratorWakeTrigger = "SPRINT_COMPLETE"
 	WakeTriggerNone                OrchestratorWakeTrigger = "NONE"
@@ -76,7 +77,7 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // 4. Immediate discoveries (not yet converted to tasks)
 // 5. Planning complete (all planned tasks terminal, merged tasks have output[])
 // 6. Sprint complete (all planned tasks terminal)
-func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool) OrchestratorWakeResult {
+func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
 	for _, triggerSpec := range orchestratorWakeTriggerSpecs {
 		if count := triggerSpec.Count(state); count > 0 {
 			return OrchestratorWakeResult{
@@ -100,6 +101,13 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 		if n := countMergedPlanningTasksWithOutput(state, planningPairs); n > 0 {
 			return OrchestratorWakeResult{
 				Trigger: WakeTriggerPlanningComplete,
+				Count:   n,
+			}
+		}
+		// Check for ready many-to-one cohorts
+		if n := countReadyManyToOneCohorts(state, m2oTransitions); n > 0 {
+			return OrchestratorWakeResult{
+				Trigger: WakeTriggerManyToOneReady,
 				Count:   n,
 			}
 		}
@@ -224,6 +232,35 @@ func hasIntegrationTask(state *models.State) bool {
 		}
 	}
 	return false
+}
+
+// countReadyManyToOneCohorts counts distinct many-to-one cohorts that are
+// ready for transition (all members MERGED, transition not yet executed).
+// Uses ops.IsManyToOneReady and deduplicates by cohort (shared parent + transition).
+func countReadyManyToOneCohorts(state *models.State, m2oTransitions []ops.ManyToOneTransitionInfo) int {
+	type cohortKey struct {
+		parentID       string
+		transitionName string
+	}
+	seen := make(map[cohortKey]bool)
+
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if !ops.IsManyToOneReady(task, state, m2oTransitions) {
+			continue
+		}
+		parents := task.EffectiveParentTasks()
+		if len(parents) == 0 {
+			continue
+		}
+		for _, m2o := range m2oTransitions {
+			if task.RolePair == m2o.SourceRolePair {
+				key := cohortKey{parents[0], m2o.Name}
+				seen[key] = true
+			}
+		}
+	}
+	return len(seen)
 }
 
 // countMergedPlanningTasksWithOutput counts planned tasks with unconsumed

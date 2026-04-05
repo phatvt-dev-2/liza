@@ -151,7 +151,7 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string) (
 }
 
 // verifyOrchestratorStateChanges checks if orchestrator made expected state changes after completion
-func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool) error {
+func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) error {
 	logger := GetLogger()
 	// Read state after agent execution
 	stateAfter, err := bb.ReadCached()
@@ -160,7 +160,7 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 	}
 
 	// Detect the wake trigger that caused this orchestrator run
-	result := DetectOrchestratorWakeTriggers(stateBefore, pipelineTerminals, planningPairs)
+	result := DetectOrchestratorWakeTriggers(stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
 
 	// Verify expected changes based on trigger
 	switch result.Trigger {

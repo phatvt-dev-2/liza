@@ -132,7 +132,7 @@ func TestVerifyOrchestratorStateChanges_BlockedNotResolved(t *testing.T) {
 
 	bb := db.New(statePath)
 
-	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil)
+	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil, nil)
 	if err != nil {
 		t.Errorf("Expected no error for no-op BLOCKED exit (may require human intervention), got: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestVerifyOrchestratorStateChanges_HypothesisExhaustedNotResolved(t *testin
 
 	bb := db.New(statePath)
 
-	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil)
+	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil, nil)
 	if err != nil {
 		t.Errorf("Expected no error for no-op HYPOTHESIS_EXHAUSTED exit (may require human intervention), got: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestVerifyOrchestratorStateChanges_CodingCompleteNoIntegration(t *testing.T
 
 	bb := db.New(statePath)
 
-	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil)
+	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil, nil)
 	if err == nil {
 		t.Error("Expected error when CODING_COMPLETE trigger but no integration-pair task created")
 	}
