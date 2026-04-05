@@ -464,13 +464,25 @@ func (r *Resolver) Transition(name string) (*TransitionDef, error) {
 	return nil, fmt.Errorf("unknown transition %q", name)
 }
 
-// AvailableTransitions returns transition names available for a task at the given
-// status, excluding transitions already executed.
+// AvailableTransitions returns manual transition names available for a task at
+// the given status, excluding transitions already executed.
 func (r *Resolver) AvailableTransitions(status models.TaskStatus, transitionsExecuted map[string]bool) []string {
+	return r.availableTransitionsByTrigger("manual", status, transitionsExecuted)
+}
+
+// AvailableAutoTransitions returns auto transition names available for a task at
+// the given status, excluding transitions already executed.
+func (r *Resolver) AvailableAutoTransitions(status models.TaskStatus, transitionsExecuted map[string]bool) []string {
+	return r.availableTransitionsByTrigger("auto", status, transitionsExecuted)
+}
+
+// availableTransitionsByTrigger returns transition names matching the given trigger
+// type that are available for a task at the given status, excluding already-executed.
+func (r *Resolver) availableTransitionsByTrigger(trigger string, status models.TaskStatus, transitionsExecuted map[string]bool) []string {
 	var available []string
 	for _, sp := range r.config.Pipeline.SubPipelines {
 		for _, t := range sp.Transitions {
-			if t.Trigger != "manual" {
+			if t.Trigger != trigger {
 				continue
 			}
 			if transitionsExecuted[t.Name] {
@@ -486,7 +498,7 @@ func (r *Resolver) AvailableTransitions(status models.TaskStatus, transitionsExe
 		}
 	}
 	for _, t := range r.config.Pipeline.PipelineTransitions {
-		if t.Trigger != "manual" {
+		if t.Trigger != trigger {
 			continue
 		}
 		if transitionsExecuted[t.Name] {

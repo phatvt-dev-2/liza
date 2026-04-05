@@ -98,7 +98,7 @@ pipeline:
         - name: integration-to-fix
           from: integration-pair.approved
           to: coding-pair.initial
-          trigger: manual
+          trigger: auto
           cardinality: per-subtask
 
   entry-points:

@@ -1105,6 +1105,32 @@ func TestResolver_SprintTerminalStates_IncludesClean(t *testing.T) {
 	}
 }
 
+func TestResolver_AvailableAutoTransitions(t *testing.T) {
+	r := NewResolver(loadCleanConfig(t))
+
+	t.Run("returns auto transitions for matching status", func(t *testing.T) {
+		got := r.AvailableAutoTransitions("INTEGRATION_ANALYSIS_APPROVED", nil)
+		want := []string{"integration-to-fix"}
+		if len(got) != len(want) || got[0] != want[0] {
+			t.Errorf("AvailableAutoTransitions(INTEGRATION_ANALYSIS_APPROVED, nil) = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("excludes already-executed transitions", func(t *testing.T) {
+		got := r.AvailableAutoTransitions("INTEGRATION_ANALYSIS_APPROVED", map[string]bool{"integration-to-fix": true})
+		if len(got) != 0 {
+			t.Errorf("AvailableAutoTransitions with executed = %v, want []", got)
+		}
+	})
+
+	t.Run("manual-only filter preserved", func(t *testing.T) {
+		got := r.AvailableTransitions("INTEGRATION_ANALYSIS_APPROVED", nil)
+		if len(got) != 0 {
+			t.Errorf("AvailableTransitions(INTEGRATION_ANALYSIS_APPROVED, nil) = %v, want [] (no manual transitions)", got)
+		}
+	})
+}
+
 func TestResolver_resolvePhase_Clean(t *testing.T) {
 	r := NewResolver(loadCleanConfig(t))
 
