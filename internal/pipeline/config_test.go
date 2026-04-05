@@ -20,8 +20,8 @@ func TestLoad_ValidConfig(t *testing.T) {
 	}
 
 	// Verify role-pairs parsed.
-	if len(cfg.Pipeline.RolePairs) != 2 {
-		t.Fatalf("expected 2 role-pairs, got %d", len(cfg.Pipeline.RolePairs))
+	if len(cfg.Pipeline.RolePairs) != 3 {
+		t.Fatalf("expected 3 role-pairs, got %d", len(cfg.Pipeline.RolePairs))
 	}
 	if _, ok := cfg.Pipeline.RolePairs["coding-pair"]; !ok {
 		t.Error("missing role-pair coding-pair")
@@ -29,10 +29,13 @@ func TestLoad_ValidConfig(t *testing.T) {
 	if _, ok := cfg.Pipeline.RolePairs["code-planning-pair"]; !ok {
 		t.Error("missing role-pair code-planning-pair")
 	}
+	if _, ok := cfg.Pipeline.RolePairs["architecture-pair"]; !ok {
+		t.Error("missing role-pair architecture-pair")
+	}
 
 	// Verify roles parsed.
-	if len(cfg.Pipeline.Roles) != 4 {
-		t.Fatalf("expected 4 roles, got %d", len(cfg.Pipeline.Roles))
+	if len(cfg.Pipeline.Roles) != 6 {
+		t.Fatalf("expected 6 roles, got %d", len(cfg.Pipeline.Roles))
 	}
 
 	// Verify sub-pipelines parsed.
@@ -40,18 +43,18 @@ func TestLoad_ValidConfig(t *testing.T) {
 	if !ok {
 		t.Fatal("missing sub-pipeline coding-subpipeline")
 	}
-	if len(sp.Steps) != 2 {
-		t.Fatalf("expected 2 steps, got %d", len(sp.Steps))
+	if len(sp.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(sp.Steps))
 	}
-	if len(sp.Transitions) != 2 {
-		t.Fatalf("expected 2 transitions, got %d", len(sp.Transitions))
+	if len(sp.Transitions) != 3 {
+		t.Fatalf("expected 3 transitions, got %d", len(sp.Transitions))
 	}
 
 	// Verify entry-points.
 	if ep, ok := cfg.Pipeline.EntryPoints["detailed-spec"]; !ok {
 		t.Error("missing entry-point detailed-spec")
-	} else if ep != "coding-subpipeline.code-planning-pair" {
-		t.Errorf("entry-point value = %q, want %q", ep, "coding-subpipeline.code-planning-pair")
+	} else if ep != "coding-subpipeline.architecture-pair" {
+		t.Errorf("entry-point value = %q, want %q", ep, "coding-subpipeline.architecture-pair")
 	}
 }
 
@@ -671,8 +674,8 @@ func TestLoadFrozen_ValidFile(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("expected non-nil config")
 	}
-	if len(cfg.Pipeline.RolePairs) != 2 {
-		t.Errorf("expected 2 role-pairs, got %d", len(cfg.Pipeline.RolePairs))
+	if len(cfg.Pipeline.RolePairs) != 3 {
+		t.Errorf("expected 3 role-pairs, got %d", len(cfg.Pipeline.RolePairs))
 	}
 }
 
@@ -792,11 +795,13 @@ func TestResolver_TransitionMap(t *testing.T) {
 func TestResolver_AllDeclaredStates(t *testing.T) {
 	r := NewResolver(loadTestConfig(t))
 	states := r.AllDeclaredStates()
-	// 2 role-pairs: code-planning-pair (6 states) + coding-pair (6 + 2 quorum states) = 14.
-	if len(states) != 14 {
-		t.Errorf("expected 14 declared states, got %d", len(states))
+	// 3 role-pairs: architecture-pair (6 states) + code-planning-pair (6 states) + coding-pair (6 + 2 quorum states) = 20.
+	if len(states) != 20 {
+		t.Errorf("expected 20 declared states, got %d", len(states))
 	}
 	expected := []models.TaskStatus{
+		"DRAFT_ARCHITECTURE", "ARCHITECTING", "ARCHITECTURE_TO_REVIEW",
+		"REVIEWING_ARCHITECTURE", "ARCHITECTURE_APPROVED", "ARCHITECTURE_REJECTED",
 		"DRAFT_CODING_PLAN", "CODE_PLANNING", "CODING_PLAN_TO_REVIEW",
 		"REVIEWING_CODING_PLAN", "CODING_PLAN_APPROVED", "CODING_PLAN_REJECTED",
 		"DRAFT_CODE", "IMPLEMENTING_CODE", "CODE_READY_FOR_REVIEW",
@@ -813,7 +818,7 @@ func TestResolver_AllDeclaredStates(t *testing.T) {
 func TestResolver_SprintTerminalStates(t *testing.T) {
 	r := NewResolver(loadTestConfig(t))
 	got := r.SprintTerminalStates()
-	want := []models.TaskStatus{"CODING_PLAN_APPROVED", "MERGED"}
+	want := []models.TaskStatus{"ARCHITECTURE_APPROVED", "CODING_PLAN_APPROVED", "MERGED"}
 	slices.Sort(want)
 
 	if len(got) != len(want) {
@@ -1109,19 +1114,19 @@ func TestLoad_Phase2ValidConfig(t *testing.T) {
 		t.Fatal("expected non-nil config")
 	}
 
-	// Verify 4 role-pairs parsed.
-	if len(cfg.Pipeline.RolePairs) != 4 {
-		t.Fatalf("expected 4 role-pairs, got %d", len(cfg.Pipeline.RolePairs))
+	// Verify 5 role-pairs parsed.
+	if len(cfg.Pipeline.RolePairs) != 5 {
+		t.Fatalf("expected 5 role-pairs, got %d", len(cfg.Pipeline.RolePairs))
 	}
-	for _, name := range []string{"epic-planning-pair", "us-writing-pair", "code-planning-pair", "coding-pair"} {
+	for _, name := range []string{"epic-planning-pair", "us-writing-pair", "code-planning-pair", "coding-pair", "architecture-pair"} {
 		if _, ok := cfg.Pipeline.RolePairs[name]; !ok {
 			t.Errorf("missing role-pair %s", name)
 		}
 	}
 
-	// Verify 9 roles (8 agent roles + orchestrator).
-	if len(cfg.Pipeline.Roles) != 9 {
-		t.Fatalf("expected 9 roles, got %d", len(cfg.Pipeline.Roles))
+	// Verify 11 roles (10 agent roles + orchestrator).
+	if len(cfg.Pipeline.Roles) != 11 {
+		t.Fatalf("expected 11 roles, got %d", len(cfg.Pipeline.Roles))
 	}
 
 	// Verify 2 sub-pipelines.
@@ -1140,14 +1145,14 @@ func TestLoad_Phase2ValidConfig(t *testing.T) {
 	if pt.From != "epic-spec-subpipeline.us-writing-pair.approved" {
 		t.Errorf("pipeline-transition from = %q, want 3-part ref", pt.From)
 	}
-	if pt.To != "coding-subpipeline.code-planning-pair.initial" {
+	if pt.To != "coding-subpipeline.architecture-pair.initial" {
 		t.Errorf("pipeline-transition to = %q, want 3-part ref", pt.To)
 	}
 	if pt.Trigger != "manual" {
 		t.Errorf("pipeline-transition trigger = %q, want %q", pt.Trigger, "manual")
 	}
-	if pt.Cardinality != "one-to-one" {
-		t.Errorf("pipeline-transition cardinality = %q, want %q", pt.Cardinality, "one-to-one")
+	if pt.Cardinality != "many-to-one" {
+		t.Errorf("pipeline-transition cardinality = %q, want %q", pt.Cardinality, "many-to-one")
 	}
 
 	// Verify 2 entry-points.
@@ -1157,7 +1162,7 @@ func TestLoad_Phase2ValidConfig(t *testing.T) {
 	if ep := cfg.Pipeline.EntryPoints["general-objective"]; ep != "epic-spec-subpipeline.epic-planning-pair" {
 		t.Errorf("entry-point general-objective = %q", ep)
 	}
-	if ep := cfg.Pipeline.EntryPoints["detailed-spec"]; ep != "coding-subpipeline.code-planning-pair" {
+	if ep := cfg.Pipeline.EntryPoints["detailed-spec"]; ep != "coding-subpipeline.architecture-pair" {
 		t.Errorf("entry-point detailed-spec = %q", ep)
 	}
 }
@@ -1736,22 +1741,24 @@ func TestLoad_EmbeddedPipelineRoles(t *testing.T) {
 		t.Fatalf("LoadFromBytes failed: %v", err)
 	}
 
-	if len(cfg.Pipeline.Roles) != 11 {
-		t.Fatalf("expected 11 roles, got %d", len(cfg.Pipeline.Roles))
+	if len(cfg.Pipeline.Roles) != 13 {
+		t.Fatalf("expected 13 roles, got %d", len(cfg.Pipeline.Roles))
 	}
 
 	expectedRoles := map[string]string{
-		"coder":                "doer",
-		"code-reviewer":        "reviewer",
-		"orchestrator":         "orchestrator",
-		"epic-planner":         "doer",
-		"epic-plan-reviewer":   "reviewer",
-		"us-writer":            "doer",
-		"us-reviewer":          "reviewer",
-		"code-planner":         "doer",
-		"code-plan-reviewer":   "reviewer",
-		"integration-analyst":  "doer",
-		"integration-reviewer": "reviewer",
+		"coder":                 "doer",
+		"code-reviewer":         "reviewer",
+		"orchestrator":          "orchestrator",
+		"epic-planner":          "doer",
+		"epic-plan-reviewer":    "reviewer",
+		"us-writer":             "doer",
+		"us-reviewer":           "reviewer",
+		"code-planner":          "doer",
+		"code-plan-reviewer":    "reviewer",
+		"integration-analyst":   "doer",
+		"integration-reviewer":  "reviewer",
+		"architect":             "doer",
+		"architecture-reviewer": "reviewer",
 	}
 	for name, wantType := range expectedRoles {
 		role, ok := cfg.Pipeline.Roles[name]

@@ -277,6 +277,62 @@ pipeline:
         - software-architecture-review
       mandatory-docs: []
 
+    architect:
+      type: doer
+      display-name: "Architect"
+      description: "Defines component boundaries, interfaces, and structural decisions for a change"
+      timeouts:
+        execution: 2h
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+        - await-verdict
+      context-sections:
+        - assigned-task
+        - worktree-rules
+        - prior-rejection
+        - prior-attempt
+        - doer-state-transitions
+        - doer-tools
+        - implementation-phase
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - software-architecture-review
+      mandatory-docs: []
+
+    architecture-reviewer:
+      type: reviewer
+      display-name: "Architecture Reviewer"
+      description: "Reviews architectural coherence, interface contracts, structural soundness"
+      timeouts:
+        execution: 30m
+        poll-interval: 30s
+        max-wait: 30m
+      allowed-operations:
+        - submit-verdict
+        - await-resubmission
+      context-sections:
+        - review-task
+        - worktree-rules
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - systemic-thinking
+      mandatory-docs: []
+
     integration-analyst:
       type: doer
       display-name: "Integration Analyst"
@@ -388,6 +444,17 @@ pipeline:
         partially-approved: CODE_PARTIALLY_APPROVED
         reviewing-2: REVIEWING_CODE_2
 
+    architecture-pair:
+      doer: architect
+      reviewer: architecture-reviewer
+      states:
+        initial: DRAFT_ARCHITECTURE
+        executing: ARCHITECTING
+        submitted: ARCHITECTURE_TO_REVIEW
+        reviewing: REVIEWING_ARCHITECTURE
+        approved: ARCHITECTURE_APPROVED
+        rejected: ARCHITECTURE_REJECTED
+
     integration-pair:
       doer: integration-analyst
       reviewer: integration-reviewer
@@ -414,9 +481,15 @@ pipeline:
 
     coding-subpipeline:
       steps:
+        - architecture-pair
         - code-planning-pair
         - coding-pair
       transitions:
+        - name: architecture-to-code-plan
+          from: architecture-pair.approved
+          to: code-planning-pair.initial
+          trigger: manual  # human validates architectural decomposition
+          cardinality: per-subtask
         - name: code-plan-to-coding
           from: code-planning-pair.approved
           to: coding-pair.initial
@@ -437,12 +510,12 @@ pipeline:
   pipeline-transitions:
     - name: us-to-coding
       from: epic-spec-subpipeline.us-writing-pair.approved
-      to: coding-subpipeline.code-planning-pair.initial
+      to: coding-subpipeline.architecture-pair.initial
       trigger: manual
-      cardinality: one-to-one  # approved task itself is the input, no output[] needed
+      cardinality: many-to-one  # N approved US → 1 architecture task
 
   # Orchestrator is implicit — mandatory, unique, not part of any pipeline.
   # It reads entry-points below to classify input and dispatch to the right sub-pipeline.
   entry-points:
     general-objective: epic-spec-subpipeline.epic-planning-pair
-    detailed-spec: coding-subpipeline.code-planning-pair
+    detailed-spec: coding-subpipeline.architecture-pair

@@ -32,14 +32,14 @@ func TestResolver_Transition_PipelineTransition(t *testing.T) {
 	if tr.From != "epic-spec-subpipeline.us-writing-pair.approved" {
 		t.Errorf("from = %q, want 3-part ref", tr.From)
 	}
-	if tr.To != "coding-subpipeline.code-planning-pair.initial" {
+	if tr.To != "coding-subpipeline.architecture-pair.initial" {
 		t.Errorf("to = %q, want 3-part ref", tr.To)
 	}
 	if tr.Trigger != "manual" {
 		t.Errorf("trigger = %q, want %q", tr.Trigger, "manual")
 	}
-	if tr.Cardinality != "one-to-one" {
-		t.Errorf("cardinality = %q, want %q", tr.Cardinality, "one-to-one")
+	if tr.Cardinality != "many-to-one" {
+		t.Errorf("cardinality = %q, want %q", tr.Cardinality, "many-to-one")
 	}
 }
 
@@ -61,6 +61,17 @@ func TestResolver_Transition_SubPipelineStillWorks(t *testing.T) {
 	}
 	if tr.From != "code-planning-pair.approved" {
 		t.Errorf("from = %q, want %q", tr.From, "code-planning-pair.approved")
+	}
+
+	tr, err = r.Transition("architecture-to-code-plan")
+	if err != nil {
+		t.Fatalf("Transition(architecture-to-code-plan): unexpected error: %v", err)
+	}
+	if tr.From != "architecture-pair.approved" {
+		t.Errorf("from = %q, want %q", tr.From, "architecture-pair.approved")
+	}
+	if tr.To != "code-planning-pair.initial" {
+		t.Errorf("to = %q, want %q", tr.To, "code-planning-pair.initial")
 	}
 }
 
@@ -94,6 +105,13 @@ func TestResolver_AvailableManualTransitions_PipelineTransition(t *testing.T) {
 		t.Errorf("AvailableTransitions(CODING_PLAN_APPROVED, nil) = %v, want %v", got, want)
 	}
 
+	// ARCHITECTURE_APPROVED should have "architecture-to-code-plan" available.
+	got = r.AvailableManualTransitions("ARCHITECTURE_APPROVED", nil)
+	want = []string{"architecture-to-code-plan"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("AvailableTransitions(ARCHITECTURE_APPROVED, nil) = %v, want %v", got, want)
+	}
+
 	// DRAFT_CODE should have no transitions.
 	got = r.AvailableManualTransitions("DRAFT_CODE", nil)
 	if len(got) != 0 {
@@ -107,9 +125,11 @@ func TestResolver_SprintTerminalStates_Phase2(t *testing.T) {
 
 	// Pipeline-transition sources: us-writing-pair.approved (US_APPROVED)
 	// Sub-pipeline transition sources: epic-planning-pair.approved (EPIC_PLAN_APPROVED),
+	//   architecture-pair.approved (ARCHITECTURE_APPROVED),
 	//   code-planning-pair.approved (CODING_PLAN_APPROVED)
 	// Plus MERGED always included.
 	want := []models.TaskStatus{
+		"ARCHITECTURE_APPROVED",
 		"CODING_PLAN_APPROVED",
 		"EPIC_PLAN_APPROVED",
 		"MERGED",
@@ -131,7 +151,7 @@ func TestResolver_RolePairNames(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 	got := r.RolePairNames()
 
-	want := []string{"code-planning-pair", "coding-pair", "epic-planning-pair", "us-writing-pair"}
+	want := []string{"architecture-pair", "code-planning-pair", "coding-pair", "epic-planning-pair", "us-writing-pair"}
 	if len(got) != len(want) {
 		t.Fatalf("RolePairNames() = %v, want %v", got, want)
 	}
@@ -146,10 +166,11 @@ func TestResolver_TransitionSourcePairs_Phase2(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 	got := r.TransitionSourcePairs()
 
-	// Sub-pipeline transition sources: epic-planning-pair, code-planning-pair
+	// Sub-pipeline transition sources: epic-planning-pair, architecture-pair, code-planning-pair
 	// Pipeline-transition sources: us-writing-pair
 	want := map[string]bool{
 		"epic-planning-pair": true,
+		"architecture-pair":  true,
 		"code-planning-pair": true,
 		"us-writing-pair":    true,
 	}
@@ -167,7 +188,7 @@ func TestResolver_TransitionSourcePairs_Phase2(t *testing.T) {
 func TestResolver_IsTransitionSourcePair_Phase2(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 
-	sources := []string{"epic-planning-pair", "code-planning-pair", "us-writing-pair"}
+	sources := []string{"epic-planning-pair", "architecture-pair", "code-planning-pair", "us-writing-pair"}
 	for _, rp := range sources {
 		if !r.IsTransitionSourcePair(rp) {
 			t.Errorf("IsTransitionSourcePair(%q) = false, want true", rp)
@@ -212,7 +233,7 @@ func TestRoleType(t *testing.T) {
 func TestDoerRoleNames(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 	got := r.DoerRoleNames()
-	want := []string{"code-planner", "coder", "epic-planner", "us-writer"}
+	want := []string{"architect", "code-planner", "coder", "epic-planner", "us-writer"}
 	if len(got) != len(want) {
 		t.Fatalf("DoerRoleNames() = %v, want %v", got, want)
 	}
@@ -226,7 +247,7 @@ func TestDoerRoleNames(t *testing.T) {
 func TestReviewerRoleNames(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 	got := r.ReviewerRoleNames()
-	want := []string{"code-plan-reviewer", "code-reviewer", "epic-plan-reviewer", "us-reviewer"}
+	want := []string{"architecture-reviewer", "code-plan-reviewer", "code-reviewer", "epic-plan-reviewer", "us-reviewer"}
 	if len(got) != len(want) {
 		t.Fatalf("ReviewerRoleNames() = %v, want %v", got, want)
 	}
@@ -241,6 +262,7 @@ func TestAllRoleNames(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 	got := r.AllRoleNames()
 	want := []string{
+		"architect", "architecture-reviewer",
 		"code-plan-reviewer", "code-planner", "code-reviewer", "coder",
 		"epic-plan-reviewer", "epic-planner", "orchestrator", "us-reviewer", "us-writer",
 	}
@@ -323,8 +345,8 @@ func TestResolver_TransitionTargetRolePair_PipelineTransition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TransitionTargetRolePair(us-to-coding): %v", err)
 	}
-	if rp != "code-planning-pair" {
-		t.Errorf("TransitionTargetRolePair = %q, want %q", rp, "code-planning-pair")
+	if rp != "architecture-pair" {
+		t.Errorf("TransitionTargetRolePair = %q, want %q", rp, "architecture-pair")
 	}
 
 	// Sub-pipeline transition target role-pair should still work.
@@ -833,6 +855,7 @@ func TestResolver_FixtureMatchesEmbeddedPipeline(t *testing.T) {
 		"code-planner", "code-plan-reviewer",
 		"epic-planner", "epic-plan-reviewer",
 		"us-writer", "us-reviewer",
+		"architect", "architecture-reviewer",
 	} {
 		fixtureSections, err := fixture.ContextSections(role)
 		if err != nil {

@@ -1,5 +1,11 @@
 pipeline:
   roles:
+    architect:
+      type: doer
+      display-name: "Architect"
+    architecture-reviewer:
+      type: reviewer
+      display-name: "Architecture Reviewer"
     code-planner:
       type: doer
       display-name: "Code Planner"
@@ -14,6 +20,17 @@ pipeline:
       display-name: "Code Reviewer"
 
   role-pairs:
+    architecture-pair:
+      doer: architect
+      reviewer: architecture-reviewer
+      states:
+        initial: DRAFT_ARCHITECTURE
+        executing: ARCHITECTING
+        submitted: ARCHITECTURE_TO_REVIEW
+        reviewing: REVIEWING_ARCHITECTURE
+        approved: ARCHITECTURE_APPROVED
+        rejected: ARCHITECTURE_REJECTED
+
     code-planning-pair:
       doer: code-planner
       reviewer: code-plan-reviewer
@@ -43,9 +60,15 @@ pipeline:
   sub-pipelines:
     coding-subpipeline:
       steps:
+        - architecture-pair
         - code-planning-pair
         - coding-pair
       transitions:
+        - name: architecture-to-code-plan
+          from: architecture-pair.approved
+          to: code-planning-pair.initial
+          trigger: manual
+          cardinality: per-subtask
         - name: code-plan-to-coding
           from: code-planning-pair.approved
           to: coding-pair.initial
@@ -58,4 +81,4 @@ pipeline:
           cardinality: one-to-one
 
   entry-points:
-    detailed-spec: coding-subpipeline.code-planning-pair
+    detailed-spec: coding-subpipeline.architecture-pair

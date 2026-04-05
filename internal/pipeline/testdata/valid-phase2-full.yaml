@@ -206,6 +206,40 @@ pipeline:
         - software-architecture-review
         - systemic-thinking
       mandatory-docs: []
+    architect:
+      type: doer
+      display-name: "Architect"
+      context-sections:
+        - assigned-task
+        - worktree-rules
+        - prior-rejection
+        - prior-attempt
+        - doer-state-transitions
+        - doer-tools
+        - implementation-phase
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - software-architecture-review
+      mandatory-docs: []
+    architecture-reviewer:
+      type: reviewer
+      display-name: "Architecture Reviewer"
+      context-sections:
+        - review-task
+        - worktree-rules
+        - prior-rejection
+        - reviewer-state-transitions
+        - reviewer-tools
+        - anomaly-logging
+        - review-instructions
+        - rejection-format
+        - verdict-submission
+        - mandatory-docs
+        - skills-affinity
+      skills:
+        - systemic-thinking
+      mandatory-docs: []
 
   role-pairs:
     epic-planning-pair:
@@ -254,6 +288,17 @@ pipeline:
         approved: CODE_APPROVED
         rejected: CODE_REJECTED
 
+    architecture-pair:
+      doer: architect
+      reviewer: architecture-reviewer
+      states:
+        initial: DRAFT_ARCHITECTURE
+        executing: ARCHITECTING
+        submitted: ARCHITECTURE_TO_REVIEW
+        reviewing: REVIEWING_ARCHITECTURE
+        approved: ARCHITECTURE_APPROVED
+        rejected: ARCHITECTURE_REJECTED
+
   sub-pipelines:
     epic-spec-subpipeline:
       steps:
@@ -268,9 +313,15 @@ pipeline:
 
     coding-subpipeline:
       steps:
+        - architecture-pair
         - code-planning-pair
         - coding-pair
       transitions:
+        - name: architecture-to-code-plan
+          from: architecture-pair.approved
+          to: code-planning-pair.initial
+          trigger: manual
+          cardinality: per-subtask
         - name: code-plan-to-coding
           from: code-planning-pair.approved
           to: coding-pair.initial
@@ -280,10 +331,10 @@ pipeline:
   pipeline-transitions:
     - name: us-to-coding
       from: epic-spec-subpipeline.us-writing-pair.approved
-      to: coding-subpipeline.code-planning-pair.initial
+      to: coding-subpipeline.architecture-pair.initial
       trigger: manual
-      cardinality: one-to-one
+      cardinality: many-to-one
 
   entry-points:
     general-objective: epic-spec-subpipeline.epic-planning-pair
-    detailed-spec: coding-subpipeline.code-planning-pair
+    detailed-spec: coding-subpipeline.architecture-pair
