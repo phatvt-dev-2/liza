@@ -147,6 +147,7 @@ Roles:
 
   Architecture phase (both entry points):
   architect               - Defines component boundaries, interfaces, and structural decisions
+                            (receives parent task context from upstream US tasks or goal spec)
   architecture-reviewer   - Reviews architectural coherence and structural soundness
 
   Coding phase (both entry points):

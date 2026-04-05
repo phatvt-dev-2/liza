@@ -284,6 +284,19 @@ Precedence: entry-level `arch_ref` takes priority over parent task `arch_ref`. T
 | Code-planning | from `output[]` entry | from architecture task's `output[]` entry (first hop) | — |
 | Coding | from `output[]` entry | inherited from parent code-planning task (second hop) | from code-planner's `output[]` entry |
 
+**`parent-tasks-context` prompt section:**
+
+The `parent-tasks-context` template block renders upstream parent task metadata for the architect role. It is registered in the architect's `context-sections` list in pipeline YAML.
+
+| Attribute | Value |
+|-----------|-------|
+| Name | `parent-tasks-context` |
+| Used by | architect |
+| Data source | `EffectiveParentTasks()` — resolves `parent_tasks` (or deprecated `parent_task`) to task objects from state |
+| Rendered fields | ID, description, done_when, spec_ref, plan_ref for each parent task |
+| Behavior | Iterates over parent tasks and renders a metadata block per parent. When the parent list is empty (e.g., detailed-spec entry point with no upstream US tasks), the section produces no output. |
+| Scope | Architect consolidation — provides upstream deliverable context so the architect can locate and read relevant documents via standard tools. Does **not** embed file content; renders pointers only. |
+
 **Available transitions:**
 
 | Name | Source Status | Cardinality | Effect |
