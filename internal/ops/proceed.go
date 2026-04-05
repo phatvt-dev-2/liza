@@ -501,7 +501,7 @@ func extraToStringSlice(v any) []string {
 // Cycle detection: true cycle members get a transition_cycle_blocked history event
 // and are skipped from execution. Tasks downstream of those cycles are skipped
 // until the upstream cycle is resolved.
-func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
+func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]ProceedResult, error) {
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
@@ -517,7 +517,7 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 		var pending []pendingTx
 		origIdx := 0
 
-		// Phase 1a: Collect available transitions (existing behavior)
+		// Phase 1a: Collect available transitions based on trigger filter.
 		for i := range s.Tasks {
 			task := &s.Tasks[i]
 			if task.Status != models.TaskStatusMerged || task.RolePair == "" {
@@ -530,7 +530,16 @@ func ExecuteAvailableTransitions(projectRoot string) ([]ProceedResult, error) {
 				continue
 			}
 
-			available := resolver.AvailableTransitions(approvedStatus, task.TransitionsExecuted)
+			var available []string
+			switch triggerFilter {
+			case "auto":
+				available = resolver.AvailableAutoTransitions(approvedStatus, task.TransitionsExecuted)
+			case "manual":
+				available = resolver.AvailableTransitions(approvedStatus, task.TransitionsExecuted)
+			default: // "" — both
+				available = resolver.AvailableTransitions(approvedStatus, task.TransitionsExecuted)
+				available = append(available, resolver.AvailableAutoTransitions(approvedStatus, task.TransitionsExecuted)...)
+			}
 			for _, transitionName := range available {
 				tDef, err := buildTransitionDefFromPipeline(resolver, transitionName)
 				if err != nil {
