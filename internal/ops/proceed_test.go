@@ -1948,6 +1948,223 @@ func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
 	}
 }
 
+// --- arch_ref propagation tests ---
+
+func TestProceed_PerSubtask_PropagatesArchRef(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "arch-archref-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "architecture-pair",
+		Description:  "Arch with arch_ref on entries",
+		Status:       models.TaskStatus("ARCHITECTURE_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Architecture approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Task A", DoneWhen: "A works", Scope: "a", SpecRef: "specs/a.md", ArchRef: "specs/arch-plan/feature.md"},
+			{Desc: "Task B", DoneWhen: "B works", Scope: "b", SpecRef: "specs/b.md", ArchRef: "specs/arch-plan/feature.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "architecture-to-code-plan")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for i, childID := range result.ChildTaskIDs {
+		child := readState.FindTask(childID)
+		if child == nil {
+			t.Fatalf("Child task %d not found", i)
+		}
+		if child.ArchRef != "specs/arch-plan/feature.md" {
+			t.Errorf("Child %d arch_ref = %q, want %q", i, child.ArchRef, "specs/arch-plan/feature.md")
+		}
+	}
+}
+
+func TestProceed_PerSubtask_InheritsParentArchRef(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-archref-inherit-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with parent arch_ref",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		ArchRef:      "specs/arch-plan/feature.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Task A", DoneWhen: "A works", Scope: "a", SpecRef: "specs/a.md"},
+			{Desc: "Task B", DoneWhen: "B works", Scope: "b", SpecRef: "specs/b.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for i, childID := range result.ChildTaskIDs {
+		child := readState.FindTask(childID)
+		if child == nil {
+			t.Fatalf("Child task %d not found", i)
+		}
+		if child.ArchRef != "specs/arch-plan/feature.md" {
+			t.Errorf("Child %d arch_ref = %q, want %q (should inherit from parent)", i, child.ArchRef, "specs/arch-plan/feature.md")
+		}
+	}
+}
+
+func TestProceed_OneToOne_InheritsArchRef(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	parentID := "plan-archref-oto-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with arch_ref for one-to-one",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		ArchRef:      "specs/arch-plan/feature.md",
+		PlanRef:      "specs/plans/plan.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		History:      []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir, "auto")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions(auto) error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1", len(results))
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child := readState.FindTask(results[0].ChildTaskIDs[0])
+	if child == nil {
+		t.Fatal("Child task not found")
+	}
+	if child.ArchRef != "specs/arch-plan/feature.md" {
+		t.Errorf("Child arch_ref = %q, want %q", child.ArchRef, "specs/arch-plan/feature.md")
+	}
+}
+
+func TestProceed_PerSubtask_EntryArchRefOverridesParent(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-archref-override-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with override arch_ref",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		ArchRef:      "specs/arch-plan/old.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Task A", DoneWhen: "A works", Scope: "a", SpecRef: "specs/a.md", ArchRef: "specs/arch-plan/new.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child := readState.FindTask(result.ChildTaskIDs[0])
+	if child == nil {
+		t.Fatal("Child task not found")
+	}
+	if child.ArchRef != "specs/arch-plan/new.md" {
+		t.Errorf("Child arch_ref = %q, want %q (entry should override parent)", child.ArchRef, "specs/arch-plan/new.md")
+	}
+}
+
 // --- computeInheritedDeps tests ---
 
 func TestComputeInheritedDeps_UpstreamExecutedSameTransition(t *testing.T) {

@@ -344,7 +344,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	switch tDef.cardinality {
 	case "per-subtask":
 		for i, entry := range task.Output {
-			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, now)
+			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, task.ArchRef, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[i])
 		}
@@ -392,7 +392,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
 		}
 		for _, idx := range missingChildren {
-			child := buildChildTask(siblingIDs[idx], taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, now)
+			child := buildChildTask(siblingIDs[idx], taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, task.ArchRef, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[idx])
 		}
@@ -991,13 +991,18 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 // siblingIDs maps output entry indices to their generated task IDs,
 // used to resolve DependsOn index references to actual task IDs.
 // inheritedDeps are phase-gate dependencies from upstream tasks' children.
-func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, taskType models.TaskType, siblingIDs, inheritedDeps []string, now time.Time) models.Task {
+func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, taskType models.TaskType, siblingIDs, inheritedDeps []string, parentArchRef string, now time.Time) models.Task {
 	var deps []string
 	for _, ref := range entry.DependsOn {
 		idx, _ := strconv.Atoi(ref) // validated upstream in validateOutputEntry
 		deps = append(deps, siblingIDs[idx])
 	}
 	deps = append(deps, inheritedDeps...)
+
+	archRef := entry.ArchRef
+	if archRef == "" {
+		archRef = parentArchRef
+	}
 
 	return models.Task{
 		ID:          childID,
@@ -1009,6 +1014,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 		ParentTasks: []string{parentID},
 		SpecRef:     paths.NormalizeSpecRef(entry.SpecRef),
 		PlanRef:     paths.NormalizeSpecRef(entry.PlanRef),
+		ArchRef:     paths.NormalizeSpecRef(archRef),
 		DoneWhen:    entry.DoneWhen,
 		Scope:       entry.Scope,
 		DependsOn:   deps,
@@ -1036,6 +1042,7 @@ func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef tran
 		ParentTasks: []string{parentID},
 		SpecRef:     paths.NormalizeSpecRef(parent.SpecRef),
 		PlanRef:     parent.PlanRef, // inherited from parent (set from OutputEntry for per-subtask, propagated for one-to-one)
+		ArchRef:     parent.ArchRef,
 		DoneWhen:    fmt.Sprintf("Complete %s work based on parent task %s", doerName, parentID),
 		Scope:       fmt.Sprintf("Based on parent task %s", parentID),
 		DependsOn:   inheritedDeps,
