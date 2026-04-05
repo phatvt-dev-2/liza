@@ -1154,6 +1154,54 @@ func TestResolver_AvailableAutoTransitions(t *testing.T) {
 	})
 }
 
+func TestResolver_AllTransitions(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+
+	all := r.AllTransitions()
+
+	// The phase2 fixture has 3 sub-pipeline transitions + 1 pipeline-transition = 4 total.
+	if len(all) != 4 {
+		t.Fatalf("AllTransitions() returned %d transitions, want 4", len(all))
+	}
+
+	for i, td := range all {
+		if td.Name == "" {
+			t.Errorf("AllTransitions()[%d]: Name is empty", i)
+		}
+		if td.Cardinality == "" {
+			t.Errorf("AllTransitions()[%d] (%s): Cardinality is empty", i, td.Name)
+		}
+	}
+}
+
+func TestResolver_TransitionSourceRolePair(t *testing.T) {
+	r := NewResolver(loadPhase2Config(t))
+
+	// Pipeline-transition (3-part from ref): us-to-coding → us-writing-pair
+	got, err := r.TransitionSourceRolePair("us-to-coding")
+	if err != nil {
+		t.Fatalf("TransitionSourceRolePair(us-to-coding): unexpected error: %v", err)
+	}
+	if got != "us-writing-pair" {
+		t.Errorf("TransitionSourceRolePair(us-to-coding) = %q, want %q", got, "us-writing-pair")
+	}
+
+	// Sub-pipeline transition (2-part from ref): code-plan-to-coding → code-planning-pair
+	got, err = r.TransitionSourceRolePair("code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("TransitionSourceRolePair(code-plan-to-coding): unexpected error: %v", err)
+	}
+	if got != "code-planning-pair" {
+		t.Errorf("TransitionSourceRolePair(code-plan-to-coding) = %q, want %q", got, "code-planning-pair")
+	}
+
+	// Unknown transition → error
+	_, err = r.TransitionSourceRolePair("nonexistent")
+	if err == nil {
+		t.Error("TransitionSourceRolePair(nonexistent): expected error, got nil")
+	}
+}
+
 func TestResolver_resolvePhase_Clean(t *testing.T) {
 	r := NewResolver(loadCleanConfig(t))
 

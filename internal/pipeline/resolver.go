@@ -573,6 +573,39 @@ func (r *Resolver) resolve3PartPhase(ref string) models.TaskStatus {
 	return r.resolvePhase(rolePair, phase)
 }
 
+// AllTransitions returns all transition definitions across all sub-pipelines
+// and pipeline-transitions. Used for cardinality-based filtering (e.g., finding
+// all many-to-one transitions for cohort detection).
+func (r *Resolver) AllTransitions() []TransitionDef {
+	var all []TransitionDef
+	for _, sp := range r.config.Pipeline.SubPipelines {
+		all = append(all, sp.Transitions...)
+	}
+	all = append(all, r.config.Pipeline.PipelineTransitions...)
+	return all
+}
+
+// TransitionSourceRolePair returns the source role-pair name for a transition.
+// Handles both 2-part refs (sub-pipeline transitions) and 3-part refs (pipeline-transitions).
+// Mirrors TransitionTargetRolePair for the "from" side.
+func (r *Resolver) TransitionSourceRolePair(name string) (string, error) {
+	t, err := r.Transition(name)
+	if err != nil {
+		return "", err
+	}
+	// Try 3-part ref first (pipeline-transitions).
+	_, fromPair, _, err3 := parse3PartRef(t.From)
+	if err3 == nil {
+		return fromPair, nil
+	}
+	// Fall back to 2-part ref (sub-pipeline transitions).
+	fromPair2, _, err2 := parseRef(t.From)
+	if err2 != nil {
+		return "", fmt.Errorf("transition %q: invalid from reference: %w", name, err2)
+	}
+	return fromPair2, nil
+}
+
 // IsDeclaredState checks if a status is declared in the pipeline config.
 func (r *Resolver) IsDeclaredState(status models.TaskStatus) bool {
 	return slices.Contains(r.AllDeclaredStates(), status)
