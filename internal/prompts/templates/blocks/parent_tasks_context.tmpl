@@ -1,0 +1,21 @@
+{{- define "parent-tasks-context" -}}
+{{- if gt (len .ParentTaskContexts) 0}}
+
+=== PARENT TASKS ({{len .ParentTaskContexts}}) ===
+This task consolidates {{len .ParentTaskContexts}} approved upstream task(s):
+{{- range .ParentTaskContexts}}
+
+--- {{.ID}} ---
+DESCRIPTION: {{.Description}}
+DONE WHEN: {{.DoneWhen}}
+{{- if ne .SpecRef ""}}
+SPEC: {{.SpecRef}}
+{{- end}}
+{{- if ne .PlanRef ""}}
+PLAN: {{.PlanRef}}
+{{- end}}
+{{- end}}
+
+Read referenced specs and plans to understand the full scope of each parent deliverable.
+{{- end}}
+{{- end -}}

@@ -876,6 +876,94 @@ func TestBlockSkillsAffinity_EmptySlice(t *testing.T) {
 	}
 }
 
+func TestBlockParentTasksContext_WithEntries(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/parent_tasks_context.tmpl"))
+
+	data := RoleContextData{
+		ParentTaskContexts: []ParentTaskContext{
+			{
+				ID:          "us-1",
+				Description: "User can sign up",
+				DoneWhen:    "Signup flow works end-to-end",
+				SpecRef:     "specs/goals/feature-x.md",
+				PlanRef:     "specs/plans/signup.md",
+			},
+			{
+				ID:          "us-2",
+				Description: "User can reset password",
+				DoneWhen:    "Password reset flow works",
+				SpecRef:     "specs/goals/feature-x.md",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "parent-tasks-context", &data)
+	if err != nil {
+		t.Fatalf("failed to execute parent-tasks-context template: %v", err)
+	}
+
+	output := buf.String()
+
+	for _, key := range []string{
+		"PARENT TASKS (2)",
+		"--- us-1 ---",
+		"DESCRIPTION: User can sign up",
+		"DONE WHEN: Signup flow works end-to-end",
+		"SPEC: specs/goals/feature-x.md",
+		"PLAN: specs/plans/signup.md",
+		"--- us-2 ---",
+		"DESCRIPTION: User can reset password",
+		"DONE WHEN: Password reset flow works",
+	} {
+		if !strings.Contains(output, key) {
+			t.Errorf("output missing key string %q", key)
+		}
+	}
+
+	// us-2 has no PlanRef — should not render PLAN line for it
+	// Count PLAN occurrences: should be exactly 1 (from us-1)
+	if strings.Count(output, "PLAN:") != 1 {
+		t.Errorf("expected exactly 1 PLAN line, got %d", strings.Count(output, "PLAN:"))
+	}
+}
+
+func TestBlockParentTasksContext_Empty(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/parent_tasks_context.tmpl"))
+
+	data := RoleContextData{
+		ParentTaskContexts: nil,
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "parent-tasks-context", &data)
+	if err != nil {
+		t.Fatalf("failed to execute parent-tasks-context template: %v", err)
+	}
+
+	if buf.String() != "" {
+		t.Errorf("expected empty output for nil ParentTaskContexts, got %q", buf.String())
+	}
+}
+
+func TestBlockParentTasksContext_EmptySlice(t *testing.T) {
+	tmpl := template.Must(template.ParseFiles("templates/blocks/parent_tasks_context.tmpl"))
+
+	data := RoleContextData{
+		ParentTaskContexts: []ParentTaskContext{},
+	}
+
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "parent-tasks-context", &data)
+	if err != nil {
+		t.Fatalf("failed to execute parent-tasks-context template: %v", err)
+	}
+
+	if buf.String() != "" {
+		t.Errorf("expected empty output for empty ParentTaskContexts slice, got %q", buf.String())
+	}
+}
+
 // TestBuildRoleContext_AllRoles verifies that BuildRoleContext produces expected key
 // content strings for each of the 9 standard roles using block templates.
 // Section lists are loaded from the embedded pipeline YAML via the resolver,

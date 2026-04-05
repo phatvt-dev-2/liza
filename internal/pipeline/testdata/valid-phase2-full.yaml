@@ -211,6 +211,7 @@ pipeline:
       display-name: "Architect"
       context-sections:
         - assigned-task
+        - parent-tasks-context
         - worktree-rules
         - prior-rejection
         - prior-attempt
