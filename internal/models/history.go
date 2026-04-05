@@ -25,6 +25,7 @@ type Goal struct {
 	Description      string             `yaml:"description"`
 	SpecRef          string             `yaml:"spec_ref"`
 	EntryPoint       string             `yaml:"entry_point,omitempty"`
+	BaseCommit       *string            `yaml:"base_commit,omitempty"`
 	Created          time.Time          `yaml:"created"`
 	Status           GoalStatus         `yaml:"status"`
 	AlignmentHistory []AlignmentHistory `yaml:"alignment_history"`

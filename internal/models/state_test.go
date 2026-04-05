@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -1739,4 +1740,67 @@ func TestTopPriorityTier(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGoalBaseCommitYAMLRoundTrip(t *testing.T) {
+	t.Run("with BaseCommit set", func(t *testing.T) {
+		sha := "abc123def456"
+		goal := Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "specs/test.md",
+			Created:     time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC),
+			Status:      GoalStatusInProgress,
+			BaseCommit:  &sha,
+		}
+
+		data, err := yaml.Marshal(&goal)
+		if err != nil {
+			t.Fatalf("Failed to marshal goal: %v", err)
+		}
+
+		yamlStr := string(data)
+		if !strings.Contains(yamlStr, "base_commit:") {
+			t.Errorf("YAML output should contain 'base_commit:' field, got:\n%s", yamlStr)
+		}
+
+		var unmarshaled Goal
+		if err := yaml.Unmarshal(data, &unmarshaled); err != nil {
+			t.Fatalf("Failed to unmarshal goal: %v", err)
+		}
+		if unmarshaled.BaseCommit == nil {
+			t.Fatal("BaseCommit should not be nil after round-trip")
+		}
+		if *unmarshaled.BaseCommit != sha {
+			t.Errorf("BaseCommit mismatch: got %q, want %q", *unmarshaled.BaseCommit, sha)
+		}
+	})
+
+	t.Run("without BaseCommit", func(t *testing.T) {
+		goal := Goal{
+			ID:          "goal-2",
+			Description: "Test goal without base commit",
+			SpecRef:     "specs/test.md",
+			Created:     time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC),
+			Status:      GoalStatusInProgress,
+		}
+
+		data, err := yaml.Marshal(&goal)
+		if err != nil {
+			t.Fatalf("Failed to marshal goal: %v", err)
+		}
+
+		yamlStr := string(data)
+		if strings.Contains(yamlStr, "base_commit") {
+			t.Errorf("YAML output should NOT contain 'base_commit' when nil (omitempty), got:\n%s", yamlStr)
+		}
+
+		var unmarshaled Goal
+		if err := yaml.Unmarshal(data, &unmarshaled); err != nil {
+			t.Fatalf("Failed to unmarshal goal: %v", err)
+		}
+		if unmarshaled.BaseCommit != nil {
+			t.Errorf("BaseCommit should be nil after round-trip, got %q", *unmarshaled.BaseCommit)
+		}
+	})
 }
