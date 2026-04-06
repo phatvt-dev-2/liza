@@ -7,6 +7,10 @@ SCAN BOUNDARY: goal base commit {{.GoalBaseCommit}}
 DIFF COMMAND (execute in your worktree to see all changes for this goal):
 git -C {{.Worktree}} diff {{.GoalBaseCommit}}..HEAD
 
+TEST EXECUTION (run in your worktree BEFORE analyzing the diff):
+cd {{.Worktree}} && run all project test suites (unit, e2e, integration — whatever the project has).
+Failing tests are findings. Include them in your output[] as fix tasks with the test failure details.
+
 COMPLETED TASKS:
 {{- range .CompletedTasks}}
 - {{.ID}}: {{.Description}}
