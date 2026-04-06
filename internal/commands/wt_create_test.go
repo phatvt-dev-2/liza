@@ -416,6 +416,212 @@ func TestWtCreateCommand_NoPostWorktreeCmd(t *testing.T) {
 	}
 }
 
+func TestWtCreateCommand_ProvisionClaudeConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	// Create Claude Code config files in the project root.
+	mcpContent := []byte(`{"mcpServers":{"liza":{"command":"liza-mcp"}}}`)
+	settingsContent := []byte(`{"permissions":{"defaultMode":"acceptEdits"}}`)
+	localContent := []byte(`{"alwaysThinkingEnabled":true}`)
+	hookContent := []byte("#!/bin/sh\necho ok\n")
+
+	if err := os.WriteFile(filepath.Join(tmpDir, ".mcp.json"), mcpContent, 0644); err != nil {
+		t.Fatal(err)
+	}
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	if err := os.MkdirAll(filepath.Join(claudeDir, "hooks"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "settings.json"), settingsContent, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "settings.local.json"), localContent, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "hooks", "enforce-init.sh"), hookContent, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	agent := "coder-1"
+	worktreePath := filepath.Join(".worktrees", "task-config")
+	leaseExpires := now.Add(30 * time.Minute)
+
+	initialState := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:               "goal-1",
+			Description:      "Test goal",
+			SpecRef:          "README.md",
+			Created:          now,
+			Status:           models.GoalStatusInProgress,
+			AlignmentHistory: []models.AlignmentHistory{},
+		},
+		Tasks: []models.Task{
+			{
+				ID:           "task-config",
+				Description:  "Test task",
+				Status:       models.TaskStatusImplementing,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Created:      now,
+				SpecRef:      "README.md",
+				DoneWhen:     "Done",
+				Scope:        "Test",
+				AssignedTo:   &agent,
+				Worktree:     &worktreePath,
+				LeaseExpires: &leaseExpires,
+				History:      []models.TaskHistoryEntry{},
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Sprint: models.Sprint{
+			ID:      "sprint-1",
+			GoalRef: "goal-1",
+			Scope: models.SprintScope{
+				Planned: []string{"task-config"},
+				Stretch: []string{},
+			},
+			Timeline: models.SprintTimeline{
+				Started: now,
+			},
+			Status: models.SprintStatusInProgress,
+		},
+		CircuitBreaker: models.CircuitBreaker{
+			Status:  "OK",
+			History: []models.CircuitBreakerHistory{},
+		},
+		Config: models.Config{
+			MaxCoderIterations: 10,
+			MaxReviewCycles:    5,
+			IntegrationBranch:  "integration",
+		},
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	if err := WtCreateCommand(tmpDir, "task-config", false); err != nil {
+		t.Fatalf("WtCreateCommand failed: %v", err)
+	}
+
+	wtDir := filepath.Join(tmpDir, ".worktrees", "task-config")
+
+	// Verify all config files were copied with correct content.
+	for _, tc := range []struct {
+		rel     string
+		content []byte
+		mode    os.FileMode
+	}{
+		{".mcp.json", mcpContent, 0644},
+		{filepath.Join(".claude", "settings.json"), settingsContent, 0644},
+		{filepath.Join(".claude", "settings.local.json"), localContent, 0644},
+		{filepath.Join(".claude", "hooks", "enforce-init.sh"), hookContent, 0755},
+	} {
+		path := filepath.Join(wtDir, tc.rel)
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("%s: not copied: %v", tc.rel, err)
+			continue
+		}
+		if string(got) != string(tc.content) {
+			t.Errorf("%s: content mismatch: got %q, want %q", tc.rel, got, tc.content)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Errorf("%s: stat failed: %v", tc.rel, err)
+			continue
+		}
+		if info.Mode().Perm() != tc.mode {
+			t.Errorf("%s: mode %v, want %v", tc.rel, info.Mode().Perm(), tc.mode)
+		}
+	}
+}
+
+func TestWtCreateCommand_ProvisionClaudeConfig_NoFiles(t *testing.T) {
+	// When no Claude Code config files exist, worktree creation succeeds
+	// without errors or warnings from provisioning.
+	tmpDir := t.TempDir()
+
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	agent := "coder-1"
+	worktreePath := filepath.Join(".worktrees", "task-noconfig")
+	leaseExpires := now.Add(30 * time.Minute)
+
+	initialState := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:               "goal-1",
+			Description:      "Test goal",
+			SpecRef:          "README.md",
+			Created:          now,
+			Status:           models.GoalStatusInProgress,
+			AlignmentHistory: []models.AlignmentHistory{},
+		},
+		Tasks: []models.Task{
+			{
+				ID:           "task-noconfig",
+				Description:  "Test task",
+				Status:       models.TaskStatusImplementing,
+				RolePair:     "coding-pair",
+				Priority:     1,
+				Created:      now,
+				SpecRef:      "README.md",
+				DoneWhen:     "Done",
+				Scope:        "Test",
+				AssignedTo:   &agent,
+				Worktree:     &worktreePath,
+				LeaseExpires: &leaseExpires,
+				History:      []models.TaskHistoryEntry{},
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Sprint: models.Sprint{
+			ID:      "sprint-1",
+			GoalRef: "goal-1",
+			Scope: models.SprintScope{
+				Planned: []string{"task-noconfig"},
+				Stretch: []string{},
+			},
+			Timeline: models.SprintTimeline{
+				Started: now,
+			},
+			Status: models.SprintStatusInProgress,
+		},
+		CircuitBreaker: models.CircuitBreaker{
+			Status:  "OK",
+			History: []models.CircuitBreakerHistory{},
+		},
+		Config: models.Config{
+			MaxCoderIterations: 10,
+			MaxReviewCycles:    5,
+			IntegrationBranch:  "integration",
+		},
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, initialState)
+
+	err := WtCreateCommand(tmpDir, "task-noconfig", false)
+	if err != nil {
+		t.Fatalf("WtCreateCommand failed: %v", err)
+	}
+
+	// Verify no .mcp.json or .claude/ leaked into the worktree.
+	wtDir := filepath.Join(tmpDir, ".worktrees", "task-noconfig")
+	for _, rel := range []string{".mcp.json", ".claude"} {
+		if _, err := os.Stat(filepath.Join(wtDir, rel)); err == nil {
+			t.Errorf("%s should not exist in worktree when absent from project root", rel)
+		}
+	}
+}
+
 func TestWtCreateCommandIntegration(t *testing.T) {
 	// Create temp directory (project root)
 	tmpDir := t.TempDir()

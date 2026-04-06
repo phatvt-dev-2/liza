@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,6 +59,8 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 				WorktreeDir:    worktreeDir,
 				AlreadyExisted: true,
 			}
+			// Provision Claude Code config — idempotent, catches prior failures or upgrades.
+			result.Warnings = append(result.Warnings, ProvisionClaudeConfig(lp.ProjectRoot(), worktreeDir)...)
 			// Run post-worktree command even on existing worktrees — idempotent, catches prior failures.
 			if postCmd != nil {
 				if err := RunPostWorktreeCmd(*postCmd, worktreeDir); err != nil {
@@ -99,6 +102,9 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 		BaseCommit:  baseCommit,
 	}
 
+	// Provision Claude Code config so agents in worktrees have MCP access.
+	result.Warnings = append(result.Warnings, ProvisionClaudeConfig(lp.ProjectRoot(), worktreeDir)...)
+
 	// Run post-worktree command so the worktree is build/test-ready.
 	// Non-fatal: agents can run the command manually.
 	if postCmd != nil {
@@ -108,6 +114,83 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	}
 
 	return result, nil
+}
+
+// ProvisionClaudeConfig copies Claude Code configuration files from the project
+// root into a worktree so that agents launched there have MCP access and correct
+// settings. Files that don't exist in the project root are silently skipped.
+// Returns warnings for any copy failures (non-fatal).
+func ProvisionClaudeConfig(projectRoot, worktreeDir string) []string {
+	var warnings []string
+
+	// Individual files to copy (relative to project root).
+	files := []string{
+		".mcp.json",
+		filepath.Join(".claude", "settings.json"),
+		filepath.Join(".claude", "settings.local.json"),
+	}
+
+	for _, rel := range files {
+		src := filepath.Join(projectRoot, rel)
+		dst := filepath.Join(worktreeDir, rel)
+		if err := copyFilePreserveMode(src, dst); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			warnings = append(warnings, fmt.Sprintf("provision-claude-config: %s: %v", rel, err))
+		}
+	}
+
+	// Copy hook scripts (may have execute bits).
+	hooksDir := filepath.Join(projectRoot, ".claude", "hooks")
+	entries, err := os.ReadDir(hooksDir)
+	if err != nil {
+		// No hooks directory — nothing to copy.
+		return warnings
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		rel := filepath.Join(".claude", "hooks", entry.Name())
+		src := filepath.Join(projectRoot, rel)
+		dst := filepath.Join(worktreeDir, rel)
+		if err := copyFilePreserveMode(src, dst); err != nil {
+			warnings = append(warnings, fmt.Sprintf("provision-claude-config: %s: %v", rel, err))
+		}
+	}
+
+	return warnings
+}
+
+// copyFilePreserveMode copies a file from src to dst, creating parent
+// directories as needed and preserving the source file's permission bits.
+func copyFilePreserveMode(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	info, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(dstFile, srcFile)
+	if closeErr := dstFile.Close(); err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 // RunPostWorktreeCmd runs the configured post-worktree shell command in the given directory.
