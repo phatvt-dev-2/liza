@@ -326,8 +326,8 @@ func IsManyToOneReady(task *models.Task, state *models.State, m2oTransitions []M
 	if task == nil || task.Status != models.TaskStatusMerged {
 		return false
 	}
-	parents := task.EffectiveParentTasks()
-	if len(parents) == 0 {
+	sharedParentID := task.CohortParentID()
+	if sharedParentID == "" {
 		return false
 	}
 
@@ -340,7 +340,6 @@ func IsManyToOneReady(task *models.Task, state *models.State, m2oTransitions []M
 		}
 
 		// Check if ALL siblings in the cohort are MERGED with unfired transition
-		sharedParentID := parents[0]
 		allReady := true
 		for i := range state.Tasks {
 			sibling := &state.Tasks[i]
@@ -380,13 +379,13 @@ func CountReadyManyToOneCohorts(state *models.State, m2oTransitions []ManyToOneT
 		if !IsManyToOneReady(task, state, m2oTransitions) {
 			continue
 		}
-		parents := task.EffectiveParentTasks()
-		if len(parents) == 0 {
+		cohortParent := task.CohortParentID()
+		if cohortParent == "" {
 			continue
 		}
 		for _, m2o := range m2oTransitions {
 			if task.RolePair == m2o.SourceRolePair {
-				seen[cohortKey{parents[0], m2o.Name}] = true
+				seen[cohortKey{cohortParent, m2o.Name}] = true
 			}
 		}
 	}

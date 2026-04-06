@@ -242,6 +242,17 @@ func (t *Task) EffectiveParentTasks() []string {
 	return nil
 }
 
+// CohortParentID returns the shared parent used to identify a many-to-one cohort.
+// Many-to-one children are siblings created from the same upstream task, so
+// EffectiveParentTasks()[0] is the cohort anchor. Returns "" if no parents exist.
+func (t *Task) CohortParentID() string {
+	parents := t.EffectiveParentTasks()
+	if len(parents) == 0 {
+		return ""
+	}
+	return parents[0]
+}
+
 // OutputEntry represents a structured subtask definition produced by a doer role.
 // When a task completes with output[], each entry defines a downstream child task.
 type OutputEntry struct {

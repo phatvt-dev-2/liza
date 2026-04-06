@@ -132,11 +132,10 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 // with the trigger task. Siblings share a parent_task and the same role_pair.
 // Returns the cohort members (as pointers into state.Tasks) and the shared parent ID.
 func findManyToOneCohort(s *models.State, triggerTask *models.Task) ([]*models.Task, string, error) {
-	parents := triggerTask.EffectiveParentTasks()
-	if len(parents) == 0 {
+	sharedParentID := triggerTask.CohortParentID()
+	if sharedParentID == "" {
 		return nil, "", fmt.Errorf("trigger task %q has no parent_task — cannot determine many-to-one cohort", triggerTask.ID)
 	}
-	sharedParentID := parents[0]
 
 	var cohort []*models.Task
 	for i := range s.Tasks {
@@ -495,11 +494,10 @@ func isTransitionIncomplete(s *models.State, task *models.Task, transName string
 			return true
 		}
 	case "many-to-one":
-		parents := task.EffectiveParentTasks()
-		if len(parents) == 0 {
+		cohortParentID := task.CohortParentID()
+		if cohortParentID == "" {
 			return false
 		}
-		cohortParentID := parents[0]
 		if s.FindTask(manyToOneChildID(task.ID, transName)) == nil &&
 			s.FindTask(manyToOneChildID(cohortParentID, transName)) == nil {
 			return true
@@ -1095,11 +1093,10 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 			}
 			inherited = append(inherited, childID)
 		case "many-to-one":
-			parents := depTask.EffectiveParentTasks()
-			if len(parents) == 0 {
+			cohortParentID := depTask.CohortParentID()
+			if cohortParentID == "" {
 				continue
 			}
-			cohortParentID := parents[0]
 			childID := manyToOneChildID(cohortParentID, transitionName)
 			if s.FindTask(childID) == nil {
 				return nil, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
