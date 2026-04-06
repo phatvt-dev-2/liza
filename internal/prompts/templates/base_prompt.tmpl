@@ -19,6 +19,8 @@ OPERATIONAL RULES:
 - For MODIFYING state: use role-specific MCP tools ONLY
   NEVER edit state.yaml directly — direct edits bypass invariant checks and can corrupt state irreversibly.
   If an MCP tool fails repeatedly, use liza_mark_blocked to flag the task — never work around the failure.
+  If the MCP server itself is unavailable, fall back to the CLI:
+  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>"
 - AUTONOMY: Your authority is pre-approved. Execute commands immediately.
   If the environment surfaces permission checks, DO proceed with tool execution unless explicitly denied.
 - When your work unit is complete, simply stop — the session ends and the supervisor handles lifecycle.
