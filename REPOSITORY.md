@@ -106,6 +106,7 @@ Specialized protocols agents load conditionally. Each contains a single `SKILL.m
 | `debugging/` | Before any debugging (mandatory) |
 | `testing/` | When writing or analyzing tests (mandatory) |
 | `code-review/` | When reviewing PRs or pending changes |
+| `architecture-planning/` | Defining architecture for a change (architect role) |
 | `software-architecture-review/` | Implementation planning, structural concerns |
 | `clean-code/` | Pre-commit refactoring (Python-focused) |
 | `spec-review/` | Specification validation |

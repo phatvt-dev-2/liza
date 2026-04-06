@@ -109,7 +109,7 @@ The `many-to-one` cardinality keeps the pipeline fully declarative — no specia
 - Pipeline topology remains fully declarative
 
 **Limitations accepted:**
-- No purpose-built architecture skill yet — architect relies on `software-architecture-review` (designed for evaluation, not definition)
+- ~~No purpose-built architecture skill yet~~ — resolved: `architecture-planning` skill created
 - `ParentTasks` field adds complexity to parent reference handling across all callsites
 - Detailed-spec path creates architecture task via `add-task` (no upstream transition) — direct entry point
 

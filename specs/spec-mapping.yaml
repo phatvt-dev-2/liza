@@ -30,6 +30,7 @@ code_classification:
   internal/commands/init.go: {type: functional, confidence: confirmed}
   skills/adr-backfill/SKILL.md: {type: functional, confidence: confirmed}
   skills/black-box-red-testing/SKILL.md: {type: functional, confidence: confirmed}
+  skills/architecture-planning/SKILL.md: {type: functional, confidence: confirmed}
   skills/clean-code/SKILL.md: {type: functional, confidence: confirmed}
   skills/code-review/SKILL.md: {type: functional, confidence: confirmed}
   skills/code-spec-backfill/SKILL.md: {type: functional, confidence: confirmed}
@@ -570,6 +571,15 @@ mappings:
     confidence: confirmed
     conflict_details: null
     last_verified: "2026-02-22"
+  skills/architecture-planning/SKILL.md:
+    status: new
+    code_sha: null
+    spec_sha: null
+    spec_path: specs/functional/1.6 - Skills.md
+    spec_title: Skills
+    confidence: unverified
+    conflict_details: null
+    last_verified: null
   skills/software-architecture-review/SKILL.md:
     status: aligned
     code_sha: cfede1d
@@ -1465,6 +1475,7 @@ specs:
       - internal/commands/setup.go
       - skills/adr-backfill/SKILL.md
       - skills/black-box-red-testing/SKILL.md
+      - skills/architecture-planning/SKILL.md
       - skills/clean-code/SKILL.md
       - skills/code-review/SKILL.md
       - skills/code-spec-backfill/SKILL.md
