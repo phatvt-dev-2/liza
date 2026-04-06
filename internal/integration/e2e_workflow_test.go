@@ -480,6 +480,18 @@ func TestIntegrationPipelineWithFindings(t *testing.T) {
 		t.Errorf("Expected INTEGRATION_ANALYSIS_APPROVED, got %s", task.Status)
 	}
 
+	// Step 5b: Merge the approved integration task (all tasks go through merge now)
+	t.Log("Step 5b: Merge approved integration task")
+	if _, err := ops.MergeWorktree(projectDir, taskID, reviewerID); err != nil {
+		t.Fatalf("MergeWorktree failed: %v", err)
+	}
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task = findTask(state.Tasks, taskID)
+	if task.Status != models.TaskStatusMerged {
+		t.Errorf("Expected MERGED after merge, got %s", task.Status)
+	}
+
 	// Step 6: Execute auto-transitions — should create coding-pair fix tasks
 	t.Log("Step 6: Execute auto-transitions")
 	results, err := ops.ExecuteAvailableTransitions(projectDir, "auto")

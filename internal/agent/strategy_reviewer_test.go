@@ -22,21 +22,23 @@ func TestReviewerPreWork_ExecutesAutoTransitions(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	state.PipelineVersion = 2
 
-	// Integration-analyst task: APPROVED (bypasses merge, fans out directly).
+	// Integration-analyst task: MERGED (goes through merge path like all tasks).
 	reviewCommit := "abc123"
+	mergeCommit := "def456"
 	parentID := "integration-task-1"
 	task := models.Task{
 		ID:           parentID,
 		Type:         models.TaskTypeIntegration,
 		RolePair:     "integration-pair",
 		Description:  "Integration analysis for goal",
-		Status:       models.TaskStatus("INTEGRATION_ANALYSIS_APPROVED"),
+		Status:       models.TaskStatusMerged,
 		Priority:     1,
 		Created:      now,
 		SpecRef:      "specs/goals/test.md",
 		DoneWhen:     "Analysis approved",
 		Scope:        "full branch",
 		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
 		Output: []models.OutputEntry{
 			{Desc: "Fix type alignment in auth", DoneWhen: "Types match across modules", Scope: "internal/auth", SpecRef: "specs/goals/test.md"},
 			{Desc: "Fix error mapping in handler", DoneWhen: "All errors propagated", Scope: "internal/handler", SpecRef: "specs/goals/test.md"},
@@ -69,13 +71,13 @@ func TestReviewerPreWork_ExecutesAutoTransitions(t *testing.T) {
 		t.Fatalf("Failed to read state: %v", err)
 	}
 
-	// Verify: parent is still in approved state (no merge for integration tasks)
+	// Verify: parent is in MERGED state (integration tasks now go through merge)
 	parent := readState.FindTask(parentID)
 	if parent == nil {
 		t.Fatal("Parent task not found")
 	}
-	if parent.Status != models.TaskStatus("INTEGRATION_ANALYSIS_APPROVED") {
-		t.Errorf("Parent status = %q, want INTEGRATION_ANALYSIS_APPROVED", parent.Status)
+	if parent.Status != models.TaskStatusMerged {
+		t.Errorf("Parent status = %q, want MERGED", parent.Status)
 	}
 
 	// Verify: child fix tasks were created

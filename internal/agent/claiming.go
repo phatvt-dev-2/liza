@@ -197,11 +197,6 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr mod
 
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		// Integration analysis tasks produce no code — skip merge, let
-		// auto-transitions fan out child tasks directly from approved state.
-		if task.EffectiveType() == models.TaskTypeIntegration {
-			continue
-		}
 		if models.IsApprovedForMerge(task, pr) &&
 			task.LastApprover() == agentID &&
 			task.MergeCommit == nil {
@@ -290,9 +285,6 @@ func hasPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResol
 
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		if task.EffectiveType() == models.TaskTypeIntegration {
-			continue
-		}
 		if models.IsApprovedForMerge(task, pr) &&
 			task.LastApprover() == agentID &&
 			task.MergeCommit == nil {
