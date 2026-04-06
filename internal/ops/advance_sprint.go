@@ -367,6 +367,32 @@ func IsManyToOneReady(task *models.Task, state *models.State, m2oTransitions []M
 	return false
 }
 
+// CountReadyManyToOneCohorts counts distinct many-to-one cohorts where all
+// siblings are MERGED with unfired transitions. Deduplicates by (shared parent, transition).
+func CountReadyManyToOneCohorts(state *models.State, m2oTransitions []ManyToOneTransitionInfo) int {
+	type cohortKey struct {
+		parentID       string
+		transitionName string
+	}
+	seen := make(map[cohortKey]bool)
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if !IsManyToOneReady(task, state, m2oTransitions) {
+			continue
+		}
+		parents := task.EffectiveParentTasks()
+		if len(parents) == 0 {
+			continue
+		}
+		for _, m2o := range m2oTransitions {
+			if task.RolePair == m2o.SourceRolePair {
+				seen[cohortKey{parents[0], m2o.Name}] = true
+			}
+		}
+	}
+	return len(seen)
+}
+
 // collectMergedManyToOneWithUnfiredTransition returns IDs of planned MERGED tasks
 // that are part of a complete many-to-one cohort with an unfired transition.
 // These must be carried forward so the orchestrator can fire the transition.

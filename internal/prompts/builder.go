@@ -215,30 +215,9 @@ func countCycleBlockedPlanning(tasks []models.Task, planningPairs map[string]boo
 	return count
 }
 
-// countReadyM2OCohorts counts unique many-to-one cohorts where all siblings are
-// MERGED with unfired transitions. Mirrors agent.countReadyManyToOneCohorts logic.
+// countReadyM2OCohorts delegates to ops.CountReadyManyToOneCohorts.
 func countReadyM2OCohorts(state *models.State, m2oTransitions []ops.ManyToOneTransitionInfo) int {
-	type cohortKey struct {
-		parentID       string
-		transitionName string
-	}
-	seen := make(map[cohortKey]bool)
-	for _, taskID := range state.Sprint.Scope.Planned {
-		task := state.FindTask(taskID)
-		if !ops.IsManyToOneReady(task, state, m2oTransitions) {
-			continue
-		}
-		parents := task.EffectiveParentTasks()
-		if len(parents) == 0 {
-			continue
-		}
-		for _, m2o := range m2oTransitions {
-			if task.RolePair == m2o.SourceRolePair {
-				seen[cohortKey{parents[0], m2o.Name}] = true
-			}
-		}
-	}
-	return len(seen)
+	return ops.CountReadyManyToOneCohorts(state, m2oTransitions)
 }
 
 // hasIntegrationTaskInSprint checks if any planned task uses the integration-pair role-pair.
