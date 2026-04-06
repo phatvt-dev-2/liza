@@ -43,11 +43,11 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
 - **Autonomous Spec-driven Coding System:**
   - From **general goal** to code and tests, with multi-stage decomposition into intermediate artifacts (epics, US, implementation plans)
     that are AI generated but human reviewed.
-  - Automatic task decomposition based on complexity with dependency management for parallel execution.
+  - Automatic task decomposition based on complexity with dependency management for parallel execution. Many-to-one transitions consolidate sibling tasks (e.g. N user stories → 1 architecture task).
   - Multi-sprints: agents are fully autonomous within a sprint, user steers between sprints via Liza CLI - review of produced artifacts, continuous improvement, and steering of the next sprint
   - A TUI (`liza tui`) displays live system state and lets you spawn agents, pause/resume, add tasks, and trigger checkpoints.
 - **Adversarial architecture:**
-  - One Orchestrator role + 8 others. More to come (Architect, ...).
+  - One Orchestrator role + 12 others across three pipeline phases.
   - Every activity is dual — a doer and a reviewer: epic planning, epic writing, US writing, code planning, coding - everything.
   - They interact like on a PR review — submission, feedback comments, verdict, revised submission, etc. — until approval.
 - **Hybrid hardened architecture:**
@@ -55,7 +55,7 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
   - The supervisor does the **deterministic code-enforced actions** (worktree management, merges, TDD enforcement, etc),
     leaving the **judgment to the agent**. Strict task state machine with 43+ validation rules.
   - Agents communicate and act through Liza's **MCP tools**.
-  - 20k LOC of Go (+60k of tests). Liza is not a prompt collection.
+  - 35k LOC of Go (+92k of tests). Liza is not a prompt collection.
   - Agent logs recording for automatic analysis and continuous improvements (token optimization, MCP server usage analysis, ...)
 - **Multi-model:**
   - Liza wraps provider **CLIs**, not their APIs. This means your existing subscription (Claude Max, ChatGPT Pro, etc.) works — no API keys or per-token billing required — and your personal setup is used.
@@ -318,9 +318,10 @@ and may use any skill they consider relevant to adapt to the situation.
 
 **Liza has the built-in capability to do things right on the first pass.**
 
-Liza has 9 roles organized in two pipeline phases:
+Liza has 13 roles organized in three pipeline phases:
 - **Specification phase**: orchestrator, epic-planner, epic-plan-reviewer, us-writer, us-reviewer
-- **Coding phase**: orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer
+- **Coding phase**: orchestrator, architect, architecture-reviewer, code-planner, code-plan-reviewer, coder, code-reviewer
+- **Integration phase**: integration-analyst, integration-reviewer, coder, code-reviewer
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -336,12 +337,20 @@ Liza has 9 roles organized in two pipeline phases:
     │  US Writer    ←→ US Reviewer             │
     │                                          │
     └──────────────────┬───────────────────────┘
-                       │ liza proceed
+                       │ liza proceed (us-to-coding, many-to-one)
     ┌──────────── Coding Phase ────────────────┐
     │                                          │
     │  Orchestrator (decomposes & rescopes)    │
+    │  Architect    ←→ Architecture Reviewer   │
     │  Code Planner ←→ Code Plan Reviewer      │
     │  Coder        ←→ Code Reviewer           │
+    │                                          │
+    └──────────────────┬───────────────────────┘
+                       │ all coding tasks merged
+    ┌──────────── Integration Phase ───────────┐
+    │                                          │
+    │  Integration Analyst ←→ Integration Rev. │
+    │  (findings → fix tasks in coding-pair)   │
     │                                          │
     └──────────────────┬───────────────────────┘
                        │
@@ -383,15 +392,18 @@ initial → executing → submitted → reviewing → approved → MERGED
 Inter-pair transitions (`liza proceed`) create downstream tasks between sprints:
 
 ```
-  Spec phase                                    Coding phase
+  Spec phase                           Coding phase
 
-  Epic Planner ─approved─► MERGED               Code Planner ─approved─► MERGED
-       │ liza proceed (epic-to-us)                   │ liza proceed (code-plan-to-coding)
-       ▼                                             ▼
-  US Writer ─approved─► MERGED                  Coder ─approved─► MERGED
-       │ liza proceed (us-to-coding)
-       ▼
-  Code Planner (coding phase)
+  Epic Planner ─approved─► MERGED      Architect ─approved─► MERGED
+       │ epic-to-us (per-subtask)           │ arch-to-code-plan (per-subtask)
+       ▼                                    ▼
+  US Writer ─approved─► MERGED         Code Planner ─approved─► MERGED
+       │ us-to-coding (many-to-one)         │ code-plan-to-coding (per-subtask)
+       ▼                                    ▼
+  Architect (coding phase)             Coder ─approved─► MERGED
+                                            │ all tasks merged
+                                            ▼
+                                       Integration Analyst (auto)
 ```
 
 Example of a task on the blackboard:
@@ -447,7 +459,7 @@ See [Release Notes](docs/release_notes/) for version history and [RELEASE.md](RE
 
 **Where Liza works today:**
 - **Pairing mode** is battle-tested — agents write **~90% of production code** under human supervision
-- **Multi-agent mode** produces solid specs and code through the full goal-to-merge pipeline with 9 roles across 2 phases — starting from release v0.4.0, all major Liza changes are implemented using this mode
+- **Multi-agent mode** produces solid specs and code through the full goal-to-merge pipeline with 13 roles across 3 phases — starting from release v0.4.0, all major Liza changes are implemented using this mode
 
 Liza is a collaborative agent network (L4 AI maturity) but its architecture has been designed to support a software factory (L5) where humans focus on strategy and product vision. Still a long way to go.
 
@@ -455,16 +467,16 @@ Liza is a collaborative agent network (L4 AI maturity) but its architecture has 
 - Orchestrator (decomposes goal into planning tasks)
 - Epic Planner / Epic Plan Reviewer
 - US Writer / US Reviewer
+- Architect / Architecture Reviewer
 - Code Planner / Code Plan Reviewer
 - Coder / Code Reviewer
+- Integration Analyst / Integration Reviewer
 
 **Planned role pairs:**
 - Sprint Analyzer role — analyze agent logs at sprint boundaries, capitalize on patterns via lesson-capture
-- Architect / Architecture Reviewer — define architecture from specs for coders to follow
 - Security Auditor / Security Audit Reviewer — review the security of the code
 
 **Roadmap:**
-- Integration sub-pipeline — validate a batch of commits so it can be safely merged to main. For now, an extra pass of LLM-assisted review before merging to main is recommended.
 - Context handoff as blackboard event — structured positive/negative findings on every task completion
 - Deterministic pre/post hooks at role transitions — mechanical checks before spawning agents and before their handoff
 - Orchestrator-routed model selection — assign tasks to models based on estimated complexity
