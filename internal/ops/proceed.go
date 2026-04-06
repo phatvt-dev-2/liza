@@ -1097,6 +1097,12 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 			if cohortParentID == "" {
 				continue
 			}
+			// Skip intra-cohort deps: when the dep task shares the same cohort
+			// parent, the many-to-one child is the same task being created,
+			// which would produce a circular self-dependency.
+			if cohortParentID == task.CohortParentID() {
+				continue
+			}
 			childID := manyToOneChildID(cohortParentID, transitionName)
 			if s.FindTask(childID) == nil {
 				return nil, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)

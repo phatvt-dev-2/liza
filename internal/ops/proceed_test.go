@@ -3650,6 +3650,55 @@ func TestComputeInheritedDeps_ManyToOne(t *testing.T) {
 	}
 }
 
+func TestComputeInheritedDeps_ManyToOne_IntraCohortSkipsSelfDep(t *testing.T) {
+	tmpDir, _ := setupPhase2PipelineProceedTest(t)
+
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+
+	parentID := "epic-plan-1"
+	childID := manyToOneChildID(parentID, "us-to-coding")
+
+	// Cohort members us-1 and us-2 share the same parent. us-2 depends on us-1.
+	// When us-1 has already executed the transition, computeInheritedDeps for us-2
+	// must NOT produce the many-to-one child as an inherited dep — that child IS
+	// the task being created, which would be a circular self-dependency.
+	state := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:          "us-1",
+				RolePair:    "us-writing-pair",
+				ParentTasks: []string{parentID},
+				TransitionsExecuted: map[string]bool{
+					"us-to-coding": true,
+				},
+			},
+			{
+				ID:          "us-2",
+				RolePair:    "us-writing-pair",
+				ParentTasks: []string{parentID},
+				DependsOn:   []string{"us-1"},
+			},
+			{
+				ID:       childID,
+				RolePair: "architecture-pair",
+			},
+		},
+	}
+
+	triggerTask := state.FindTask("us-2")
+	inherited, err := computeInheritedDeps(state, triggerTask, "us-to-coding", resolver)
+	if err != nil {
+		t.Fatalf("computeInheritedDeps: %v", err)
+	}
+
+	if len(inherited) != 0 {
+		t.Errorf("inherited deps = %v, want empty (intra-cohort dep should be skipped to avoid self-reference)", inherited)
+	}
+}
+
 func TestProceedManyToOne_CrashRecovery_MissingChild(t *testing.T) {
 	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
 
