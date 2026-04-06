@@ -311,6 +311,8 @@ func buildOrchestratorStatus(state *models.State, projectRoot string) orchestrat
 		ps.Reason = fmt.Sprintf("%d immediate discovery(ies) need to be converted to tasks", count)
 	case "PLANNING_COMPLETE":
 		ps.Reason = fmt.Sprintf("%d planning task(s) merged with output[]; ready for coding task expansion", count)
+	case "MANY_TO_ONE_READY":
+		ps.Reason = fmt.Sprintf("%d many-to-one cohort(s) ready for consolidation transition", count)
 	case "SPRINT_COMPLETE":
 		ps.Reason = fmt.Sprintf("All %d planned task(s) reached terminal state; sprint complete", count)
 	case "NONE":

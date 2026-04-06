@@ -758,6 +758,41 @@ func TestFormatStatusDashboard(t *testing.T) {
 				"Blocked by dependencies: 3 tasks",
 			},
 		},
+		{
+			name: "many-to-one ready trigger",
+			data: statusData{
+				Goal: goalStatus{
+					Description: "Test",
+					Status:      "IN_PROGRESS",
+					SpecRef:     "spec.md",
+				},
+				Sprint: sprintStatus{
+					ID:         "sprint-1",
+					Status:     "IN_PROGRESS",
+					StartTime:  now.Format(time.RFC3339),
+					TasksDone:  0,
+					TasksTotal: 0,
+				},
+				Config: configStatus{Mode: "RUNNING"},
+				Tasks: taskStatus{
+					Total:    0,
+					ByStatus: map[string]int{},
+				},
+				Agents:            []agentStatus{},
+				OrchestratorState: orchestratorStatus{Trigger: "MANY_TO_ONE_READY", TriggerCount: 3, Reason: "3 many-to-one cohort(s) ready for consolidation transition"},
+				WorkQueues: workQueuesStatus{
+					Coder:    queueStatus{Available: 0, Reason: "No claimable tasks"},
+					Reviewer: queueStatus{Available: 0, Reason: "No reviewable tasks"},
+				},
+			},
+			expectSections: []string{
+				"MANY_TO_ONE_READY",
+				"many-to-one cohort(s) ready for consolidation transition",
+			},
+			notExpect: []string{
+				"Unknown trigger",
+			},
+		},
 	}
 
 	for _, tt := range tests {
