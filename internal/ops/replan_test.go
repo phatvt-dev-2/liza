@@ -398,6 +398,55 @@ func TestReplan_PreservesDependsOn(t *testing.T) {
 	}
 }
 
+func TestReplan_PreservesParentTasksAndArchRef(t *testing.T) {
+	tmpDir, stateFile := setupReplanTest(t)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+
+	// Upstream parent tasks (already terminal)
+	us1 := testhelpers.BuildTaskByStatus("us-1", models.TaskStatusMerged, now)
+	us2 := testhelpers.BuildTaskByStatus("us-2", models.TaskStatusMerged, now)
+
+	task := buildMergedPlanningTask("plan-1", now)
+	parentID := "us-1"
+	task.ParentTask = &parentID
+	task.ParentTasks = []string{"us-1", "us-2"}
+	task.ArchRef = "specs/arch.md"
+	testhelpers.CreateSpecFile(t, tmpDir, "arch.md", "# Arch\n")
+
+	state.Tasks = append(state.Tasks, us1, us2, task)
+	state.Sprint.Scope.Planned = []string{"plan-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Replan(tmpDir, &ReplanInput{TaskID: "plan-1", ChangedBy: "human"})
+	if err != nil {
+		t.Fatalf("Replan: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	newTask := readState.FindTask(result.NewTaskID)
+	if newTask == nil {
+		t.Fatal("new task not found")
+	}
+
+	if newTask.ParentTask == nil || *newTask.ParentTask != "us-1" {
+		t.Errorf("ParentTask = %v, want us-1", newTask.ParentTask)
+	}
+	if len(newTask.ParentTasks) != 2 || newTask.ParentTasks[0] != "us-1" || newTask.ParentTasks[1] != "us-2" {
+		t.Errorf("ParentTasks = %v, want [us-1 us-2]", newTask.ParentTasks)
+	}
+	if newTask.ArchRef != "specs/arch.md" {
+		t.Errorf("ArchRef = %q, want %q", newTask.ArchRef, "specs/arch.md")
+	}
+}
+
 func TestReplan_RetargetsDownstream(t *testing.T) {
 	tmpDir, stateFile := setupReplanTest(t)
 	now := time.Now().UTC()
