@@ -9,6 +9,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 // setupInitTestDir creates a temp dir with a git repo and a spec file,
@@ -16,6 +17,7 @@ import (
 func setupInitTestDir(t *testing.T) (projectRoot, specFile string) {
 	t.Helper()
 
+	testhelpers.SetupGlobalLiza(t)
 	projectRoot = t.TempDir()
 
 	// Initialize a git repo so branch operations work
