@@ -171,6 +171,27 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 		}); err != nil {
 			return fmt.Errorf("SetTaskOutput: %w", err)
 		}
+	} else if role == "architect" {
+		if err := ops.SetTaskOutput(projectRoot, &ops.SetTaskOutputInput{
+			TaskID:  taskID,
+			AgentID: agentID,
+			Output: []models.OutputEntry{
+				{
+					Desc:     fmt.Sprintf("Code plan 1 from %s", taskID),
+					DoneWhen: "Implementation plan complete",
+					Scope:    "Component A",
+					SpecRef:  "specs/feature.md",
+				},
+				{
+					Desc:     fmt.Sprintf("Code plan 2 from %s", taskID),
+					DoneWhen: "Implementation plan complete",
+					Scope:    "Component B",
+					SpecRef:  "specs/feature.md",
+				},
+			},
+		}); err != nil {
+			return fmt.Errorf("SetTaskOutput: %w", err)
+		}
 	} else if role == "us-writer" ||
 		role == "code-planner" {
 		if err := ops.SetTaskOutput(projectRoot, &ops.SetTaskOutputInput{
@@ -254,16 +275,16 @@ func (m *SmartMockCLIExecutor) executeReviewer(projectRoot, agentID, taskID, rol
 // ---------------------------------------------------------------------------
 
 // TestFullSprintSequence runs the real RunSupervisor loop through a complete
-// pipeline: epic-planning → US-writing → code-planning → coding.
+// pipeline: epic-planning → US-writing → architecture → code-planning → coding.
 //
 // Each supervisor is run sequentially. Each claims one task, the mock executor
 // does the work (checkpoint, commit, submit/verdict), the supervisor loops
 // back, finds no more work, and exits after a short timeout.
 //
 // The test verifies:
-//   - All 4 tasks reach MERGED status
-//   - 3 child tasks are created by pipeline transitions
-//   - Each mock CLI was called exactly once per role
+//   - All 8 tasks reach MERGED status
+//   - 7 child tasks are created by pipeline transitions
+//   - Each mock CLI was called the expected number of times per role
 func TestFullSprintSequence(t *testing.T) {
 	// ── Setup ──────────────────────────────────────────────────────────
 
@@ -423,16 +444,22 @@ func TestFullSprintSequence(t *testing.T) {
 	t.Log("=== Phase 2: US Writing ===")
 	runSupervisor("us-writer-1", "us-writer")
 	runSupervisor("us-reviewer-1", "us-reviewer")
-	simulateOrchestratorTransitions("US → code-planning")
+	simulateOrchestratorTransitions("US → architecture")
 
-	// ── Phase 3: Code Planning ─────────────────────────────────────────
-	t.Log("=== Phase 3: Code Planning ===")
+	// ── Phase 3: Architecture ──────────────────────────────────────────
+	t.Log("=== Phase 3: Architecture ===")
+	runSupervisor("architect-1", "architect")
+	runSupervisor("architecture-reviewer-1", "architecture-reviewer")
+	simulateOrchestratorTransitions("architecture → code-planning")
+
+	// ── Phase 4: Code Planning ─────────────────────────────────────────
+	t.Log("=== Phase 4: Code Planning ===")
 	runSupervisor("code-planner-1", "code-planner")
 	runSupervisor("code-plan-reviewer-1", "code-plan-reviewer")
 	simulateOrchestratorTransitions("code-planning → coding")
 
-	// ── Phase 4: Coding ────────────────────────────────────────────────
-	t.Log("=== Phase 4: Coding ===")
+	// ── Phase 5: Coding ────────────────────────────────────────────────
+	t.Log("=== Phase 5: Coding ===")
 	runSupervisor("coder-1", "coder")
 	runSupervisor("code-reviewer-1", "code-reviewer")
 
@@ -449,17 +476,18 @@ func TestFullSprintSequence(t *testing.T) {
 		t.Logf("  Task %-55s  status=%-25s  role_pair=%s", task.ID, task.Status, task.RolePair)
 	}
 
-	// Expected tasks (1 original + 6 created by transitions):
-	// The epic planner produces 2 capability entries, so the tree fans out:
-	//   epic-1                                                      (epic-planning-pair)
-	//   epic-1-epic-to-us-0                                         (us-writing-pair, CAP-001)
-	//   epic-1-epic-to-us-1                                         (us-writing-pair, CAP-002)
-	//   epic-1-epic-to-us-0-us-to-coding                            (code-planning-pair)
-	//   epic-1-epic-to-us-1-us-to-coding                            (code-planning-pair)
-	//   epic-1-epic-to-us-0-us-to-coding-code-plan-to-coding-0      (coding-pair)
-	//   epic-1-epic-to-us-1-us-to-coding-code-plan-to-coding-0      (coding-pair)
-	if len(state.Tasks) != 7 {
-		t.Errorf("Expected 7 tasks, got %d", len(state.Tasks))
+	// Expected tasks (1 original + 7 created by transitions):
+	// The epic planner produces 2 capability entries, the architect produces 2 code plans:
+	//   epic-1                                                                          (epic-planning-pair)
+	//   epic-1-epic-to-us-0                                                             (us-writing-pair, CAP-001)
+	//   epic-1-epic-to-us-1                                                             (us-writing-pair, CAP-002)
+	//   epic-1-us-to-coding                                                             (architecture-pair, many-to-one)
+	//   epic-1-us-to-coding-architecture-to-code-plan-0                                 (code-planning-pair)
+	//   epic-1-us-to-coding-architecture-to-code-plan-1                                 (code-planning-pair)
+	//   epic-1-us-to-coding-architecture-to-code-plan-0-code-plan-to-coding-0           (coding-pair)
+	//   epic-1-us-to-coding-architecture-to-code-plan-1-code-plan-to-coding-0           (coding-pair)
+	if len(state.Tasks) != 8 {
+		t.Errorf("Expected 8 tasks, got %d", len(state.Tasks))
 	}
 
 	// All tasks should be MERGED.
@@ -469,19 +497,26 @@ func TestFullSprintSequence(t *testing.T) {
 			mergedCount++
 		}
 	}
-	if mergedCount != 7 {
-		t.Errorf("Expected 7 MERGED tasks, got %d", mergedCount)
+	if mergedCount != 8 {
+		t.Errorf("Expected 8 MERGED tasks, got %d", mergedCount)
 	}
 
 	// Verify transitions_executed on source tasks.
 	assertTransitionExecuted(t, state, "epic-1", "epic-to-us")
 
-	// Both US tasks should trigger us-to-coding transitions.
+	// Both US tasks should have us-to-coding executed (many-to-one).
 	for _, suffix := range []string{"0", "1"} {
 		usTaskID := "epic-1-epic-to-us-" + suffix
 		assertTransitionExecuted(t, state, usTaskID, "us-to-coding")
+	}
 
-		codePlanTaskID := usTaskID + "-us-to-coding"
+	// Architecture task fans out to code-planning tasks.
+	archTaskID := "epic-1-us-to-coding"
+	assertTransitionExecuted(t, state, archTaskID, "architecture-to-code-plan")
+
+	// Each code-planning task fans out to a coding task.
+	for _, suffix := range []string{"0", "1"} {
+		codePlanTaskID := archTaskID + "-architecture-to-code-plan-" + suffix
 		assertTransitionExecuted(t, state, codePlanTaskID, "code-plan-to-coding")
 	}
 
@@ -516,24 +551,27 @@ func TestFullSprintSequence(t *testing.T) {
 	mock.mu.Lock()
 	defer mock.mu.Unlock()
 
-	// 2 (epic) + 4 (US x2) + 4 (code-plan x2) + 4 (coding x2) = 14
-	if len(mock.calls) != 14 {
-		t.Errorf("Expected 14 mock calls, got %d", len(mock.calls))
+	// 2 (epic) + 4 (US x2) + 2 (arch) + 4 (code-plan x2) + 4 (coding x2) = 16
+	if len(mock.calls) != 16 {
+		t.Errorf("Expected 16 mock calls, got %d", len(mock.calls))
 		for i, call := range mock.calls {
 			t.Logf("  Call %d: %s (%s) on %s [%s]", i, call.AgentID, call.Role, call.TaskID, call.Action)
 		}
 	}
 
-	// Epic roles called once; all downstream roles called twice (one per capability).
+	// Epic roles called once; architect called once (many-to-one consolidation);
+	// all other downstream roles called twice (one per capability / code plan).
 	expectedRoleCounts := map[string]int{
-		"epic-planner":       1,
-		"epic-plan-reviewer": 1,
-		"us-writer":          2,
-		"us-reviewer":        2,
-		"code-planner":       2,
-		"code-plan-reviewer": 2,
-		"coder":              2,
-		"code-reviewer":      2,
+		"epic-planner":          1,
+		"epic-plan-reviewer":    1,
+		"us-writer":             2,
+		"us-reviewer":           2,
+		"architect":             1,
+		"architecture-reviewer": 1,
+		"code-planner":          2,
+		"code-plan-reviewer":    2,
+		"coder":                 2,
+		"code-reviewer":         2,
 	}
 	roleCounts := make(map[string]int)
 	for _, call := range mock.calls {
