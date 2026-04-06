@@ -56,3 +56,5 @@
 | [0052 — Bubbletea TUI](0052-bubbletea-tui.md) | Interactive Bubbletea TUI replacing console.sh and headless monitoring with live dashboard and keyboard commands. |
 | [0053 — Supervisor Resilience](0053-supervisor-resilience-automated-failure-detection.md) | Three-layer automated failure detection (quota exhaustion, crash loops, spinning) preventing infinite supervisor restart cycles. |
 | [0054 — Blocking Await Primitives](0054-blocking-await-primitives-for-review-flow.md) | Session-persistent blocking MCP tools (`await_verdict`, `await_resubmission`) eliminating cold restarts across review cycles. |
+| [0055 — Integration Sub-Pipeline](0055-integration-sub-pipeline.md) | Automated branch-wide integration analysis with clean terminal states, auto-transitions, and fix-task generation reusing the coding-pair. |
+| [0056 — Architecture Step with Many-to-One Transitions](0056-architecture-step-many-to-one-transitions.md) | Architecture consolidation point with new `many-to-one` fan-in cardinality, `arch_ref` propagation, and multi-parent task linkage. |

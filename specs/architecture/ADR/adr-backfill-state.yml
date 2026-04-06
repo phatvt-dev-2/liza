@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-03-27T16:00:00Z"
+last_updated: "2026-04-06T10:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -775,10 +775,41 @@ clusters:
       limitations: "25-min default timeout constrained by Claude Code MCP_TIMEOUT"
     note: "Restores original vision. Extends ADR-0051 (First-Class Attempt Model)."
 
+  # --- Wave 9: 2026-04-05 to 2026-04-06 ---
+
+  - id: 55
+    title: "Integration Sub-Pipeline"
+    commit_shas: ["17c0ae7", "74b0b22", "c642d9c", "116db78", "a577971", "0fa2497", "7b7d0b9", "be48a1e", "16b36df", "31bf68c", "5142819", "7d098d2", "5111447", "06b98fa", "d9f2da2", "89e2fcc", "da4d3a6", "e1217a0", "9a285aa", "2283094", "26b710d", "23ee096", "07ef5cd", "e7b2452", "a116295", "1ee4ceb", "be5801c", "7678263", "20acc4d", "81f9e9a", "ce596a0", "633ea5b"]
+    gap_commits: ["54f81d3", "473148d", "53f9db6"]
+    date_range: "2026-04-05"
+    confidence: 0.90
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0055-integration-sub-pipeline.md"
+    user_context:
+      problem: "Branch-wide integration issues invisible to task-scoped review; human was doing this manually"
+      alternatives: "None — part of initial pipeline vision"
+      rationale: "Automate mechanical integration review; reuse coding-pair for fixes"
+      limitations: "No re-scan after fixes (v2); BaseCommit includes concurrent goals by design"
+    note: "Extends ADR-0035, ADR-0038, ADR-0036. Introduces clean terminal state, auto-transitions, CodingComplete wake trigger."
+
+  - id: 56
+    title: "Architecture Step with Many-to-One Transitions"
+    commit_shas: ["cabf1ae", "d5a1ffa", "c27b77e", "b512f09", "be6f3e3", "eb2d271", "3290d84", "6503ad9", "b9e64dc", "acb34f4", "efd068a", "e630dc5", "7440d01", "84e2c17", "713b11d", "f76e7c5", "7752d25", "46945f9", "62b2670", "107318e", "e09d0e2", "d9efb6c", "3de9cd2", "7432712", "f4a8f2a", "10d7be5", "5c25e7f", "6a3bf98", "4df5a05", "57bd72e", "4420583", "592a0d4", "97373c7", "01874e0", "5f2099a", "325809d"]
+    date_range: "2026-04-05 to 2026-04-06"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0056-architecture-step-many-to-one-transitions.md"
+    user_context:
+      problem: "No architecture consolidation point; parallel code-planners diverged structurally"
+      alternatives: "None — part of initial vision"
+      rationale: "Generic many-to-one cardinality keeps pipeline declarative; arch_ref propagates structural context"
+      limitations: "No purpose-built architecture skill yet; ParentTasks adds callsite complexity"
+    note: "Extends ADR-0035, ADR-0038, ADR-0036. Introduces many-to-one cardinality, arch_ref field, multi-parent task model."
+
 processing_cursor:
   step: "cluster_analysis"
   substep: "high_confidence_complete"
-  note: "Wave 8 complete (ADR-0053, ADR-0054). Non-ADR commits since Wave 7: attempt model migration fixes (ADR-0051 follow-up), TUI bug fixes (ADR-0052 follow-up), prompt tuning, contract tightening, auto-resume option, platform fixes, docs."
+  note: "Wave 9 complete (ADR-0055, ADR-0056). Non-ADR commits since Wave 8: bug fixes (ADR-0051/0052/0053/0054 follow-up), Codex compat fixes, release notes (v0.5.4, v0.5.5), RTK anti-abuse rules, liza-logs skill docs."
 
 configuration:
   adr_output_dir: "specs/architecture/ADR"
