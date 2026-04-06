@@ -27,6 +27,12 @@ optimized for **doing things right on the first pass** — with the auditability
 Liza bets on time-to-quality and durable codebase maintainability through automated reviews and documentation
 (e.g. the [ADR Backfill](skills/adr-backfill) skill).
 
+Liza's behavioral contract — used by both modes — **makes models more thoughtful**:
+> *"I want to wash my car. The car wash is 100 meters away. Should I walk or drive?"<br>*
+Sonnet 4.6: *"Walk. Driving 100 meters to a car wash defeats the purpose — you'd barely get the car dirty enough to justify the trip, and parking/maneuvering takes longer than the walk itself."<br>*
+Same with Liza's contract: *"Drive. You're already going to a car wash — arriving dirty is the point."*
+
+Liza is a **frontier Multi-Agent System**:
 > Soufiane Keli – VP Software Engineering, Octo Technology (Accenture) – maps AI engineering maturity across 5 levels,
 > from autocomplete (L1) to software factory (L5, still theoretical). He places Liza at L4 – Collaborative Agent Networks:
 > <br>
