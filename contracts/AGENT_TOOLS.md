@@ -104,16 +104,11 @@ Do NOT mix in same batch (would cause all sibling calls to fail).
 
 RTK is a CLI proxy that compresses tool output (git, go, pytest etc.) saving ~90% tokens. A PreToolUse hook rewrites
 most Bash commands to `rtk <command>` transparently.
-**Shorter, denser output is a feature.** Content is complete, exit codes are unaltered — diagnose real errors, not RTK.
-
-ONLY when Command REALLY failed **with an explicit error mentioning rtk** may you disable RTK for **that** command:
-```bash
-rtk proxy <cmd>
-```
+**Shorter, denser output is a feature.** Content is complete, exit codes are unaltered — diagnose real errors, trust RTK.
 
 **Do NOT:**
-- Use rtk proxy as a first response to unexpected output or when the error is in your command (wrong flags, wrong path) — fix the command.
-- Invent workarounds (subshells, echo debugging) to speculative errors.
+- Use rtk proxy. In case of error, fix the command (wrong flags, wrong path).
+- Try workarounds (subshells, echo debugging) to speculative errors.
 - Rationalize away unexpected output ("nothing to stash" when there are changes)
 - Read RTK tee files (`~/.local/share/rtk/tee/*.log`) — the compressed summary is the authoritative output.
 - Re-run passing tests "to see full output" — if RTK says it passed, it passed.

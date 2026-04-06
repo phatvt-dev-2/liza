@@ -19,6 +19,16 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/rtk-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
       }
     ]
   },
@@ -30,7 +40,6 @@
     "allow": [
       "Read(~/.claude/**)",
       "Read(~/.liza/**)",
-      "Read(~/.local/share/rtk/tee/**)",
 
       "mcp__liza__liza_get",
       "mcp__liza__liza_status",
@@ -131,8 +140,7 @@
       "Bash(go build:*)",
       "Bash(make build)",
       "Bash(make test)",
-      "Bash(make lint)",
-      "Bash(rtk proxy:*)"
+      "Bash(make lint)"
     ]
   }
 }

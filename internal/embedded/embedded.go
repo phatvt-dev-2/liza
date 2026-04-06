@@ -43,6 +43,9 @@ var enforceInitHookContent []byte
 //go:embed "hooks/git-guard.sh"
 var gitGuardHookContent []byte
 
+//go:embed "hooks/rtk-guard.sh"
+var rtkGuardHookContent []byte
+
 //go:embed "console.sh"
 var consoleScriptContent []byte
 
@@ -645,6 +648,7 @@ func WriteHooks(projectRoot string) error {
 	for name, content := range map[string][]byte{
 		"enforce-init.sh": enforceInitHookContent,
 		"git-guard.sh":    gitGuardHookContent,
+		"rtk-guard.sh":    rtkGuardHookContent,
 	} {
 		hookPath := filepath.Join(hooksDir, name)
 		if err := os.WriteFile(hookPath, content, 0755); err != nil {

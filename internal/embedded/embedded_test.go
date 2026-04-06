@@ -1025,6 +1025,7 @@ func TestWriteHooks(t *testing.T) {
 	for name, wantContent := range map[string][]byte{
 		"enforce-init.sh": enforceInitHookContent,
 		"git-guard.sh":    gitGuardHookContent,
+		"rtk-guard.sh":    rtkGuardHookContent,
 	} {
 		hookPath := filepath.Join(tmpDir, ".claude", "hooks", name)
 		info, err := os.Stat(hookPath)
@@ -1056,7 +1057,7 @@ func TestWriteHooks_Overwrites(t *testing.T) {
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"enforce-init.sh", "git-guard.sh"} {
+	for _, name := range []string{"enforce-init.sh", "git-guard.sh", "rtk-guard.sh"} {
 		if err := os.WriteFile(filepath.Join(hooksDir, name), []byte("old"), 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -1067,7 +1068,7 @@ func TestWriteHooks_Overwrites(t *testing.T) {
 		t.Fatalf("WriteHooks failed: %v", err)
 	}
 
-	for _, name := range []string{"enforce-init.sh", "git-guard.sh"} {
+	for _, name := range []string{"enforce-init.sh", "git-guard.sh", "rtk-guard.sh"} {
 		content, err := os.ReadFile(filepath.Join(hooksDir, name))
 		if err != nil {
 			t.Fatal(err)
