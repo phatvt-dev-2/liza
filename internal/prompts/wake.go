@@ -27,6 +27,7 @@ type wakeEntryPointData struct {
 // wakeTemplateData is used by wake trigger templates that need GoalSpecRef
 type wakeTemplateData struct {
 	AgentID              string
+	ToolPrefix           string // MCP tool name prefix (provider-dependent)
 	GoalSpecRef          string
 	GoalEntryPoint       string               // set if --entry-point was specified
 	ResolvedRolePair     string               // role-pair resolved from GoalEntryPoint
@@ -39,6 +40,7 @@ type wakeTemplateData struct {
 // wakePlanningCompleteData is used by the PLANNING_COMPLETE wake template
 type wakePlanningCompleteData struct {
 	AgentID       string
+	ToolPrefix    string // MCP tool name prefix (provider-dependent)
 	PlanningTasks []planningTaskData
 }
 
@@ -177,11 +179,12 @@ func resolveTaskType(resolver *pipeline.Resolver, rolePair string) string {
 	return string(tt)
 }
 
-func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeTemplateData, planningTasks []planningTaskData) (string, error) {
-	agentData := wakeTemplateData{AgentID: agentID}
+func buildInstructionsForWakeTrigger(wakeTrigger, agentID, toolPrefix string, wakeData wakeTemplateData, planningTasks []planningTaskData) (string, error) {
+	agentData := wakeTemplateData{AgentID: agentID, ToolPrefix: toolPrefix}
 	switch wakeTrigger {
 	case "INITIAL_PLANNING":
 		wakeData.AgentID = agentID
+		wakeData.ToolPrefix = toolPrefix
 		return executeTemplate("wake_initial_planning", wakeData)
 	case "BLOCKED_TASKS":
 		return executeTemplate("wake_blocked_tasks", agentData)
@@ -192,6 +195,7 @@ func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeT
 	case "PLANNING_COMPLETE":
 		return executeTemplate("wake_planning_complete", wakePlanningCompleteData{
 			AgentID:       agentID,
+			ToolPrefix:    toolPrefix,
 			PlanningTasks: planningTasks,
 		})
 	case "MANY_TO_ONE_READY":

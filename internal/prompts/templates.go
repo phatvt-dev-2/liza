@@ -23,6 +23,7 @@ var funcMap = template.FuncMap{
 	"sub": func(a, b int) int {
 		return a - b
 	},
+	"toolSearchHint": toolSearchHint,
 }
 
 var tmpl = template.Must(

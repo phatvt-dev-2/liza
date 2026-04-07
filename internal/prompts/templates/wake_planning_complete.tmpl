@@ -10,9 +10,9 @@ Do NOT wait for permission.
 
 --- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
 
-1. Run liza_update_sprint_metrics with {"agent_id": "{{.AgentID}}"}.
+1. Run {{.ToolPrefix}}liza_update_sprint_metrics with {"agent_id": "{{.AgentID}}"}.
 
-2. Create checkpoint for human review: execute liza_sprint_checkpoint with {"agent_id": "{{.AgentID}}", "trigger": "PLANNING_COMPLETE"}.
+2. Create checkpoint for human review: execute {{.ToolPrefix}}liza_sprint_checkpoint with {"agent_id": "{{.AgentID}}", "trigger": "PLANNING_COMPLETE"}.
    The checkpoint will pause all agents and generate a sprint summary.
 
 SUCCESS CRITERIA:

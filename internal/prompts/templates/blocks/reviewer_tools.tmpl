@@ -1,28 +1,28 @@
 {{- define "reviewer-tools" -}}
 {{- if eq .Role "code-reviewer"}}
 
-REVIEWER TOOL (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict,mcp__liza__liza_await_resubmission):
-- liza_submit_verdict — Submit review verdict (see VERDICT SUBMISSION below for params)
-- liza_await_resubmission — Block until doer resubmits after rejection (call after submit_verdict REJECTED)
+REVIEWER TOOL{{toolSearchHint .ToolPrefix "liza_get,liza_submit_verdict,liza_await_resubmission"}}:
+- {{.ToolPrefix}}liza_submit_verdict — Submit review verdict (see VERDICT SUBMISSION below for params)
+- {{.ToolPrefix}}liza_await_resubmission — Block until doer resubmits after rejection (call after submit_verdict REJECTED)
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
 {{- else}}
 
 {{- if eq .Role "code-plan-reviewer"}}
-CODE PLAN REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict,mcp__liza__liza_await_resubmission):
+CODE PLAN REVIEWER TOOLS{{toolSearchHint .ToolPrefix "liza_get,liza_submit_verdict,liza_await_resubmission"}}:
 {{- else if eq .Role "epic-plan-reviewer"}}
-EPIC PLAN REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict,mcp__liza__liza_await_resubmission):
+EPIC PLAN REVIEWER TOOLS{{toolSearchHint .ToolPrefix "liza_get,liza_submit_verdict,liza_await_resubmission"}}:
 {{- else if eq .Role "us-reviewer"}}
-US REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict,mcp__liza__liza_await_resubmission):
+US REVIEWER TOOLS{{toolSearchHint .ToolPrefix "liza_get,liza_submit_verdict,liza_await_resubmission"}}:
 {{- else if eq .Role "architecture-reviewer"}}
-ARCHITECTURE REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict,mcp__liza__liza_await_resubmission):
+ARCHITECTURE REVIEWER TOOLS{{toolSearchHint .ToolPrefix "liza_get,liza_submit_verdict,liza_await_resubmission"}}:
 {{- end}}
-- liza_get — Query task state to inspect output[] entries
+- {{.ToolPrefix}}liza_get — Query task state to inspect output[] entries
   {"query": "tasks/{{.TaskID}}"}
-- liza_submit_verdict — Submit review verdict (MCP tool call, NOT a CLI command)
+- {{.ToolPrefix}}liza_submit_verdict — Submit review verdict (MCP tool call, NOT a CLI command)
   ⚠️  Do NOT use `go run`, `liza submit-verdict`, or any shell command.
-  APPROVED: call tool liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "APPROVED", "agent_id": "{{.AgentID}}"}
-  REJECTED: call tool liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "REJECTED", "agent_id": "{{.AgentID}}", "reason": "<detailed rejection reason>"}
-- liza_await_resubmission — Block until doer resubmits after rejection (call after submit_verdict REJECTED)
+  APPROVED: call tool {{.ToolPrefix}}liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "APPROVED", "agent_id": "{{.AgentID}}"}
+  REJECTED: call tool {{.ToolPrefix}}liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "REJECTED", "agent_id": "{{.AgentID}}", "reason": "<detailed rejection reason>"}
+- {{.ToolPrefix}}liza_await_resubmission — Block until doer resubmits after rejection (call after submit_verdict REJECTED)
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
 {{- end}}
 {{- end -}}

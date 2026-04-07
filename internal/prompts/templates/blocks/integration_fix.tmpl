@@ -22,13 +22,13 @@ WORKFLOW:
 
 3. IF UNRESOLVABLE
    git -C {{.Worktree}} rebase --abort
-   Use liza_mark_blocked: {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "Merge conflicts require redesign: <explain>", "questions": ["..."]}
+   Use {{.ToolPrefix}}liza_mark_blocked: {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "Merge conflicts require redesign: <explain>", "questions": ["..."]}
 
 4. VALIDATE
    Run tests in the worktree. Verify done_when criteria still met.
 
 5. SUBMIT
    Get SHA: git -C {{.Worktree}} rev-parse HEAD
-   Use liza_submit_for_review: {"task_id": "{{.TaskID}}", "commit_sha": "<SHA from above>", "agent_id": "{{.AgentID}}"}
+   Use {{.ToolPrefix}}liza_submit_for_review: {"task_id": "{{.TaskID}}", "commit_sha": "<SHA from above>", "agent_id": "{{.AgentID}}"}
 {{- end}}
 {{- end -}}

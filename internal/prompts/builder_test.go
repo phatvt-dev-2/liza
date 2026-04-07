@@ -320,7 +320,7 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dashboard, wakeInstr, err := RenderOrchestratorDashboard(tt.state, projectRoot, "orchestrator-1")
+			dashboard, wakeInstr, err := RenderOrchestratorDashboard(tt.state, projectRoot, "orchestrator-1", "mcp__liza__")
 			if err != nil {
 				t.Fatalf("RenderOrchestratorDashboard() error: %v", err)
 			}
@@ -419,7 +419,7 @@ func TestRenderOrchestratorDashboard_EntryPoints(t *testing.T) {
 			state.Tasks = []models.Task{}
 			state.Goal.EntryPoint = tt.entryPoint
 
-			dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+			dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
 			if err != nil {
 				t.Fatalf("RenderOrchestratorDashboard() error: %v", err)
 			}
@@ -642,9 +642,9 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 			wantTrigger: "BLOCKED_TASKS",
 			wantContains: []string{
 				"Analyze and resolve immediately",
-				"execute liza_add_tasks tool NOW",
+				"execute mcp__liza__liza_add_tasks tool NOW",
 				"execute tools NOW",
-				"Do NOT call liza_sprint_checkpoint",
+				"Do NOT call mcp__liza__liza_sprint_checkpoint",
 			},
 		},
 		{
@@ -664,7 +664,7 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 				"Execute changes",
 				"create them all in this session",
 				"All state modifications must be executed before you exit",
-				"Do NOT call liza_sprint_checkpoint",
+				"Do NOT call mcp__liza__liza_sprint_checkpoint",
 			},
 		},
 		{
@@ -692,10 +692,10 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 			wantContains: []string{
 				"Urgent discoveries need immediate action",
 				"execute decision NOW",
-				"execute liza_add_tasks tool NOW",
-				"liza_set_discovery_disposition",
+				"execute mcp__liza__liza_add_tasks tool NOW",
+				"mcp__liza__liza_set_discovery_disposition",
 				"All tools must be executed in this session",
-				"Do NOT call liza_sprint_checkpoint",
+				"Do NOT call mcp__liza__liza_sprint_checkpoint",
 			},
 		},
 		{
@@ -724,7 +724,7 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dashboard, wakeInstr, err := RenderOrchestratorDashboard(tt.state, projectRoot, "orchestrator-1")
+			dashboard, wakeInstr, err := RenderOrchestratorDashboard(tt.state, projectRoot, "orchestrator-1", "mcp__liza__")
 			if err != nil {
 				t.Fatalf("RenderOrchestratorDashboard() error: %v", err)
 			}
@@ -1026,6 +1026,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			SiblingTasks:      siblings,
 			TotalPlanTasks:    3, TaskOrdinal: 2,
 			ProjectRoot: projectRoot,
+			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("coder")
 		if err != nil {
@@ -1072,6 +1073,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("code-reviewer")
 		if err != nil {
@@ -1111,7 +1113,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 	t.Run("orchestrator", func(t *testing.T) {
 		state := testhelpers.CreateValidState()
 		state.Tasks = []models.Task{}
-		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
 		if err != nil {
 			t.Fatalf("RenderOrchestratorDashboard: %v", err)
 		}
@@ -1156,6 +1158,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("code-planner")
 		if err != nil {
@@ -1196,6 +1199,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("code-plan-reviewer")
 		if err != nil {
@@ -1235,6 +1239,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			Worktree:     projectRoot + "/.worktrees/task-ep",
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			ProjectRoot: projectRoot,
+			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("epic-planner")
 		if err != nil {
@@ -1272,6 +1277,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
 			ProjectRoot: projectRoot,
+			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("epic-plan-reviewer")
 		if err != nil {
@@ -1313,6 +1319,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("us-writer")
 		if err != nil {
@@ -1357,6 +1364,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
+			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("us-reviewer")
 		if err != nil {
@@ -1403,6 +1411,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 				{ID: "us-2", Description: "User story 2", DoneWhen: "US2 done", SpecRef: "specs/goals/feature-x.md"},
 			},
 			ProjectRoot: projectRoot,
+			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("architect")
 		if err != nil {
@@ -1442,6 +1451,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			IterationNum: 1,
 			BaseCommit:   "abc1234", ReviewCommit: "def5678", AssignedTo: "architect-1",
 			ProjectRoot: projectRoot,
+			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("architecture-reviewer")
 		if err != nil {
@@ -1602,7 +1612,7 @@ func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
 
 		state.Tasks = []models.Task{normalPlan, cycledPlan, codeDone}
 
-		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
 		if err != nil {
 			t.Fatalf("RenderOrchestratorDashboard: %v", err)
 		}
@@ -1639,7 +1649,7 @@ func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
 
 		state.Tasks = []models.Task{cycledPlan, codeDone}
 
-		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
 		if err != nil {
 			t.Fatalf("RenderOrchestratorDashboard: %v", err)
 		}
@@ -2072,7 +2082,7 @@ func TestRenderOrchestratorDashboard_ManyToOneReady(t *testing.T) {
 	state.Tasks = []models.Task{us1, us2, us3}
 	state.Sprint.Scope.Planned = []string{"us-1", "us-2", "us-3"}
 
-	dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+	dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
 	if err != nil {
 		t.Fatalf("RenderOrchestratorDashboard: %v", err)
 	}
@@ -2086,7 +2096,7 @@ func TestRenderOrchestratorDashboard_ManyToOneReady(t *testing.T) {
 
 func TestBuildInstructionsForWakeTrigger_ManyToOneReady(t *testing.T) {
 	wakeData := wakeTemplateData{AgentID: "orchestrator-1"}
-	instructions, err := buildInstructionsForWakeTrigger("MANY_TO_ONE_READY", "orchestrator-1", wakeData, nil)
+	instructions, err := buildInstructionsForWakeTrigger("MANY_TO_ONE_READY", "orchestrator-1", "mcp__liza__", wakeData, nil)
 	if err != nil {
 		t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
 	}

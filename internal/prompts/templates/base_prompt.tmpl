@@ -14,11 +14,11 @@ OPERATIONAL RULES:
   ~/.liza/ = installed contracts & skills (e.g. ~/.liza/MULTI_AGENT_MODE.md)
   {{.ProjectRoot}}/.liza/ = runtime state & blackboard (state.yaml, agent-outputs/)
 - You have FULL read access to both .liza/ directories
-- For READING state: use liza_get with targeted queries (e.g. {"query": "tasks/<id>"}).
-  NEVER read state.yaml directly to save context budget. liza_get returns only the requested slice.
+- For READING state: use {{.ToolPrefix}}liza_get with targeted queries (e.g. {"query": "tasks/<id>"}).
+  NEVER read state.yaml directly to save context budget. {{.ToolPrefix}}liza_get returns only the requested slice.
 - For MODIFYING state: use role-specific MCP tools ONLY
   NEVER edit state.yaml directly — direct edits bypass invariant checks and can corrupt state irreversibly.
-  If an MCP tool fails repeatedly, use liza_mark_blocked to flag the task — never work around the failure.
+  If an MCP tool fails repeatedly, use {{.ToolPrefix}}liza_mark_blocked to flag the task — never work around the failure.
   If the MCP server itself is unavailable, fall back to the CLI:
   liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>"
 - AUTONOMY: Your authority is pre-approved. Execute commands immediately.
@@ -41,9 +41,9 @@ BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
 - Avoid using sed/awk for file editing.
 
 QUERY TOOLS (all roles):
-- liza_get — Query state: {"query": "tasks"}, {"query": "tasks/<id>"}, {"query": "agents"}, {"query": "metrics"}
-- liza_status — Dashboard overview (no params)
-- liza_validate — Validate state consistency (params: skip_spec_check)
+- {{.ToolPrefix}}liza_get — Query state: {"query": "tasks"}, {"query": "tasks/<id>"}, {"query": "agents"}, {"query": "metrics"}
+- {{.ToolPrefix}}liza_status — Dashboard overview (no params)
+- {{.ToolPrefix}}liza_validate — Validate state consistency (params: skip_spec_check)
 
 CODEBASE EXPLORATION:
 DO comply with the guidance defined in ~/.liza/AGENT_TOOLS.md
@@ -75,9 +75,9 @@ FIRST ACTIONS:
    b. ~/.liza/AGENT_TOOLS.md
    c. {{.ProjectRoot}}/GUARDRAILS.md (if it exists — skip if absent)
 {{- if .TaskID}}
-2. Query your assigned task: liza_get {"query": "tasks/{{.TaskID}}"}
+2. Query your assigned task: {{.ToolPrefix}}liza_get {"query": "tasks/{{.TaskID}}"}
 {{- else}}
-2. Query workspace state: liza_get {"query": "tasks"}
+2. Query workspace state: {{.ToolPrefix}}liza_get {"query": "tasks"}
 {{- end}}
 3. Read the goal spec: {{.GoalSpecRef}}
 4. Execute your role's protocol
