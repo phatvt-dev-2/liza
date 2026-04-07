@@ -133,7 +133,7 @@ The TUI (`liza tui`) is the primary way to spawn and monitor agents. Press `s` t
 
 Alternatively, spawn agents from the CLI: `liza agent <role>`. Agent identity defaults to the first `{role}-N` not already registered with a valid lease (e.g., `coder-1`, or `coder-2` if `coder-1` is active). Override with `--agent-id` or the `LIZA_AGENT_ID` environment variable.
 
-Roles are organized into two phases. Which agents you need depends on your entry point:
+Roles are organized into three sub-pipelines (specification, coding, integration). Which agents you need depends on your entry point:
 
 ```
 Roles:
@@ -270,7 +270,7 @@ The `integration-to-fix` transition is an exception — it uses `trigger: auto`,
 │  5. Sprint checkpoints → HUMAN GATE (or auto-resumed)   │
 │                                                         │
 │  Human reviews results, then (manual mode):             │
-│    liza resume                       (complete strint)  │
+│    liza resume                       (complete sprint)  │
 │    liza resume                     (start next sprint)  │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
@@ -355,6 +355,8 @@ The `liza` binary provides all system operations. Key commands:
 | `liza submit-verdict <task-id> <APPROVED\|REJECTED> [reason]` | Submit a review verdict (reviewer agents; reason required for REJECTED) |
 | `liza mark-blocked <task-id>` | Mark a task as BLOCKED with reason and questions |
 | `liza assess-blocked <task-id>` | Record orchestrator assessment of a BLOCKED task (prevents re-wake loops) |
+| `liza assess-hypothesis-exhausted <task-id>` | Record orchestrator assessment of a hypothesis-exhausted task (2+ coders failed) |
+| `liza cancel-task <task-id> --reason "..."` | Cancel a task (transition to ABANDONED with audit trail) |
 | `liza handoff <task-id> <summary> <next-action>` | Context-exhaustion handoff for a doer agent's claimed task |
 | `liza supersede-task <task-id> [replacements] --reason "..."` | Mark a task as SUPERSEDED (with or without replacements) |
 | `liza proceed <task-id> <transition>` | Execute inter-pair pipeline transition (e.g., code-plan-to-coding) |
