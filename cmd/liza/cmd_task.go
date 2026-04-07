@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/spf13/cobra"
 )
@@ -350,14 +353,212 @@ in MERGED state cannot be deleted by default (as they represent integrated work)
 	},
 }
 
+var writeCheckpointCmd = &cobra.Command{
+	Use:   "write-checkpoint <task-id>",
+	Short: "Write pre-execution checkpoint before submitting for review",
+	Long: `Record implementation intent, validation plan, and scope before submission.
+
+Requirements:
+  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Task must be in an executing status (resolved from pipeline config)
+  - Task must be assigned to the submitting agent
+
+Updates:
+  - Appends pre_execution_checkpoint event to task history
+  - Does not change task status`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+
+		agentID, err := requireAgentID(cmd)
+		if err != nil {
+			return err
+		}
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		intent, _ := cmd.Flags().GetString("intent")
+		validationPlan, _ := cmd.Flags().GetString("validation-plan")
+		filesToModify, _ := cmd.Flags().GetStringSlice("files-to-modify")
+		assumptions, _ := cmd.Flags().GetStringSlice("assumptions")
+		risks, _ := cmd.Flags().GetString("risks")
+		tddNotRequired, _ := cmd.Flags().GetString("tdd-not-required")
+		impact, _ := cmd.Flags().GetString("impact")
+
+		input := &ops.WriteCheckpointInput{
+			TaskID:         taskID,
+			AgentID:        agentID,
+			Intent:         intent,
+			ValidationPlan: validationPlan,
+			FilesToModify:  filesToModify,
+			Assumptions:    assumptions,
+			Risks:          risks,
+			TDDNotRequired: tddNotRequired,
+			Impact:         impact,
+		}
+
+		// Parse scope-extensions from JSON if provided
+		if scopeJSON, _ := cmd.Flags().GetString("scope-extensions"); scopeJSON != "" {
+			var entries []ops.ScopeExtensionEntry
+			if err := json.Unmarshal([]byte(scopeJSON), &entries); err != nil {
+				return fmt.Errorf("invalid --scope-extensions JSON: %w", err)
+			}
+			input.ScopeExtensions = entries
+		}
+
+		return commands.WriteCheckpointCommand(projectRoot, input)
+	},
+}
+
+var setTaskOutputCmd = &cobra.Command{
+	Use:   "set-task-output <task-id> --output <path>",
+	Short: "Set output entries for downstream task generation",
+	Long: `Define output entries that will become downstream tasks after merge.
+
+Reads output entries from a JSON file. Each entry must have desc, done_when,
+and scope. Optional fields: spec_ref, plan_ref, arch_ref, depends_on.
+
+Requirements:
+  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Task must be in an executing status
+  - Task must be assigned to the submitting agent
+  - At least one output entry required
+
+Updates:
+  - Sets task.output to provided entries (overwrites existing, idempotent)
+
+Example:
+  cat > outputs.json <<'EOF'
+  [
+    {"desc": "Subtask 1", "done_when": "Tests pass", "scope": "internal/pkg"},
+    {"desc": "Subtask 2", "done_when": "API works", "scope": "internal/api", "depends_on": ["0"]}
+  ]
+  EOF
+  liza set-task-output task-1 --output outputs.json`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+
+		agentID, err := requireAgentID(cmd)
+		if err != nil {
+			return err
+		}
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		outputFile, _ := cmd.Flags().GetString("output")
+		if outputFile == "" {
+			return fmt.Errorf("--output is required")
+		}
+
+		data, err := os.ReadFile(outputFile)
+		if err != nil {
+			return fmt.Errorf("reading output file: %w", err)
+		}
+
+		var entries []models.OutputEntry
+		if err := json.Unmarshal(data, &entries); err != nil {
+			return fmt.Errorf("parsing output file: %w", err)
+		}
+
+		return commands.SetTaskOutputCommand(projectRoot, &ops.SetTaskOutputInput{
+			TaskID:  taskID,
+			AgentID: agentID,
+			Output:  entries,
+		})
+	},
+}
+
+var addTasksCmd = &cobra.Command{
+	Use:   "add-tasks --tasks-file <path>",
+	Short: "Add multiple tasks in batch from a JSON file",
+	Long: `Add multiple tasks to state.yaml in a single batch operation.
+
+Reads task definitions from a JSON file. Each task must have id, desc, spec,
+done, and scope. Optional fields: priority, depends, type, role_pair, plan_ref.
+
+Tasks are added independently; failed tasks don't block subsequent ones.
+
+Example:
+  cat > tasks.json <<'EOF'
+  [
+    {"id": "task-1", "desc": "Implement X", "spec": "specs/x.md", "done": "X works", "scope": "internal/x"},
+    {"id": "task-2", "desc": "Implement Y", "spec": "specs/y.md", "done": "Y works", "scope": "internal/y", "depends": ["task-1"]}
+  ]
+  EOF
+  liza add-tasks --tasks-file tasks.json`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		filePath, _ := cmd.Flags().GetString("tasks-file")
+		if filePath == "" {
+			return fmt.Errorf("--tasks-file is required")
+		}
+
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("reading tasks file: %w", err)
+		}
+
+		var tasks []ops.AddTaskInput
+		if err := json.Unmarshal(data, &tasks); err != nil {
+			return fmt.Errorf("parsing tasks file: %w", err)
+		}
+
+		orchestratorID, err := resolveOrchestratorID(cmd)
+		if err != nil {
+			return err
+		}
+
+		statePath := filepath.Join(paths.LizaDirName, paths.StateFileName)
+		logPath := filepath.Join(paths.LizaDirName, paths.LogFileName)
+
+		return commands.AddTasksCommand(statePath, logPath, &ops.AddTasksInput{
+			Tasks:          tasks,
+			OrchestratorID: orchestratorID,
+		})
+	},
+}
+
+var setDiscoveryDispositionCmd = &cobra.Command{
+	Use:   "set-discovery-disposition <discovery-id> <disposition>",
+	Short: "Set the disposition of a discovered item",
+	Long: `Set how a discovered item should be handled.
+
+Disposition values:
+  - A task ID (e.g. "task-5"): converts the discovery into that task
+  - "deferred": defer for later consideration
+  - "dismissed": dismiss the discovery`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		discoveryID := args[0]
+		disposition := args[1]
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		return commands.SetDiscoveryDispositionCommand(projectRoot, discoveryID, disposition)
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(claimTaskCmd)
 	rootCmd.AddCommand(addTaskCmd)
+	rootCmd.AddCommand(addTasksCmd)
 	rootCmd.AddCommand(supersedeTaskCmd)
 	rootCmd.AddCommand(cancelTaskCmd)
 	rootCmd.AddCommand(markBlockedCmd)
 	rootCmd.AddCommand(assessBlockedCmd)
 	rootCmd.AddCommand(assessHypothesisExhaustedCmd)
+	rootCmd.AddCommand(writeCheckpointCmd)
+	rootCmd.AddCommand(setTaskOutputCmd)
+	rootCmd.AddCommand(setDiscoveryDispositionCmd)
 	deleteCmd.AddCommand(deleteTaskCmd)
 
 	addAgentIDFlag(addTaskCmd)
@@ -393,6 +594,30 @@ func init() {
 	addTaskCmd.Flags().String("type", "", "task type determining role workflow (default: coding)")
 	addTaskCmd.Flags().String("state", "", "path to state.yaml (default: .liza/state.yaml)")
 	addTaskCmd.Flags().String("log", "", "path to log.yaml (default: .liza/log.yaml)")
+
+	// Add-tasks (batch) command flags
+	addAgentIDFlag(addTasksCmd)
+	addTasksCmd.Flags().String("tasks-file", "", "path to JSON file with task definitions array (required)")
+	addTasksCmd.MarkFlagRequired("tasks-file")
+
+	// Write-checkpoint command flags
+	addAgentIDFlag(writeCheckpointCmd)
+	writeCheckpointCmd.Flags().String("intent", "", "specific, observable intent of implementation (required)")
+	writeCheckpointCmd.Flags().String("validation-plan", "", "concrete validation command and expected output (required)")
+	writeCheckpointCmd.Flags().StringSlice("files-to-modify", nil, "files that will be modified (required, at least one)")
+	writeCheckpointCmd.Flags().StringSlice("assumptions", nil, "tagged assumptions")
+	writeCheckpointCmd.Flags().String("risks", "", "identified risks")
+	writeCheckpointCmd.Flags().String("tdd-not-required", "", "justification for skipping new test files")
+	writeCheckpointCmd.Flags().String("impact", "", "impact classification (standard, significant, architecture)")
+	writeCheckpointCmd.Flags().String("scope-extensions", "", `scope extensions as JSON array, e.g. [{"file":"path","justification":"why"}]`)
+	writeCheckpointCmd.MarkFlagRequired("intent")
+	writeCheckpointCmd.MarkFlagRequired("validation-plan")
+	writeCheckpointCmd.MarkFlagRequired("files-to-modify")
+
+	// Set-task-output command flags
+	addAgentIDFlag(setTaskOutputCmd)
+	setTaskOutputCmd.Flags().String("output", "", "path to JSON file with output entries array (required)")
+	setTaskOutputCmd.MarkFlagRequired("output")
 
 	// Delete task command flags
 	deleteTaskCmd.Flags().Bool("force", false, "force deletion even if task has dependencies or is in restricted state")

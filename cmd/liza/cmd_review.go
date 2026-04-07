@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/roles"
@@ -177,16 +179,101 @@ Agent ID for audit trail:
 	},
 }
 
+var awaitVerdictCmd = &cobra.Command{
+	Use:   "await-verdict <task-id>",
+	Short: "Block until a review verdict arrives for a submitted task",
+	Long: `Block until a reviewer approves or rejects a submitted task.
+
+Used by doer agents after submit-for-review to wait for the review outcome.
+
+Requirements:
+  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Task must be in a submitted/reviewing status
+
+Possible outcomes:
+  - APPROVED: work accepted, agent can exit
+  - REJECTED: work needs revision, reason provided
+  - TIMEOUT: no verdict within timeout period
+  - NEW_ATTEMPT: task reassigned for fresh attempt
+  - ABORTED: task was superseded or cancelled`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+
+		agentID, err := requireAgentID(cmd)
+		if err != nil {
+			return err
+		}
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		timeoutSec, _ := cmd.Flags().GetInt("timeout-seconds")
+		timeout := time.Duration(timeoutSec) * time.Second
+
+		return commands.AwaitVerdictCommand(projectRoot, taskID, agentID, timeout)
+	},
+}
+
+var awaitResubmissionCmd = &cobra.Command{
+	Use:   "await-resubmission <task-id>",
+	Short: "Block until a doer resubmits after a rejection",
+	Long: `Block until a doer agent resubmits work after a reviewer rejected it.
+
+Used by reviewer agents after submit-verdict REJECTED to wait for the revised submission.
+
+Requirements:
+  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Task must have been rejected by the calling reviewer
+
+Possible outcomes:
+  - RESUBMITTED: doer submitted new changes, reviewer should re-review
+  - TIMEOUT: no resubmission within timeout period
+  - TERMINAL: task reached a terminal state (superseded, abandoned)
+  - ABORTED: task was cancelled or reassigned`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+
+		agentID, err := requireAgentID(cmd)
+		if err != nil {
+			return err
+		}
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		timeoutSec, _ := cmd.Flags().GetInt("timeout-seconds")
+		timeout := time.Duration(timeoutSec) * time.Second
+
+		return commands.AwaitResubmissionCommand(projectRoot, taskID, agentID, timeout)
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(submitForReviewCmd)
 	rootCmd.AddCommand(handoffCmd)
 	rootCmd.AddCommand(submitVerdictCmd)
 	rootCmd.AddCommand(releaseClaimCmd)
+	rootCmd.AddCommand(awaitVerdictCmd)
+	rootCmd.AddCommand(awaitResubmissionCmd)
 
 	addAgentIDFlag(submitForReviewCmd)
 	addAgentIDFlag(handoffCmd)
 	addAgentIDFlag(submitVerdictCmd)
 	addChangedByFlag(releaseClaimCmd)
+
+	// Await-verdict flags
+	addAgentIDFlag(awaitVerdictCmd)
+	awaitVerdictCmd.Flags().Int("timeout-seconds", 1500, "total blocking timeout in seconds")
+
+	// Await-resubmission flags
+	addAgentIDFlag(awaitResubmissionCmd)
+	awaitResubmissionCmd.Flags().Int("timeout-seconds", 1500, "total blocking timeout in seconds")
 
 	// Submit-verdict flags
 	submitVerdictCmd.Flags().String("impact", "", "impact classification (standard, significant, architecture)")

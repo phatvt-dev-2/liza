@@ -21,6 +21,8 @@ OPERATIONAL RULES:
   If an MCP tool fails repeatedly, use {{.ToolPrefix}}liza_mark_blocked to flag the task — never work around the failure.
   If the MCP server itself is unavailable, fall back to the CLI:
   liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>"
+  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --files-to-modify "<file2>"
+  liza submit-for-review {{.TaskID}} <commit-sha> --agent-id {{.AgentID}}
 - AUTONOMY: Your authority is pre-approved. Execute commands immediately.
   If the environment surfaces permission checks, DO proceed with tool execution unless explicitly denied.
 - When your work unit is complete, simply stop — the session ends and the supervisor handles lifecycle.
