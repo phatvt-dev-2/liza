@@ -534,10 +534,10 @@ func TestRenderTaskPanel_ColumnTierMinimal(t *testing.T) {
 
 func TestRenderTaskPanel_ColumnTierStandard(t *testing.T) {
 	m := Model{
-		width:      100,
+		width:      110,
 		height:     40,
 		columnTier: ColumnTierStandard,
-		styles:     NewStyles(100),
+		styles:     NewStyles(110),
 		state: &models.State{
 			Tasks: []models.Task{makeTask("task-1", models.TaskStatusImplementing, 1)},
 		},

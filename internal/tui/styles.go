@@ -187,17 +187,18 @@ func NewStyles(width int) Styles {
 		HeaderStatus: lipgloss.NewStyle().
 			Bold(true),
 
-		// Panels
+		// Panels — Width is content width; border adds 2, so use width-2
+		// to keep total rendered width == terminal width.
 		AgentPanel: lipgloss.NewStyle().
-			Width(width).
+			Width(max(width-2, 0)).
 			Border(panelBorder).
 			BorderForeground(lipgloss.Color("8")),
 		TaskPanel: lipgloss.NewStyle().
-			Width(width).
+			Width(max(width-2, 0)).
 			Border(panelBorder).
 			BorderForeground(lipgloss.Color("8")),
 		ActivityPanel: lipgloss.NewStyle().
-			Width(width).
+			Width(max(width-2, 0)).
 			Border(panelBorder).
 			BorderForeground(lipgloss.Color("8")),
 

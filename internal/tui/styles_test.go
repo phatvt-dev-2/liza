@@ -164,14 +164,15 @@ func TestNewStyles_ReturnsPopulatedStruct(t *testing.T) {
 	if s.FooterBar.GetWidth() != 120 {
 		t.Errorf("FooterBar width = %d, want 120", s.FooterBar.GetWidth())
 	}
-	if s.AgentPanel.GetWidth() != 120 {
-		t.Errorf("AgentPanel width = %d, want 120", s.AgentPanel.GetWidth())
+	// Bordered panels use width-2 so total rendered width (content + border) == terminal width
+	if s.AgentPanel.GetWidth() != 118 {
+		t.Errorf("AgentPanel width = %d, want 118 (120-2 for border)", s.AgentPanel.GetWidth())
 	}
-	if s.TaskPanel.GetWidth() != 120 {
-		t.Errorf("TaskPanel width = %d, want 120", s.TaskPanel.GetWidth())
+	if s.TaskPanel.GetWidth() != 118 {
+		t.Errorf("TaskPanel width = %d, want 118 (120-2 for border)", s.TaskPanel.GetWidth())
 	}
-	if s.ActivityPanel.GetWidth() != 120 {
-		t.Errorf("ActivityPanel width = %d, want 120", s.ActivityPanel.GetWidth())
+	if s.ActivityPanel.GetWidth() != 118 {
+		t.Errorf("ActivityPanel width = %d, want 118 (120-2 for border)", s.ActivityPanel.GetWidth())
 	}
 }
 
