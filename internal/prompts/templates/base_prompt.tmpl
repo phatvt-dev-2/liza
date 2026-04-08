@@ -20,6 +20,10 @@ OPERATIONAL RULES:
   NEVER edit state.yaml directly — direct edits bypass invariant checks and can corrupt state irreversibly.
   If an MCP tool fails repeatedly, use {{.ToolPrefix}}liza_mark_blocked to flag the task — never work around the failure.
   If the MCP server itself is unavailable, fall back to the CLI:
+  liza get tasks                          liza get tasks/<task-id>                liza get agents
+  liza status
+  liza add-task --id <id> --desc "<desc>" --spec "<spec-ref>" --done "<done-when>" --scope "<scope>" --priority <N> --type <type> --agent-id {{.AgentID}}
+  liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}}
   liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>"
   liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --files-to-modify "<file2>"
   liza submit-for-review {{.TaskID}} <commit-sha> --agent-id {{.AgentID}}
