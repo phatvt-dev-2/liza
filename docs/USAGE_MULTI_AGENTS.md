@@ -8,6 +8,14 @@ See [Contract Activation](../contracts/contract-activation.md).
 
 See [DEMO](DEMO.md) for a full example.
 
+### Key Concepts
+
+**Goal** — A Liza workspace (`.liza/`) is bound to a single goal. The goal is defined at `liza init` with a description and a spec reference. All tasks, sprints, and agent activity within that workspace serve this goal. To pursue a different goal, remove `.liza/` and re-initialize. One project can only have one active goal at a time.
+
+**Checkpoints** — Execution halts at defined points (sprint completion, planning output ready) so a human can review before the system continues. This is intentional — Liza defaults to human-gated transitions between pipeline phases. If you want uninterrupted execution, enable auto-resume (`liza init --auto-resume` or press `y` in the TUI).
+
+**Worktrees** — Agents don't work directly on your main branch. Each task gets its own [git worktree](https://git-scm.com/docs/git-worktree) (under `.worktrees/task-N/`), giving agents isolated workspaces that can't interfere with each other or with your working copy. Completed work merges into the integration branch, then into main. This means Liza requires a git repository and only one Liza context per repository.
+
 ### Project Structure
 
 ```
@@ -80,6 +88,9 @@ liza setup --agent-tools ~/my-agent-tools.md  # use custom AGENT_TOOLS.md
 ```
 
 **2. Initialize Project**
+
+> **Commit your spec file before running `liza init`.** Worktrees are created from the current branch — uncommitted files won't be visible to agents.
+
 ```bash
 # Interactive wizard (recommended for first use):
 liza init
@@ -490,6 +501,8 @@ jq -c 'select(.item) | .item | {type, text, command, tool, usage}
 jq -c 'select(.type == "assistant") | {id: .message.id, usage: .message.usage}' \
   .liza/agent-outputs/orchestrator-1-*.txt
 ```
+
+**Interactive diagnosis** — open a regular coding agent session (`claude`, `codex`, etc.) in the project directory. It picks up Liza's MCP tools from `.mcp.json` and can read `.liza/state.yaml`, agent logs, and prompts — everything needed to diagnose issues interactively. The `/liza-logs` skill works this way.
 
 ### Submit, Await Verdict, Handle Result
 

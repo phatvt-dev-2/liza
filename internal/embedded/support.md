@@ -90,7 +90,7 @@ IN_PROGRESS → CHECKPOINT → COMPLETED → (new sprint) IN_PROGRESS
 
 ## Reading state.yaml
 
-> **Blackboard is read-only.** Never edit `state.yaml` directly — all mutations go through `liza` CLI commands or MCP tools. Direct edits bypass validation and produce invalid states.
+Prefer `liza_*` MCP tools and CLI commands for all state mutations. If a needed operation isn't covered, edit `.liza/state.yaml` directly but: write atomically (write to temp file, then rename), use ISO 8601 UTC timestamps (`YYYY-MM-DDTHH:MM:SSZ`), and run `liza validate` afterward to verify invariants.
 
 Key task fields:
 - `status` — current state
@@ -145,7 +145,7 @@ Generate: `date -u +%Y-%m-%dT%H:%M:%SZ`
 
 ### Agent crash loop
 **Symptom**: Supervisor keeps restarting, agent exits non-zero repeatedly.
-**Diagnosis**: Check agent output logs in `.liza/agent-outputs/`.
+**Diagnosis**: Check agent output logs in `.liza/agent-outputs/` and the bootstrap prompt in `.liza/agent-prompts/` (what the agent was told to do).
 **Fix**: After 5 restarts without progress, supervisor auto-blocks the task. Check `blocked_reason`. May need `liza recover-task` then manual investigation.
 
 ### BLOCKED task
