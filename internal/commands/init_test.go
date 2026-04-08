@@ -1721,6 +1721,97 @@ func TestInitCommandWithConfig_ExplicitFlagSkipsAutoDetect(t *testing.T) {
 	}
 }
 
+func TestInitCommandWithConfig_WarnsWhenNodeModulesMissing(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Create package.json + lockfile but NO node_modules
+	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name":"test"}`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "package-lock.json"), []byte("{}"), 0644)
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err = InitCommandWithConfig(InitParams{
+		Description:     "Goal without node_modules",
+		SpecRef:         "specs/vision.md",
+		PostWorktreeCmd: "npm install",
+	})
+	if err != nil {
+		w.Close()
+		os.Stderr = oldStderr
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+	w.Close()
+	stderrBytes, _ := io.ReadAll(r)
+	os.Stderr = oldStderr
+
+	stderr := string(stderrBytes)
+	if !strings.Contains(stderr, "node_modules/ is missing") {
+		t.Errorf("Expected missing node_modules warning in stderr, got: %s", stderr)
+	}
+}
+
+func TestInitCommandWithConfig_NoWarningWhenNodeModulesPresent(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Create package.json + lockfile AND node_modules
+	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name":"test"}`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "package-lock.json"), []byte("{}"), 0644)
+	os.MkdirAll(filepath.Join(tmpDir, "node_modules"), 0755)
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err = InitCommandWithConfig(InitParams{
+		Description:     "Goal with node_modules",
+		SpecRef:         "specs/vision.md",
+		PostWorktreeCmd: "npm install",
+	})
+	if err != nil {
+		w.Close()
+		os.Stderr = oldStderr
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+	w.Close()
+	stderrBytes, _ := io.ReadAll(r)
+	os.Stderr = oldStderr
+
+	stderr := string(stderrBytes)
+	if strings.Contains(stderr, "node_modules/ is missing") {
+		t.Errorf("Expected no node_modules warning when node_modules exists, got: %s", stderr)
+	}
+}
+
 func TestInitCommandWithConfig_EntryPointWithoutConfig(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)

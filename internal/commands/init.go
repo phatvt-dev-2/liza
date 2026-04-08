@@ -588,6 +588,18 @@ func InitCommandWithConfig(params InitParams) error {
 		}
 	}
 
+	// Warn if Node.js project lacks installed dependencies.
+	// post_worktree_cmd runs npm/yarn/pnpm install in worktrees, but it can
+	// fail silently if the main repo's deps aren't installed (no cache, missing
+	// native modules, etc.). Catching it here prevents agents from discovering
+	// the problem 17 turns into a review session.
+	if _, err := os.Stat(filepath.Join(lizaPaths.ProjectRoot(), "package.json")); err == nil {
+		if _, err := os.Stat(filepath.Join(lizaPaths.ProjectRoot(), "node_modules")); os.IsNotExist(err) {
+			installCmd := detectPostWorktreeCmd(lizaPaths.ProjectRoot())
+			fmt.Fprintf(os.Stderr, "⚠️  package.json found but node_modules/ is missing. Run %q before starting agents.\n", installCmd)
+		}
+	}
+
 	// Generate IDs and timestamps
 	timestamp := time.Now().UTC()
 	goalID := fmt.Sprintf("goal-%d", timestamp.Unix())
