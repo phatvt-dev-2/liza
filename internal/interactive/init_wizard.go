@@ -160,13 +160,18 @@ func resolveContractConflicts(projectRoot string, result *InitWizardResult) erro
 
 	// Conflict detected — ask user
 	var action string
+	options := []huh.Option[string]{
+		huh.NewOption(fmt.Sprintf("Use global config instead (keeps your existing %s)", conflicting), "global"),
+		huh.NewOption(fmt.Sprintf("Rename existing to %s.bak and place Liza contract at repo root", conflicting), "rename"),
+	}
+	if conflicting == "CLAUDE.md" {
+		options = append(options, huh.NewOption("Use CLAUDE.local.md (local override, should be gitignored)", "local"))
+	}
+	options = append(options, huh.NewOption("Skip — don't create this contract", "skip"))
+
 	err = huh.NewSelect[string]().
 		Title(fmt.Sprintf("%s already exists. Where should Liza place its contract?", conflicting)).
-		Options(
-			huh.NewOption(fmt.Sprintf("Use global config instead (keeps your existing %s)", conflicting), "global"),
-			huh.NewOption(fmt.Sprintf("Rename existing to %s.bak and place Liza contract at repo root", conflicting), "rename"),
-			huh.NewOption("Skip — don't create this contract", "skip"),
-		).
+		Options(options...).
 		Value(&action).
 		Run()
 	if err != nil {

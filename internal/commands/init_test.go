@@ -754,6 +754,72 @@ func TestInitCommand_BrownfieldDuplicateLizaWarns(t *testing.T) {
 	}
 }
 
+func TestInitCommand_ContractActionLocalCreatesCLAUDELocalMd(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	os.Chdir(gitDir)
+
+	testhelpers.CreateSpecFile(t, gitDir, "vision.md", "# Vision\n")
+
+	// Pre-create CLAUDE.md as a regular file (brownfield project)
+	os.WriteFile(filepath.Join(gitDir, "CLAUDE.md"), []byte("project"), 0644)
+
+	err := InitCommandWithConfig(InitParams{
+		Description:    "Test goal",
+		SpecRef:        "specs/vision.md",
+		Agents:         []string{"claude"},
+		ContractAction: "local",
+	})
+	if err != nil {
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+
+	// CLAUDE.md at repo root should be untouched
+	content, _ := os.ReadFile(filepath.Join(gitDir, "CLAUDE.md"))
+	if string(content) != "project" {
+		t.Error("Repo root CLAUDE.md was modified")
+	}
+
+	// CLAUDE.local.md should be a symlink to CORE.md
+	coreFile := filepath.Join(fakeHome, ".liza", "CORE.md")
+	localPath := filepath.Join(gitDir, "CLAUDE.local.md")
+	target, err := os.Readlink(localPath)
+	if err != nil {
+		t.Fatalf("CLAUDE.local.md symlink not created: %v", err)
+	}
+	if target != coreFile {
+		t.Errorf("CLAUDE.local.md → %q, want %q", target, coreFile)
+	}
+}
+
+func TestCheckContractConfigured_FindsLocalMd(t *testing.T) {
+	dir := t.TempDir()
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+
+	// Create ~/.liza/CORE.md
+	lizaDir := filepath.Join(fakeHome, ".liza")
+	os.MkdirAll(lizaDir, 0755)
+	coreFile := filepath.Join(lizaDir, "CORE.md")
+	os.WriteFile(coreFile, []byte("core"), 0644)
+
+	// Create CLAUDE.local.md as a Liza symlink
+	os.Symlink(coreFile, filepath.Join(dir, "CLAUDE.local.md"))
+
+	got := CheckContractConfigured(dir, "claude")
+	if got == "" {
+		t.Fatal("expected CheckContractConfigured to find CLAUDE.local.md")
+	}
+	if filepath.Base(got) != "CLAUDE.local.md" {
+		t.Errorf("found %q, expected CLAUDE.local.md", got)
+	}
+}
+
 func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 	// Create temporary git repo
 	gitDir := setupGitRepo(t)

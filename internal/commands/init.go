@@ -179,6 +179,14 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 		return repoPath
 	}
 
+	// Check CLAUDE.local.md (Claude-specific local override)
+	if effectiveCLI == "claude" {
+		localPath := filepath.Join(projectRoot, "CLAUDE.local.md")
+		if isLizaSymlink(localPath, contractTarget) {
+			return localPath
+		}
+	}
+
 	// Check global fallback
 	if globalRel, ok := globalFallbacks[fileName]; ok {
 		globalPath := filepath.Join(homeDir, globalRel)
@@ -245,6 +253,24 @@ func createContractSymlinksFiltered(projectRoot, contractTarget string, names []
 		// Step 3: repo root occupied by non-Liza file — apply contract action
 		if contractAction == "skip" {
 			fmt.Printf("%s: skipped (user choice)\n", name)
+			continue
+		}
+
+		if contractAction == "local" && name == "CLAUDE.md" {
+			localPath := filepath.Join(projectRoot, "CLAUDE.local.md")
+			if _, err := os.Lstat(localPath); err == nil {
+				if isLizaSymlink(localPath, contractTarget) {
+					fmt.Printf("CLAUDE.local.md: already correct\n")
+				} else {
+					fmt.Fprintf(os.Stderr, "Warning: CLAUDE.local.md already exists and is not a Liza symlink.\n")
+				}
+				continue
+			}
+			if err := os.Symlink(contractTarget, localPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to create CLAUDE.local.md symlink: %v\n", err)
+			} else {
+				fmt.Printf("CLAUDE.local.md → %s\n", contractTarget)
+			}
 			continue
 		}
 
