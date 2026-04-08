@@ -22,6 +22,7 @@ type quotaPattern struct {
 // Add new entries here when a new provider's quota message is observed.
 var quotaPatterns = []quotaPattern{
 	{Provider: "codex", Needle: "You've hit your usage limit"},
+	{Provider: "claude", Needle: "You're out of extra usage"},
 }
 
 // QuotaExhaustion holds details about a detected quota event.
