@@ -60,6 +60,9 @@ func claimDoerTask(projectRoot, agentID, role string, bb *db.Blackboard) (taskID
 			lastErr = claimErr
 			continue
 		}
+		for _, w := range result.Warnings {
+			logger.Warn("Claim warning", "task_id", result.TaskID, "warning", w)
+		}
 		return result.TaskID, result.WorktreeRel, nil
 	}
 
@@ -365,6 +368,9 @@ func handleCleanTaskCleanup(projectRoot string) error {
 		if err != nil {
 			logger.Warn("Failed to cleanup clean task worktree", "task_id", task.ID, "error", err)
 			continue
+		}
+		for _, w := range result.Warnings {
+			logger.Warn("Clean task worktree cleanup warning", "task_id", task.ID, "warning", w)
 		}
 		if result.Existed {
 			logger.Info("Cleaned up worktree for clean-terminal task", "task_id", task.ID)
