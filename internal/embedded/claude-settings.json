@@ -138,6 +138,7 @@
       "Bash(go test:*)",
       "Bash(go mod:*)",
       "Bash(go build:*)",
+      "Bash(go -C:*)",
       "Bash(make build)",
       "Bash(make test)",
       "Bash(make lint)"
