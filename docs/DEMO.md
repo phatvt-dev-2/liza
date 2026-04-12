@@ -267,7 +267,7 @@ watch -n 2 'liza get tasks --format table'
 
 **Full blackboard state (tasks, agents, metrics, anomalies):**
 ```bash
-watch -n 2 './console.sh'
+liza tui
 ```
 
 **System status:**

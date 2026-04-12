@@ -197,8 +197,6 @@ liza agent coder --agent-id coder-5   # explicit ID
 
 `liza tui` shows live system state — agents, tasks, alerts, sprint metrics. Keyboard shortcuts: `s` spawn (default cli), `S` spawn (pick cli), `p` pause, `r` resume, `a` add task, `c` checkpoint, `y` yolo (toggle auto-resume), `Q` stop.
 
-`./console.sh` is deprecated.
-
 From the CLI:
 ```bash
 # Pause all agents

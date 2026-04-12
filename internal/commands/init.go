@@ -582,23 +582,6 @@ func InitCommandWithConfig(params InitParams) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write GUARDRAILS.md: %v\n", err)
 	}
 
-	// Write console.sh to project root (non-fatal, prompts if exists)
-	consolePath := filepath.Join(lizaPaths.ProjectRoot(), "console.sh")
-	writeConsole := true
-	if _, err := os.Stat(consolePath); err == nil {
-		fmt.Fprintf(os.Stderr, "console.sh already exists. Overwrite? (y/n): ")
-		response, err := stdin.ReadString('\n')
-		response = strings.TrimSpace(strings.ToLower(response))
-		if err != nil || (response != "y" && response != "yes") {
-			writeConsole = false
-		}
-	}
-	if writeConsole {
-		if err := embedded.WriteConsoleScript(lizaPaths.ProjectRoot()); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write console.sh: %v\n", err)
-		}
-	}
-
 	// Auto-suggest post_worktree_cmd if not explicitly set and stdin is a terminal
 	postWorktreeCmd := params.PostWorktreeCmd
 	if postWorktreeCmd == "" && (params.ForceInteractive || isInteractive(rawStdin)) {
