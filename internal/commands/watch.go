@@ -443,6 +443,9 @@ func checkReviewLoops(state *models.State) []Alert {
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
+		if task.Status.IsTerminal() {
+			continue
+		}
 		if task.ReviewCyclesCurrent >= 5 {
 			alerts = append(alerts, Alert{
 				Timestamp: now,
@@ -479,6 +482,9 @@ func checkHypothesisExhaustion(state *models.State) []Alert {
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
+		if task.Status.IsTerminal() {
+			continue
+		}
 		if len(task.FailedBy) >= 2 {
 			alerts = append(alerts, Alert{
 				Timestamp: now,
@@ -497,6 +503,9 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []Alert {
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
+		if task.Status.IsTerminal() {
+			continue
+		}
 		if task.EffectiveAttempt() != 2 {
 			continue
 		}

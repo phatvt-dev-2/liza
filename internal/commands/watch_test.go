@@ -384,6 +384,17 @@ func TestCheckReviewLoops(t *testing.T) {
 			},
 			wantAlerts: 0,
 		},
+		{
+			name: "superseded task at limit ignored",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, now)
+					task.ReviewCyclesCurrent = 5
+					return task
+				}(),
+			},
+			wantAlerts: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -459,6 +470,17 @@ func TestCheckHypothesisExhaustion(t *testing.T) {
 				func() models.Task {
 					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now)
 					task.FailedBy = []string{"coder-1"}
+					return task
+				}(),
+			},
+			wantAlerts: 0,
+		},
+		{
+			name: "superseded task with two failures ignored",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusSuperseded, now)
+					task.FailedBy = []string{"coder-1", "coder-2"}
 					return task
 				}(),
 			},
@@ -551,6 +573,18 @@ func TestCheckReassigned(t *testing.T) {
 				}(),
 			},
 			cache:      map[string]time.Time{"attempt2:task-1": now.Add(-1 * time.Minute)},
+			wantAlerts: 0,
+		},
+		{
+			name: "merged task at attempt 2 ignored",
+			tasks: []models.Task{
+				func() models.Task {
+					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+					task.Attempt = 2
+					return task
+				}(),
+			},
+			cache:      make(map[string]time.Time),
 			wantAlerts: 0,
 		},
 	}
