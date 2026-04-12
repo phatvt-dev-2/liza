@@ -41,6 +41,70 @@ func TestAutoResumeAction(t *testing.T) {
 	}
 }
 
+// TestIsGoalComplete tests the pure decision function for goal completion detection.
+func TestIsGoalComplete(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *ops.ResumeResult
+		want   bool
+	}{
+		{
+			name: "goal_complete",
+			result: &ops.ResumeResult{
+				SprintAdvanced:      &ops.AdvanceSprintResult{CarriedTasks: nil},
+				TransitionsExecuted: 0,
+				TransitionError:     "",
+			},
+			want: true,
+		},
+		{
+			name: "carried_tasks_remain",
+			result: &ops.ResumeResult{
+				SprintAdvanced:      &ops.AdvanceSprintResult{CarriedTasks: []string{"task-1"}},
+				TransitionsExecuted: 0,
+				TransitionError:     "",
+			},
+			want: false,
+		},
+		{
+			name: "transitions_executed",
+			result: &ops.ResumeResult{
+				SprintAdvanced:      &ops.AdvanceSprintResult{CarriedTasks: nil},
+				TransitionsExecuted: 2,
+				TransitionError:     "",
+			},
+			want: false,
+		},
+		{
+			name: "transition_error_not_goal_complete",
+			result: &ops.ResumeResult{
+				SprintAdvanced:      &ops.AdvanceSprintResult{CarriedTasks: nil},
+				TransitionsExecuted: 0,
+				TransitionError:     "failed to load pipeline config",
+			},
+			want: false,
+		},
+		{
+			name: "no_sprint_advance",
+			result: &ops.ResumeResult{
+				SprintAdvanced:      nil,
+				TransitionsExecuted: 0,
+				TransitionError:     "",
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isGoalComplete(tt.result)
+			if got != tt.want {
+				t.Errorf("isGoalComplete() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestIsSystemStopped tests the isSystemStopped helper function
 func TestIsSystemStopped(t *testing.T) {
 	tests := []struct {

@@ -12,6 +12,11 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// errGoalComplete is a sentinel error returned by waitWhilePaused when
+// auto-resume detects that the goal is complete (no carried tasks, no
+// pending transitions). The supervisor must handle this as a clean exit.
+var errGoalComplete = errors.New("goal complete")
+
 // checkAbort returns true if system mode is STOPPED
 func checkAbort(projectRoot string) bool {
 	statePath := paths.New(projectRoot).StatePath()
@@ -32,6 +37,16 @@ func isSystemStopped(state *models.State) (bool, string) {
 		return true, "System mode is STOPPED"
 	}
 	return false, ""
+}
+
+// isGoalComplete returns true when a sprint advance produced no carried tasks
+// and no transitions fired successfully. This means there's no work left.
+// Pure decision function — no side effects, independently testable.
+func isGoalComplete(result *ops.ResumeResult) bool {
+	return result.SprintAdvanced != nil &&
+		len(result.SprintAdvanced.CarriedTasks) == 0 &&
+		result.TransitionsExecuted == 0 &&
+		result.TransitionError == ""
 }
 
 // autoResumeAction returns the sprint status to auto-resume, or "" if none.
@@ -84,9 +99,17 @@ func waitWhilePaused(ctx context.Context, projectRoot string) error {
 					pauseReason = "[CHECKPOINT] Sprint is at checkpoint"
 				case state.Sprint.Status == models.SprintStatusCompleted && state.Config.AutoResume:
 					logger.Info("Auto-resuming from COMPLETED")
-					if _, resumeErr := ops.Resume(projectRoot, "auto-resume"); resumeErr != nil {
+					result, resumeErr := ops.Resume(projectRoot, "auto-resume")
+					if resumeErr != nil {
 						logger.Warn("Auto-resume from COMPLETED failed, waiting", "error", resumeErr)
 					} else {
+						if isGoalComplete(result) {
+							logger.Info("Goal complete — all tasks terminal, no pending transitions. Stopping system.")
+							if _, stopErr := ops.Stop(projectRoot, "goal complete", "system"); stopErr != nil {
+								return fmt.Errorf("goal complete but failed to stop system: %w", stopErr)
+							}
+							return errGoalComplete
+						}
 						continue // state changed, re-read immediately
 					}
 					isPaused = true

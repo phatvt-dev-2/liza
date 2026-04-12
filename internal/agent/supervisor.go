@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -649,6 +650,10 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		// Wait while PAUSE/CHECKPOINT
 		if err := waitWhilePaused(ctx, config.ProjectRoot); err != nil {
+			if errors.Is(err, errGoalComplete) {
+				GetLogger().Info("Goal complete, supervisor exiting")
+				return nil
+			}
 			return err
 		}
 

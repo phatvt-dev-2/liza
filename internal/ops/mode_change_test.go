@@ -462,6 +462,48 @@ func TestResume_FromCompleted_AdvancesSprint(t *testing.T) {
 	}
 }
 
+func TestResume_FromCompleted_AllTerminal_EmptyCarriedTasks(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeRunning
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	// All tasks terminal (MERGED) — nothing to carry forward
+	now := time.Now().UTC()
+	task := models.Task{
+		ID:          "task-1",
+		Type:        models.TaskTypeCoding,
+		Description: "Done task",
+		Status:      models.TaskStatusMerged,
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "README.md",
+		DoneWhen:    "Done",
+		Scope:       "scope",
+		History:     []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{"task-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Resume(tmpDir, "auto-resume")
+	if err != nil {
+		t.Fatalf("Resume() error: %v", err)
+	}
+
+	if result.SprintAdvanced == nil {
+		t.Fatal("Expected sprint advance")
+	}
+	if len(result.SprintAdvanced.CarriedTasks) != 0 {
+		t.Errorf("CarriedTasks = %v, want empty", result.SprintAdvanced.CarriedTasks)
+	}
+	if result.TransitionsExecuted != 0 {
+		t.Errorf("TransitionsExecuted = %d, want 0", result.TransitionsExecuted)
+	}
+}
+
 func TestResume_FromStopped(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
