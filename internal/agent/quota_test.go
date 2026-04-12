@@ -38,6 +38,30 @@ func TestDetectQuotaExhaustion_ClaudeMatch(t *testing.T) {
 	}
 }
 
+func TestDetectQuotaExhaustion_ClaudeHitYourLimitMatch(t *testing.T) {
+	output := `{"type":"result","subtype":"success","is_error":true,"duration_ms":7072,"duration_api_ms":0,"num_turns":1,"result":"You've hit your limit · resets 8pm (Europe/Paris)","stop_reason":"stop_sequence"}`
+
+	result := DetectQuotaExhaustion(output, "claude")
+	if result == nil {
+		t.Fatal("expected quota exhaustion detected, got nil")
+	}
+	if result.Provider != "claude" {
+		t.Errorf("Provider = %q, want %q", result.Provider, "claude")
+	}
+	if result.Message == "" {
+		t.Error("Message should not be empty")
+	}
+}
+
+func TestDetectQuotaExhaustion_ClaudeHitYourLimitWithoutResetDoesNotMatch(t *testing.T) {
+	output := `{"type":"error","message":"You've hit your limit."}`
+
+	result := DetectQuotaExhaustion(output, "claude")
+	if result != nil {
+		t.Errorf("expected nil for bare Claude limit message, got %+v", result)
+	}
+}
+
 func TestDetectQuotaExhaustion_WrongProvider(t *testing.T) {
 	output := `{"type":"error","message":"You've hit your usage limit."}`
 

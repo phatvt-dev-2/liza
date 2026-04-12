@@ -14,15 +14,16 @@ import (
 type quotaPattern struct {
 	// Provider is the CLIName (e.g. "codex", "claude", "gemini").
 	Provider string
-	// Needle is a substring to search for in agent output.
-	Needle string
+	// Needles are substrings that must all appear on the same output line.
+	Needles []string
 }
 
 // quotaPatterns is the registry of known quota-exhaustion signatures.
 // Add new entries here when a new provider's quota message is observed.
 var quotaPatterns = []quotaPattern{
-	{Provider: "codex", Needle: "You've hit your usage limit"},
-	{Provider: "claude", Needle: "You're out of extra usage"},
+	{Provider: "codex", Needles: []string{"You've hit your usage limit"}},
+	{Provider: "claude", Needles: []string{"You're out of extra usage"}},
+	{Provider: "claude", Needles: []string{"You've hit your limit", "resets"}},
 }
 
 // QuotaExhaustion holds details about a detected quota event.
@@ -34,24 +35,23 @@ type QuotaExhaustion struct {
 // DetectQuotaExhaustion scans agent output for quota-exhaustion patterns.
 // Returns non-nil if a known pattern is found.
 func DetectQuotaExhaustion(output, cliName string) *QuotaExhaustion {
-	for _, p := range quotaPatterns {
-		if p.Provider != cliName {
-			continue
-		}
-		if idx := strings.Index(output, p.Needle); idx != -1 {
-			// Extract a reasonable context window around the match.
-			start := idx
-			end := idx + len(p.Needle) + 100
-			if end > len(output) {
-				end = len(output)
+	for _, line := range strings.Split(output, "\n") {
+		for _, p := range quotaPatterns {
+			if p.Provider != cliName {
+				continue
 			}
-			// Find end of line.
-			if nl := strings.IndexByte(output[start:end], '\n'); nl >= 0 {
-				end = start + nl
+			matched := true
+			for _, needle := range p.Needles {
+				if !strings.Contains(line, needle) {
+					matched = false
+					break
+				}
 			}
-			return &QuotaExhaustion{
-				Provider: p.Provider,
-				Message:  output[start:end],
+			if matched {
+				return &QuotaExhaustion{
+					Provider: p.Provider,
+					Message:  line,
+				}
 			}
 		}
 	}
