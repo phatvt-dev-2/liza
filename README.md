@@ -199,8 +199,7 @@ liza setup --claude --codex --gemini --mistral
 > The installed `~/.liza/AGENT_TOOLS.md` ships with a default
 > tool configuration. It defines which tools agents prefer (IDE integrations,
 > search providers, documentation sources, etc.) and is specific to each user's environment.<br>
-> Context management is of paramount importance. Make sure you use tools that reduce token usage.<br>
-> Recos: [RTK](https://github.com/rtk-ai/rtk), filesystem MCP, MorphLLM MCP, Perplexity MCP.<br>
+> Context management is of paramount importance — see [Recommended Tools](#recommended-tools) below.<br>
 > Edit `~/.liza/AGENT_TOOLS.md` to match your own setup — remove tools you don't have,
 > add ones you do, and adjust precedence rules accordingly.<br>
 > Or better, provide your own file at install time: `liza setup --agent-tools ~/my-tools.md`.<br>
@@ -282,6 +281,18 @@ liza analyze                                        # Circuit breaker analysis
 ### Diagnosing Issues
 
 After your first sprint, run `/liza-logs` in any coding agent session to identify frictions. New users will typically find setup issues (missing tool permissions in `AGENT_TOOLS.md`, wrong `--post-worktree-cmd`, stale `~/.liza/` files). Seasoned users use it to catch regressions — provider CLI updates that break flags, context budget growth from prompt changes, or new tool failure patterns. See [Analyzing Agent Logs](docs/USAGE_MULTI_AGENTS.md#analyzing-agent-logs) for details.
+
+### Recommended Tools
+
+Liza optimizes cost-to-quality, not cost-to-lets-cross-fingers. These tools reduce token usage without sacrificing output quality:
+
+| Tool | What it does | Impact |
+|------|-------------|--------|
+| [RTK](https://github.com/rtk-ai/rtk) | CLI proxy that compresses tool output (git, go, pytest, ...) — ~90% token savings on command results | Fewer tokens per tool call, more budget for reasoning |
+| [MorphLLM MCP](https://www.morphllm.com/) (WarpGrep) | Fast Apply edits via `// ... existing code ...` placeholders + semantic codebase search | Avoids reading full files into context for edits |
+| [claude-usage](https://github.com/phuryn/claude-usage) | Tracks Claude subscription usage with cost breakdown | Visibility into where tokens go — essential for optimizing agent configurations |
+
+Configure tool preferences in `~/.liza/AGENT_TOOLS.md` (see [installation notes](#installation) above).
 
 ---
 
