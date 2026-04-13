@@ -772,12 +772,14 @@ func TestBuildSprintAdvancePlan_CarriesManyToOne(t *testing.T) {
 	state.Tasks = []models.Task{us1, us2}
 	state.Sprint.Scope.Planned = []string{"us-1", "us-2"}
 
-	planningPairs := map[string]bool{"code-planning-pair": true}
-	m2oTransitions := []ManyToOneTransitionInfo{
-		{Name: "us-to-coding", SourceRolePair: "us-writing-pair"},
+	detCtx := &advanceDetectionContext{
+		planningPairs: map[string]bool{"code-planning-pair": true},
+		m2oTransitions: []ManyToOneTransitionInfo{
+			{Name: "us-to-coding", SourceRolePair: "us-writing-pair"},
+		},
 	}
 
-	plan, err := buildSprintAdvancePlan(state, now, planningPairs, m2oTransitions)
+	plan, err := buildSprintAdvancePlan(state, now, detCtx)
 	if err != nil {
 		t.Fatalf("buildSprintAdvancePlan() error: %v", err)
 	}
@@ -831,5 +833,42 @@ func TestAdvanceSprint_CycleBlockedPlanningTaskCarriedForward(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("CarriedTasks = %v, want to include plan-cycled (cycle-blocked should carry forward)", result.CarriedTasks)
+	}
+}
+
+// TestAdvanceSprint_PipelineTerminalNotCarried verifies that tasks in
+// pipeline-defined terminal states (e.g. INTEGRATION_ANALYSIS_CLEAN) are NOT
+// carried forward to the next sprint. Previously, only MERGED/ABANDONED/SUPERSEDED
+// were recognized as terminal, causing pipeline-terminal tasks to be carried
+// indefinitely and triggering an auto-resume sprint-advance loop.
+func TestAdvanceSprint_PipelineTerminalNotCarried(t *testing.T) {
+	tmpDir, stateFile := setupAdvanceTest(t)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.Number = 1
+
+	// Task in a pipeline-defined terminal state (not universally terminal)
+	integrationTask := testhelpers.BuildTaskByStatus("integration-1", "INTEGRATION_ANALYSIS_CLEAN", now)
+	integrationTask.RolePair = "integration-pair"
+
+	// Also a universally terminal task for comparison
+	mergedTask := testhelpers.BuildTaskByStatus("coding-1", models.TaskStatusMerged, now)
+
+	state.Tasks = []models.Task{integrationTask, mergedTask}
+	state.Sprint.Scope.Planned = []string{"integration-1", "coding-1"}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := AdvanceSprint(tmpDir)
+	if err != nil {
+		t.Fatalf("AdvanceSprint() error: %v", err)
+	}
+
+	// Neither task should be carried — both are terminal
+	if len(result.CarriedTasks) > 0 {
+		t.Errorf("CarriedTasks = %v, want empty (pipeline-terminal tasks should not be carried)", result.CarriedTasks)
 	}
 }

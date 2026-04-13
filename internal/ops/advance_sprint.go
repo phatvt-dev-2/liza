@@ -101,7 +101,7 @@ func planSprintAdvance(s *models.State, now time.Time, projectRoot string) (*spr
 	if ppErr != nil {
 		return nil, fmt.Errorf("cannot advance sprint: %w", ppErr)
 	}
-	return buildSprintAdvancePlan(s, now, detCtx.planningPairs, detCtx.m2oTransitions)
+	return buildSprintAdvancePlan(s, now, detCtx)
 }
 
 // applySprintAdvance mutates state to record the completed sprint in history
@@ -164,19 +164,17 @@ func planSprintAdvanceFromCompleted(s *models.State, now time.Time, projectRoot 
 	if err != nil {
 		return nil, fmt.Errorf("cannot advance sprint: %w", err)
 	}
-	return buildSprintAdvancePlan(s, now, detCtx.planningPairs, detCtx.m2oTransitions)
+	return buildSprintAdvancePlan(s, now, detCtx)
 }
 
 // buildSprintAdvancePlan is the shared implementation for sprint advance planning.
 // It snapshots the current sprint for archive, normalizes legacy numbering, and
 // computes carried tasks. Callers validate preconditions before calling this.
 //
-// planningPairs identifies which role-pairs are transition sources (planning pairs).
-// Merged planning tasks with unconsumed output are carried forward alongside
-// non-terminal tasks so the orchestrator can fire PLANNING_COMPLETE in the new sprint.
-// m2oTransitions identifies many-to-one transitions whose merged cohort members
-// with unfired transitions must also be carried forward.
-func buildSprintAdvancePlan(s *models.State, now time.Time, planningPairs map[string]bool, m2oTransitions []ManyToOneTransitionInfo) (*sprintAdvancePlan, error) {
+// detCtx provides pipeline-aware detection data: sprint terminal states,
+// planning pairs (transition sources), and many-to-one transitions.
+// Tasks in pipeline-defined terminal states are NOT carried forward.
+func buildSprintAdvancePlan(s *models.State, now time.Time, detCtx *advanceDetectionContext) (*sprintAdvancePlan, error) {
 	archivedSprint := s.Sprint
 	if archivedSprint.Number == 0 {
 		archivedSprint.Number = 1
@@ -187,9 +185,9 @@ func buildSprintAdvancePlan(s *models.State, now time.Time, planningPairs map[st
 
 	newNumber := archivedSprint.Number + 1
 	newSprintID := fmt.Sprintf("sprint-%d", newNumber)
-	carriedTasks := collectNonTerminalTaskIDs(s)
-	carriedTasks = append(carriedTasks, collectMergedPlanningWithUnconsumedOutput(s, planningPairs)...)
-	carriedTasks = append(carriedTasks, collectMergedManyToOneWithUnfiredTransition(s, m2oTransitions)...)
+	carriedTasks := collectNonTerminalTaskIDs(s, detCtx.sprintTerminals)
+	carriedTasks = append(carriedTasks, collectMergedPlanningWithUnconsumedOutput(s, detCtx.planningPairs)...)
+	carriedTasks = append(carriedTasks, collectMergedManyToOneWithUnfiredTransition(s, detCtx.m2oTransitions)...)
 
 	return &sprintAdvancePlan{
 		archivedSprint: archivedSprint,
@@ -200,10 +198,12 @@ func buildSprintAdvancePlan(s *models.State, now time.Time, planningPairs map[st
 }
 
 // collectNonTerminalTaskIDs returns IDs of tasks not in a terminal state.
-func collectNonTerminalTaskIDs(state *models.State) []string {
+// Uses pipeline-aware terminal check so that pipeline-defined terminal states
+// (e.g. INTEGRATION_ANALYSIS_CLEAN) are recognized and not carried forward.
+func collectNonTerminalTaskIDs(state *models.State, pipelineTerminals []models.TaskStatus) []string {
 	var carried []string
 	for _, task := range state.Tasks {
-		if !task.Status.IsTerminal() {
+		if !task.Status.IsPipelineSprintTerminal(pipelineTerminals) {
 			carried = append(carried, task.ID)
 		}
 	}
@@ -314,8 +314,9 @@ func collectMergedPlanningWithUnconsumedOutput(state *models.State, planningPair
 
 // advanceDetectionContext holds the detection data needed for sprint advance.
 type advanceDetectionContext struct {
-	planningPairs  map[string]bool
-	m2oTransitions []ManyToOneTransitionInfo
+	sprintTerminals []models.TaskStatus
+	planningPairs   map[string]bool
+	m2oTransitions  []ManyToOneTransitionInfo
 }
 
 // IsManyToOneReady checks if a MERGED task is part of a complete many-to-one
@@ -426,8 +427,9 @@ func loadDetectionContextForAdvance(projectRoot string) (*advanceDetectionContex
 		return nil, fmt.Errorf("pipeline config failed to load: %w", err)
 	}
 	return &advanceDetectionContext{
-		planningPairs:  detCtx.PlanningPairs,
-		m2oTransitions: detCtx.ManyToOneTransitions,
+		sprintTerminals: detCtx.SprintTerminals,
+		planningPairs:   detCtx.PlanningPairs,
+		m2oTransitions:  detCtx.ManyToOneTransitions,
 	}, nil
 }
 
