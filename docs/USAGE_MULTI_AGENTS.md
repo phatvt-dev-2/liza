@@ -391,19 +391,7 @@ See [Architecture Overview](../specs/architecture/overview.md) for detailed comp
 
 `liza init` creates the Claude Code configuration automatically:
 
-**`.claude/settings.json`** — Permissions for Claude Code agents (Liza CLI permissions shown, other categories truncated):
-```json
-{
-  "enableAllProjectMcpServers": true,
-  "permissions": {
-    "defaultMode": "acceptEdits",
-    "allow": [
-      "Read(~/.claude/**)",
-      "Bash(liza:*)"
-    ]
-  }
-}
-```
+**`.claude/settings.json`** — Permissions for Claude Code agents (Liza CLI permissions shown, hooks, MCP servers).
 
 The full template also pre-approves skills (code-review, testing, debugging, etc.), git read/write commands, build tools (go, make, python), shell utilities, and web access (WebFetch, WebSearch, LSP). See `internal/embedded/claude-settings.json` for the complete list.
 

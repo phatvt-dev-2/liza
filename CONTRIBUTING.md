@@ -49,7 +49,7 @@ make coverage       # Tests with HTML coverage report
 
 Files in `internal/embedded/` fall into two categories:
 
-- **Mastered in-place**: `claude-settings.json`, `mcp.json`, `hooks/` — edit directly
+- **Mastered in-place**: `claude-settings.json`, `hooks/` — edit directly
 - **Synced from repo root**: `contracts/`, `skills/` — edit the repo-root masters,
   never the `internal/embedded/` copies
 
