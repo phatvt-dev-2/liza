@@ -429,6 +429,60 @@ priority: 1
 	}
 }
 
+func TestTaskTypeEpicPlanningIsValid(t *testing.T) {
+	if !TaskTypeEpicPlanning.IsValid() {
+		t.Error("TaskTypeEpicPlanning should be valid")
+	}
+}
+
+func TestTaskTypeEpicPlanningHasRoles(t *testing.T) {
+	if !TaskTypeEpicPlanning.HasRole(RoleEpicPlanner) {
+		t.Error("epic-planning type should have epic-planner role")
+	}
+	if !TaskTypeEpicPlanning.HasRole(RoleEpicPlanReviewer) {
+		t.Error("epic-planning type should have epic-plan-reviewer role")
+	}
+	if TaskTypeEpicPlanning.HasRole(RoleCoder) {
+		t.Error("epic-planning type should not have coder role")
+	}
+	if TaskTypeEpicPlanning.HasRole(RoleCodeReviewer) {
+		t.Error("epic-planning type should not have code-reviewer role")
+	}
+}
+
+func TestTaskTypeEpicPlanningNotCoding(t *testing.T) {
+	if TaskTypeEpicPlanning == TaskTypeCoding {
+		t.Error("TaskTypeEpicPlanning must differ from TaskTypeCoding (TDD bypass condition)")
+	}
+}
+
+func TestTaskTypeUSWritingIsValid(t *testing.T) {
+	if !TaskTypeUSWriting.IsValid() {
+		t.Error("TaskTypeUSWriting should be valid")
+	}
+}
+
+func TestTaskTypeUSWritingHasRoles(t *testing.T) {
+	if !TaskTypeUSWriting.HasRole(RoleUSWriter) {
+		t.Error("us-writing type should have us-writer role")
+	}
+	if !TaskTypeUSWriting.HasRole(RoleUSReviewer) {
+		t.Error("us-writing type should have us-reviewer role")
+	}
+	if TaskTypeUSWriting.HasRole(RoleCoder) {
+		t.Error("us-writing type should not have coder role")
+	}
+	if TaskTypeUSWriting.HasRole(RoleCodeReviewer) {
+		t.Error("us-writing type should not have code-reviewer role")
+	}
+}
+
+func TestTaskTypeUSWritingNotCoding(t *testing.T) {
+	if TaskTypeUSWriting == TaskTypeCoding {
+		t.Error("TaskTypeUSWriting must differ from TaskTypeCoding (TDD bypass condition)")
+	}
+}
+
 func TestTaskTypeIntegrationIsValid(t *testing.T) {
 	if !TaskTypeIntegration.IsValid() {
 		t.Error("TaskTypeIntegration should be valid")
@@ -509,6 +563,10 @@ func TestTaskTypeForRole(t *testing.T) {
 		{RoleCodeReviewer, TaskTypeCoding},
 		{RoleCodePlanner, TaskTypePlanning},
 		{RoleCodePlanReviewer, TaskTypePlanning},
+		{RoleEpicPlanner, TaskTypeEpicPlanning},
+		{RoleEpicPlanReviewer, TaskTypeEpicPlanning},
+		{RoleUSWriter, TaskTypeUSWriting},
+		{RoleUSReviewer, TaskTypeUSWriting},
 		{RoleIntegrationAnalyst, TaskTypeIntegration},
 		{RoleIntegrationReviewer, TaskTypeIntegration},
 		{RoleArchitect, TaskTypeArchitecture},

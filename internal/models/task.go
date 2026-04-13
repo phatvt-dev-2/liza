@@ -16,6 +16,8 @@ type TaskType string
 const (
 	TaskTypeCoding       TaskType = "coding"
 	TaskTypePlanning     TaskType = "planning"
+	TaskTypeEpicPlanning TaskType = "epic-planning"
+	TaskTypeUSWriting    TaskType = "us-writing"
 	TaskTypeIntegration  TaskType = "integration"
 	TaskTypeArchitecture TaskType = "architecture"
 )
@@ -44,6 +46,8 @@ const (
 var taskWorkflows = map[TaskType][]string{
 	TaskTypeCoding:       {RoleCoder, RoleCodeReviewer},
 	TaskTypePlanning:     {RoleCodePlanner, RoleCodePlanReviewer},
+	TaskTypeEpicPlanning: {RoleEpicPlanner, RoleEpicPlanReviewer},
+	TaskTypeUSWriting:    {RoleUSWriter, RoleUSReviewer},
 	TaskTypeIntegration:  {RoleIntegrationAnalyst, RoleIntegrationReviewer},
 	TaskTypeArchitecture: {RoleArchitect, RoleArchitectureReviewer},
 }

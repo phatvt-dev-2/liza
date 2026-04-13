@@ -917,7 +917,7 @@ func TestProceed_EpicToUS_ChildRetainsCodingType(t *testing.T) {
 	reviewCommit := "abc123"
 	task := models.Task{
 		ID:           parentID,
-		Type:         models.TaskTypeCoding,
+		Type:         models.TaskTypeEpicPlanning,
 		RolePair:     "epic-planning-pair",
 		Description:  "Epic for auth module",
 		Status:       models.TaskStatus("EPIC_PLAN_APPROVED"),
@@ -954,9 +954,9 @@ func TestProceed_EpicToUS_ChildRetainsCodingType(t *testing.T) {
 	if child == nil {
 		t.Fatal("Child task not found")
 	}
-	// us-writing-pair is not code-planning-pair, so child retains TaskTypeCoding
-	if child.Type != models.TaskTypeCoding {
-		t.Errorf("Child type = %q, want %q (non-code-planning pairs keep coding type)", child.Type, models.TaskTypeCoding)
+	// us-writing-pair resolves to TaskTypeUSWriting via TaskTypeForRole
+	if child.Type != models.TaskTypeUSWriting {
+		t.Errorf("Child type = %q, want %q", child.Type, models.TaskTypeUSWriting)
 	}
 	if child.RolePair != "us-writing-pair" {
 		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "us-writing-pair")
