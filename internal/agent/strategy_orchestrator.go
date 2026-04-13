@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -126,7 +127,44 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 	if err := verifyOrchestratorStateChanges(bb, stateBefore, pipelineTerminals, planningPairs, m2oTransitions); err != nil {
 		GetLogger().Warn("Orchestrator state verification failed",
 			"error", err,
-			"hint", "Agent may not have executed required commands - check prompt file")
+			"hint", "Agent may not have executed required commands - attempting self-heal")
+
+		// Self-healing: for mechanical checkpoint operations, perform the
+		// expected state change directly instead of relying on the LLM.
+		// This breaks the re-wake loop where the orchestrator keeps
+		// executing without calling sprint_checkpoint.
+		trigger := DetectOrchestratorWakeTriggers(stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
+		if healed := selfHealCheckpoint(config.ProjectRoot, trigger.Trigger); healed {
+			GetLogger().Info("Self-healed: checkpoint created after agent failed to do so",
+				"trigger", trigger.Trigger)
+		}
 	}
 	return nil
+}
+
+// selfHealCheckpoint calls sprint_checkpoint directly when the orchestrator
+// agent failed to do so. Returns true if a checkpoint was successfully created.
+// Only acts on checkpoint triggers (SPRINT_COMPLETE, PLANNING_COMPLETE,
+// MANY_TO_ONE_READY) — these are mechanical operations that don't require
+// LLM creativity.
+func selfHealCheckpoint(projectRoot string, trigger OrchestratorWakeTrigger) bool {
+	switch trigger {
+	case WakeTriggerSprintComplete, WakeTriggerPlanningComplete, WakeTriggerManyToOneReady:
+	default:
+		return false
+	}
+
+	triggerStr := ""
+	if trigger == WakeTriggerPlanningComplete {
+		triggerStr = models.CheckpointTriggerPlanningComplete
+	}
+	_, err := ops.SprintCheckpoint(projectRoot, triggerStr)
+	if err != nil {
+		if errors.Is(err, ops.ErrSprintAlreadyCheckpoint) {
+			return true // already done, count as healed
+		}
+		GetLogger().Warn("Self-heal checkpoint failed", "error", err)
+		return false
+	}
+	return true
 }

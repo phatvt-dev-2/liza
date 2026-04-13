@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -233,6 +234,45 @@ func exit42TaskProgressSignature(task *models.Task) string {
 		return fmt.Sprintf("%s|%d|%t", task.Status, task.Iteration, task.HandoffPending)
 	}
 	return string(payload)
+}
+
+// orchestratorProgressSignature returns a string capturing the state dimensions
+// the orchestrator is expected to change. Includes sprint metadata, task-status
+// distribution, and discovery count so that legitimate progress like resolving
+// blocked tasks, superseding exhausted tasks, or triaging discoveries is
+// recognized as a signature change and resets the spinning counter.
+func orchestratorProgressSignature(state *models.State) string {
+	// Task-status distribution: count tasks per status so any status
+	// transition (block→ready, ready→superseded, etc.) changes the signature.
+	statusCounts := make(map[models.TaskStatus]int)
+	for i := range state.Tasks {
+		statusCounts[state.Tasks[i].Status]++
+	}
+	// Sort keys for deterministic output.
+	keys := make([]string, 0, len(statusCounts))
+	for k := range statusCounts {
+		keys = append(keys, string(k))
+	}
+	sort.Strings(keys)
+	var dist strings.Builder
+	for _, k := range keys {
+		if dist.Len() > 0 {
+			dist.WriteByte(',')
+		}
+		fmt.Fprintf(&dist, "%s=%d", k, statusCounts[models.TaskStatus(k)])
+	}
+
+	// Unconverted immediate discovery count — changes when orchestrator triages.
+	immediateDisc := 0
+	for _, d := range state.Discovered {
+		if d.Urgency == "immediate" && d.ConvertedToTask == nil {
+			immediateDisc++
+		}
+	}
+
+	return fmt.Sprintf("sprint:%s:%d:planned:%d:dist:%s:disc:%d",
+		state.Sprint.Status, state.Sprint.Number,
+		len(state.Sprint.Scope.Planned), dist.String(), immediateDisc)
 }
 
 // isReviewingStatus checks if a task is in a reviewing state.
@@ -750,6 +790,27 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				blockTaskFromSupervisor(bb, config.ProjectRoot, effectiveTask, config.AgentID, reason)
 				spinTracker.reset(effectiveTask)
 				continue
+			}
+		} else {
+			// Orchestrator spinning detection: no task ID, so track by state
+			// signature. If the orchestrator keeps executing without changing
+			// sprint status, sprint number, or task count, it is spinning.
+			sig := orchestratorProgressSignature(stateBefore)
+			spinCount := spinTracker.Track("orchestrator", sig)
+			spinThreshold := effectiveSpinningRestartThreshold(stateBefore.Config)
+			if spinCount > spinThreshold {
+				reason := fmt.Sprintf("orchestrator spinning detected: %d consecutive executions without state progress (threshold=%d)",
+					spinCount, spinThreshold)
+				GetLogger().Error("Orchestrator spinning detected, stopping system",
+					"agent_id", config.AgentID,
+					"count", spinCount)
+				if alertErr := LogAlert(config.ProjectRoot, "🚨", "ORCHESTRATOR_SPINNING", reason); alertErr != nil {
+					GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
+				}
+				if _, stopErr := ops.Stop(config.ProjectRoot, reason, config.AgentID); stopErr != nil {
+					GetLogger().Warn("Failed to stop system after orchestrator spinning", "error", stopErr)
+				}
+				return nil
 			}
 		}
 

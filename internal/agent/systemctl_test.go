@@ -405,3 +405,308 @@ func TestVerifyOrchestratorStateChanges_ManyToOneReady(t *testing.T) {
 		t.Errorf("Expected no error when sprint checkpointed for MANY_TO_ONE_READY trigger, got: %v", err)
 	}
 }
+
+// TestSelfHealCheckpoint_SprintComplete verifies that selfHealCheckpoint
+// creates a checkpoint when the orchestrator agent failed to do so.
+func TestSelfHealCheckpoint_SprintComplete(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Sprint: models.Sprint{
+			ID:     "sprint-1",
+			Number: 1,
+			Status: models.SprintStatusInProgress,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+			Timeline: models.SprintTimeline{
+				Started:  now.Add(-1 * time.Hour),
+				Deadline: now.Add(1 * time.Hour),
+			},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+		},
+		Config:         models.Config{IntegrationBranch: "main"},
+		CircuitBreaker: models.CircuitBreaker{Status: "OK"},
+	}
+
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	healed := selfHealCheckpoint(tmpDir, WakeTriggerSprintComplete)
+	if !healed {
+		t.Fatal("Expected selfHealCheckpoint to succeed for SPRINT_COMPLETE")
+	}
+
+	// Verify sprint is now at CHECKPOINT
+	bb := db.New(statePath)
+	after, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Sprint.Status != models.SprintStatusCheckpoint {
+		t.Errorf("Sprint status = %s, want CHECKPOINT", after.Sprint.Status)
+	}
+}
+
+// TestSelfHealCheckpoint_AlreadyCheckpointed verifies that selfHealCheckpoint
+// returns true when the sprint is already at CHECKPOINT.
+func TestSelfHealCheckpoint_AlreadyCheckpointed(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	checkpointAt := now.Add(-10 * time.Second)
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Sprint: models.Sprint{
+			ID:     "sprint-1",
+			Number: 1,
+			Status: models.SprintStatusCheckpoint,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+			Timeline: models.SprintTimeline{
+				Started:      now.Add(-1 * time.Hour),
+				Deadline:     now.Add(1 * time.Hour),
+				CheckpointAt: &checkpointAt,
+			},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+		},
+		Config:         models.Config{IntegrationBranch: "main"},
+		CircuitBreaker: models.CircuitBreaker{Status: "OK"},
+	}
+
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	healed := selfHealCheckpoint(tmpDir, WakeTriggerSprintComplete)
+	if !healed {
+		t.Fatal("Expected selfHealCheckpoint to return true for already-checkpointed sprint")
+	}
+}
+
+// TestSelfHealCheckpoint_ManyToOneReady verifies that selfHealCheckpoint
+// handles the MANY_TO_ONE_READY trigger (same checkpoint-only pattern).
+func TestSelfHealCheckpoint_ManyToOneReady(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Sprint: models.Sprint{
+			ID:     "sprint-1",
+			Number: 1,
+			Status: models.SprintStatusInProgress,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+			Timeline: models.SprintTimeline{
+				Started:  now.Add(-1 * time.Hour),
+				Deadline: now.Add(1 * time.Hour),
+			},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+		},
+		Config:         models.Config{IntegrationBranch: "main"},
+		CircuitBreaker: models.CircuitBreaker{Status: "OK"},
+	}
+
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	healed := selfHealCheckpoint(tmpDir, WakeTriggerManyToOneReady)
+	if !healed {
+		t.Fatal("Expected selfHealCheckpoint to succeed for MANY_TO_ONE_READY")
+	}
+
+	bb := db.New(statePath)
+	after, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Sprint.Status != models.SprintStatusCheckpoint {
+		t.Errorf("Sprint status = %s, want CHECKPOINT", after.Sprint.Status)
+	}
+}
+
+// TestSelfHealCheckpoint_NonMechanicalTrigger verifies that selfHealCheckpoint
+// does nothing for triggers that require LLM creativity.
+func TestSelfHealCheckpoint_NonMechanicalTrigger(t *testing.T) {
+	nonMechanical := []OrchestratorWakeTrigger{
+		WakeTriggerInitialPlanning,
+		WakeTriggerBlocked,
+		WakeTriggerHypothesisExhausted,
+		WakeTriggerImmediateDiscovery,
+		WakeTriggerCodingComplete,
+		WakeTriggerNone,
+	}
+
+	for _, trigger := range nonMechanical {
+		t.Run(string(trigger), func(t *testing.T) {
+			// projectRoot doesn't matter — function should return false before touching disk
+			if selfHealCheckpoint("/nonexistent", trigger) {
+				t.Errorf("Expected selfHealCheckpoint to return false for trigger %s", trigger)
+			}
+		})
+	}
+}
+
+// TestOrchestratorProgressSignature verifies signature changes when state changes.
+func TestOrchestratorProgressSignature(t *testing.T) {
+	now := time.Now().UTC()
+
+	base := &models.State{
+		Sprint: models.Sprint{
+			Status: models.SprintStatusInProgress,
+			Number: 1,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		},
+	}
+
+	baseSig := orchestratorProgressSignature(base)
+
+	// Same state → same signature
+	sameSig := orchestratorProgressSignature(base)
+	if sameSig != baseSig {
+		t.Errorf("Same state should produce same signature: got %q vs %q", sameSig, baseSig)
+	}
+
+	// Sprint status change → different signature
+	withCheckpoint := &models.State{
+		Sprint: models.Sprint{
+			Status: models.SprintStatusCheckpoint,
+			Number: 1,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		},
+	}
+	if orchestratorProgressSignature(withCheckpoint) == baseSig {
+		t.Error("Sprint status change should produce different signature")
+	}
+
+	// Sprint number change → different signature
+	withNewSprint := &models.State{
+		Sprint: models.Sprint{
+			Status: models.SprintStatusInProgress,
+			Number: 2,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		},
+	}
+	if orchestratorProgressSignature(withNewSprint) == baseSig {
+		t.Error("Sprint number change should produce different signature")
+	}
+
+	// Task count change → different signature
+	withMoreTasks := &models.State{
+		Sprint: models.Sprint{
+			Status: models.SprintStatusInProgress,
+			Number: 1,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
+		},
+	}
+	if orchestratorProgressSignature(withMoreTasks) == baseSig {
+		t.Error("Task count change should produce different signature")
+	}
+
+	// Planned count change → different signature
+	withMorePlanned := &models.State{
+		Sprint: models.Sprint{
+			Status: models.SprintStatusInProgress,
+			Number: 1,
+			Scope:  models.SprintScope{Planned: []string{"task-1", "task-2"}},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		},
+	}
+	if orchestratorProgressSignature(withMorePlanned) == baseSig {
+		t.Error("Planned count change should produce different signature")
+	}
+
+	// Task status change (same count) → different signature
+	// This catches the blocker: resolving a blocked task changes status distribution
+	withBlockedResolved := &models.State{
+		Sprint: models.Sprint{
+			Status: models.SprintStatusInProgress,
+			Number: 1,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+		},
+	}
+	if orchestratorProgressSignature(withBlockedResolved) == baseSig {
+		t.Error("Task status distribution change should produce different signature")
+	}
+
+	// Discovery count change → different signature
+	withDiscovery := &models.State{
+		Sprint: models.Sprint{
+			Status: models.SprintStatusInProgress,
+			Number: 1,
+			Scope:  models.SprintScope{Planned: []string{"task-1"}},
+		},
+		Tasks: []models.Task{
+			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		},
+		Discovered: []models.Discovery{
+			{ID: "disc-1", Urgency: "immediate"},
+		},
+	}
+	if orchestratorProgressSignature(withDiscovery) == baseSig {
+		t.Error("Discovery count change should produce different signature")
+	}
+}
+
+// TestOrchestratorSpinningTracker verifies spinning detection for orchestrator.
+func TestOrchestratorSpinningTracker(t *testing.T) {
+	tracker := newSpinningTracker()
+	sig := "sprint:IN_PROGRESS:1:tasks:3:planned:3"
+
+	// Same signature N times → count increases
+	for i := 1; i <= 5; i++ {
+		count := tracker.Track("orchestrator", sig)
+		if count != i {
+			t.Errorf("Track() = %d, want %d", count, i)
+		}
+	}
+
+	// Different signature → resets
+	count := tracker.Track("orchestrator", "sprint:CHECKPOINT:1:tasks:3:planned:3")
+	if count != 1 {
+		t.Errorf("Track() after signature change = %d, want 1", count)
+	}
+}
