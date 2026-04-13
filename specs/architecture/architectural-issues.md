@@ -86,6 +86,10 @@ Persistent record of issues identified by architectural analysis skills.
   - [Dual Contract Delivery Paths](#dual-contract-delivery-paths)
   - [Self-Reported Validation](#self-reported-validation)
   - [Kill Switch Granularity](#kill-switch-granularity)
+- [Structural Debt](#structural-debt)
+  - [Decompose proceed.go (1,200 LOC)](#decompose-proceedgo-1200-loc)
+  - [Decompose init.go (854 LOC)](#decompose-initgo-854-loc)
+  - [Decompose supervisor.go (831 LOC)](#decompose-supervisorgo-831-loc)
 - [Completed Fixes](#completed-fixes)
 - [Fixed (Traceability)](#fixed-traceability)
 - [Fix Details](#fix-details)
@@ -114,7 +118,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | ASSUMPTION | [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified) |
 | **medium** | BLIND SPOT | [Retrospective Findings Don't Feed Forward to Next Sprint](#retrospective-findings-dont-feed-forward-to-next-sprint) |
 | **medium** | STRESS POINT | [Manual Sprint Transitions as Scaling Bottleneck](#manual-sprint-transitions-as-scaling-bottleneck) |
-| **medium** | TENSION | [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency) |
+| ~~medium~~ | ~~TENSION~~ | ~~[MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency) — resolved: MCP removed (`90c132d5`)~~ |
 | **medium** | TENSION | [Merge Execution Authority Split](#merge-execution-authority-split) |
 | **medium** | TENSION | [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope) |
 | **medium** | TENSION | [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows) |
@@ -154,8 +158,11 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | TENSION | [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime) |
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
 | **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
+| **medium** | STRUCTURAL DEBT | [Decompose proceed.go (1,200 LOC)](#decompose-proceedgo-1200-loc) |
+| **medium** | STRUCTURAL DEBT | [Decompose init.go (854 LOC)](#decompose-initgo-854-loc) |
+| **medium** | STRUCTURAL DEBT | [Decompose supervisor.go (831 LOC)](#decompose-supervisorgo-831-loc) |
 
-**Counts:** 17 high, 29 medium, 14 low — 60 open issues total. *(2026-03-24: +2 INVARIANTS.md enforcement gaps; verification 2026-03-11: MCP Admin Handler Authorization Gap, Unbounded Integration Test Execution resolved)*
+**Counts:** 17 high, 31 medium, 14 low — 62 open issues total. *(2026-04-13: MCP Cross-Layer Read Dependency resolved — MCP removed)*
 
 ---
 
@@ -206,21 +213,13 @@ Design contradictions that create structural friction.
 - Extract `ops.RegisterAgent` / `ops.UnregisterAgent` for agent lifecycle
 - Accept the split as intentional: ops owns task lifecycle, agent owns agent lifecycle (document the boundary)
 
-### MCP Cross-Layer Read Dependency
+### MCP Cross-Layer Read Dependency — RESOLVED
 
 **Skill:** systemic-thinking
-**Category:** TENSION
-**Coupled with:** [No Query Layer](#no-query-layer)
+**Category:** TENSION → RESOLVED
+**Resolved:** MCP server removed in `90c132d5` (ADR-0057). The cross-layer dependency no longer exists — `commands` now has a single consumer (CLI). The underlying "No Query Layer" trajectory issue remains but is lower-pressure with only one presentation layer.
 
-**Issue:** The MCP server's read-only handlers (`handleGet`, `handleStatus`, `handleValidate`) import and call `commands.InspectCommand`, `commands.StatusCommand`, and `commands.ValidateCommand` — CLI presentation functions that happen to return strings. This creates a cross-layer dependency: `mcp` (protocol presentation) depends on `commands` (CLI presentation), bypassing `ops` entirely for the read path. The mutation path is clean (`mcp` → `ops` → `db`); the read path is `mcp` → `commands` → `db`, bridging two presentation layers. This dependency exists because there is no query layer between `db` (raw state access) and the presentation layers.
-
-**Implication:** Every new read operation will either be implemented in `commands` (wrong layer for MCP) or duplicated between consumers — the system will accumulate presentation-layer coupling as the query surface grows.
-
-**Current mitigation:** The read commands (`InspectCommand`, `StatusCommand`) return plain strings and don't perform terminal I/O, so the coupling is dormant.
-
-**Future options:**
-- Extract query functions to `ops` or a new `queries` package (return structured data, let each presentation layer format)
-- Accept the coupling and document `commands` as the shared query+formatting layer (rename or annotate to clarify dual role)
+**Original issue:** MCP read-only handlers imported `commands` (CLI presentation layer), creating a cross-layer dependency. Resolved by removing MCP entirely — agents now interact via CLI `--json` mode.
 
 ### Role-Boundary Severity Drift
 
@@ -1165,6 +1164,43 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 
 ---
 
+## Structural Debt
+
+### Decompose proceed.go (1,200 LOC)
+
+**Skill:** code-quality-assessment
+**Category:** RECOMMENDATION (P1.8 — escalated)
+
+**Issue:** `internal/ops/proceed.go` at 1,200 LOC is 2.4x the Go ecosystem norm (500 LOC). Contains 26 functions spanning 6 distinct responsibility clusters: transition execution, many-to-one cohort management, phase-gate dependency propagation, topo-sorted execution with SCC cycle detection, crash recovery, and child task construction. Recommended for decomposition at the 2026-03-24 assessment (then 816 LOC); grew 47% without being addressed.
+
+**Implication:** Navigability, reviewability, and testability degrade as file size increases. The 6 responsibility clusters share minimal state — extraction is straightforward but grows harder as the clusters interleave further.
+
+**Direction:** Extract by responsibility cluster: transition execution, cohort management, child construction, graph algorithms, crash recovery, and the available-transitions engine. Each cluster has clear boundaries already. After structural decomposition, evaluate design-level improvements (P3.4).
+
+### Decompose init.go (854 LOC)
+
+**Skill:** code-quality-assessment
+**Category:** RECOMMENDATION (P1.9)
+
+**Issue:** `internal/commands/init.go` at 854 LOC with `InitCommandWithConfig` at 315 LOC. Sequential phases (project detection, symlink setup, config generation, interactive prompts) are inlined in a single function. Recommended for decomposition at the 2026-03-24 assessment (then 753 LOC); grew 13%.
+
+**Implication:** Brownfield init evolution is constrained by the monolithic function. Adding new detection steps or interactive prompts requires understanding the full 315 LOC function.
+
+**Direction:** Extract each phase into its own function or file. Phases are sequential with clear data boundaries.
+
+### Decompose supervisor.go (831 LOC)
+
+**Skill:** code-quality-assessment
+**Category:** RECOMMENDATION (P1.10 — new 2026-04-13)
+
+**Issue:** `internal/agent/supervisor.go` grew from 588→831 LOC (+41%) with 24 functions mixing: restart tracking (exit-42 + crash + spinning trackers, ~300 LOC), CLI execution (`DefaultCLIExecutor`, ~150 LOC), and the supervisor loop (`RunSupervisor` at 287 LOC).
+
+**Implication:** Restart tracking is a self-contained subsystem with its own types and no shared mutable state with the supervisor — yet it's co-located, making the supervisor file harder to navigate and the trackers harder to test in isolation.
+
+**Direction:** Extract restart tracking (3 tracker types + helpers) into `restart_tracking.go`. Extract `DefaultCLIExecutor` into a dedicated file. Reduces supervisor.go from 831 to ~380 LOC.
+
+---
+
 ## Completed Fixes
 
 ---
@@ -1175,6 +1211,7 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 |-------|----------|----------|
 | [MCP Admin Handler Authorization Gap](#mcp-admin-handler-authorization-gap) | FRAGILITY | 2026-03-11 — all handlers now use declarative `roleChecker` in `server_registration.go` |
 | [Unbounded Integration Test Execution](#unbounded-integration-test-execution) | STRESS POINT | 2026-03-11 — `exec.CommandContext` with `DefaultIntegrationTestTimeout` (10m) + process group kill |
+| [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency) | TENSION | 2026-04-13 — MCP server removed (`90c132d5`, ADR-0057); single consumer (CLI) eliminates cross-layer concern |
 
 ---
 
