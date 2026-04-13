@@ -897,20 +897,6 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 		t.Errorf("permissions.allow array is empty")
 	}
 
-	// Verify key liza MCP tools are in allow array (explicit tool format)
-	foundLizaMCP := false
-	for _, perm := range allow {
-		permStr := perm.(string)
-		// Check for explicit tool format: mcp__liza__liza_add_tasks
-		if strings.HasPrefix(permStr, "mcp__liza__") {
-			foundLizaMCP = true
-			break
-		}
-	}
-	if !foundLizaMCP {
-		t.Errorf("Expected liza MCP tools in allow array (e.g., mcp__liza__liza_add_tasks)")
-	}
-
 	// Verify .claude/hooks/enforce-init.sh was deployed
 	hookPath := filepath.Join(claudeDir, "hooks", "enforce-init.sh")
 	hookInfo, hookErr := os.Stat(hookPath)
@@ -1991,5 +1977,55 @@ func TestInitCommandWithConfig_DefaultCLIOmittedWhenEmpty(t *testing.T) {
 	}
 	if strings.Contains(string(data), "default_cli") {
 		t.Error("state.yaml contains default_cli key, want omitted when empty")
+	}
+}
+
+func TestInitCommand_WorkspaceInit(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Capture stdout to verify init output
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "CLI-only workspace",
+		SpecRef:     "specs/vision.md",
+	})
+
+	w.Close()
+	stdoutBytes, _ := io.ReadAll(r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	stdout := string(stdoutBytes)
+
+	// Must contain expected CLI-only output
+	if !strings.Contains(stdout, "Liza initialized at") {
+		t.Errorf("Expected 'Liza initialized at' in stdout, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Integration branch:") {
+		t.Errorf("Expected 'Integration branch:' in stdout, got: %s", stdout)
+	}
+
+	// Must NOT contain stale MCP wording
+	if strings.Contains(stdout, "MCP tools and personal permissions") {
+		t.Error("stdout still contains stale MCP note after MCP removal")
 	}
 }

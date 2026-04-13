@@ -42,27 +42,27 @@ func TestBuildBasePrompt(t *testing.T) {
 				"PROJECT: /project",
 				"BLACKBOARD: /project/.liza/state.yaml",
 				"GOAL: Build a web API",
-				"APPROVED: use MCP tools with escalated permissions",
+				"APPROVED: use CLI commands with escalated permissions",
 				"TWO .liza/ directories exist",
 				"~/.liza/ = installed contracts & skills",
 				"/project/.liza/ = runtime state & blackboard",
 				"You have FULL read access to both .liza/ directories",
-				"For READING state: use liza_get with targeted queries",
-				"For MODIFYING state: use role-specific MCP tools ONLY",
+				"For READING state: use liza get --json",
+				"For MODIFYING state: use role-specific CLI commands ONLY",
 				"NEVER edit state.yaml directly",
 				"Execute commands immediately",
 				"DO proceed with tool execution",
 				"QUERY TOOLS",
-				"liza_get",
-				"liza_status",
-				"liza_validate",
+				"liza get --json",
+				"liza status --json",
+				"liza validate --json",
 				"COMMUNICATION:",
 				"FORBIDDEN:",
 				"Do NOT attempt to claim tasks",
 				"SESSION EXIT CODES",
 				"TIMESTAMPS:",
 				"FIRST ACTIONS:",
-				`Query your assigned task: liza_get {"query": "tasks/task-1"}`,
+				`Query your assigned task: liza get task-1 --json`,
 				"Read the goal spec: specs/vision.md",
 				"lessons/agents/",
 				"GUARDRAILS.md",
@@ -110,7 +110,7 @@ func TestBuildBasePrompt(t *testing.T) {
 			wantContains: []string{
 				"You are a Liza orchestrator agent",
 				"QUERY TOOLS",
-				`Query workspace state: liza_get {"query": "tasks"}`,
+				`Query workspace state: liza get tasks --json`,
 				"FORBIDDEN:",
 				"Do NOT manually modify task status",
 				"Do NOT make architecture decisions",
@@ -173,16 +173,14 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"- Integration failed: 0",
 				"- Hypothesis exhausted: 0",
 				"- Immediate discoveries: 0",
-				"ORCHESTRATOR COMMANDS (resolve AFTER initialization:",
-				"liza_add_tasks",
-				"liza_assess_blocked",
-				"liza_supersede_task",
-				`liza_wt_delete`,
-				`Tool parameters: {"task_id": "...", "agent_id": "orchestrator-1"}`,
-				`liza_sprint_checkpoint — Create sprint checkpoint for human review`,
-				`Tool parameters: {"agent_id": "orchestrator-1"}`,
-				`liza_update_sprint_metrics — Recompute sprint metrics`,
-				`Tool parameters: {"agent_id": "orchestrator-1"}`,
+				"ORCHESTRATOR COMMANDS:",
+				"liza add-tasks",
+				"liza assess-blocked",
+				"liza supersede-task",
+				`liza wt-delete`,
+				`--agent-id "orchestrator-1" --json`,
+				`liza sprint-checkpoint — Create sprint checkpoint for human review`,
+				`liza update-sprint-metrics — Recompute sprint metrics`,
 				"This is initial planning",
 				"Classify the input document and choose the appropriate entry-point",
 				"AVAILABLE ENTRY-POINTS:",
@@ -207,7 +205,7 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"- Blocked: 1",
 				"Tasks are BLOCKED. Analyze and resolve immediately:",
 				"Read blocked tasks from blackboard",
-				"liza_assess_blocked",
+				"liza assess-blocked",
 			},
 		},
 		{
@@ -293,7 +291,7 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"- Merged: 2",
 				"Planning sprint tasks have been merged with output[] entries",
 				"Pipeline transitions will execute automatically after checkpoint and human resume",
-				`liza_sprint_checkpoint`,
+				`liza sprint-checkpoint`,
 			},
 		},
 		{
@@ -312,15 +310,15 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"- Total tasks: 2",
 				"- Merged: 2",
 				"All planned sprint tasks have reached terminal state",
-				`liza_update_sprint_metrics with {"agent_id": "orchestrator-1"}`,
-				`liza_sprint_checkpoint with {"agent_id": "orchestrator-1"}`,
+				`liza update-sprint-metrics --json`,
+				`liza sprint-checkpoint --json`,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dashboard, wakeInstr, err := RenderOrchestratorDashboard(tt.state, projectRoot, "orchestrator-1", "mcp__liza__")
+			dashboard, wakeInstr, err := RenderOrchestratorDashboard(tt.state, projectRoot, "orchestrator-1")
 			if err != nil {
 				t.Fatalf("RenderOrchestratorDashboard() error: %v", err)
 			}
@@ -419,7 +417,7 @@ func TestRenderOrchestratorDashboard_EntryPoints(t *testing.T) {
 			state.Tasks = []models.Task{}
 			state.Goal.EntryPoint = tt.entryPoint
 
-			dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
+			dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
 			if err != nil {
 				t.Fatalf("RenderOrchestratorDashboard() error: %v", err)
 			}
@@ -525,11 +523,11 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		"FULL read access to both .liza/ directories",
 	})
 
-	// --- STATE ACCESS: liza_get over state.yaml ---
+	// --- STATE ACCESS: liza get over state.yaml ---
 	assertSection("state-access", []string{
-		"use liza_get with targeted queries",
+		"use liza get --json",
 		"NEVER read state.yaml directly",
-		"liza_get returns only the requested slice",
+		"liza get --json returns only the requested slice",
 		"NEVER edit state.yaml directly",
 	})
 
@@ -550,22 +548,21 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		"NEVER attempt to install, bootstrap, or fix system-level tooling",
 		`NEVER use "git add -A" or "git add ."`,
 		"stage specific files by name",
-		"liza_* operations are MCP tool calls",
-		"NEVER via shell commands",
+		"sed/awk for file editing",
 	})
 
 	// --- QUERY TOOLS: available to all roles ---
 	assertSection("query-tools", []string{
 		"QUERY TOOLS",
-		"liza_get",
-		"liza_status",
-		"liza_validate",
+		"liza get --json",
+		"liza status --json",
+		"liza validate --json",
 	})
 
 	// --- COMMUNICATION: blackboard-only ---
 	assertSection("communication", []string{
 		"Agents communicate via blackboard only",
-		"MCP tools",
+		"CLI commands",
 		"not direct interaction",
 	})
 
@@ -589,7 +586,7 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 	// --- FIRST ACTIONS: boot sequence ---
 	assertSection("first-actions", []string{
 		"FIRST ACTIONS:",
-		`Query your assigned task: liza_get {"query": "tasks/task-42"}`,
+		`Query your assigned task: liza get task-42 --json`,
 		"Read the goal spec: specs/vision.md",
 		"lessons/agents/",
 		"GUARDRAILS.md",
@@ -642,9 +639,9 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 			wantTrigger: "BLOCKED_TASKS",
 			wantContains: []string{
 				"Analyze and resolve immediately",
-				"execute mcp__liza__liza_add_tasks tool NOW",
-				"execute tools NOW",
-				"Do NOT call mcp__liza__liza_sprint_checkpoint",
+				"liza add-tasks --tasks-file",
+				"run commands NOW",
+				"Do NOT call liza sprint-checkpoint",
 			},
 		},
 		{
@@ -664,7 +661,7 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 				"Execute changes",
 				"create them all in this session",
 				"All state modifications must be executed before you exit",
-				"Do NOT call mcp__liza__liza_sprint_checkpoint",
+				"Do NOT call liza sprint-checkpoint",
 			},
 		},
 		{
@@ -692,10 +689,10 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 			wantContains: []string{
 				"Urgent discoveries need immediate action",
 				"execute decision NOW",
-				"execute mcp__liza__liza_add_tasks tool NOW",
-				"mcp__liza__liza_set_discovery_disposition",
-				"All tools must be executed in this session",
-				"Do NOT call mcp__liza__liza_sprint_checkpoint",
+				"liza add-tasks --tasks-file",
+				"liza set-discovery-disposition",
+				"All commands must be executed in this session",
+				"Do NOT call liza sprint-checkpoint",
 			},
 		},
 		{
@@ -716,15 +713,15 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 			wantContains: []string{
 				"Planning sprint tasks have been merged with output[] entries",
 				"Pipeline transitions will execute automatically after checkpoint and human resume",
-				"FULL autonomy to execute MCP tools immediately",
-				"liza_sprint_checkpoint",
+				"FULL autonomy to run CLI commands immediately",
+				"liza sprint-checkpoint",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dashboard, wakeInstr, err := RenderOrchestratorDashboard(tt.state, projectRoot, "orchestrator-1", "mcp__liza__")
+			dashboard, wakeInstr, err := RenderOrchestratorDashboard(tt.state, projectRoot, "orchestrator-1")
 			if err != nil {
 				t.Fatalf("RenderOrchestratorDashboard() error: %v", err)
 			}
@@ -1026,7 +1023,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			SiblingTasks:      siblings,
 			TotalPlanTasks:    3, TaskOrdinal: 2,
 			ProjectRoot: projectRoot,
-			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("coder")
 		if err != nil {
@@ -1042,10 +1038,10 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"TASK ID: task-coder",
 			"CODER STATE TRANSITIONS:",
 			"IMPLEMENTING_CODE",
-			"CODER TOOLS (resolve AFTER initialization:",
-			"liza_submit_for_review",
-			"liza_handoff",
-			"liza_mark_blocked",
+			"CODER TOOLS:",
+			"liza submit-for-review",
+			"liza handoff",
+			"liza mark-blocked",
 			"ANOMALY LOGGING:",
 			"BLOCKING PROTOCOL:",
 			"WORKTREE RULES:",
@@ -1073,7 +1069,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
-			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("code-reviewer")
 		if err != nil {
@@ -1093,9 +1088,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"REVIEWER STATE TRANSITIONS:",
 			"REVIEWING_CODE",
 			"CODE_APPROVED",
-			"REVIEWER TOOL (resolve AFTER initialization:",
-			"liza_submit_verdict",
-			"liza_await_resubmission",
+			"REVIEWER TOOLS:",
+			"liza submit-verdict",
+			"liza await-resubmission",
 			"ANOMALY LOGGING:",
 			"WORKTREE RULES:",
 			"REVIEW SCOPE:",
@@ -1113,7 +1108,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 	t.Run("orchestrator", func(t *testing.T) {
 		state := testhelpers.CreateValidState()
 		state.Tasks = []models.Task{}
-		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
+		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
 		if err != nil {
 			t.Fatalf("RenderOrchestratorDashboard: %v", err)
 		}
@@ -1137,8 +1132,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"=== ORCHESTRATOR CONTEXT ===",
 			"WAKE TRIGGER:",
 			"SPRINT STATE:",
-			"ORCHESTRATOR COMMANDS (resolve AFTER initialization:",
-			"liza_add_tasks",
+			"ORCHESTRATOR COMMANDS:",
+			"liza add-tasks",
 			"ANOMALY LOGGING:",
 			"INSTRUCTIONS:",
 		} {
@@ -1158,7 +1153,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
-			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("code-planner")
 		if err != nil {
@@ -1173,8 +1167,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"=== ASSIGNED CODE PLANNING TASK ===",
 			"TASK ID: task-planner",
 			"CODE PLANNER STATE TRANSITIONS:",
-			"CODE PLANNER TOOLS (resolve AFTER initialization:",
-			"liza_set_task_output",
+			"CODE PLANNER TOOLS:",
+			"liza set-task-output",
 			"WORKTREE RULES:",
 			"TASK DECOMPOSITION PRINCIPLE:",
 			"IMPLEMENTATION PHASE:",
@@ -1199,7 +1193,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
-			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("code-plan-reviewer")
 		if err != nil {
@@ -1215,9 +1208,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"TASK ID: task-cpr",
 			"CODE PLAN REVIEWER STATE TRANSITIONS:",
 			"REVIEWING_CODING_PLAN",
-			"CODE PLAN REVIEWER TOOLS (resolve AFTER initialization:",
-			"liza_submit_verdict",
-			"liza_await_resubmission",
+			"CODE PLAN REVIEWER TOOLS:",
+			"liza submit-verdict",
+			"liza await-resubmission",
 			"REVIEW CHECKLIST:",
 			"TIMESTAMP-task-cpr",           // interpolated task ID in reviewer gate
 			"Plan file location",           // gate label present in checklist
@@ -1239,7 +1232,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			Worktree:     projectRoot + "/.worktrees/task-ep",
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			ProjectRoot: projectRoot,
-			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("epic-planner")
 		if err != nil {
@@ -1254,8 +1246,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"=== ASSIGNED EPIC PLANNING TASK ===",
 			"TASK ID: task-ep",
 			"EPIC PLANNER STATE TRANSITIONS:",
-			"EPIC PLANNER TOOLS (resolve AFTER initialization:",
-			"liza_set_task_output",
+			"EPIC PLANNER TOOLS:",
+			"liza set-task-output",
 			"WORKTREE RULES:",
 			"EPIC-WRITING SKILL:",
 			"IMPLEMENTATION PHASE:",
@@ -1277,7 +1269,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
 			ProjectRoot: projectRoot,
-			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("epic-plan-reviewer")
 		if err != nil {
@@ -1293,9 +1284,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"TASK ID: task-epr",
 			"EPIC PLAN REVIEWER STATE TRANSITIONS:",
 			"REVIEWING_EPIC_PLAN",
-			"EPIC PLAN REVIEWER TOOLS (resolve AFTER initialization:",
-			"liza_submit_verdict",
-			"liza_await_resubmission",
+			"EPIC PLAN REVIEWER TOOLS:",
+			"liza submit-verdict",
+			"liza await-resubmission",
 			"EPIC-WRITING SKILL:",
 			"REVIEW CHECKLIST:",
 			"VERDICT SUBMISSION",
@@ -1319,7 +1310,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			IterationNum: 2, PriorRejection: "Missing error handling",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
-			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("us-writer")
 		if err != nil {
@@ -1334,7 +1324,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"=== ASSIGNED US WRITING TASK ===",
 			"TASK ID: task-usw",
 			"US WRITER STATE TRANSITIONS:",
-			"US WRITER TOOLS (resolve AFTER initialization:",
+			"US WRITER TOOLS:",
 			"WORKTREE RULES:",
 			"USER-STORY-WRITING SKILL:",
 			"CAPABILITY SCOPING:",
@@ -1364,7 +1354,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			BaseCommit: "abc1234", ReviewCommit: "def5678", AssignedTo: "coder-1",
 			GoalSpecRef: "specs/goal.md", SiblingTasks: siblings,
 			TotalPlanTasks: 3, TaskOrdinal: 2, ProjectRoot: projectRoot,
-			ToolPrefix: "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("us-reviewer")
 		if err != nil {
@@ -1380,9 +1369,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"TASK ID: task-usr",
 			"US REVIEWER STATE TRANSITIONS:",
 			"REVIEWING_US",
-			"US REVIEWER TOOLS (resolve AFTER initialization:",
-			"liza_submit_verdict",
-			"liza_await_resubmission",
+			"US REVIEWER TOOLS:",
+			"liza submit-verdict",
+			"liza await-resubmission",
 			"SPEC-REVIEW SKILL:",
 			"USER-STORY ANTI-PATTERNS",
 			"QUALITY GATES:",
@@ -1411,7 +1400,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 				{ID: "us-2", Description: "User story 2", DoneWhen: "US2 done", SpecRef: "specs/goals/feature-x.md"},
 			},
 			ProjectRoot: projectRoot,
-			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("architect")
 		if err != nil {
@@ -1428,8 +1416,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"ARCHITECT STATE TRANSITIONS:",
 			"ARCHITECTING",
 			"ARCHITECTURE_TO_REVIEW",
-			"ARCHITECT TOOLS (resolve AFTER initialization:",
-			"liza_set_task_output",
+			"ARCHITECT TOOLS:",
+			"liza set-task-output",
 			"arch_ref",
 			"IMPLEMENTATION PHASE:",
 			"Architecture document",
@@ -1451,7 +1439,6 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			IterationNum: 1,
 			BaseCommit:   "abc1234", ReviewCommit: "def5678", AssignedTo: "architect-1",
 			ProjectRoot: projectRoot,
-			ToolPrefix:  "mcp__liza__",
 		}
 		sections, err := resolver.ContextSections("architecture-reviewer")
 		if err != nil {
@@ -1467,9 +1454,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"TASK ID: task-archr",
 			"ARCHITECTURE REVIEWER STATE TRANSITIONS:",
 			"REVIEWING_ARCHITECTURE",
-			"ARCHITECTURE REVIEWER TOOLS (resolve AFTER initialization:",
-			"liza_submit_verdict",
-			"liza_await_resubmission",
+			"ARCHITECTURE REVIEWER TOOLS:",
+			"liza submit-verdict",
+			"liza await-resubmission",
 			"REVIEW CHECKLIST:",
 			"Decomposition completeness",
 			"Composability",
@@ -1612,7 +1599,7 @@ func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
 
 		state.Tasks = []models.Task{normalPlan, cycledPlan, codeDone}
 
-		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
+		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
 		if err != nil {
 			t.Fatalf("RenderOrchestratorDashboard: %v", err)
 		}
@@ -1649,7 +1636,7 @@ func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
 
 		state.Tasks = []models.Task{cycledPlan, codeDone}
 
-		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
+		dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
 		if err != nil {
 			t.Fatalf("RenderOrchestratorDashboard: %v", err)
 		}
@@ -1696,7 +1683,7 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 		if !strings.Contains(output, "specs/plan-phase1.md") {
 			t.Error("expected prior phase PlanRef in rule")
 		}
-		if !strings.Contains(output, "liza_mark_blocked") {
+		if !strings.Contains(output, "liza mark-blocked") {
 			t.Error("expected BLOCKED instruction in rule")
 		}
 	})
@@ -2082,7 +2069,7 @@ func TestRenderOrchestratorDashboard_ManyToOneReady(t *testing.T) {
 	state.Tasks = []models.Task{us1, us2, us3}
 	state.Sprint.Scope.Planned = []string{"us-1", "us-2", "us-3"}
 
-	dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1", "mcp__liza__")
+	dashboard, wakeInstr, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
 	if err != nil {
 		t.Fatalf("RenderOrchestratorDashboard: %v", err)
 	}
@@ -2096,7 +2083,7 @@ func TestRenderOrchestratorDashboard_ManyToOneReady(t *testing.T) {
 
 func TestBuildInstructionsForWakeTrigger_ManyToOneReady(t *testing.T) {
 	wakeData := wakeTemplateData{AgentID: "orchestrator-1"}
-	instructions, err := buildInstructionsForWakeTrigger("MANY_TO_ONE_READY", "orchestrator-1", "mcp__liza__", wakeData, nil)
+	instructions, err := buildInstructionsForWakeTrigger("MANY_TO_ONE_READY", "orchestrator-1", wakeData, nil)
 	if err != nil {
 		t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
 	}

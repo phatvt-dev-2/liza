@@ -33,7 +33,6 @@ go tool cover -func=coverage.out            # Coverage by function
 ```bash
 go test -race ./...                # All packages
 go test -race ./internal/db/       # Specific package (db has locks)
-go test -race ./internal/mcp/      # MCP server (concurrent handlers)
 ```
 
 ### Benchmarks
@@ -63,10 +62,6 @@ internal/
 │   └── ... (each command has its test)
 ├── models/
 │   └── state.go / state_test.go
-├── mcp/
-│   ├── server.go / server_test.go
-│   ├── handlers.go / handlers_test.go
-│   └── concurrency_test.go
 ├── git/
 │   └── worktree.go / worktree_test.go
 ├── testhelpers/               # Shared test utilities

@@ -815,21 +815,20 @@ func TestWriteClaudeSettings_NewFile(t *testing.T) {
 		t.Errorf("Expected non-empty permissions.allow array")
 	}
 
-	// Verify liza MCP tools are in allow array (explicit tool format)
-	foundLizaMCP := false
+	// Verify liza CLI permission is in allow array
+	foundLizaCLI := false
 	for _, perm := range allow {
 		permStr, ok := perm.(string)
 		if !ok {
 			continue
 		}
-		// Check for explicit tool format: mcp__liza__liza_add_tasks
-		if strings.HasPrefix(permStr, "mcp__liza__") {
-			foundLizaMCP = true
+		if permStr == "Bash(liza:*)" {
+			foundLizaCLI = true
 			break
 		}
 	}
-	if !foundLizaMCP {
-		t.Errorf("Expected liza MCP tools in allow array (e.g., mcp__liza__liza_add_tasks)")
+	if !foundLizaCLI {
+		t.Errorf("Expected Bash(liza:*) in allow array")
 	}
 }
 
@@ -1077,4 +1076,75 @@ func TestWriteHooks_Overwrites(t *testing.T) {
 			t.Errorf("hook %s was not overwritten", name)
 		}
 	}
+}
+
+func TestCleanStaleMCPEntry(t *testing.T) {
+	t.Run("no file", func(t *testing.T) {
+		if err := CleanStaleMCPEntry(t.TempDir()); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("removes liza entry", func(t *testing.T) {
+		dir := t.TempDir()
+		mcpPath := filepath.Join(dir, ".mcp.json")
+		os.WriteFile(mcpPath, []byte(`{
+  "mcpServers": {
+    "liza": {"command": "liza-mcp", "args": ["--project-root", "."]},
+    "other": {"command": "other-server"}
+  }
+}`), 0644)
+
+		if err := CleanStaleMCPEntry(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		data, err := os.ReadFile(mcpPath)
+		if err != nil {
+			t.Fatalf("file should still exist: %v", err)
+		}
+		var doc map[string]any
+		json.Unmarshal(data, &doc)
+		servers := doc["mcpServers"].(map[string]any)
+		if _, hasLiza := servers["liza"]; hasLiza {
+			t.Error("liza entry should have been removed")
+		}
+		if _, hasOther := servers["other"]; !hasOther {
+			t.Error("other entry should be preserved")
+		}
+	})
+
+	t.Run("deletes file when only liza entry", func(t *testing.T) {
+		dir := t.TempDir()
+		mcpPath := filepath.Join(dir, ".mcp.json")
+		os.WriteFile(mcpPath, []byte(`{
+  "mcpServers": {
+    "liza": {"command": "liza-mcp", "args": ["--project-root", "."]}
+  }
+}`), 0644)
+
+		if err := CleanStaleMCPEntry(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if _, err := os.Stat(mcpPath); !os.IsNotExist(err) {
+			t.Error("file should have been deleted")
+		}
+	})
+
+	t.Run("no liza entry is no-op", func(t *testing.T) {
+		dir := t.TempDir()
+		mcpPath := filepath.Join(dir, ".mcp.json")
+		original := `{"mcpServers": {"other": {"command": "x"}}}`
+		os.WriteFile(mcpPath, []byte(original), 0644)
+
+		if err := CleanStaleMCPEntry(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		data, _ := os.ReadFile(mcpPath)
+		if string(data) != original {
+			t.Errorf("file should be unchanged, got %s", data)
+		}
+	})
 }

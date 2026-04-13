@@ -119,6 +119,13 @@ func InitPairingCommand(params InitPairingParams) error {
 		}
 	}
 
+	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)
+	if projectRoot != "" {
+		if err := embedded.CleanStaleMCPEntry(projectRoot); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to clean stale .mcp.json entry: %v\n", err)
+		}
+	}
+
 	if hasMistral {
 		if err := setupMistralContract(coreFile, stdin); err != nil {
 			return fmt.Errorf("mistral setup failed: %w", err)
@@ -557,11 +564,9 @@ func InitCommandWithConfig(params InitParams) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
 	}
 
-	// Write/merge MCP server configuration to .mcp.json
-	// This is non-fatal - if it fails, just warn
-	// Note: This may prompt user for input if settings file exists
-	if err := embedded.WriteMCPSettings(lizaPaths.ProjectRoot(), stdin); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to write .mcp.json: %v\n", err)
+	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)
+	if err := embedded.CleanStaleMCPEntry(lizaPaths.ProjectRoot()); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to clean stale .mcp.json entry: %v\n", err)
 	}
 
 	// Create contract symlinks only for explicitly requested providers
@@ -735,7 +740,6 @@ func InitCommandWithConfig(params InitParams) error {
 
 	fmt.Printf("Liza initialized at %s\n", lizaPaths.LizaDir())
 	fmt.Printf("Integration branch: %s\n", branch)
-	fmt.Println("\nNote: MCP tools and personal permissions belong in ~/.claude/settings.json (global).")
 
 	hasNonClaude := false
 	for _, a := range params.Agents {

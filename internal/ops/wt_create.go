@@ -16,11 +16,11 @@ import (
 
 // CreateWorktreeResult contains the outcome of creating a worktree.
 type CreateWorktreeResult struct {
-	TaskID         string
-	WorktreeDir    string
-	BaseCommit     string
-	AlreadyExisted bool // true if worktree existed and fresh was false
-	Warnings       []string
+	TaskID         string   `json:"task_id"`
+	WorktreeDir    string   `json:"worktree_dir"`
+	BaseCommit     string   `json:"base_commit"`
+	AlreadyExisted bool     `json:"already_existed"` // true if worktree existed and fresh was false
+	Warnings       []string `json:"warnings"`
 }
 
 // CreateWorktree provisions a git worktree from the integration branch for a
@@ -102,7 +102,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 		BaseCommit:  baseCommit,
 	}
 
-	// Provision Claude Code config so agents in worktrees have MCP access.
+	// Provision Claude Code config for agents in worktrees.
 	result.Warnings = append(result.Warnings, ProvisionClaudeConfig(lp.ProjectRoot(), worktreeDir)...)
 
 	// Run post-worktree command so the worktree is build/test-ready.
@@ -117,15 +117,14 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 }
 
 // ProvisionClaudeConfig copies Claude Code configuration files from the project
-// root into a worktree so that agents launched there have MCP access and correct
-// settings. Files that don't exist in the project root are silently skipped.
+// root into a worktree so that agents launched there have correct settings.
+// Files that don't exist in the project root are silently skipped.
 // Returns warnings for any copy failures (non-fatal).
 func ProvisionClaudeConfig(projectRoot, worktreeDir string) []string {
 	var warnings []string
 
 	// Individual files to copy (relative to project root).
 	files := []string{
-		".mcp.json",
 		filepath.Join(".claude", "settings.json"),
 		filepath.Join(".claude", "settings.local.json"),
 	}

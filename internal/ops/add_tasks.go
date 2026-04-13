@@ -18,22 +18,22 @@ import (
 
 // AddTaskInput represents the input parameters for adding a task.
 type AddTaskInput struct {
-	ID          string
-	Type        string
-	RolePair    string
-	Description string
-	SpecRef     string
-	PlanRef     string
-	DoneWhen    string
-	Scope       string
-	Priority    int
-	DependsOn   []string
+	ID          string   `json:"id"`
+	Type        string   `json:"type,omitempty"`
+	RolePair    string   `json:"role_pair,omitempty"`
+	Description string   `json:"desc"`
+	SpecRef     string   `json:"spec"`
+	PlanRef     string   `json:"plan_ref,omitempty"`
+	DoneWhen    string   `json:"done"`
+	Scope       string   `json:"scope"`
+	Priority    int      `json:"priority"`
+	DependsOn   []string `json:"depends,omitempty"`
 }
 
 // AddTaskResult contains the outcome of adding a task.
 type AddTaskResult struct {
-	TaskID   string
-	Warnings []string
+	TaskID   string   `json:"task_id"`
+	Warnings []string `json:"warnings"`
 }
 
 // PostWriteValidationError indicates the mutation succeeded but state
@@ -194,15 +194,15 @@ type AddTasksInput struct {
 
 // AddTasksResult contains the outcome of batch task creation.
 type AddTasksResult struct {
-	Results []AddTaskItemResult
+	Results []AddTaskItemResult `json:"results"`
 }
 
 // AddTaskItemResult contains the outcome of adding a single task in a batch.
 type AddTaskItemResult struct {
-	TaskID   string
-	Success  bool
-	Error    string // empty on success
-	Warnings []string
+	TaskID   string   `json:"task_id"`
+	Success  bool     `json:"success"`
+	Error    string   `json:"error"` // empty on success
+	Warnings []string `json:"warnings"`
 }
 
 // AddTasks adds multiple tasks in a single call. Each task is added

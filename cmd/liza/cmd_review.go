@@ -1,9 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"io"
+	"log"
+	"os"
 	"time"
 
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
@@ -27,7 +33,18 @@ Updates:
   - review_commit = post-rebase worktree HEAD
   - Adds history entry with event "submitted_for_review"`,
 	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 		commitSHA := args[1]
 
@@ -41,6 +58,18 @@ Updates:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "submit-for-review"); err != nil {
+			return err
+		}
+
+		if isJSON(cmd) {
+			result, err := ops.SubmitForReview(projectRoot, taskID, commitSHA, agentID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.SubmitForReviewCommand(projectRoot, taskID, commitSHA, agentID)
 	},
 }
@@ -61,7 +90,18 @@ Updates:
   - handoff.<task-id> note is recorded with summary and next_action
   - agent status = HANDOFF`,
 	Args: cobra.ExactArgs(3),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 		summary := args[1]
 		nextAction := args[2]
@@ -76,6 +116,24 @@ Updates:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "handoff"); err != nil {
+			return err
+		}
+
+		if isJSON(cmd) {
+			result, err := ops.Handoff(&ops.HandoffInput{
+				ProjectRoot: projectRoot,
+				TaskID:      taskID,
+				Summary:     summary,
+				NextAction:  nextAction,
+				AgentID:     agentID,
+			})
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.HandoffCommand(projectRoot, &ops.HandoffInput{
 			TaskID:     taskID,
 			Summary:    summary,
@@ -111,7 +169,18 @@ For REJECTED verdict:
   - Clear reviewing_by and review_lease_expires
   - Add history entry with event "rejected" and reason`,
 	Args: cobra.RangeArgs(2, 3),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 		verdict := args[1]
 		reason := ""
@@ -129,8 +198,20 @@ For REJECTED verdict:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "submit-verdict"); err != nil {
+			return err
+		}
+
 		impact, _ := cmd.Flags().GetString("impact")
 
+		if isJSON(cmd) {
+			result, err := ops.SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID, impact)
 	},
 }
@@ -157,7 +238,18 @@ Agent ID for audit trail:
   - Can be specified via --changed-by flag or LIZA_AGENT_ID env var
   - Defaults to "human" if not provided`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 		role, _ := cmd.Flags().GetString("role")
 		force, _ := cmd.Flags().GetBool("force")
@@ -175,6 +267,10 @@ Agent ID for audit trail:
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.ReleaseClaim(projectRoot, taskID, role, force, reason, agentID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.ReleaseClaimCommand(projectRoot, taskID, role, force, reason, agentID)
 	},
 }
@@ -197,7 +293,18 @@ Possible outcomes:
   - NEW_ATTEMPT: task reassigned for fresh attempt
   - ABORTED: task was superseded or cancelled`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 
 		agentID, err := requireAgentID(cmd)
@@ -210,9 +317,21 @@ Possible outcomes:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "await-verdict"); err != nil {
+			return err
+		}
+
 		timeoutSec, _ := cmd.Flags().GetInt("timeout-seconds")
 		timeout := time.Duration(timeoutSec) * time.Second
 
+		if isJSON(cmd) {
+			result, err := ops.AwaitVerdict(context.Background(), projectRoot, taskID, agentID, timeout)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.AwaitVerdictCommand(projectRoot, taskID, agentID, timeout)
 	},
 }
@@ -234,7 +353,18 @@ Possible outcomes:
   - TERMINAL: task reached a terminal state (superseded, abandoned)
   - ABORTED: task was cancelled or reassigned`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 
 		agentID, err := requireAgentID(cmd)
@@ -247,9 +377,21 @@ Possible outcomes:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "await-resubmission"); err != nil {
+			return err
+		}
+
 		timeoutSec, _ := cmd.Flags().GetInt("timeout-seconds")
 		timeout := time.Duration(timeoutSec) * time.Second
 
+		if isJSON(cmd) {
+			result, err := ops.AwaitResubmission(context.Background(), projectRoot, taskID, agentID, timeout)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.AwaitResubmissionCommand(projectRoot, taskID, agentID, timeout)
 	},
 }
@@ -283,4 +425,12 @@ func init() {
 	releaseClaimCmd.Flags().Bool("full", false, "release both doer and reviewer claims (alias for --role both)")
 	releaseClaimCmd.Flags().Bool("force", false, "force release even if lease is still valid")
 	releaseClaimCmd.Flags().String("reason", "manual release", "reason for releasing the claim")
+
+	// JSON output flags
+	addJSONFlag(submitForReviewCmd)
+	addJSONFlag(handoffCmd)
+	addJSONFlag(submitVerdictCmd)
+	addJSONFlag(releaseClaimCmd)
+	addJSONFlag(awaitVerdictCmd)
+	addJSONFlag(awaitResubmissionCmd)
 }

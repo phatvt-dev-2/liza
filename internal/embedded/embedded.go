@@ -34,9 +34,6 @@ var skillsFS embed.FS
 //go:embed "claude-settings.json"
 var claudeSettingsContent []byte
 
-//go:embed "mcp.json"
-var mcpSettingsContent []byte
-
 //go:embed "hooks/enforce-init.sh"
 var enforceInitHookContent []byte
 
@@ -354,6 +351,51 @@ func WriteClaudeSettings(projectRoot string, reader *bufio.Reader) error {
 	return nil
 }
 
+// CleanStaleMCPEntry removes the "liza" key from the "mcpServers" object in
+// .mcp.json at the project root. Prior Liza versions wrote this entry during
+// init; the MCP server has since been removed. If the file becomes empty
+// (no remaining servers), it is deleted entirely.
+func CleanStaleMCPEntry(projectRoot string) error {
+	mcpPath := filepath.Join(projectRoot, ".mcp.json")
+	data, err := os.ReadFile(mcpPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("reading .mcp.json: %w", err)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil // not valid JSON — leave it alone
+	}
+
+	servers, ok := doc["mcpServers"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	if _, hasLiza := servers["liza"]; !hasLiza {
+		return nil
+	}
+
+	delete(servers, "liza")
+
+	if len(servers) == 0 && len(doc) == 1 {
+		// Only mcpServers key remained, and it's now empty — remove file
+		return os.Remove(mcpPath)
+	}
+
+	if len(servers) == 0 {
+		delete(doc, "mcpServers")
+	}
+
+	output, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling .mcp.json: %w", err)
+	}
+	return os.WriteFile(mcpPath, append(output, '\n'), 0644)
+}
+
 // mergeSettings merges liza settings into existing settings.
 // Existing settings take precedence (user customizations preserved).
 // Special handling for permissions.allow (union) and hooks.PreToolUse (union).
@@ -523,52 +565,6 @@ func unionStringArrays(a, b []any) []any {
 	return result
 }
 
-// WriteMCPSettings writes the embedded mcp.json to .mcp.json in the project root.
-// If the file already exists, prompts the user to merge settings.
-// Returns nil on success or if user declines merge.
-// The stdin parameter allows for injected input in tests; pass os.Stdin for CLI usage.
-func WriteMCPSettings(projectRoot string, reader *bufio.Reader) error {
-	mcpSettingsPath := filepath.Join(projectRoot, ".mcp.json")
-
-	var existingSettings map[string]any
-	if existingData, err := os.ReadFile(mcpSettingsPath); err == nil {
-		ok, err := confirmMerge("Should the Liza MCP server configuration be merged into the existing .mcp.json file? (y/n): ", reader)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return nil
-		}
-
-		if err := json.Unmarshal(existingData, &existingSettings); err != nil {
-			return fmt.Errorf("failed to parse existing .mcp.json: %w", err)
-		}
-	}
-
-	var lizaMCPSettings map[string]any
-	if err := json.Unmarshal(mcpSettingsContent, &lizaMCPSettings); err != nil {
-		return fmt.Errorf("failed to parse embedded mcp.json: %w", err)
-	}
-
-	var finalSettings map[string]any
-	if existingSettings != nil {
-		finalSettings = mergeMCPSettings(lizaMCPSettings, existingSettings)
-	} else {
-		finalSettings = lizaMCPSettings
-	}
-
-	output, err := json.MarshalIndent(finalSettings, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal .mcp.json: %w", err)
-	}
-
-	if err := os.WriteFile(mcpSettingsPath, output, 0644); err != nil {
-		return fmt.Errorf("failed to write .mcp.json: %w", err)
-	}
-
-	return nil
-}
-
 // WritePipelineConfig writes the embedded pipeline.yaml to the target directory.
 // If the file doesn't exist, writes it unconditionally.
 // If the file exists and stdin is nil, skips silently (test callers).
@@ -644,31 +640,4 @@ func WriteHooks(projectRoot string) error {
 	}
 
 	return nil
-}
-
-// mergeMCPSettings merges liza MCP settings into existing settings.
-// Existing values override liza defaults, except "mcpServers" which is deep-merged
-// (individual server entries merged, existing takes precedence per server name).
-func mergeMCPSettings(liza, existing map[string]any) map[string]any {
-	result := make(map[string]any)
-	maps.Copy(result, liza)
-
-	for k, v := range existing {
-		if k == "mcpServers" {
-			lizaServers, lizaOk := liza[k].(map[string]any)
-			existingServers, existingOk := v.(map[string]any)
-			if lizaOk && existingOk {
-				mergedServers := make(map[string]any)
-				maps.Copy(mergedServers, lizaServers)
-				maps.Copy(mergedServers, existingServers)
-				result[k] = mergedServers
-			} else {
-				result[k] = v
-			}
-		} else {
-			result[k] = v
-		}
-	}
-
-	return result
 }

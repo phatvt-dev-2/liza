@@ -60,9 +60,9 @@ Liza is a **frontier Multi-Agent System**:
   - LLM agents wrapped by code-enforced supervisors and working on isolated git worktrees.
   - The supervisor does the **deterministic code-enforced actions** (worktree management, merges, TDD enforcement, etc),
     leaving the **judgment to the agent**. Strict task state machine with 43+ validation rules.
-  - Agents communicate and act through Liza's **MCP tools**.
+  - Agents communicate and act through Liza's **CLI**.
   - 35k LOC of Go (+92k of tests). Liza is not a prompt collection.
-  - Agent logs recording for automatic analysis and continuous improvements (token optimization, MCP server usage analysis, ...)
+  - Agent logs recording for automatic analysis and continuous improvements (token optimization, tool usage analysis, ...)
 - **Multi-model:**
   - Liza wraps provider **CLIs**, not their APIs. This means your existing subscription (Claude Max, ChatGPT Pro, etc.) works — no API keys or per-token billing required — and your personal setup is used.
   - BYOM: Claude Code, Codex CLI, Kimi, Mistral, Gemini. [Not all are made equal though](docs/demo-benchmark).
@@ -152,8 +152,8 @@ Most tools either expect the detailed spec already done (OpenSpec, GSD) or have 
 
 ### Installation
 
-Liza relies on two executables: `liza` and `liza-mcp`:
-- By default they install to `~/.local/bin` (created automatically, no sudo needed).
+Liza provides a single executable: `liza`:
+- By default it installs to `~/.local/bin` (created automatically, no sudo needed).
 - Set the `INSTALL_DIR` environment variable to override.
 - If upgrading from a previous install in `/usr/local/bin`, old binaries are removed automatically.
 
@@ -197,7 +197,7 @@ liza setup --claude --codex --gemini --mistral
 
 > **️⚠️ Customize your tool setup:**<br>
 > The installed `~/.liza/AGENT_TOOLS.md` ships with a default
-> MCP server and tool configuration. It defines which tools agents prefer (IDE integrations,
+> tool configuration. It defines which tools agents prefer (IDE integrations,
 > search providers, documentation sources, etc.) and is specific to each user's environment.<br>
 > Context management is of paramount importance. Make sure you use tools that reduce token usage.<br>
 > Recos: [RTK](https://github.com/rtk-ai/rtk), filesystem MCP, MorphLLM MCP, Perplexity MCP.<br>
@@ -289,13 +289,12 @@ Reliability is built into every component.
 
 ```mermaid
 graph TB
-    AP["Doer / Reviewer LLM Agent Pairs · <small>judgment layer</small>"]
     H["User"] -->|commands| CLI["Go CLI · <i>liza</i>"]
+    AP["Doer / Reviewer LLM Agent Pairs · <small>judgment layer</small>"]
     CLI -->|spawns| S["Supervisor · <small>deterministic Go</small>"]
 
     CLI --> BB["YAML Blackboard<br><small>state.yaml</small>"]
-    MCP --> BB
-    MCP --> WT["Git Worktrees<br><small>isolated workspaces</small>"]
+    CLI --> WT["Git Worktrees<br><small>isolated workspaces</small>"]
 
     S -->|wraps| AP
     PL["YAML Pipeline & Roles"] --> |specializes| S
@@ -304,11 +303,10 @@ graph TB
     PB["Prompt Builder"] -->|bootstrap prompt| AP
     SK["Skills"] -->|empowers| AP
     SP["Specs"] <-->|drives / produces| AP
-    AP -->|calls| MCP["MCP Tools · <small>deterministic Go</small>"]
+    AP -->|calls| CLI
 
     style CLI fill:#4a90d9,stroke:#2c5ea0,color:#fff
     style S fill:#4a90d9,stroke:#2c5ea0,color:#fff
-    style MCP fill:#4a90d9,stroke:#2c5ea0,color:#fff
     style AP fill:#e8833a,stroke:#c0652a,color:#fff
     style PB fill:#5bb87d,stroke:#3d8a5a,color:#fff
     style BC fill:#5bb87d,stroke:#3d8a5a,color:#fff
