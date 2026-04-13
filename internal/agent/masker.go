@@ -104,6 +104,34 @@ func newSecretMaskerFromEnv(environ []string) *SecretMasker {
 	return &SecretMasker{secrets: secrets}
 }
 
+// AddEntries extends the masker with additional KEY=VALUE entries.
+// Only entries whose keys match secret patterns are added.
+func (m *SecretMasker) AddEntries(entries []string) {
+	seen := make(map[string]struct{}, len(m.secrets))
+	for _, s := range m.secrets {
+		seen[s] = struct{}{}
+	}
+
+	for _, entry := range entries {
+		k, v, ok := strings.Cut(entry, "=")
+		if !ok || v == "" || len(v) < minSecretLen {
+			continue
+		}
+		if !isSecretKey(k) {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		m.secrets = append(m.secrets, v)
+	}
+
+	sort.Slice(m.secrets, func(i, j int) bool {
+		return len(m.secrets[i]) > len(m.secrets[j])
+	})
+}
+
 // MaskText replaces all occurrences of collected secret values in text.
 func (m *SecretMasker) MaskText(text string) string {
 	if len(m.secrets) == 0 {

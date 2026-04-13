@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -479,6 +480,18 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 	// env var, so we set it explicitly to guarantee availability.
 	cmd.Env = append(os.Environ(), "LIZA_AGENT_ID="+agentID)
 
+	// Load project-level env overrides for Claude CLI (e.g. claude.env).
+	if actualCLI == "claude" {
+		envFile := filepath.Join(projectRoot, "claude.env")
+		if extra := loadEnvFile(envFile); len(extra) > 0 {
+			cmd.Env = append(cmd.Env, extra...)
+			// Extend masker so secrets from claude.env are redacted in saved output.
+			if d.masker != nil {
+				d.masker.AddEntries(extra)
+			}
+		}
+	}
+
 	// Handle output: either save to file or stream to stdout/stderr.
 	// Separate buffers avoid the concurrency issue: exec.Cmd drains each pipe
 	// in its own goroutine, so each buffer is written by exactly one goroutine.
@@ -547,6 +560,31 @@ func (d *DefaultCLIExecutor) ExecuteInteractive(ctx context.Context, cliName str
 	}
 
 	return 0, nil
+}
+
+// loadEnvFile reads a KEY=VALUE env file, skipping comments and empty lines.
+// Supports full-line and inline comments (# after value).
+// Returns nil if the file does not exist or cannot be read.
+func loadEnvFile(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var env []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Strip inline comments: KEY=VALUE # comment → KEY=VALUE
+		if idx := strings.Index(line, " #"); idx >= 0 {
+			line = strings.TrimRight(line[:idx], " ")
+		}
+		if strings.Contains(line, "=") {
+			env = append(env, line)
+		}
+	}
+	return env
 }
 
 // RunSupervisor is the main entry point for the agent supervisor

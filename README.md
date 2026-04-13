@@ -215,6 +215,19 @@ liza init --claude --codex --gemini --mistral
 ```
 The interactive wizard walks through mode selection (pairing vs full MAS), agent selection, and handles existing `CLAUDE.md` conflicts automatically. Claude is fully automated; for other CLIs see [contract activation](https://github.com/liza-mas/liza/blob/main/contracts/contract-activation.md) for additional manual steps.
 
+> **Claude environment overrides:**<br>
+> Create a `claude.env` file at your project root to inject environment variables into Claude CLI agent processes.
+> The supervisor reads this file automatically if it exists. Format: `KEY=VALUE`, one per line (comments with `#`).
+> See https://code.claude.com/docs/en/env-vars.
+> ```bash
+> # claude.env — example
+> # Mitigate recent token usage spike, https://x.com/kunchenguid/status/2043511416448307378
+> CLAUDE_CODE_EFFORT_LEVEL=high
+> CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1
+> CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+> CLAUDE_CODE_SUBAGENT_MODEL=sonnet
+> ```
+
 ### Pairing and MAS Modes
 
 > **New to Liza?** Start with Pairing mode — it's the fastest way to experience how the behavioral contract changes agent behavior. The trust you build watching agents pause at gates, surface assumptions, and validate before claiming done is what makes letting them run autonomously in Multi-Agent mode a comfortable next step.

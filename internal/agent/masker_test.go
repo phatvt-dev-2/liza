@@ -165,3 +165,44 @@ func TestSecretMaskerMaskText(t *testing.T) {
 		}
 	})
 }
+
+func TestSecretMaskerAddEntries(t *testing.T) {
+	t.Run("extends masker with new secrets", func(t *testing.T) {
+		m := newSecretMaskerFromEnv([]string{
+			"ANTHROPIC_API_KEY=sk-ant-original-key",
+		})
+		m.AddEntries([]string{
+			"GITHUB_TOKEN=ghp_added-later-token",
+		})
+		input := "keys: sk-ant-original-key and ghp_added-later-token"
+		want := "keys: *** and ***"
+		if got := m.MaskText(input); got != want {
+			t.Errorf("MaskText =\n  %q\nwant\n  %q", got, want)
+		}
+	})
+
+	t.Run("skips non-secret entries", func(t *testing.T) {
+		m := newSecretMaskerFromEnv(nil)
+		m.AddEntries([]string{
+			"CLAUDE_CODE_DISABLE_1M_CONTEXT=1",
+			"HOME=/home/user",
+		})
+		input := "setting CLAUDE_CODE_DISABLE_1M_CONTEXT=1"
+		if got := m.MaskText(input); got != input {
+			t.Errorf("non-secret env should not be masked, got %q", got)
+		}
+	})
+
+	t.Run("deduplicates with existing secrets", func(t *testing.T) {
+		m := newSecretMaskerFromEnv([]string{
+			"OPENAI_API_KEY=sk-same-secret-value",
+		})
+		m.AddEntries([]string{
+			"BACKUP_API_KEY=sk-same-secret-value",
+		})
+		// Should still have only one secret entry
+		if len(m.secrets) != 1 {
+			t.Errorf("expected 1 secret after dedup, got %d", len(m.secrets))
+		}
+	})
+}
