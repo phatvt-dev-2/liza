@@ -114,7 +114,8 @@
       "Bash(go -C:*)",
       "Bash(make build)",
       "Bash(make test)",
-      "Bash(make lint)"
+      "Bash(make lint)",
+      "Bash(diff-cover:*)"
     ]
   }
 }
