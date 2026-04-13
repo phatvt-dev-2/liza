@@ -413,7 +413,21 @@ The settings template is embedded into the binary. `liza init` writes the active
 
 ### Analyzing Agent Logs
 
-Logs (captured by default, disable with `--no-log`) are NDJSON files (one JSON object per line) from `claude --verbose --output-format stream-json`. Two formats exist depending on the agent role:
+Agent logs are your primary diagnostic tool for understanding what agents actually did and where they got stuck. **Use `/liza-logs` early and often** — it cross-correlates logs across agents, surfaces patterns that slow down the execution and increase token usage, and proposes actionable fixes.
+
+#### Identifying Frictions
+
+Log analysis serves different purposes depending on where you are in your Liza journey:
+
+**New users — misconfiguration detection.** Most early failures come from setup issues, not agent logic. Common culprits: incomplete `AGENT_TOOLS.md` (missing tool permissions, wrong MCP server names), missing `GUARDRAILS.md` constraints, incorrect `--post-worktree-cmd`, or stale `~/.liza/` files after an upgrade. Run `/liza-logs` after your first sprint — it will flag permission denials, tool failures, and initialization errors that point straight to the misconfiguration.
+
+**Seasoned users — regression and drift detection.** Once your setup is stable, log analysis shifts to catching new frictions: provider CLI updates that change output formats or break flags, context budget regressions from prompt growth, new tool failure patterns, or behavioral drift after contract changes. Run `/liza-logs` when a previously-smooth pipeline starts producing unexpected checkpoints, rejections, or BLOCKED tasks.
+
+In both cases, the pattern is the same: run the analysis, read the friction report, fix the root cause, re-run. Logs are cheap; debugging blind is expensive.
+
+#### Log Format
+
+Logs are captured by default (disable with `--no-log`) as NDJSON files (one JSON object per line) from `claude --verbose --output-format stream-json`. Two formats exist depending on the agent role:
 
 | Format | First event | Seen in | Token detail |
 |--------|-------------|---------|--------------|
