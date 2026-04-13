@@ -32,6 +32,20 @@ func nonZeroOr(val, fallback int) int {
 // Returns (hasWork, logMessage). If logMessage is non-empty, it will be printed when work is found.
 type workCheckFunc func(*models.State) (hasWork bool, logMessage string)
 
+// stateWatcher abstracts file-change notification so tests can inject
+// a silent watcher to exercise the abortTicker fallback path.
+type stateWatcher interface {
+	Events() <-chan struct{}
+	Errors() <-chan error
+	Close() error
+}
+
+// newStateWatcher creates a watcher for state file changes.
+// Overridable in tests to inject a silent (no-event) watcher.
+var newStateWatcher = func(bb *db.Blackboard) (stateWatcher, error) {
+	return bb.WatchForChanges()
+}
+
 // waitForWorkEventDriven is a generic event-driven wait implementation for all agent roles.
 // It uses fsnotify to detect state changes and wake immediately when work becomes available.
 func waitForWorkEventDriven(
@@ -77,7 +91,7 @@ func waitForWorkEventDriven(
 	}
 
 	// Try to set up event-driven watching
-	watcher, err := bb.WatchForChanges()
+	watcher, err := newStateWatcher(bb)
 	if err != nil {
 		// Fallback to polling if watcher fails
 		return waitForWorkPolling(ctx, bb, projectRoot, pollInterval, maxWait, checkWork)
@@ -106,6 +120,14 @@ func waitForWorkEventDriven(
 			if stopped, reason := isSystemStopped(state); stopped {
 				logger.Info("ABORT detected", "reason", reason)
 				return false, nil
+			}
+			// Also check for work: covers the TOCTOU race where state
+			// changed between the initial check and watcher setup.
+			if hasWork, logMsg := checkWork(state); hasWork {
+				if logMsg != "" {
+					logger.Info(logMsg)
+				}
+				return true, nil
 			}
 			if time.Now().After(deadline) {
 				return false, nil

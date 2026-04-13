@@ -1212,3 +1212,104 @@ func TestWaitForCoderWorkDetectsResumableHandoff(t *testing.T) {
 		t.Fatal("expected resumable handoff to be detected as available work")
 	}
 }
+
+// silentWatcher is a watcher whose Events channel never fires,
+// simulating the TOCTOU race where fsnotify misses a state change.
+type silentWatcher struct {
+	events chan struct{}
+	errors chan error
+}
+
+func newSilentWatcher() *silentWatcher {
+	return &silentWatcher{
+		events: make(chan struct{}),
+		errors: make(chan error),
+	}
+}
+
+func (w *silentWatcher) Events() <-chan struct{} { return w.events }
+func (w *silentWatcher) Errors() <-chan error    { return w.errors }
+func (w *silentWatcher) Close() error            { return nil }
+
+// TestWaitForWork_AbortTickerDetectsWork_TOCTOU verifies that the
+// abortTicker (1s) detects work even when fsnotify misses the state
+// change — the TOCTOU race between initial check and watcher setup.
+func TestWaitForWork_AbortTickerDetectsWork_TOCTOU(t *testing.T) {
+	// Inject a silent watcher with a handshake: the factory signals
+	// watcherReady when newStateWatcher is called, guaranteeing the
+	// state mutation happens AFTER the initial check AND after watcher
+	// setup — deterministically placing it in the gap that only the
+	// abortTicker can cover.
+	watcherReady := make(chan struct{})
+	original := newStateWatcher
+	newStateWatcher = func(bb *db.Blackboard) (stateWatcher, error) {
+		close(watcherReady)
+		return newSilentWatcher(), nil
+	}
+	defer func() { newStateWatcher = original }()
+
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// Write initial state with no work
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	config := SupervisorConfig{
+		StatePath:   statePath,
+		ProjectRoot: tmpDir,
+	}
+	bb := db.New(statePath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resultCh := make(chan bool, 1)
+	errCh := make(chan error, 1)
+
+	strategy, _ := NewRoleStrategy("coder", testResolver(t))
+	go func() {
+		hasWork, err := strategy.WaitForWork(ctx, bb, config, 10*time.Millisecond, 5*time.Second)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resultCh <- hasWork
+	}()
+
+	// Block until WaitForWork has completed the initial check and
+	// called newStateWatcher — the work mutation is now guaranteed
+	// to land in the gap where only the abortTicker can detect it.
+	select {
+	case <-watcherReady:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for watcher setup")
+	}
+
+	// Add claimable work — the silent watcher won't notify,
+	// so only the abortTicker (1s) can detect this.
+	if err := bb.Modify(func(s *models.State) error {
+		s.Tasks = append(s.Tasks, testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()))
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	start := time.Now()
+	select {
+	case err := <-errCh:
+		t.Fatalf("WaitForWork() error = %v", err)
+	case hasWork := <-resultCh:
+		elapsed := time.Since(start)
+		if !hasWork {
+			t.Fatal("expected work to be detected")
+		}
+		// abortTicker fires every 1s; allow up to 2s for scheduling jitter
+		if elapsed > 2*time.Second {
+			t.Errorf("abortTicker took %v to detect work, expected < 2s", elapsed)
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("Timeout: abortTicker did not detect work within 4s")
+	}
+}
