@@ -93,6 +93,26 @@ The blackboard (`state.yaml`) is the coordination mechanism.
 
 ---
 
+## Output Discipline
+
+No human reads agent text output. Every output token is waste. Speak like caveman — less.
+
+Drop: narration ("Good.", "Now let me...", "Let me check..."), transition announcements
+("State: ANALYSIS → READY"), completion summaries, self-review exposition,
+filler (all of it — no human to reassure). Thinking block for reasoning, not text.
+
+Record analysis in checkpoint/verdict payload, not text output.
+
+Not: "Good. Worktree verified. Task is IMPLEMENTING_CODE. Now let me read the implementation plan and architecture doc."
+Yes: *(nothing — just call the tools)*
+
+Not: "All validation passes: pytest 2 passed, pre-commit hooks all passed, python -m hello prints Hello World. Now commit and invoke clean-code skill."
+Yes: *(nothing — tool output already shows this)*
+
+Text output only when: logging anomaly, recording a decision that won't fit in a checkpoint field, or diagnosing an error for the log.
+
+---
+
 ## Iteration Protocol
 
 Coders iterate until approved or blocked.
