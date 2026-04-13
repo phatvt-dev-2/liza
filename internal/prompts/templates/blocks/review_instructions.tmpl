@@ -223,6 +223,7 @@ REVIEW CHECKLIST:
 | Cross-cutting concerns | Cross-cutting concerns (error handling, observability, security) are unaddressed or assigned to no component |
 | Composability | The M code-planning scopes would not compose into a working whole — integration gaps exist |
 | Single intent per scope | An output[] entry bundles multiple unrelated concerns |
+| Domain-level scopes | Scopes split within a domain by implementation steps rather than by domain boundaries. Sequencing within a domain is code-planner territory. |
 | Falsifiable done_when | done_when for output[] entries is vague or untestable |
 | Dependency ordering | Output[] entries have circular or missing dependencies |
 | Shared-file dependencies | Two output[] entries may modify the same files without depends_on |

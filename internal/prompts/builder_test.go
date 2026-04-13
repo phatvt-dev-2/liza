@@ -184,7 +184,7 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"This is initial planning",
 				"Classify the input document and choose the appropriate entry-point",
 				"AVAILABLE ENTRY-POINTS:",
-				"Phases must partition the goal",
+				"Tasks must partition the goal",
 				"role-pair-derived prefix with sequential suffixes",
 				"All tasks use the chosen role_pair matching the entry-point",
 			},
@@ -1674,21 +1674,21 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 			t.Fatalf("BuildRoleContext: %v", err)
 		}
 
-		if !strings.Contains(output, "PHASE CONSISTENCY RULE") {
-			t.Error("expected phase-consistency rule to render")
+		if !strings.Contains(output, "SIBLING CONSISTENCY RULE") {
+			t.Error("expected sibling-consistency rule to render")
 		}
 		if !strings.Contains(output, "plan-1") {
-			t.Error("expected prior phase task ID in rule")
+			t.Error("expected prior task ID in rule")
 		}
 		if !strings.Contains(output, "specs/plan-phase1.md") {
-			t.Error("expected prior phase PlanRef in rule")
+			t.Error("expected prior task PlanRef in rule")
 		}
 		if !strings.Contains(output, "liza mark-blocked") {
 			t.Error("expected BLOCKED instruction in rule")
 		}
 	})
 
-	t.Run("without DependsOn → no phase-consistency rule", func(t *testing.T) {
+	t.Run("without DependsOn → no sibling-consistency rule", func(t *testing.T) {
 		data := &RoleContextData{
 			Role:           "code-planner",
 			RoleType:       "doer",
@@ -1705,12 +1705,12 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 			t.Fatalf("BuildRoleContext: %v", err)
 		}
 
-		if strings.Contains(output, "PHASE CONSISTENCY RULE") {
-			t.Error("should NOT render phase-consistency rule without DependsOn")
+		if strings.Contains(output, "SIBLING CONSISTENCY RULE") {
+			t.Error("should NOT render sibling-consistency rule without DependsOn")
 		}
 	})
 
-	t.Run("DependsOn on different-role-pair sibling → no phase-consistency rule", func(t *testing.T) {
+	t.Run("DependsOn on different-role-pair sibling → no sibling-consistency rule", func(t *testing.T) {
 		data := &RoleContextData{
 			Role:           "code-planner",
 			RoleType:       "doer",
@@ -1729,8 +1729,8 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 			t.Fatalf("BuildRoleContext: %v", err)
 		}
 
-		if strings.Contains(output, "PHASE CONSISTENCY RULE") {
-			t.Error("should NOT render phase-consistency rule for different-role-pair dependency")
+		if strings.Contains(output, "SIBLING CONSISTENCY RULE") {
+			t.Error("should NOT render sibling-consistency rule for different-role-pair dependency")
 		}
 	})
 
@@ -1751,7 +1751,7 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 			t.Fatalf("BuildRoleContext: %v", err)
 		}
 
-		if !strings.Contains(output, "Do NOT plan capabilities that belong to a sibling phase") {
+		if !strings.Contains(output, "Do NOT plan capabilities that belong to a sibling task") {
 			t.Error("expected epic-planner scope restriction")
 		}
 	})

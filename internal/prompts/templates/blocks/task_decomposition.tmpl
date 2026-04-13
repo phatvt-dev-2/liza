@@ -7,8 +7,8 @@ Smell: if done_when lists assertions across more than 2 packages or >4 condition
 Atomic exceptions exist (e.g., "add model field and update serializer") — use judgment.
 When a spec step is too large for one task, split it. When two spec steps are small and
 tightly coupled, combining them is acceptable — but the intent must still be singular.
-Prefer more smaller tasks over fewer larger ones: each additional review cycle on a
-large task costs more than a review cycle on a small, focused task.
+Keep closely related changes together — splitting cohesive work adds overhead without
+reducing risk. Split at natural seams between independent concerns.
 Declare dependency order between tasks — no circular or missing dependencies.
 Shared-file rule: when two tasks modify the same file, they MUST have a depends_on
 relationship. Parallel coders work in isolated worktrees — shared files without

@@ -9,16 +9,16 @@ Do NOT wait for permission.
 
 1. Read the goal spec ({{.GoalSpecRef}}) thoroughly.
 2. Assess complexity: count distinct functional areas, estimate output entries.
-3. Decide: single task (simple) or multi-phase (complex).
+3. Decide: single task (simple) or multiple tasks (complex).
 
-MULTI-PHASE PLANNING:
+MULTI-TASK PLANNING:
 When a goal is complex (>3 distinct functional areas, >~8 estimated output entries,
 or cross-cutting concerns that benefit from sequential refinement):
-- Create up to ~5 planning tasks, each scoped to a natural boundary in the spec.
-- Phases must partition the goal: non-overlapping scopes that together cover the full planning scope.
+- Create up to ~5 planning tasks, each scoped to a domain or sub-domain boundary in the spec.
+- Tasks must partition the goal: non-overlapping scopes that together cover the full planning scope.
 - Use the SAME role-pair for all tasks.
 - Task IDs use the role-pair-derived prefix with sequential suffixes: <prefix>-1, <prefix>-2, etc.
-- Chain with sequential depends_on: task-2 depends on task-1, task-3 on task-2, etc.
+- Add depends_on only where one domain genuinely requires another's output — independent domains run in parallel.
 Simple goals (default): one task, no depends_on.
 
 --- EXECUTION PHASE (MANDATORY - DO NOT SKIP) ---
@@ -31,10 +31,10 @@ Run liza add-tasks once with ALL tasks in a JSON file.
 [
   {
     "id": "{{.ResolvedTaskIDPrefix}}-1",
-    "desc": "Phase 1: <boundary description>",
+    "desc": "<domain A>: <boundary description>",
     "spec": "{{.GoalSpecRef}}",
-    "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for review",
-    "scope": "Planning only: <phase 1 boundary>. No implementation.",
+    "done": "Implementation plan for <domain A> is complete, reviewable, and submitted for review",
+    "scope": "Planning only: <domain A boundary>. No implementation.",
     "priority": 1,
     "depends": [],
     "type": "{{.ResolvedTaskType}}",
@@ -42,12 +42,12 @@ Run liza add-tasks once with ALL tasks in a JSON file.
   },
   {
     "id": "{{.ResolvedTaskIDPrefix}}-2",
-    "desc": "Phase 2: <boundary description>",
+    "desc": "<domain B>: <boundary description>",
     "spec": "{{.GoalSpecRef}}",
     "done": "...",
-    "scope": "Planning only: <phase 2 boundary>. No implementation.",
+    "scope": "Planning only: <domain B boundary>. No implementation.",
     "priority": 2,
-    "depends": ["{{.ResolvedTaskIDPrefix}}-1"],
+    "depends": [],
     "type": "{{.ResolvedTaskType}}",
     "role_pair": "{{.ResolvedRolePair}}"
   }
@@ -58,7 +58,7 @@ For simple goals, use a single task (omit the second entry, empty depends).
 SUCCESS CRITERIA:
 - All tasks use role_pair {{.ResolvedRolePair}}.
 - Tasks are claimable by the {{.ResolvedDisplayName}}.
-- Complex goals: sequential depends_on chain, each task scoped to a natural boundary.
+- Complex goals: each task scoped to a domain boundary. depends_on only where one domain requires another's output.
 {{- else if .EntryPoints }}
 
 No entry-point was specified. Classify the input document and choose the appropriate entry-point.
@@ -79,10 +79,10 @@ After classifying, write a JSON file with the chosen role_pair and run liza add-
 [
   {
     "id": "<chosen-prefix>-1",
-    "desc": "Phase 1: <boundary description>",
+    "desc": "<domain A>: <boundary description>",
     "spec": "{{.GoalSpecRef}}",
-    "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for review",
-    "scope": "Planning only: <phase 1 boundary>. No implementation.",
+    "done": "Implementation plan for <domain A> is complete, reviewable, and submitted for review",
+    "scope": "Planning only: <domain A boundary>. No implementation.",
     "priority": 1,
     "depends": [],
     "type": "<chosen-type>",
@@ -90,12 +90,12 @@ After classifying, write a JSON file with the chosen role_pair and run liza add-
   },
   {
     "id": "<chosen-prefix>-2",
-    "desc": "Phase 2: <boundary description>",
+    "desc": "<domain B>: <boundary description>",
     "spec": "{{.GoalSpecRef}}",
     "done": "...",
-    "scope": "Planning only: <phase 2 boundary>. No implementation.",
+    "scope": "Planning only: <domain B boundary>. No implementation.",
     "priority": 2,
-    "depends": ["<chosen-prefix>-1"],
+    "depends": [],
     "type": "<chosen-type>",
     "role_pair": "<chosen-role-pair>"
   }
@@ -106,7 +106,7 @@ For simple goals, use a single task (omit the second entry, empty depends).
 SUCCESS CRITERIA:
 - All tasks use the chosen role_pair matching the entry-point.
 - Classification reasoning is stated before creating the task(s).
-- Complex goals: sequential depends_on chain, each task scoped to a natural boundary.
+- Complex goals: each task scoped to a domain boundary. depends_on only where one domain requires another's output.
 {{- else }}
 
 Write a JSON file with the tasks and run liza add-tasks.
@@ -114,10 +114,10 @@ Write a JSON file with the tasks and run liza add-tasks.
 [
   {
     "id": "code-planning-1",
-    "desc": "Phase 1: <boundary description>",
+    "desc": "<domain A>: <boundary description>",
     "spec": "{{.GoalSpecRef}}",
-    "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for code-plan-review",
-    "scope": "Planning only: <phase 1 boundary>. No implementation.",
+    "done": "Implementation plan for <domain A> is complete, reviewable, and submitted for code-plan-review",
+    "scope": "Planning only: <domain A boundary>. No implementation.",
     "priority": 1,
     "depends": [],
     "type": "coding",
@@ -125,12 +125,12 @@ Write a JSON file with the tasks and run liza add-tasks.
   },
   {
     "id": "code-planning-2",
-    "desc": "Phase 2: <boundary description>",
+    "desc": "<domain B>: <boundary description>",
     "spec": "{{.GoalSpecRef}}",
     "done": "...",
-    "scope": "Planning only: <phase 2 boundary>. No implementation.",
+    "scope": "Planning only: <domain B boundary>. No implementation.",
     "priority": 2,
-    "depends": ["code-planning-1"],
+    "depends": [],
     "type": "coding",
     "role_pair": "code-planning-pair"
   }
@@ -141,12 +141,12 @@ For simple goals, use a single task (omit the second entry, empty depends).
 SUCCESS CRITERIA:
 - All tasks use role_pair code-planning-pair.
 - Tasks enter DRAFT_CODING_PLAN and are claimable by code-planner.
-- Complex goals: sequential depends_on chain, each task scoped to a natural boundary.
+- Complex goals: each task scoped to a domain boundary. depends_on only where one domain requires another's output.
 {{- end }}
 
 EXPECTED BEHAVIOR EXAMPLES:
 ✅ Simple goal: one planning task, no depends_on, confirm success, exit.
-✅ Complex goal: N planning tasks with sequential depends_on chain, confirm success, exit.
+✅ Complex goal: N planning tasks scoped to domain boundaries, depends_on only where needed, confirm success, exit.
 
 ❌ INCORRECT (DO NOT DO THIS):
 1. Plan but do not execute liza add-tasks

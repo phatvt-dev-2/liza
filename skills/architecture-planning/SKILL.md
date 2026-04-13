@@ -90,7 +90,9 @@ If a decision reads like code, it's too low. If it reads like a requirement, it'
 
 ## 4. Decompose
 
-Break the architecture into code-planning scopes. Each scope becomes one code-planner task.
+Map the architecture to code-planning scopes. Each scope becomes one code-planner task.
+Scopes correspond to domains or sub-domains — not to implementation steps. Sequencing
+work within a scope is code-planner territory.
 
 1. **Identify scopes** — natural boundaries from the design
 2. **Scope independence** — each code-planner should work without waiting for another
@@ -100,9 +102,11 @@ Break the architecture into code-planning scopes. Each scope becomes one code-pl
 
 **Decomposition heuristics:**
 - A scope requiring >5-8 files to understand is probably too broad
-- A scope producing <2-3 meaningful changes is probably too narrow
+- A scope producing <2-3 meaningful changes is too narrow — merge it with a sibling
 - If you can't write a falsifiable `done_when`, the scope isn't well-bounded
 - Prefer scopes aligned with existing package/module boundaries
+- If two scopes share one domain and differ only in implementation order, they're one scope
+- A domain must have independent user-visible purpose from the spec's perspective. Build config, packaging, module stubs, and boilerplate that exist solely to support a feature are part of that feature's scope — not a separate domain. "Scaffolding then implementation" is an implementation-step split disguised as a domain split.
 
 ## 5. Self-Review
 
@@ -112,6 +116,7 @@ Before submitting:
 - [ ] Data flow traces cover primary paths — no orphaned components
 - [ ] Structural decisions have explicit rationale
 - [ ] Decomposition covers the full goal spec scope
+- [ ] Scopes map to domains, not implementation steps within a domain
 - [ ] Each scope has a falsifiable `done_when`
 - [ ] `depends_on` captures true ordering constraints only
 - [ ] Shared-file conflicts identified and resolved
@@ -138,7 +143,8 @@ Fix issues before submitting.
 | **Architecture Astronautics** | Over-abstraction for hypothetical flexibility. If an interface has one implementation and no planned second, it's a cost not an investment. |
 | **Scope Inflation** | Components or interfaces not required by the spec. The plan should be minimal — just enough structure. |
 | **Interface Speculation** | Defining detailed contracts before understanding data flow. Trace data first; interfaces emerge from what needs to cross boundaries. |
-| **Monolithic Scope** | One giant scope covering multiple component boundaries. Decompose further. |
+| **Monolithic Scope** | One giant scope spanning unrelated domain boundaries. Decompose when a scope covers multiple domains. |
+| **Task-Level Decomposition** | Splitting within a domain by implementation steps (e.g., "scaffolding" then "logic", or "core" then "wiring"). Build config and stubs that serve one feature are not a separate domain. Implementation sequencing is code-planner territory; the architect decomposes by domain. |
 | **False Independence** | Scopes sharing state or files without `depends_on`. Shared-file audit catches file overlap; also audit for shared-state overlap. |
 | **Invisible Decisions** | Structural choices without rationale. Every boundary should answer "why here?" |
 | **Cathedral Planning** | Pursuing perfect upfront design. Define boundaries and interfaces; implementation detail crystallizes during code-planning. |
