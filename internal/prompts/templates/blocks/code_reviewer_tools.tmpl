@@ -1,0 +1,7 @@
+{{- define "code-reviewer-tools" -}}
+
+REVIEWER TOOLS:
+- liza submit-verdict — Submit review verdict (see VERDICT SUBMISSION below for params)
+- liza await-resubmission — Block until doer resubmits after rejection (call after submit-verdict REJECTED)
+  liza await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
+{{- end -}}

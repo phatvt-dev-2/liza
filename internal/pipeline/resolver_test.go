@@ -282,7 +282,7 @@ func TestAllowedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllowedOperations(coder): %v", err)
 	}
-	want := []string{"write-checkpoint", "submit-for-review", "mark-blocked", "handoff", "set-task-output", "await-verdict"}
+	want := []string{"write-checkpoint", "submit-for-review", "mark-blocked", "handoff", "await-verdict"}
 	if len(got) != len(want) {
 		t.Fatalf("AllowedOperations(coder) = %v, want %v", got, want)
 	}
@@ -389,7 +389,7 @@ func TestResolver_ContextSections(t *testing.T) {
 	}
 	want := []string{
 		"assigned-task", "worktree-rules", "collective-plan-scoping", "handoff-resume",
-		"integration-fix", "prior-rejection", "prior-attempt", "doer-state-transitions", "doer-tools",
+		"integration-fix", "prior-rejection", "prior-attempt", "doer-state-transitions", "coder-tools",
 		"anomaly-logging", "blocking-protocol", "commit-workflow", "implementation-phase",
 		"submission-phase", "mandatory-docs", "skills-affinity",
 	}

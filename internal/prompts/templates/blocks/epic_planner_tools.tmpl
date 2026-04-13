@@ -1,0 +1,21 @@
+{{- define "epic-planner-tools" -}}
+
+EPIC PLANNER TOOLS:
+- liza submit-for-review — Submit epic plan for review
+  liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
+  Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+- liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
+  liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
+- liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
+- liza set-task-output — Persist one entry per capability for downstream US Writer tasks
+  liza set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
+  JSON file contains: [
+    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "plan_ref": "...", "depends_on": ["0"]}
+  ]
+  depends_on: optional array of sibling index strings for ordering capabilities.
+- liza handoff — Context near exhaustion (~90%)
+  liza handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
+- liza mark-blocked — Cannot proceed
+  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
+{{- end -}}

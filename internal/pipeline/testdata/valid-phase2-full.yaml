@@ -13,7 +13,6 @@ pipeline:
         - submit-for-review
         - mark-blocked
         - handoff
-        - set-task-output
         - await-verdict
       context-sections:
         - assigned-task
@@ -24,7 +23,7 @@ pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - coder-tools
         - anomaly-logging
         - blocking-protocol
         - commit-workflow
@@ -55,7 +54,7 @@ pipeline:
         - scope-extensions
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - code-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format
@@ -102,7 +101,7 @@ pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - epic-planner-tools
         - capability-scoping
         - implementation-phase
         - mandatory-docs
@@ -120,7 +119,7 @@ pipeline:
         - collective-plan-scoping
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - epic-plan-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format
@@ -141,7 +140,7 @@ pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - us-writer-tools
         - capability-scoping
         - implementation-phase
         - mandatory-docs
@@ -158,7 +157,7 @@ pipeline:
         - collective-plan-scoping
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - us-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format
@@ -178,7 +177,7 @@ pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - code-planner-tools
         - task-decomposition
         - implementation-phase
         - mandatory-docs
@@ -195,7 +194,7 @@ pipeline:
         - collective-plan-scoping
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - code-plan-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format
@@ -216,7 +215,7 @@ pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - architect-tools
         - implementation-phase
         - mandatory-docs
         - skills-affinity
@@ -231,7 +230,7 @@ pipeline:
         - worktree-rules
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - architecture-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format

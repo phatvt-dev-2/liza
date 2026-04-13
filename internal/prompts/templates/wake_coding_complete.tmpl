@@ -3,7 +3,9 @@ All coding tasks for this goal have been merged. Integration analysis is needed.
 
 Spawn a single integration-analyst task scoped to the full branch diff since goal.base_commit.
 
-1. Read the goal spec: liza get goal --json
+1. Read the goal context:
+   liza get goal.spec_ref --json
+   liza get goal.base_commit --json
 2. Create integration task — write a JSON file and run:
    liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
    ⚠️  The file must contain a bare JSON array — NOT a wrapper object.

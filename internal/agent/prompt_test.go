@@ -1960,7 +1960,7 @@ var architectE2EPipelineYAML = `pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - architect-tools
         - implementation-phase
         - mandatory-docs
         - skills-affinity
@@ -1974,7 +1974,7 @@ var architectE2EPipelineYAML = `pipeline:
         - worktree-rules
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - architecture-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format

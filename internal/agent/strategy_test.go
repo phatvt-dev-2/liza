@@ -45,7 +45,7 @@ pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - epic-planner-tools
         - capability-scoping
         - implementation-phase
         - mandatory-docs
@@ -58,7 +58,7 @@ pipeline:
         - worktree-rules
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - epic-plan-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format
@@ -75,7 +75,7 @@ pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - us-writer-tools
         - capability-scoping
         - implementation-phase
         - mandatory-docs
@@ -89,7 +89,7 @@ pipeline:
         - collective-plan-scoping
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - us-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format
@@ -106,7 +106,7 @@ pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - code-planner-tools
         - task-decomposition
         - implementation-phase
         - mandatory-docs
@@ -120,7 +120,7 @@ pipeline:
         - collective-plan-scoping
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - code-plan-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format
@@ -139,7 +139,7 @@ pipeline:
         - prior-rejection
         - prior-attempt
         - doer-state-transitions
-        - doer-tools
+        - coder-tools
         - anomaly-logging
         - blocking-protocol
         - commit-workflow
@@ -157,7 +157,7 @@ pipeline:
         - scope-extensions
         - prior-rejection
         - reviewer-state-transitions
-        - reviewer-tools
+        - code-reviewer-tools
         - anomaly-logging
         - review-instructions
         - rejection-format
