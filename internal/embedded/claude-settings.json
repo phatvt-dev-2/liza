@@ -33,7 +33,7 @@
     ]
   },
   "enableAllProjectMcpServers": true,
-  "additionalDirectories": ["~/.liza"],
+  "additionalDirectories": ["~/.liza", "/tmp"],
   "permissions": {
     "defaultMode": "acceptEdits",
     "allow": [

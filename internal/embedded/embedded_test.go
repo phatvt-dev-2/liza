@@ -724,9 +724,27 @@ func TestMergeSettings(t *testing.T) {
 			},
 		},
 		{
-			name: "additionalDirectories preserved from existing",
+			name: "additionalDirectories unioned - liza dirs preserved when existing is empty",
 			liza: map[string]any{
+				"additionalDirectories": []any{"~/.liza"},
+			},
+			existing: map[string]any{
 				"additionalDirectories": []any{},
+			},
+			checks: func(t *testing.T, result map[string]any) {
+				dirs, ok := result["additionalDirectories"].([]any)
+				if !ok {
+					t.Fatalf("additionalDirectories is not []any")
+				}
+				if len(dirs) != 1 || dirs[0] != "~/.liza" {
+					t.Errorf("Expected [~/.liza], got %v", dirs)
+				}
+			},
+		},
+		{
+			name: "additionalDirectories unioned - both sources merged",
+			liza: map[string]any{
+				"additionalDirectories": []any{"~/.liza"},
 			},
 			existing: map[string]any{
 				"additionalDirectories": []any{"/custom/path"},
@@ -736,8 +754,8 @@ func TestMergeSettings(t *testing.T) {
 				if !ok {
 					t.Fatalf("additionalDirectories is not []any")
 				}
-				if len(dirs) != 1 || dirs[0] != "/custom/path" {
-					t.Errorf("additionalDirectories not preserved from existing")
+				if len(dirs) != 2 {
+					t.Errorf("Expected 2 dirs, got %d: %v", len(dirs), dirs)
 				}
 			},
 		},
@@ -925,10 +943,23 @@ func TestWriteClaudeSettings_MergeAccepted(t *testing.T) {
 		}
 	}
 
-	// Verify additionalDirectories preserved
+	// Verify additionalDirectories unioned (existing + embedded)
 	dirs, ok := merged["additionalDirectories"].([]any)
-	if !ok || len(dirs) != 1 || dirs[0] != "/custom/path" {
-		t.Errorf("additionalDirectories not preserved from existing")
+	if !ok {
+		t.Fatalf("additionalDirectories missing after merge")
+	}
+	dirSet := make(map[string]bool)
+	for _, d := range dirs {
+		dirSet[d.(string)] = true
+	}
+	if !dirSet["/custom/path"] {
+		t.Errorf("existing /custom/path not preserved after merge")
+	}
+	if !dirSet["~/.liza"] {
+		t.Errorf("embedded ~/.liza not preserved after merge")
+	}
+	if !dirSet["/tmp"] {
+		t.Errorf("embedded /tmp not preserved after merge")
 	}
 
 }

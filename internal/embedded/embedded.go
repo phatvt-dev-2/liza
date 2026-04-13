@@ -426,6 +426,14 @@ func mergeSettings(liza, existing map[string]any) map[string]any {
 			} else {
 				result[k] = v
 			}
+		case "additionalDirectories":
+			lizaDirs, lizaOk := liza[k].([]any)
+			existingDirs, existingOk := v.([]any)
+			if lizaOk && existingOk {
+				result[k] = unionStringArrays(lizaDirs, existingDirs)
+			} else if existingOk {
+				result[k] = v
+			}
 		default:
 			result[k] = v
 		}
