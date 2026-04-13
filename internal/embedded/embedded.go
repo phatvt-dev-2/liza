@@ -46,6 +46,9 @@ var rtkGuardHookContent []byte
 //go:embed "guardrails-template.md"
 var guardrailsTemplateContent []byte
 
+//go:embed "claudeignore"
+var claudeIgnoreContent []byte
+
 //go:embed "support.md"
 var supportDocContent []byte
 
@@ -606,6 +609,29 @@ func WriteGuardrails(projectRoot string) error {
 	}
 	if err := os.WriteFile(guardrailsPath, guardrailsTemplateContent, 0644); err != nil {
 		return fmt.Errorf("failed to write GUARDRAILS.md: %w", err)
+	}
+	return nil
+}
+
+// WriteClaudeIgnore writes the embedded .claudeignore template to the project root.
+// If the file already exists, prompts the user to overwrite.
+// reader may be nil (non-interactive/test callers) — skips silently if file exists.
+func WriteClaudeIgnore(projectRoot string, reader *bufio.Reader) error {
+	ignorePath := filepath.Join(projectRoot, ".claudeignore")
+	if _, err := os.Stat(ignorePath); err == nil {
+		if reader == nil {
+			return nil
+		}
+		ok, err := confirmMerge(".claudeignore already exists. Overwrite with Liza template? (y/n): ", reader)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+	}
+	if err := os.WriteFile(ignorePath, claudeIgnoreContent, 0644); err != nil {
+		return fmt.Errorf("failed to write .claudeignore: %w", err)
 	}
 	return nil
 }

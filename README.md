@@ -294,6 +294,14 @@ Liza optimizes cost-to-quality, not cost-to-lets-cross-fingers. These tools redu
 
 Configure tool preferences in `~/.liza/AGENT_TOOLS.md` (see [installation notes](#installation) above).
 
+**`.claudeignore`** — Claude Code reads all files on disk, including git-tracked ones it doesn't need. Add a `.claudeignore` at your project root (same syntax as `.gitignore`) to keep irrelevant content out of the context budget. Liza ships one by default; review and adapt it to your project. Common candidates:
+
+- **Untracked local files**: `claude.env`, `.mcp.json`, build caches, backup directories
+- **Tracked but useless to Claude**: lock files (`package-lock.json`, `go.sum`), generated changelogs, historical SQL migrations
+- **Large test fixtures**: JSON/CSV data files committed for tests
+- **Generated documentation**: auto-generated `docs/` that duplicates what Claude can infer from source
+- **Git submodules**: tracked but no reason for Claude to explore external dependencies
+
 ---
 
 ## Architecture

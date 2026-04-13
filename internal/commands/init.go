@@ -126,6 +126,13 @@ func InitPairingCommand(params InitPairingParams) error {
 		}
 	}
 
+	// Write .claudeignore template (Claude-specific, non-fatal, prompts if exists)
+	if hasClaude {
+		if err := embedded.WriteClaudeIgnore(projectRoot, stdin); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write .claudeignore: %v\n", err)
+		}
+	}
+
 	if hasMistral {
 		if err := setupMistralContract(coreFile, stdin); err != nil {
 			return fmt.Errorf("mistral setup failed: %w", err)
@@ -585,6 +592,11 @@ func InitCommandWithConfig(params InitParams) error {
 	// Write GUARDRAILS.md template to project root (non-fatal, like claude-settings)
 	if err := embedded.WriteGuardrails(lizaPaths.ProjectRoot()); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write GUARDRAILS.md: %v\n", err)
+	}
+
+	// Write .claudeignore template (non-fatal, prompts if exists)
+	if err := embedded.WriteClaudeIgnore(lizaPaths.ProjectRoot(), stdin); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write .claudeignore: %v\n", err)
 	}
 
 	// Auto-suggest post_worktree_cmd if not explicitly set and stdin is a terminal
