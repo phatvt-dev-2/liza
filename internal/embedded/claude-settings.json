@@ -39,6 +39,7 @@
     "allow": [
       "Read(~/.claude/**)",
       "Read(~/.liza/**)",
+      "Write(/tmp/**)",
 
       "Skill(adr-backfill)",
       "Skill(architecture-planning)",
