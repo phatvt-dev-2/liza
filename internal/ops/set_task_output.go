@@ -25,10 +25,6 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 	if input.AgentID == "" {
 		return &PreconditionError{Reason: "agent_id is required"}
 	}
-	if len(input.Output) == 0 {
-		return &PreconditionError{Reason: "output is required (at least one entry)"}
-	}
-
 	for i, entry := range input.Output {
 		if entry.Desc == "" {
 			return &PreconditionError{Reason: fmt.Sprintf("output[%d].desc is required", i)}

@@ -26,11 +26,6 @@ func TestSetTaskOutput_Validation(t *testing.T) {
 			errContains: "agent_id is required",
 		},
 		{
-			name:        "empty output",
-			input:       SetTaskOutputInput{TaskID: "t1", AgentID: "coder-1"},
-			errContains: "output is required",
-		},
-		{
 			name:        "output entry missing desc",
 			input:       SetTaskOutputInput{TaskID: "t1", AgentID: "coder-1", Output: []models.OutputEntry{{DoneWhen: "dw", Scope: "s"}}},
 			errContains: "output[0].desc is required",
@@ -152,6 +147,41 @@ func TestSetTaskOutput_HappyPath(t *testing.T) {
 	}
 	if task.Output[1].SpecRef != "specs/y.md" {
 		t.Errorf("Output[1].SpecRef = %q, want %q", task.Output[1].SpecRef, "specs/y.md")
+	}
+}
+
+func TestSetTaskOutput_EmptyOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	err := SetTaskOutput(tmpDir, &SetTaskOutputInput{
+		TaskID:  "task-1",
+		AgentID: "coder-1",
+		Output:  []models.OutputEntry{},
+	})
+	if err != nil {
+		t.Fatalf("SetTaskOutput() with empty output: unexpected error: %v", err)
+	}
+
+	bb := db.For(stateFile)
+	stateAfter, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := stateAfter.FindTask("task-1")
+	if task == nil {
+		t.Fatal("task-1 not found after SetTaskOutput")
+	}
+	if len(task.Output) != 0 {
+		t.Fatalf("Expected 0 output entries, got %d", len(task.Output))
 	}
 }
 
