@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-04-06T10:00:00Z"
+last_updated: "2026-04-13T12:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -806,10 +806,26 @@ clusters:
       limitations: "No purpose-built architecture skill yet; ParentTasks adds callsite complexity"
     note: "Extends ADR-0035, ADR-0038, ADR-0036. Introduces many-to-one cardinality, arch_ref field, multi-parent task model."
 
+  # --- Wave 10: 2026-04-06 to 2026-04-13 ---
+
+  - id: 57
+    title: "MCP Server Removal and CLI-Native Access Control"
+    commit_shas: ["6d281803", "1fdd7c08", "f3cde405", "b7f9f34e", "10e6ba89", "176c3ed9", "90c132d5"]
+    date_range: "2026-04-06 to 2026-04-13"
+    confidence: 0.95
+    status: "adr_generated"
+    adr_path: "specs/architecture/ADR/0057-mcp-server-removal-cli-native-access-control.md"
+    user_context:
+      problem: "MCP reliability failure in one project caused unsubmittable work; adding CLI fallbacks for every MCP tool revealed MCP was redundant — painful to maintain both surfaces for little added value"
+      alternatives: "None — CLI-only had been considered for some time"
+      rationale: "MCP brought nothing valuable that couldn't be added to the CLI; ops layer made removal clean"
+      limitations: "Same trust model (self-declared identity); no MCP interface for future tooling"
+    note: "Supersedes ADR-0039 (MCP RBAC) and ADR-0043 (MCP Middleware). Extends ADR-0021 (Ops Service Layer), ADR-0008 (Multi-LLM)."
+
 processing_cursor:
   step: "cluster_analysis"
   substep: "high_confidence_complete"
-  note: "Wave 9 complete (ADR-0055, ADR-0056). Non-ADR commits since Wave 8: bug fixes (ADR-0051/0052/0053/0054 follow-up), Codex compat fixes, release notes (v0.5.4, v0.5.5), RTK anti-abuse rules, liza-logs skill docs."
+  note: "Wave 10 complete (ADR-0057). Non-ADR commits since Wave 9: bug fixes (supervisor TOCTOU race, goal completion loop, quota detection), configurable default_cli, console.sh removal, architecture-planning skill, RTK guard hook, brownfield CLAUDE.local.md, release notes (v0.6.0-v0.6.2)."
 
 configuration:
   adr_output_dir: "specs/architecture/ADR"
