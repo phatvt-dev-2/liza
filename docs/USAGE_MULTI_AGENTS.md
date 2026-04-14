@@ -288,7 +288,12 @@ Transitions create child tasks from the parent's `output[]` entries (per-subtask
 #### What Humans Do at Checkpoints
 
 When a sprint checkpoints (status: CHECKPOINT), all agents pause.
-The human reviews the sprint summary and decides:
+The human reviews what agents produced and decides what to do next.
+
+**Start with a summary.** Run `/checkpoint-summary` in any pairing agent session to get
+a prioritized digest of agent decisions, open points, and risks — what needs your input,
+what needs confirmation, and what's just informational. This is faster than reading every
+artifact yourself and surfaces unflagged decisions agents baked in without marking.
 
 | Action | Command | When                                                                                                 |
 |--------|---------|------------------------------------------------------------------------------------------------------|
