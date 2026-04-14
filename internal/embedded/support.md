@@ -29,51 +29,58 @@ liza delete task <id>              # Remove task from state
 
 ```bash
 liza pause                         # Pause all agents (sets CHECKPOINT)
-liza resume                        # Resume from CHECKPOINT or advance sprint
+liza resume                        # Resume or advance sprint (see Sprint Lifecycle)
 liza stop                          # Abort system
 liza sprint-checkpoint             # Force checkpoint (halt + summary)
 liza replan [task-id]              # Invalidate planner output, create new planning task
+liza proceed <task-id> <transition> # Create child tasks for next role-pair
 ```
 
-## Task State Machine
+## Pipeline Structure
 
-### Coding Pair (coder / code-reviewer)
+Tasks flow through role-pairs organized in sub-pipelines. The project's frozen pipeline is in `.liza/pipeline.yaml` — inspect it for actual role-pairs, transitions, and state names.
+
+Transitions with `trigger: manual` are human gates; `trigger: auto` transitions run without one. Use `liza status` to see currently available manual transitions.
+
+### Transition Cardinalities
+
+Each transition in `.liza/pipeline.yaml` has a `cardinality`:
+
+| Cardinality | Behavior |
+|-------------|----------|
+| `per-subtask` | One child task per `output[]` entry |
+| `one-to-one` | Single child task from parent |
+| `many-to-one` | All sibling tasks in cohort must reach approved, then one child linking all parents |
+
+### `liza proceed`
+
+Creates child tasks based on a completed task's `output[]` and the transition's cardinality. After proceed, run `liza resume` to start the next sprint.
+
+```bash
+liza proceed <task-id> <transition-name>
+```
+
+Transition names appear under `transitions:` within each sub-pipeline and under the top-level `pipeline-transitions:` (for cross-subpipeline transitions) in `.liza/pipeline.yaml`.
+
+## Task State Machines
+
+Every role-pair in `.liza/pipeline.yaml` defines its own state names under `states:`. The generic flow is:
 
 ```
-DRAFT → READY → IMPLEMENTING → READY_FOR_REVIEW → REVIEWING → APPROVED → MERGED
-                     │ ↑                              ↓
-                     │ └────────── REJECTED ──────────┘
-                     │
-                     └──→ BLOCKED → SUPERSEDED | ABANDONED
-
-APPROVED → INTEGRATION_FAILED → IMPLEMENTING (integration-fix)
+initial → executing → submitted → reviewing → approved (sprint-terminal)
+               │ ↑                      ↓
+               │ └───── rejected ──────┘
+               └──→ BLOCKED
 ```
 
-| State | Meaning |
-|-------|---------|
-| DRAFT | Orchestrator defining task — coders must ignore |
-| READY | Available for claim |
-| IMPLEMENTING | Coder working (has lease) |
-| READY_FOR_REVIEW | Submitted, awaiting reviewer |
-| REVIEWING | Reviewer active (has review lease) |
-| REJECTED | Reviewer rejected — feedback in `rejection_reason` |
-| APPROVED | Reviewer approved — eligible for merge |
-| MERGED | Merged to integration branch (terminal) |
-| BLOCKED | Cannot proceed — see `blocked_reason` and `blocked_questions` |
-| SUPERSEDED | Replaced by tasks in `superseded_by`, or completed externally (terminal) |
-| ABANDONED | Killed by orchestrator (terminal) |
-| INTEGRATION_FAILED | Merge conflict or test failure |
+Cross-pair states (not pair-specific):
+- **BLOCKED** — Cannot proceed; see `blocked_reason` and `blocked_questions`
+- **SUPERSEDED** — Replaced by tasks in `superseded_by` (terminal)
+- **ABANDONED** — Killed by orchestrator (terminal)
+- **MERGED** — Merged to integration branch (terminal, coding pair only)
+- **INTEGRATION_FAILED** — Merge conflict or test failure (coding pair only)
 
-### Code-Planning Pair (code-planner / code-plan-reviewer)
-
-```
-DRAFT_CODING_PLAN → CODE_PLANNING → CODING_PLAN_TO_REVIEW → REVIEWING_CODING_PLAN
-                         │ ↑                                        ↓
-                         │ └──────── CODING_PLAN_REJECTED ─────────┘
-                         │
-                         └──→ BLOCKED
-                                              CODING_PLAN_APPROVED (sprint-terminal)
-```
+To find the actual state names for a role-pair, check `role-pairs.<name>.states` in `.liza/pipeline.yaml`. Some pairs define extra states (e.g. `partially-approved`, `reviewing-2` for quorum review, or `clean` for no-issues-found).
 
 ## Sprint Lifecycle
 
@@ -81,12 +88,86 @@ DRAFT_CODING_PLAN → CODE_PLANNING → CODING_PLAN_TO_REVIEW → REVIEWING_CODI
 IN_PROGRESS → CHECKPOINT → COMPLETED → (new sprint) IN_PROGRESS
 ```
 
-**`liza resume` behavior depends on sprint state:**
-- **CHECKPOINT, not all tasks terminal**: resumes as IN_PROGRESS
-- **CHECKPOINT, all tasks terminal**: marks COMPLETED
-- **COMPLETED**: archives sprint, creates new one, executes pipeline transitions
+### `liza resume` behavior depends on sprint state:
 
-**`liza proceed <task-id> <transition>`**: creates child tasks from a completed task's `output[]` for the next role-pair.
+| Sprint State | Condition | Effect |
+|--------------|-----------|--------|
+| CHECKPOINT | Not all tasks terminal | Back to IN_PROGRESS (resume current sprint) |
+| CHECKPOINT | All tasks terminal | Mark COMPLETED |
+| COMPLETED | — | Archive sprint, create new one, execute pipeline transitions |
+
+**Two-step advance:** To move from one pipeline phase to the next, run `liza resume` twice: first marks COMPLETED, second archives and advances.
+
+### Checkpoint Actions
+
+When a sprint checkpoints (status: CHECKPOINT), all agents pause. The human decides:
+
+| Action | Command | When |
+|--------|---------|------|
+| Accept & resume | `liza resume` | Satisfied with output, continue |
+| Amend & replan | Edit plan, commit, `liza replan` | Want to change planner output |
+| Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks for next pair (auto-done by `liza resume` in batch) |
+| Pause for manual work | (no command) | Make manual changes first |
+| Abort | `liza stop` | Stop entirely |
+
+### Replanning
+
+When a planning sprint checkpoints (trigger: `PLANNING_COMPLETE`), the planner's `output[]` represents the proposed task breakdown.
+
+```bash
+# Typical replan workflow
+vim specs/plan.md                      # edit the plan
+git add specs/plan.md && git commit -m "amend plan"
+liza replan                            # auto-detects the planning task
+liza replan <task-id>                  # or specify task ID explicitly
+```
+
+Replan invalidates the old task's output (preserved for audit, marked superseded), creates a new planning task with the same role-pair and spec, and returns the sprint to IN_PROGRESS. Multiple replans increment: `<task-id>-replan-1`, `<task-id>-replan-2`, etc.
+
+### Auto-Resume
+
+By default, checkpoints require manual `liza resume`. Auto-resume skips these gates:
+
+- At init: `liza init --auto-resume "Goal"`
+- At runtime: TUI `y` key toggles on/off
+
+When enabled, agents auto-call `liza resume` on CHECKPOINT or COMPLETED. Use `liza pause` for a hard stop (never auto-resumed).
+
+## Agent Review Cycles
+
+### Doer: Submit → Await → Handle
+
+```
+liza submit-for-review → liza await-verdict → handle result
+```
+
+- **REJECTED**: Fix issues, resubmit (session stays alive — no cold restart)
+- **APPROVED** / **NEW_ATTEMPT** / **TIMEOUT** / **ABORTED**: Exit normally
+
+### Reviewer: Verdict → Await → Re-review
+
+```
+liza submit-verdict REJECTED → liza await-resubmission → review new changes
+```
+
+- **RESUBMITTED**: Review again (session stays alive)
+- **TERMINAL** / **TIMEOUT** / **ABORTED**: Exit normally
+
+## Agent Log Analysis
+
+Agent logs (`.liza/agent-outputs/`) are the primary diagnostic tool.
+
+**LLM-assisted** — use `/liza-logs` in any pairing agent session to cross-correlate logs, diagnose patterns, and propose fixes.
+
+**CLI analyzer** (stdlib Python 3.12+):
+```bash
+python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/*.txt
+```
+
+**Browser analyzer** — drag-and-drop visual charts:
+```bash
+open ~/.liza/skills/liza-logs/tools/liza-session-analyzer.html   # or xdg-open on Linux
+```
 
 ## Reading state.yaml
 
@@ -139,7 +220,7 @@ All timestamps in state.yaml use ISO 8601 UTC: `YYYY-MM-DDTHH:MM:SSZ`
 Generate: `date -u +%Y-%m-%dT%H:%M:%SZ`
 
 ### Stuck task (stale lease)
-**Symptom**: Task in IMPLEMENTING or REVIEWING but agent is gone.
+**Symptom**: Task in executing or reviewing state but agent is gone.
 **Diagnosis**: `liza get tasks` — check `lease_expires` is in the past (see Lease defaults above).
 **Fix**: `liza recover-task <task-id>` or `liza release-claim <task-id>`.
 
@@ -156,7 +237,7 @@ Generate: `date -u +%Y-%m-%dT%H:%M:%SZ`
 ### Integration failure
 **Symptom**: Task in INTEGRATION_FAILED state.
 **Diagnosis**: Merge conflict between task worktree and integration branch.
-**Fix**: A coder can claim it (status allows INTEGRATION_FAILED → IMPLEMENTING with `integration_fix: true`). The worktree is preserved for conflict resolution.
+**Fix**: A coder can claim it (`integration_fix: true`). The worktree is preserved for conflict resolution.
 
 ### Sprint stuck at CHECKPOINT
 **Symptom**: All agents idle, sprint in CHECKPOINT.
@@ -173,14 +254,25 @@ Generate: `date -u +%Y-%m-%dT%H:%M:%SZ`
 **Diagnosis**: `liza get agents` — check lease expiry.
 **Fix**: `liza recover-agent <agent-id>` or `liza delete agent <id>`.
 
+### Circuit breaker
+
+`liza analyze` detects systemic patterns. Supervisor auto-triggers on:
+
+| Condition | Action |
+|-----------|--------|
+| Agent crash loop (3× in 5min) | Supervisor stops the agent |
+| Blackboard validation fails | All agents pause |
+| Integration branch conflict | Task set to INTEGRATION_FAILED |
+| Circuit-breaker pattern in anomalies | CIRCUIT_BREAKER_TRIPPED mode, sprint CHECKPOINT, reports written |
+
 ## Validation Invariants
 
 `liza validate` checks these (among others):
-- IMPLEMENTING tasks must have `assigned_to`, `worktree`, and valid `lease_expires`
-- REVIEWING tasks must have `reviewing_by`, `review_lease_expires`, and `review_commit`
-- READY_FOR_REVIEW tasks must have `review_commit`
-- REJECTED tasks must have `rejection_reason`
-- BLOCKED tasks must have `blocked_reason`
+- Tasks in executing states must have `assigned_to`, `worktree`, and valid `lease_expires`
+- Tasks in reviewing states must have `reviewing_by`, `review_lease_expires`, and `review_commit`
+- Tasks in submitted states must have `review_commit`
+- Tasks in rejected states must have `rejection_reason`
+- BLOCKED tasks must have `blocked_reason` and `blocked_questions`
 - MERGED tasks must not have `worktree`
 - No two agents assigned to the same task
-- DRAFT tasks cannot have `assigned_to`
+- Tasks in initial/draft states cannot have `assigned_to`
