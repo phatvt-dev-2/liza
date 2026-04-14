@@ -116,8 +116,14 @@ When a planning sprint checkpoints (trigger: `PLANNING_COMPLETE`), the planner's
 
 ```bash
 # Typical replan workflow
-vim specs/plan.md                      # edit the plan
-git add specs/plan.md && git commit -m "amend plan"
+# 1. Find planner output files — check the task's output[] in state.yaml
+liza get tasks                         # identify the planning task
+# 2. Edit the planner's output docs (e.g. specs/plan.md, specs/stories/*.md)
+vim specs/plan.md                      # amend planner deliverables
+# 3. If scope changed, also align upstream docs that fed the planner
+#    (e.g. specs/goals/*.md, specs/epic.md) so inputs match outputs
+git add -A && git commit -m "amend plan"
+# 4. Replan
 liza replan                            # auto-detects the planning task
 liza replan <task-id>                  # or specify task ID explicitly
 ```
@@ -253,6 +259,11 @@ Generate: `date -u +%Y-%m-%dT%H:%M:%SZ`
 **Symptom**: Agent registered in state.yaml but process is dead.
 **Diagnosis**: `liza get agents` — check lease expiry.
 **Fix**: `liza recover-agent <agent-id>` or `liza delete agent <id>`.
+
+### Provider quota exhausted
+**Symptom**: All agents using a provider (e.g. Claude) have stopped. System mode is still RUNNING, sprint still IN_PROGRESS. Signal file `.liza/provider-quota-exhausted-<provider>` exists.
+**Diagnosis**: `ls .liza/provider-quota-exhausted-*` or check `.liza/alerts.log` for `PROVIDER QUOTA EXHAUSTED`.
+**Fix**: `liza pause` then `liza resume` — pause transitions RUNNING → PAUSED, resume clears quota signals and restarts the sprint. Then restart agents. (`liza resume` alone fails because the system is still RUNNING, not PAUSED.)
 
 ### Circuit breaker
 
