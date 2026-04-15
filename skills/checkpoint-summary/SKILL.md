@@ -1,5 +1,5 @@
 ---
-name: summarize-artifacts
+name: checkpoint-summary
 description: Summarize artifacts produced by liza agents for human checkpoint review
 mode: pairing
 ---
@@ -35,14 +35,17 @@ The single entry point is **`.liza/state.yaml`** — the source of truth for all
 From `state.yaml`, the skill reads:
 - **`goal.spec_ref`**: the upstream source document the agents worked from
 - **`tasks[]`**: each task with its scope, status, output capabilities, approvals, and history
-- **`tasks[].output[].plan_ref`**: paths to the produced artifact files
-- **`tasks[].approved_by`**: which agent approved (documented in blackboard schema)
+- **Artifact refs** (read all that exist, in priority order):
+  - `tasks[].plan_ref` / `tasks[].arch_ref` — task-level planning and architecture artifacts
+  - `tasks[].output[].plan_ref` / `tasks[].output[].arch_ref` — output-entry artifacts
+  - `tasks[].spec_ref` — task-level spec (may differ from `goal.spec_ref`)
+- **`tasks[].approvals[]`**: review verdicts with provider/diversity context (canonical);
+  fall back to `tasks[].approved_by` if `approvals[]` is absent
 - **`tasks[].history[]`**: full event timeline (claimed, checkpoint, submitted, approved, merged)
 - **`sprint.status`** and **`sprint.checkpoint_trigger`**: why the checkpoint was triggered
 
-No other discovery is needed. If `state.yaml` references artifact files (via `plan_ref`),
-read those. If it references an upstream source (via `spec_ref`), read that. Everything
-else is in the state file itself.
+No other discovery is needed. Read every artifact file referenced by the ref fields above.
+Read the upstream source (`goal.spec_ref`). Everything else is in the state file itself.
 
 ## Protocol
 
@@ -54,11 +57,11 @@ else is in the state file itself.
 2. **Read the upstream source** (`goal.spec_ref`) to understand what the agents were working
    from — entities, decisions, constraints, interactions, scope boundaries.
 
-3. **Read all produced artifacts** referenced by `tasks[].output[].plan_ref`. If `plan_ref`
-   is absent on an output entry, the entry describes a task definition, not a produced
-   artifact — skip it. For each artifact read:
+3. **Read all produced artifacts** referenced by task-level refs (`plan_ref`, `arch_ref`)
+   and output-entry refs (`output[].plan_ref`, `output[].arch_ref`). Skip entries where
+   no ref field points to a file. For each artifact read:
    - What was produced (title, scope, capabilities/stories count)
-   - What verdict the reviewer gave (`tasks[].approved_by`)
+   - What verdict the reviewers gave (`tasks[].approvals[]`; fall back to `approved_by`)
    - Key events from `tasks[].history[]` (rejections, re-reviews, anomalies)
 
 ### Phase 2: Extract
@@ -182,7 +185,7 @@ Brief items worth knowing but not requiring action.
 
 ## Constraints
 
-- **DO NOT** modify any artifact — this skill is read-only
+- **DO NOT** modify source artifacts — only the generated checkpoint summary report may be written
 - **DO NOT** re-review or second-guess the reviewer's verdict — summarize it
 - **DO NOT** bury decisions in long prose — one item, one heading, one clear question
 - **DO** surface unflagged decisions — the highest-value findings are choices agents made
@@ -225,13 +228,15 @@ time, collecting the human's decision before moving to the next. For "Confirm" i
 present as a batch — the human can scan and override selectively. End with a count of
 decisions made and items still open.
 
-**Liza mode:** Write the full report to the output path specified by the Orchestrator.
-If any "Decide" items exist, set task status to BLOCKED — the human must resolve them
-before the next phase starts. If only "Confirm" and "Note" items exist, set DONE with
-the report path in the status message.
+**Liza mode:** Checkpoint Summary operates autonomously within task scope. Write the
+report to the worktree (e.g. `docs/checkpoint-summary.md`) and submit for review.
+If any "Decide" items exist, mark BLOCKED with `blocked_reason` summarizing the
+decisions needed and `blocked_questions` listing each one — the human must resolve
+them before the next phase starts. If only "Confirm" and "Note" items exist, submit
+normally.
 
 | Pairing Prompt | Liza Behavior |
 |----------------|---------------|
-| "N decisions need your input — walk through them?" | Set BLOCKED, attach report |
-| "Agents made N decisions — all look reasonable. Confirm?" | Set DONE, attach report |
-| "No open points — ready for next phase" | Set DONE, attach report |
+| "N decisions need your input — walk through them?" | Mark BLOCKED; report in worktree |
+| "Agents made N decisions — all look reasonable. Confirm?" | Submit for review; report in worktree |
+| "No open points — ready for next phase" | Submit for review; report in worktree |
