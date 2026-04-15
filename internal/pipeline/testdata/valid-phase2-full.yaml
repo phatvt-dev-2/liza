@@ -100,6 +100,7 @@ pipeline:
         - collective-plan-scoping
         - prior-rejection
         - prior-attempt
+        - integration-fix
         - doer-state-transitions
         - epic-planner-tools
         - capability-scoping
@@ -139,6 +140,7 @@ pipeline:
         - collective-plan-scoping
         - prior-rejection
         - prior-attempt
+        - integration-fix
         - doer-state-transitions
         - us-writer-tools
         - capability-scoping
@@ -176,6 +178,7 @@ pipeline:
         - collective-plan-scoping
         - prior-rejection
         - prior-attempt
+        - integration-fix
         - doer-state-transitions
         - code-planner-tools
         - task-decomposition
@@ -214,6 +217,7 @@ pipeline:
         - worktree-rules
         - prior-rejection
         - prior-attempt
+        - integration-fix
         - doer-state-transitions
         - architect-tools
         - implementation-phase

@@ -14,23 +14,27 @@ CODE PLANNER STATE TRANSITIONS:
 - CODE_PLANNING → CODING_PLAN_TO_REVIEW (submit for review)
 - CODE_PLANNING → BLOCKED (spec ambiguity or dependency blocker)
 - CODING_PLAN_REJECTED → DRAFT_CODING_PLAN (supervisor re-claims for revision)
+- INTEGRATION_FAILED → CODE_PLANNING (fix merge conflicts, re-submit)
 {{- else if eq .Role "epic-planner"}}
 
 EPIC PLANNER STATE TRANSITIONS:
 - EPIC_PLANNING → EPIC_PLAN_TO_REVIEW (submit for review)
 - EPIC_PLANNING → BLOCKED (spec ambiguity or dependency blocker)
 - EPIC_PLAN_REJECTED → DRAFT_EPIC_PLAN (supervisor re-claims for revision)
+- INTEGRATION_FAILED → EPIC_PLANNING (fix merge conflicts, re-submit)
 {{- else if eq .Role "us-writer"}}
 
 US WRITER STATE TRANSITIONS:
 - WRITING_US → US_READY_FOR_REVIEW (submit for review)
 - WRITING_US → BLOCKED (spec ambiguity or dependency blocker)
 - US_REJECTED → DRAFT_US (supervisor re-claims for revision)
+- INTEGRATION_FAILED → WRITING_US (fix merge conflicts, re-submit)
 {{- else if eq .Role "architect"}}
 
 ARCHITECT STATE TRANSITIONS:
 - ARCHITECTING → ARCHITECTURE_TO_REVIEW (submit for review)
 - ARCHITECTING → BLOCKED (spec ambiguity or dependency blocker)
 - ARCHITECTURE_REJECTED → DRAFT_ARCHITECTURE (supervisor re-claims for revision)
+- INTEGRATION_FAILED → ARCHITECTING (fix merge conflicts, re-submit)
 {{- end}}
 {{- end -}}
