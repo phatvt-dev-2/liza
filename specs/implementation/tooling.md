@@ -35,7 +35,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza agent <role> --agent-id x [--cli C]` | Agent supervisor (`--cli`: claude, codex, gemini, mistral, kimi) |
 | `liza claim-task <task> <agent>` | Claim task with two-phase commit (called by supervisor) |
 | `liza submit-for-review <task> <sha>` | Validate `<sha>` matches pre-rebase worktree HEAD, then set READY_FOR_REVIEW + post-rebase `review_commit` + history |
-| `liza submit-verdict <task> <V> [reason]` | Atomically set APPROVED/REJECTED + review fields + history |
+| `liza submit-verdict <task> <V> [--reason "<reason>"]` | Atomically set APPROVED/REJECTED + review fields + history |
 | `liza wt-create <task> [--fresh]` | Create worktree for task |
 | `liza wt-merge <task>` | Merge approved worktree (supervisor-executed after APPROVED) |
 | `liza wt-delete <task>` | Clean up abandoned/merged worktree |
@@ -382,7 +382,7 @@ liza submit-for-review task-3 "$COMMIT"
 **liza submit-verdict** — Submit review verdict (Code Reviewer)
 ```bash
 liza submit-verdict task-3 APPROVED
-liza submit-verdict task-3 REJECTED "Missing error handling for 429 responses"
+liza submit-verdict task-3 REJECTED --reason "Missing error handling for 429 responses"
 ```
 
 **liza wt-create** — Create worktree (supervisor-only)

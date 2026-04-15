@@ -205,7 +205,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza add-task --id X ...` | Add task to backlog |
 | `liza claim-task <task> <agent>` | Atomically claim task for agent |
 | `liza submit-for-review <task> <sha>` | Submit work for review |
-| `liza submit-verdict <task> <V> [reason]` | Record review verdict |
+| `liza submit-verdict <task> <V> [--reason "<reason>"]` | Record review verdict |
 | `liza release-claim <task> [--role R]` | Release claim on task or review |
 | `liza clear-stale-review-claims` | Clean up abandoned reviews |
 | `liza update-sprint-metrics` | Sprint statistics |

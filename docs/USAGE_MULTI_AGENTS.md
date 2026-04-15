@@ -364,7 +364,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza add-task` | Add a new task to the state |
 | `liza claim-task <task-id> <agent-id>` | Atomically claim a task for a doer agent (creates worktree, updates state) |
 | `liza submit-for-review <task-id> <commit-sha>` | Submit a task for review (doer agents) |
-| `liza submit-verdict <task-id> <APPROVED\|REJECTED> [reason]` | Submit a review verdict (reviewer agents; reason required for REJECTED) |
+| `liza submit-verdict <task-id> <APPROVED\|REJECTED> [--reason "<reason>"]` | Submit a review verdict (reviewer agents; `--reason` required for REJECTED) |
 | `liza mark-blocked <task-id>` | Mark a task as BLOCKED with reason and questions |
 | `liza assess-blocked <task-id>` | Record orchestrator assessment of a BLOCKED task (prevents re-wake loops) |
 | `liza assess-hypothesis-exhausted <task-id>` | Record orchestrator assessment of a hypothesis-exhausted task (2+ coders failed) |

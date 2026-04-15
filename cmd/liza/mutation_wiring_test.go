@@ -105,6 +105,28 @@ func TestMutationCommandWiring(t *testing.T) {
 		}
 	})
 
+	t.Run("submit-verdict --reason flag overrides positional arg", func(t *testing.T) {
+		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
+			now := time.Now().UTC()
+			state.Tasks = []models.Task{
+				testhelpers.BuildTaskByStatus("task-reason-flag", models.TaskStatusReviewing, now),
+			}
+		})
+
+		// Pass both positional reason and --reason flag; flag should win
+		t.Setenv("LIZA_AGENT_ID", "code-reviewer-8")
+		err := executeRootCommand(t, projectRoot, "submit-verdict", "task-reason-flag", "REJECTED", "positional-reason", "--reason", "---\n# Blockers\nArchitecture plan missing")
+		if err != nil {
+			t.Fatalf("submit-verdict execute failed: %v", err)
+		}
+
+		state := readState(t, statePath)
+		task := mustFindTask(t, state, "task-reason-flag")
+		if task.RejectionReason == nil || *task.RejectionReason != "---\n# Blockers\nArchitecture plan missing" {
+			t.Fatalf("rejection_reason = %v, want markdown content from --reason flag", task.RejectionReason)
+		}
+	})
+
 	t.Run("wt-merge routes parsed args to merge handler", func(t *testing.T) {
 		projectRoot, _ := setupMutationTestProject(t, func(state *models.State) {
 			now := time.Now().UTC()

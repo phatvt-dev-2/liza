@@ -153,7 +153,7 @@ Used by reviewer agents to approve or reject work.
 Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
   - Task must be in a reviewing status (resolved from pipeline config)
-  - For REJECTED verdicts, a rejection reason is required
+  - For REJECTED verdicts, a rejection reason is required (via --reason flag or positional arg)
 
 For APPROVED verdict:
   - status = role-pair's approved status (e.g. CODE_APPROVED, CODING_PLAN_APPROVED)
@@ -186,6 +186,11 @@ For REJECTED verdict:
 		reason := ""
 		if len(args) == 3 {
 			reason = args[2]
+		}
+		// --reason flag overrides positional arg (avoids shell quoting issues
+		// with markdown content containing --- or # in positional args).
+		if flagReason, _ := cmd.Flags().GetString("reason"); flagReason != "" {
+			reason = flagReason
 		}
 
 		agentID, err := requireAgentID(cmd)
@@ -465,6 +470,7 @@ func init() {
 
 	// Submit-verdict flags
 	submitVerdictCmd.Flags().String("impact", "", "impact classification (standard, significant, architecture)")
+	submitVerdictCmd.Flags().String("reason", "", "rejection reason (alternative to positional argument, avoids shell quoting issues)")
 
 	// Release-claim command flags
 	releaseClaimCmd.Flags().String("role", roles.ClaimReviewer, "claim type to release (doer, reviewer, both)")
