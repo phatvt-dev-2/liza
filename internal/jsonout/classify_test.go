@@ -125,6 +125,46 @@ func TestClassifyError_ValidationPatterns(t *testing.T) {
 	}
 }
 
+func TestClassifyError_OperationalErrorPreservesTransientCodes(t *testing.T) {
+	tests := []struct {
+		name     string
+		inner    error
+		wantCode string
+		wantMsg  string
+	}{
+		{
+			name:     "lock timeout surfaces through OperationalError",
+			inner:    fmt.Errorf("failed to acquire lock: timed out"),
+			wantCode: "lock_timeout",
+			wantMsg:  "lock acquisition timed out",
+		},
+		{
+			name:     "race condition surfaces through OperationalError",
+			inner:    fmt.Errorf("state changed concurrently"),
+			wantCode: "race_condition",
+			wantMsg:  "state changed concurrently, retry",
+		},
+		{
+			name:     "generic inner error falls back to OperationalError message",
+			inner:    fmt.Errorf("disk full"),
+			wantCode: "internal",
+			wantMsg:  "failed to read state",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := &ops.OperationalError{Message: "failed to read state", Err: tt.inner}
+			code, msg := ClassifyError(err)
+			if code != tt.wantCode {
+				t.Errorf("code = %q, want %q", code, tt.wantCode)
+			}
+			if msg != tt.wantMsg {
+				t.Errorf("message = %q, want %q", msg, tt.wantMsg)
+			}
+		})
+	}
+}
+
 func TestClassifyError_DefaultInternal(t *testing.T) {
 	err := fmt.Errorf("something completely unexpected happened")
 	code, msg := ClassifyError(err)

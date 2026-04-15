@@ -97,7 +97,7 @@ func AwaitResubmission(ctx context.Context, projectRoot, taskID, agentID string,
 
 	// Acquire review ownership atomically.
 	if err := acquireReviewOwnership(bb, agentID, taskID, timeout); err != nil {
-		return nil, err
+		return nil, &OperationalError{Message: "failed to acquire review ownership", Err: err}
 	}
 
 	// Early resubmission: if task is already in submitted status, skip the

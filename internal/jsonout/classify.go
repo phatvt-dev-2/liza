@@ -68,10 +68,24 @@ func ClassifyError(err error) (code string, message string) {
 
 	var opErr *ops.OperationalError
 	if errors.As(err, &opErr) {
+		// Check if the underlying cause has a more specific classification
+		// (e.g. lock_timeout, race_condition) before defaulting to the
+		// OperationalError's safe message. This preserves transient error
+		// semantics that agents use to decide whether to retry.
+		if inner := opErr.Unwrap(); inner != nil {
+			if innerCode, innerMsg := classifyUntyped(inner); innerCode != "internal" {
+				return innerCode, innerMsg
+			}
+		}
 		return "internal", opErr.Message
 	}
 
-	// String-based checks for untyped errors.
+	return classifyUntyped(err)
+}
+
+// classifyUntyped maps untyped errors to codes via string matching.
+// Returns ("internal", "internal error") when no pattern matches.
+func classifyUntyped(err error) (code string, message string) {
 	msg := err.Error()
 
 	// Lock timeout: compound match (requires "lock" AND a timeout indicator).

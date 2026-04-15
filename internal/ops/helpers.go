@@ -1,8 +1,6 @@
 package ops
 
 import (
-	"fmt"
-
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
@@ -13,7 +11,7 @@ import (
 func readTaskState(bb *db.Blackboard, taskID string) (*models.State, *models.Task, error) {
 	state, err := bb.Read()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read state: %w", err)
+		return nil, nil, &OperationalError{Message: "failed to read state", Err: err}
 	}
 	task := state.FindTask(taskID)
 	if task == nil {
