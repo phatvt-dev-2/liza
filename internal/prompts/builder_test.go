@@ -1172,6 +1172,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"WORKTREE RULES:",
 			"TASK DECOMPOSITION PRINCIPLE:",
 			"IMPLEMENTATION PHASE:",
+			"You are planning, not implementing",
+			"plan from the provided spec artifacts",
 			"TIMESTAMP-task-planner.md", // canonical plan file path with task ID
 			"COLLECTIVE PLAN SCOPING",
 			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",

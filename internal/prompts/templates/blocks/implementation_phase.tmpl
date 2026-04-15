@@ -28,6 +28,9 @@ IMPLEMENTATION PHASE:
 ARCHITECTURE REFERENCE: {{.ArchRef}}
 Read the architecture document for structural context before planning.
 {{- end}}
+NOTE: You are planning, not implementing. The codebase may not contain the directories
+listed in SCOPE yet. Do NOT explore implementation directories that don't exist —
+plan from the provided spec artifacts (architecture document, goal spec, or assigned scope).
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Plan file location:
    Run: mkdir -p {{.Worktree}}/specs/plans
