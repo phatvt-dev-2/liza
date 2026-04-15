@@ -560,3 +560,94 @@ func TestReplan_RetargetDedupes(t *testing.T) {
 		t.Errorf("plan-2 DependsOn[0] = %q, want %q", downstream.DependsOn[0], result.NewTaskID)
 	}
 }
+
+func TestReplan_BlocksOutboundTransitions(t *testing.T) {
+	tmpDir, stateFile := setupReplanTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.CheckpointTrigger = models.CheckpointTriggerPlanningComplete
+
+	planningTask := buildMergedPlanningTask("code-planning-1", now)
+	state.Tasks = []models.Task{planningTask}
+	state.Sprint.Scope.Planned = []string{"code-planning-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Replan(tmpDir, &ReplanInput{
+		TaskID:    "code-planning-1",
+		ChangedBy: "human",
+	})
+	if err != nil {
+		t.Fatalf("Replan() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	oldTask := readState.FindTask("code-planning-1")
+	if oldTask == nil {
+		t.Fatal("Old task not found")
+	}
+
+	// The "replanned" marker must be set.
+	if !oldTask.TransitionsExecuted["replanned"] {
+		t.Error("TransitionsExecuted should have replanned=true")
+	}
+
+	// Real transition names must also be blocked. code-planning-pair has
+	// "code-plan-to-coding" as its outbound transition.
+	if !oldTask.TransitionsExecuted["code-plan-to-coding"] {
+		t.Error("TransitionsExecuted should block code-plan-to-coding after replan")
+	}
+
+	// The new task must NOT have any transitions pre-blocked.
+	newTask := readState.FindTask("code-planning-1-replan-1")
+	if newTask == nil {
+		t.Fatal("New task not found")
+	}
+	if len(newTask.TransitionsExecuted) > 0 {
+		t.Errorf("New task TransitionsExecuted should be empty, got %v", newTask.TransitionsExecuted)
+	}
+}
+
+func TestReplan_BlocksEpicPlanningTransitions(t *testing.T) {
+	tmpDir, stateFile := setupReplanTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.CheckpointTrigger = models.CheckpointTriggerPlanningComplete
+
+	// Use epic-planning-pair (the role-pair from the diagnosis-design incident).
+	task := testhelpers.BuildTaskByStatus("epic-planning-1", models.TaskStatusMerged, now)
+	task.RolePair = "epic-planning-pair"
+	task.Output = []models.OutputEntry{
+		{Desc: "epic 1", DoneWhen: "stories written", Scope: "auth", SpecRef: "README.md"},
+	}
+	state.Tasks = []models.Task{task}
+	state.Sprint.Scope.Planned = []string{"epic-planning-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Replan(tmpDir, &ReplanInput{
+		TaskID:    "epic-planning-1",
+		ChangedBy: "human",
+	})
+	if err != nil {
+		t.Fatalf("Replan() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	oldTask := readState.FindTask("epic-planning-1")
+	if !oldTask.TransitionsExecuted["epic-to-us"] {
+		t.Error("TransitionsExecuted should block epic-to-us after replan")
+	}
+}

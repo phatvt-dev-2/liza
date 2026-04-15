@@ -3874,3 +3874,139 @@ func TestIsTransitionIncomplete_ManyToOne(t *testing.T) {
 		}
 	})
 }
+
+func TestExecuteAvailableTransitions_SkipsReplannedTasks(t *testing.T) {
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+
+	// Original US task: MERGED but marked as replanned.
+	// Without the defensive check, EAT would fire us-to-coding on this task.
+	originalUS := models.Task{
+		ID:           "us-task-1",
+		Type:         models.TaskTypeCoding,
+		RolePair:     "us-writing-pair",
+		Description:  "Original US (replanned)",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		ParentTasks:  []string{"epic-plan-1"},
+		SpecRef:      "specs/auth.md",
+		DoneWhen:     "US approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		TransitionsExecuted: map[string]bool{
+			"replanned":    true,
+			"us-to-coding": true, // preventive layer from replan.go
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+
+	// Replan US task: MERGED without replanned marker — should fire normally.
+	replanUS := models.Task{
+		ID:           "us-task-2",
+		Type:         models.TaskTypeCoding,
+		RolePair:     "us-writing-pair",
+		Description:  "Replan US",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		ParentTasks:  []string{"epic-plan-1-replan-1"},
+		SpecRef:      "specs/auth.md",
+		DoneWhen:     "US approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		History:      []models.TaskHistoryEntry{},
+	}
+
+	state.Tasks = append(state.Tasks, originalUS, replanUS)
+	state.Sprint.Scope.Planned = []string{"us-task-1", "us-task-2"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir, "")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+
+	// Only the replan US should produce a child — the original is skipped.
+	if len(results) != 1 {
+		t.Fatalf("results count = %d, want 1 (only replan US should fire)", len(results))
+	}
+	if results[0].SourceTaskID != "us-task-2" {
+		t.Errorf("SourceTaskID = %q, want us-task-2", results[0].SourceTaskID)
+	}
+
+	// Verify only one architecture child exists.
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	var archTasks []string
+	for _, task := range readState.Tasks {
+		if task.RolePair == "architecture-pair" {
+			archTasks = append(archTasks, task.ID)
+		}
+	}
+	if len(archTasks) != 1 {
+		t.Errorf("Expected 1 architecture task, got %d: %v", len(archTasks), archTasks)
+	}
+}
+
+func TestExecuteAvailableTransitions_DefensiveSkipsReplannedEvenWithoutTransitionBlock(t *testing.T) {
+	// Tests the defensive layer alone: a replanned task where the preventive
+	// layer (blocking real transition names) was somehow missed. The "replanned"
+	// marker in TransitionsExecuted should still prevent EAT from firing.
+	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	now := time.Now().UTC()
+	reviewCommit := "abc123"
+	mergeCommit := "def456"
+
+	// Only "replanned" marker, no "us-to-coding" block.
+	task := models.Task{
+		ID:           "us-task-1",
+		Type:         models.TaskTypeCoding,
+		RolePair:     "us-writing-pair",
+		Description:  "Replanned US (defensive test)",
+		Status:       models.TaskStatusMerged,
+		Priority:     1,
+		Created:      now,
+		ParentTasks:  []string{"epic-plan-1"},
+		SpecRef:      "specs/auth.md",
+		DoneWhen:     "US approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		MergeCommit:  &mergeCommit,
+		TransitionsExecuted: map[string]bool{
+			"replanned": true,
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{"us-task-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir, "")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions() error: %v", err)
+	}
+
+	if len(results) != 0 {
+		t.Errorf("results count = %d, want 0 (replanned task should be skipped)", len(results))
+	}
+}

@@ -94,11 +94,25 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			return fmt.Errorf("failed to resolve initial status for %q: %w", task.RolePair, statusErr)
 		}
 
-		// Invalidate old task output
+		// Invalidate old task output and block all outbound transitions.
+		// The "replanned" marker alone doesn't prevent real transitions
+		// (e.g. "epic-to-us") from firing, because availableTransitionsByTrigger
+		// checks transitionsExecuted[transitionName], not "replanned".
+		// We must also mark each real transition as executed.
 		if task.TransitionsExecuted == nil {
 			task.TransitionsExecuted = make(map[string]bool)
 		}
 		task.TransitionsExecuted["replanned"] = true
+
+		approvedStatus, approvedErr := resolver.ApprovedStatus(task.RolePair)
+		if approvedErr == nil {
+			for _, txName := range resolver.AvailableManualTransitions(approvedStatus, nil) {
+				task.TransitionsExecuted[txName] = true
+			}
+			for _, txName := range resolver.AvailableAutoTransitions(approvedStatus, nil) {
+				task.TransitionsExecuted[txName] = true
+			}
+		}
 
 		now := time.Now().UTC()
 		note := fmt.Sprintf("replaced by %s", newTaskID)

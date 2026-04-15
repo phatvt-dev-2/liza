@@ -760,6 +760,13 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 				continue
 			}
 
+			// Replanned tasks must not spawn children — the replan replacement
+			// owns the downstream pipeline. Replan.go marks real transitions as
+			// executed (preventive), but this is a defensive second layer.
+			if task.TransitionsExecuted["replanned"] {
+				continue
+			}
+
 			approvedStatus, err := resolver.ApprovedStatus(task.RolePair)
 			if err != nil {
 				log.Printf("WARNING: ExecuteAvailableTransitions: task %s has unknown role-pair %q: %v", task.ID, task.RolePair, err)
@@ -802,10 +809,11 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 			if task.Status != models.TaskStatusMerged {
 				continue
 			}
+			// Replanned tasks must not spawn children (same guard as Phase 1a).
+			if task.TransitionsExecuted["replanned"] {
+				continue
+			}
 			for transName := range task.TransitionsExecuted {
-				if transName == "replanned" {
-					continue // synthetic marker, not a real transition
-				}
 				if !isTransitionIncomplete(s, task, transName, resolver) {
 					continue
 				}
