@@ -396,6 +396,50 @@ Possible outcomes:
 	},
 }
 
+// updateReviewCommitCmd is RBAC-exempt (--changed-by): operator recovery action,
+// same category as release-claim. See specs/goals/20260412-cli-native-access-control.md.
+var updateReviewCommitCmd = &cobra.Command{
+	Use:   "update-review-commit <task-id>",
+	Short: "Update review_commit to current worktree HEAD after external rebase",
+	Long: `Update a task's review_commit to the current worktree HEAD.
+
+Use this after manually rebasing a worktree that is already submitted for review.
+This is an explicit resubmission boundary: if a reviewer has claimed the task,
+their claim is released and the task returns to submitted state for a fresh review.
+
+Requirements:
+  - Task must be in a submitted or reviewing state
+  - Worktree must exist on disk
+  - Current worktree HEAD must differ from review_commit`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
+		taskID := args[0]
+		changedBy := resolveChangedBy(cmd)
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		if isJSON(cmd) {
+			result, err := ops.UpdateReviewCommit(projectRoot, taskID, changedBy)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
+		return commands.UpdateReviewCommitCommand(projectRoot, taskID, changedBy)
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(submitForReviewCmd)
 	rootCmd.AddCommand(handoffCmd)
@@ -403,11 +447,13 @@ func init() {
 	rootCmd.AddCommand(releaseClaimCmd)
 	rootCmd.AddCommand(awaitVerdictCmd)
 	rootCmd.AddCommand(awaitResubmissionCmd)
+	rootCmd.AddCommand(updateReviewCommitCmd)
 
 	addAgentIDFlag(submitForReviewCmd)
 	addAgentIDFlag(handoffCmd)
 	addAgentIDFlag(submitVerdictCmd)
 	addChangedByFlag(releaseClaimCmd)
+	addChangedByFlag(updateReviewCommitCmd)
 
 	// Await-verdict flags
 	addAgentIDFlag(awaitVerdictCmd)
@@ -433,4 +479,5 @@ func init() {
 	addJSONFlag(releaseClaimCmd)
 	addJSONFlag(awaitVerdictCmd)
 	addJSONFlag(awaitResubmissionCmd)
+	addJSONFlag(updateReviewCommitCmd)
 }

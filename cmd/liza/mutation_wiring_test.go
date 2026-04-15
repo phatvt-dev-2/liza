@@ -2,11 +2,13 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -233,6 +235,76 @@ func TestMutationCommandWiring(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "command requires role type [orchestrator]") {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("update-review-commit uses --changed-by and updates state", func(t *testing.T) {
+		// This command is RBAC-exempt (--changed-by, same as release-claim):
+		// it is an operator recovery action for rebased worktrees, not an
+		// agent workflow command. See specs/goals/20260412-cli-native-access-control.md.
+		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
+			now := time.Now().UTC()
+			state.Tasks = []models.Task{
+				testhelpers.BuildTaskByStatus("task-urc", models.TaskStatusReadyForReview, now),
+			}
+		})
+
+		// Create a worktree and make a commit so HEAD diverges from review_commit
+		g := git.New(projectRoot)
+		_, err := g.CreateWorktree("task-urc", "integration")
+		if err != nil {
+			t.Fatalf("Failed to create worktree: %v", err)
+		}
+		wtPath := g.GetWorktreePath("task-urc")
+		implFile := filepath.Join(wtPath, "feature.go")
+		if err := os.WriteFile(implFile, []byte("package feature\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		testhelpers.MustGit(t, wtPath, "add", "feature.go")
+		testhelpers.MustGit(t, wtPath, "commit", "-m", "diverge")
+
+		// Set stale review_commit and worktree path in state
+		staleCommit := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration")
+		wtHEAD := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
+		bb := db.For(statePath)
+		if err := bb.Modify(func(s *models.State) error {
+			task := s.FindTask("task-urc")
+			task.ReviewCommit = &staleCommit
+			worktreeRel := g.GetWorktreeRelPath("task-urc")
+			task.Worktree = &worktreeRel
+			return nil
+		}); err != nil {
+			t.Fatalf("Failed to update state: %v", err)
+		}
+
+		err = executeRootCommand(t, projectRoot, "update-review-commit", "task-urc", "--changed-by", "operator-1")
+		if err != nil {
+			t.Fatalf("update-review-commit execute failed: %v", err)
+		}
+
+		state := readState(t, statePath)
+		task := mustFindTask(t, state, "task-urc")
+		if task.ReviewCommit == nil || *task.ReviewCommit != wtHEAD {
+			got := "<nil>"
+			if task.ReviewCommit != nil {
+				got = *task.ReviewCommit
+			}
+			t.Fatalf("review_commit = %s, want %s", got, wtHEAD)
+		}
+
+		// Verify history entry records the operator
+		found := false
+		for _, entry := range task.History {
+			if entry.Event == models.TaskEventReviewCommitUpdated {
+				found = true
+				if entry.Agent == nil || *entry.Agent != "operator-1" {
+					t.Fatalf("history agent = %v, want operator-1", entry.Agent)
+				}
+				break
+			}
+		}
+		if !found {
+			t.Fatal("expected review_commit_updated history entry")
 		}
 	})
 

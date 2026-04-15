@@ -33,11 +33,11 @@ Add role validation to state-mutating commands before calling the ops layer. Rea
 | Positional `<agent-id>` | `cobra.ExactArgs(2)` | `claim-task` | Validate role from positional arg |
 | `--agent-id` flag | `requireAgentID(cmd)` | `submit-for-review`, `handoff`, `submit-verdict`, `await-verdict`, `await-resubmission`, `mark-blocked`, `write-checkpoint`, `set-task-output`, `wt-merge` | Validate role from flag |
 | Auto-resolved orchestrator | `resolveOrchestratorID(cmd)` | `add-task`, `add-tasks`, `supersede-task`, `cancel-task`, `assess-blocked`, `assess-hypothesis-exhausted` | Validate resolved ID has orchestrator role |
-| `--changed-by` (audit-only) | `resolveChangedBy(cmd)`, defaults to `"human"` | `pause`, `stop`, `start`, `resume`, `replan`, `release-claim` | **No RBAC** — these are human/supervisor operations |
+| `--changed-by` (audit-only) | `resolveChangedBy(cmd)`, defaults to `"human"` | `pause`, `stop`, `start`, `resume`, `replan`, `release-claim`, `update-review-commit` | **No RBAC** — these are human/supervisor operations |
 | No identity | — | `get`, `status`, `validate`, `version`, `analyze`, `tui`, `init`, `wt-create`, `wt-delete`, `clear-stale-review-claims`, `sprint-checkpoint`, `update-sprint-metrics` | Read-only or human-only — no RBAC needed |
 
 **Commands excluded from RBAC:**
-- `--changed-by` commands: Human/supervisor operations (pause, stop, start, resume, replan, release-claim). Default `"human"` identity is audit trail, not access control.
+- `--changed-by` commands: Human/supervisor operations (pause, stop, start, resume, replan, release-claim, update-review-commit). Default `"human"` identity is audit trail, not access control.
 - Read-only commands: `get`, `status`, `validate`, `version` — no state mutation beyond reads.
 - Interactive/human commands: `init`, `tui`, `delete task` — require human presence.
 - `wt-create`, `wt-delete`: Currently take no agent identity; RBAC would require adding `--agent-id`. Consider for v2.

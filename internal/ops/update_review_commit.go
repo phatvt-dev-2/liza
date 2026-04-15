@@ -1,0 +1,158 @@
+package ops
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
+)
+
+// UpdateReviewCommitResult contains the outcome of updating a task's review commit.
+type UpdateReviewCommitResult struct {
+	TaskID           string `json:"task_id"`
+	OldReviewCommit  string `json:"old_review_commit"`
+	NewReviewCommit  string `json:"new_review_commit"`
+	ReviewerReleased bool   `json:"reviewer_released"`
+	ChangedBy        string `json:"changed_by"`
+}
+
+// UpdateReviewCommit updates review_commit to the current worktree HEAD after
+// an external rebase. This is an explicit resubmission boundary: if a reviewer
+// has claimed the task, their claim is released so the task returns to submitted
+// state for a fresh review pass. No terminal I/O.
+func UpdateReviewCommit(projectRoot, taskID, changedBy string) (*UpdateReviewCommitResult, error) {
+	if taskID == "" {
+		return nil, &PreconditionError{Reason: "task ID is required"}
+	}
+	if changedBy == "" {
+		changedBy = "human"
+	}
+
+	lp := paths.New(projectRoot)
+	bb := db.For(lp.StatePath())
+
+	// Phase 1: Read state and validate preconditions
+	_, task, err := readTaskState(bb, taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	if task.ReviewCommit == nil {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no review_commit", taskID)}
+	}
+
+	resolver, _, resolverErr := loadResolver(projectRoot)
+	if resolverErr != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
+	}
+	if task.RolePair == "" {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
+	}
+
+	submittedStatus, err := resolver.SubmittedStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	reviewingStatus, err := resolver.ReviewingStatus(task.RolePair)
+	if err != nil {
+		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	reviewing2Status, _ := resolver.Reviewing2Status(task.RolePair)
+
+	isSubmitted := task.Status == submittedStatus
+	isReviewing := task.Status == reviewingStatus ||
+		(reviewing2Status != "" && task.Status == reviewing2Status)
+	if !isSubmitted && !isReviewing {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s must be in submitted or reviewing state (current: %s)", taskID, task.Status)}
+	}
+
+	// Phase 2: Read worktree HEAD
+	g := git.New(projectRoot)
+	wtPath := g.GetWorktreePath(taskID)
+	if _, statErr := os.Stat(wtPath); os.IsNotExist(statErr) {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("worktree directory does not exist: %s", wtPath)}
+	} else if statErr != nil {
+		return nil, fmt.Errorf("failed to stat worktree %s: %w", wtPath, statErr)
+	}
+
+	wtHEAD, err := g.GetWorktreeHEAD(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get worktree HEAD: %w", err)
+	}
+
+	oldReviewCommit := *task.ReviewCommit
+	if oldReviewCommit == wtHEAD {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("review_commit already matches worktree HEAD (%s) — no update needed", wtHEAD)}
+	}
+
+	// Phase 3: Atomic state update
+	pipelineTransitions := BuildPipelineTransitions(resolver)
+	now := time.Now().UTC()
+	reviewerReleased := false
+
+	err = bb.Modify(func(state *models.State) error {
+		task := state.FindTask(taskID)
+		if task == nil {
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+
+		// Re-check status inside lock
+		isSubmittedAuth := task.Status == submittedStatus
+		isReviewingAuth := task.Status == reviewingStatus ||
+			(reviewing2Status != "" && task.Status == reviewing2Status)
+		if !isSubmittedAuth && !isReviewingAuth {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s must be in submitted or reviewing state (current: %s)", taskID, task.Status)}
+		}
+
+		// Update review_commit
+		task.ReviewCommit = &wtHEAD
+
+		// If reviewer is claimed, release them and reset to submitted —
+		// they must re-claim and re-review the updated content.
+		if isReviewingAuth && task.ReviewingBy != nil {
+			releasedAgent := *task.ReviewingBy
+			if a, ok := state.Agents[releasedAgent]; ok {
+				if a.CurrentTask != nil && *a.CurrentTask == taskID {
+					state.ReleaseAgent(releasedAgent)
+				}
+			}
+			task.ReviewingBy = nil
+			task.ReviewLeaseExpires = nil
+			reviewerReleased = true
+
+			if err := task.TransitionWith(submittedStatus, pipelineTransitions); err != nil {
+				return err
+			}
+
+			log.Printf("update-review-commit %s: released reviewer %s", taskID, releasedAgent)
+		}
+
+		updateReason := fmt.Sprintf("review_commit updated: %s → %s (worktree rebased after submission)", oldReviewCommit, wtHEAD)
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time:   now,
+			Event:  models.TaskEventReviewCommitUpdated,
+			Agent:  &changedBy,
+			Reason: &updateReason,
+		})
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update review commit: %w", err)
+	}
+
+	return &UpdateReviewCommitResult{
+		TaskID:           taskID,
+		OldReviewCommit:  oldReviewCommit,
+		NewReviewCommit:  wtHEAD,
+		ReviewerReleased: reviewerReleased,
+		ChangedBy:        changedBy,
+	}, nil
+}
