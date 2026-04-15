@@ -4,8 +4,7 @@ CODER TOOLS:
 - liza submit-for-review — Submit completed work for review
   liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
-- liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
-  liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
+{{template "await-verdict-loop" .}}
 - liza handoff — Context near exhaustion (~90%)
   liza handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
 - liza mark-blocked — Cannot proceed (spec ambiguity, missing dependency)

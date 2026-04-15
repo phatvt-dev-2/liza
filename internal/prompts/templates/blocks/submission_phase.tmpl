@@ -5,13 +5,8 @@ After implementation and tests pass, you MUST submit for review:
 1. Get commit SHA: git -C {{.Worktree}} rev-parse HEAD
 2. Execute: liza submit-for-review {{.TaskID}} <SHA from step 1> --agent-id {{.AgentID}} --json
 3. Verify confirmation: status changed to CODE_READY_FOR_REVIEW
-4. Run liza await-verdict to wait for the review verdict:
-   liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
-   It blocks ~100s per call, returning POLL with remaining timeout_seconds.
-   - REJECTED: task is already reclaimed — read the rejection reason, fix, and resubmit
-   - POLL: call await-verdict again with the timeout_seconds from the response
-   - APPROVED, NEW_ATTEMPT, TIMEOUT, or ABORTED: exit normally
-   - Budget error: exit normally (at iteration limit)
+4. Run liza await-verdict (see your TOOLS section above for loop semantics).
+   On REJECTED: task is already reclaimed — read the rejection reason, fix, and resubmit.
 
 ❌ FAILURE MODE: Completing work, saying "ready for review", then exiting WITHOUT running the command.
 The CLI command IS the deliverable. Work without command execution = nothing happened.

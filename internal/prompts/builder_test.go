@@ -1469,6 +1469,59 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 	})
 }
 
+func TestBuildRoleContext_AwaitVerdictLoopRendersForAllDoers(t *testing.T) {
+	projectRoot := setupPipelineConfig(t)
+	resolver := testPipelineResolver(t)
+
+	doerRoles := []struct {
+		role    string
+		agentID string
+		taskID  string
+	}{
+		{"coder", "coder-1", "task-avl-coder"},
+		{"architect", "architect-1", "task-avl-arch"},
+		{"code-planner", "code-planner-1", "task-avl-cp"},
+		{"epic-planner", "epic-planner-1", "task-avl-ep"},
+		{"us-writer", "us-writer-1", "task-avl-usw"},
+		{"integration-analyst", "integration-analyst-1", "task-avl-ia"},
+	}
+
+	awaitVerdictKeys := []string{
+		"liza await-verdict",
+		"POLL",
+		"timeout_seconds",
+		"polling primitive",
+	}
+
+	for _, tc := range doerRoles {
+		t.Run(tc.role, func(t *testing.T) {
+			data := &RoleContextData{
+				Role: tc.role, AgentID: tc.agentID, RoleType: "doer",
+				TaskID: tc.taskID, Description: "Test task",
+				DoneWhen: "Done", Scope: "internal/test",
+				Worktree:          projectRoot + "/.worktrees/" + tc.taskID,
+				IterationNum:      1,
+				IntegrationBranch: "integration",
+				ProjectRoot:       projectRoot,
+			}
+			sections, err := resolver.ContextSections(tc.role)
+			if err != nil {
+				t.Fatalf("ContextSections: %v", err)
+			}
+			output, err := BuildRoleContext(tc.role, sections, data)
+			if err != nil {
+				t.Fatalf("BuildRoleContext: %v", err)
+			}
+
+			for _, key := range awaitVerdictKeys {
+				if !strings.Contains(output, key) {
+					t.Errorf("output missing await-verdict loop key %q", key)
+				}
+			}
+		})
+	}
+}
+
 func TestBuildRoleContext_PlanRefAndValidationPlan(t *testing.T) {
 	projectRoot := setupPipelineConfig(t)
 	resolver := testPipelineResolver(t)

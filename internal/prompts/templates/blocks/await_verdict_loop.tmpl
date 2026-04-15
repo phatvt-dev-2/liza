@@ -1,0 +1,10 @@
+{{- define "await-verdict-loop" -}}
+- liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
+  liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
+  Blocks ~100s per call. Handle the response status:
+  - POLL: call await-verdict again in the foreground, using returned timeout_seconds
+  - REJECTED: read rejection reason, fix, resubmit
+  - APPROVED, NEW_ATTEMPT, TIMEOUT, ABORTED: exit normally
+  - Budget error: exit normally
+  Do not wrap in custom polling or background execution; await-verdict is the polling primitive.
+{{- end -}}

@@ -4,8 +4,7 @@ CODE PLANNER TOOLS:
 - liza submit-for-review — Submit code plan for review
   liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
-- liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
-  liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
+{{template "await-verdict-loop" .}}
 - liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
   liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
 - liza set-task-output — Persist structured task definitions for downstream task creation
