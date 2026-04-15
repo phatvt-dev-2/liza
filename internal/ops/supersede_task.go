@@ -20,7 +20,7 @@ type SupersedeResult struct {
 	Warnings       []string          `json:"warnings"`
 }
 
-// SupersedeTask transitions a BLOCKED, REJECTED, or READY task to SUPERSEDED,
+// SupersedeTask transitions an initial, rejected, or BLOCKED task to SUPERSEDED,
 // optionally linking it to replacement task IDs. When no replacements are given
 // the task's branch is deleted immediately (no successors to trigger cleanup).
 // No terminal I/O.
@@ -50,10 +50,28 @@ func SupersedeTask(projectRoot, taskID string, replacementIDs []string, reason, 
 	}
 
 	originalStatus := task.Status
-	if originalStatus != models.TaskStatusBlocked &&
-		originalStatus != models.TaskStatusRejected &&
-		originalStatus != models.TaskStatusReady {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("cannot supersede task %s in status %s (must be BLOCKED, REJECTED, or READY)", taskID, originalStatus)}
+
+	// Supersede is allowed from: any initial (DRAFT_*) state, any rejected state, or BLOCKED.
+	allowed := originalStatus == models.TaskStatusBlocked
+	if !allowed && task.RolePair != "" {
+		// Pipeline-aware path: resolve initial/rejected from the task's role-pair.
+		initialStatus, err := pb.resolver.InitialStatus(task.RolePair)
+		if err == nil && originalStatus == initialStatus {
+			allowed = true
+		}
+		if !allowed {
+			rejectedStatus, err := pb.resolver.RejectedStatus(task.RolePair)
+			if err == nil && originalStatus == rejectedStatus {
+				allowed = true
+			}
+		}
+	}
+	if !allowed && task.RolePair == "" {
+		// Legacy fallback: tasks without a role-pair use hardcoded statuses.
+		allowed = originalStatus == models.TaskStatusReady || originalStatus == models.TaskStatusRejected
+	}
+	if !allowed {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("cannot supersede task %s in status %s (must be initial, rejected, or BLOCKED)", taskID, originalStatus)}
 	}
 
 	// Phase 2: Atomic State Update

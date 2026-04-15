@@ -248,6 +248,70 @@ func TestSupersedeTask_FromReady(t *testing.T) {
 	}
 }
 
+func TestSupersedeTask_FromPipelineDraftState(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	// DRAFT_ARCHITECTURE is a pipeline-declared initial state, not hardcoded.
+	task := models.Task{
+		ID:          "task-1",
+		Type:        models.TaskTypeCoding,
+		Description: "Architecture task",
+		Status:      "DRAFT_ARCHITECTURE",
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "README.md",
+		DoneWhen:    "Architecture defined",
+		Scope:       "Test scope",
+		History:     []models.TaskHistoryEntry{},
+		RolePair:    "architecture-pair",
+	}
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "Scope changed", "orchestrator-1")
+	if err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+	if result.OriginalStatus != "DRAFT_ARCHITECTURE" {
+		t.Errorf("OriginalStatus = %v, want DRAFT_ARCHITECTURE", result.OriginalStatus)
+	}
+}
+
+func TestSupersedeTask_LegacyTaskNoRolePair(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	// Legacy task with no role_pair — must still be supersedeable from DRAFT_CODE.
+	task := models.Task{
+		ID:          "task-1",
+		Type:        models.TaskTypeCoding,
+		Description: "Legacy task",
+		Status:      models.TaskStatusReady, // DRAFT_CODE
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "README.md",
+		DoneWhen:    "Done",
+		Scope:       "Test scope",
+		History:     []models.TaskHistoryEntry{},
+		RolePair:    "", // no role-pair — legacy
+	}
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "Legacy rescope", "orchestrator-1")
+	if err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+	if result.OriginalStatus != models.TaskStatusReady {
+		t.Errorf("OriginalStatus = %v, want DRAFT_CODE", result.OriginalStatus)
+	}
+}
+
 func TestSupersedeTask_WrongStatus(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
