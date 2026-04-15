@@ -175,9 +175,7 @@ python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/*.tx
 open ~/.liza/skills/liza-logs/tools/liza-session-analyzer.html   # or xdg-open on Linux
 ```
 
-## Reading state.yaml
-
-Use `liza` CLI commands for all state mutations. If a needed operation isn't covered, edit `.liza/state.yaml` directly but: write atomically (write to temp file, then rename), use ISO 8601 UTC timestamps (`YYYY-MM-DDTHH:MM:SSZ`), and run `liza validate` afterward to verify invariants.
+## state.yaml
 
 Key task fields:
 - `status` — current state
@@ -202,6 +200,53 @@ Key agent fields:
 - `lease_expires` — agent registration expiry
 - `current_task` — task ID being worked on
 
+### Modifying state.yaml
+
+**Golden rule:** Never round-trip state.yaml through `yaml.dump` or any YAML serializer. The file is owned by Go's `yaml.v3` library. Python/Ruby serializers change indentation, timestamp formatting, and block scalar representation in incompatible ways.
+
+**Safe mutation methods (preference order):**
+
+1. **CLI commands** — `liza supersede-task`, `liza release-claim`, `liza recover-task`, etc. Always prefer these.
+2. **Line-level text edits** — For changes the CLI doesn't support (e.g., fixing `depends_on`, setting a status the CLI rejects). Use `liza pause` first to stop heartbeat updates, then back up before touching anything:
+
+```bash
+cp .liza/state.yaml .liza/state.yaml.bak
+```
+
+Edit with line-level operations:
+
+```python
+with open('.liza/state.yaml', 'r') as f:
+    lines = f.readlines()
+# Modify specific lines by index
+lines[N] = lines[N].replace('OLD_VALUE', 'NEW_VALUE')
+# Or insert lines
+lines.insert(N, '      depends_on:\n')
+# Write atomically
+import tempfile, os
+with tempfile.NamedTemporaryFile('w', dir='.liza', suffix='.yaml', delete=False) as tmp:
+    tmp.writelines(lines)
+    tmp_path = tmp.name
+os.rename(tmp_path, '.liza/state.yaml')
+```
+
+3. **After any manual edit:**
+   - `diff .liza/state.yaml.bak .liza/state.yaml` — review exactly what changed
+   - `liza validate` — check invariants
+   - `liza update-sprint-metrics --json` — triggers Go to normalize formatting (only works if the file still parses)
+   - Timestamps must be ISO 8601 UTC (`YYYY-MM-DDTHH:MM:SSZ`). Generate: `date -u +%Y-%m-%dT%H:%M:%SZ`
+   - Once satisfied, remove the backup: `rm .liza/state.yaml.bak`
+
+### Known Gotchas
+
+- **`|N` block scalars**: Go writes `|4` for multi-line fields (e.g. `rejection_reason`). If the file was round-tripped through Python YAML, these become unparseable. Fix: repair the broken scalars with line-level text edits (e.g. convert `|4` back to `|4` with correct indentation), then `liza validate`. Once parseable, `liza update-sprint-metrics` will normalize formatting.
+- **Timestamps**: Python's `yaml.dump` converts `2026-04-14T14:29:31Z` to `2026-04-14 14:29:31+00:00`. Go rejects this. Never round-trip timestamps through a YAML library.
+- **Concurrent writes**: Agents and CLI write concurrently. Use `liza pause` before manual edits, or write atomically (temp file + `os.rename`).
+- **Field names**: SUPERSEDED tasks require `rescope_reason` (not `superseded_reason`). Check `liza validate` for correct field names.
+- **Status constraints**: `liza supersede-task` works from BLOCKED, REJECTED, or any pipeline-declared initial state. For other states, edit state.yaml directly.
+- **Dependency edits**: No CLI command exists to modify `depends_on`. Edit state.yaml directly with line-level ops.
+- **Holding a task from review**: Add a `depends_on` on the task that should be reviewed first — the system enforces ordering. Alternatively, set status to the pre-review state.
+
 ## Agent Exit Codes
 
 | Code | Meaning | Supervisor action |
@@ -219,11 +264,6 @@ Exit 42 with `handoff_pending: true` on the task means context exhaustion — th
 - Lease duration: 30 minutes
 - Heartbeat interval: 60 seconds
 - If lease expires, task becomes reclaimable
-
-### Timestamp format
-
-All timestamps in state.yaml use ISO 8601 UTC: `YYYY-MM-DDTHH:MM:SSZ`
-Generate: `date -u +%Y-%m-%dT%H:%M:%SZ`
 
 ### Stuck task (stale lease)
 **Symptom**: Task in executing or reviewing state but agent is gone.
