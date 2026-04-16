@@ -398,7 +398,22 @@ See [Architecture Overview](../specs/architecture/overview.md) for detailed comp
 
 **`.claude/settings.json`** — Permissions for Claude Code agents (Liza CLI permissions shown, hooks, MCP servers).
 
-The full template also pre-approves skills (code-review, testing, debugging, etc.), git read/write commands, build tools (go, make, python), shell utilities, and web access (WebFetch, WebSearch, LSP). See `internal/embedded/claude-settings.json` for the complete list.
+The full template also pre-approves skills (code-review, testing, debugging, etc.), git read/write commands, build tools, shell utilities, and web access (WebFetch, WebSearch, LSP). See `internal/embedded/claude-settings.json` for the complete list.
+
+> **⚠️ Dev ecosystem tools must be allowed.** Agents run non-interactively — they cannot
+> answer permission prompts. Any tool not listed in `permissions.allow` will silently fail
+> or stall the agent. The default template pre-configures common ecosystems:
+>
+> | Ecosystem | Pre-configured tools |
+> |-----------|---------------------|
+> | Python | `uv`, `ruff`, `pytest`, `mypy`, `pip`, `pre-commit` |
+> | Go | `go`, `make` |
+> | Rust | `cargo`, `rustfmt`, `clippy-driver` |
+> | Node.js | `npm`, `npx`, `yarn`, `pnpm`, `bun`, `eslint`, `prettier`, `tsc` |
+>
+> If your project uses tools not in this list, add them to `.claude/settings.json` before
+> spawning agents. Run `/liza-logs` after your first sprint to catch any remaining
+> permission denials.
 
 CLI commands (e.g., `liza add-task`) operate on `.liza/state.yaml` with proper locking. Agents use CLI commands via Bash with `--json` for structured output.
 

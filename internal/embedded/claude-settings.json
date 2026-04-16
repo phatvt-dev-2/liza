@@ -91,10 +91,15 @@
       "Bash(git:*)",
       "Bash(npm:*)",
       "Bash(npx:*)",
+      "Bash(mypy:*)",
+      "Bash(pip:*)",
+      "Bash(pip3:*)",
       "Bash(pre-commit:*)",
       "Bash(python:*)",
       "Bash(python3:*)",
       "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(uv:*)",
       "Bash(shellcheck:*)",
       "Bash(bash:*)",
       "Bash(ls:*)",
@@ -115,7 +120,18 @@
       "Bash(make build)",
       "Bash(make test)",
       "Bash(make lint)",
-      "Bash(diff-cover:*)"
+      "Bash(diff-cover:*)",
+
+      "Bash(cargo:*)",
+      "Bash(rustfmt:*)",
+      "Bash(clippy-driver:*)",
+      "Bash(yarn:*)",
+      "Bash(pnpm:*)",
+      "Bash(bun:*)",
+      "Bash(eslint:*)",
+      "Bash(prettier:*)",
+      "Bash(tsc:*)",
+      "Bash(vitest:*)"
     ]
   }
 }
