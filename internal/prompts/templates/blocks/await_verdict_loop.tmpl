@@ -6,5 +6,7 @@
   - REJECTED: read rejection reason, fix, resubmit
   - APPROVED, NEW_ATTEMPT, TIMEOUT, ABORTED: exit normally
   - Budget error: exit normally
-  Do not wrap in custom polling or background execution; await-verdict is the polling primitive.
+  BUDGET: Call await-verdict at most 3 times. If no verdict after 3 calls, exit normally — the supervisor will restart you with the verdict.
+  Do NOT poll liza get, cat /tmp, or any other command to check for verdict arrival between calls.
+  Do NOT wrap in custom polling or background execution; await-verdict is the sole polling primitive.
 {{- end -}}
