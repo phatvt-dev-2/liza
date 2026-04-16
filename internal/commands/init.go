@@ -602,8 +602,9 @@ func InitCommandWithConfig(params InitParams) error {
 	// Auto-suggest post_worktree_cmd if not explicitly set and stdin is a terminal
 	postWorktreeCmd := params.PostWorktreeCmd
 	if postWorktreeCmd == "" && (params.ForceInteractive || isInteractive(rawStdin)) {
-		if suggested := detectPostWorktreeCmd(lizaPaths.ProjectRoot()); suggested != "" {
-			fmt.Fprintf(os.Stderr, "Detected %s — set post_worktree_cmd to %q?\n", detectPkgManagerContext(lizaPaths.ProjectRoot()), suggested)
+		root := lizaPaths.ProjectRoot()
+		if suggested := detectPostWorktreeCmd(root); suggested != "" {
+			fmt.Fprintf(os.Stderr, "Detected %s — set post_worktree_cmd to %q?\n", detectPkgManagerContext(root), suggested)
 			fmt.Fprintf(os.Stderr, "This runs after every worktree creation so agents have dependencies. (y/n): ")
 			response, err := stdin.ReadString('\n')
 			if err == nil {
@@ -612,6 +613,8 @@ func InitCommandWithConfig(params InitParams) error {
 					postWorktreeCmd = suggested
 				}
 			}
+		} else if subdirs := detectNodeSubdirs(root); len(subdirs) > 1 {
+			fmt.Fprintf(os.Stderr, "Detected Node projects in: %s. Configure --post-worktree-cmd manually.\n", strings.Join(subdirs, ", "))
 		}
 	}
 
@@ -620,10 +623,18 @@ func InitCommandWithConfig(params InitParams) error {
 	// fail silently if the main repo's deps aren't installed (no cache, missing
 	// native modules, etc.). Catching it here prevents agents from discovering
 	// the problem 17 turns into a review session.
-	if _, err := os.Stat(filepath.Join(lizaPaths.ProjectRoot(), "package.json")); err == nil {
-		if _, err := os.Stat(filepath.Join(lizaPaths.ProjectRoot(), "node_modules")); os.IsNotExist(err) {
-			installCmd := detectPostWorktreeCmd(lizaPaths.ProjectRoot())
+	root := lizaPaths.ProjectRoot()
+	if _, err := os.Stat(filepath.Join(root, "package.json")); err == nil {
+		if _, err := os.Stat(filepath.Join(root, "node_modules")); os.IsNotExist(err) {
+			installCmd := detectInstallCmdInDir(root)
 			fmt.Fprintf(os.Stderr, "⚠️  package.json found but node_modules/ is missing. Run %q before starting agents.\n", installCmd)
+		}
+	}
+	for _, dir := range detectNodeSubdirs(root) {
+		dirPath := filepath.Join(root, dir)
+		if _, err := os.Stat(filepath.Join(dirPath, "node_modules")); os.IsNotExist(err) {
+			installCmd := detectInstallCmdInDir(dirPath)
+			fmt.Fprintf(os.Stderr, "⚠️  %s/package.json found but %s/node_modules/ is missing. Run %q in %s/ before starting agents.\n", dir, dir, installCmd, dir)
 		}
 	}
 
@@ -814,44 +825,103 @@ func isInteractive(r io.Reader) bool {
 	return info.Mode()&os.ModeCharDevice != 0
 }
 
-// detectPostWorktreeCmd checks the project root for package.json and returns
+// nodeLockfiles maps lockfiles to their install commands, ordered by specificity.
+var nodeLockfiles = []struct {
+	file string
+	cmd  string
+}{
+	{"pnpm-lock.yaml", "pnpm install"},
+	{"yarn.lock", "yarn install"},
+	{"bun.lockb", "bun install"},
+	{"bun.lock", "bun install"},
+	{"package-lock.json", "npm install"},
+}
+
+// detectInstallCmdInDir checks a single directory for package.json and returns
 // the appropriate install command based on which lockfile is present.
 // Returns "" if no package.json is found.
-func detectPostWorktreeCmd(projectRoot string) string {
-	if _, err := os.Stat(filepath.Join(projectRoot, "package.json")); os.IsNotExist(err) {
+func detectInstallCmdInDir(dir string) string {
+	if _, err := os.Stat(filepath.Join(dir, "package.json")); os.IsNotExist(err) {
 		return ""
 	}
-
-	// Check lockfiles in specificity order (most specific first)
-	lockfiles := []struct {
-		file string
-		cmd  string
-	}{
-		{"pnpm-lock.yaml", "pnpm install"},
-		{"yarn.lock", "yarn install"},
-		{"bun.lockb", "bun install"},
-		{"bun.lock", "bun install"},
-		{"package-lock.json", "npm install"},
-	}
-
-	for _, lf := range lockfiles {
-		if _, err := os.Stat(filepath.Join(projectRoot, lf.file)); err == nil {
+	for _, lf := range nodeLockfiles {
+		if _, err := os.Stat(filepath.Join(dir, lf.file)); err == nil {
 			return lf.cmd
 		}
 	}
-
-	// package.json exists but no lockfile — default to npm
 	return "npm install"
 }
 
-// detectPkgManagerContext returns a human-readable description of what was detected
-// (e.g. "package.json + yarn.lock") for the suggestion prompt.
+// detectLockfileInDir returns the lockfile name found in dir, or "".
+func detectLockfileInDir(dir string) string {
+	for _, lf := range nodeLockfiles {
+		if _, err := os.Stat(filepath.Join(dir, lf.file)); err == nil {
+			return lf.file
+		}
+	}
+	return ""
+}
+
+// detectNodeSubdirs returns sorted subdirectory names (depth 1) containing
+// package.json. Dotfile-prefixed directories and node_modules are skipped —
+// these commonly contain stray package.json files (build outputs, vendored
+// deps) that don't represent real project directories.
+func detectNodeSubdirs(projectRoot string) []string {
+	entries, err := os.ReadDir(projectRoot)
+	if err != nil {
+		return nil
+	}
+	var dirs []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasPrefix(name, ".") || name == "node_modules" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(projectRoot, name, "package.json")); err == nil {
+			dirs = append(dirs, name)
+		}
+	}
+	slices.Sort(dirs)
+	return dirs
+}
+
+// detectPostWorktreeCmd checks the project root (and immediate subdirectories
+// if nothing at root) for package.json, returning the appropriate install
+// command. For multiple subdirectories, returns "" — the caller should print
+// a manual-configuration message instead of guessing at a compound command.
+func detectPostWorktreeCmd(projectRoot string) string {
+	if cmd := detectInstallCmdInDir(projectRoot); cmd != "" {
+		return cmd
+	}
+	subdirs := detectNodeSubdirs(projectRoot)
+	if len(subdirs) == 1 {
+		cmd := detectInstallCmdInDir(filepath.Join(projectRoot, subdirs[0]))
+		return "cd " + subdirs[0] + " && " + cmd
+	}
+	return ""
+}
+
+// detectPkgManagerContext returns a human-readable description of what was
+// detected (e.g. "package.json + yarn.lock") for the suggestion prompt.
 func detectPkgManagerContext(projectRoot string) string {
-	lockfiles := []string{"pnpm-lock.yaml", "yarn.lock", "bun.lockb", "bun.lock", "package-lock.json"}
-	for _, lf := range lockfiles {
-		if _, err := os.Stat(filepath.Join(projectRoot, lf)); err == nil {
+	// Root-level package.json.
+	if _, err := os.Stat(filepath.Join(projectRoot, "package.json")); err == nil {
+		if lf := detectLockfileInDir(projectRoot); lf != "" {
 			return "package.json + " + lf
 		}
+		return "package.json"
+	}
+	// Single-subdir case (only called when detectPostWorktreeCmd returned non-empty).
+	subdirs := detectNodeSubdirs(projectRoot)
+	if len(subdirs) == 1 {
+		dir := subdirs[0]
+		if lf := detectLockfileInDir(filepath.Join(projectRoot, dir)); lf != "" {
+			return dir + "/package.json + " + dir + "/" + lf
+		}
+		return dir + "/package.json"
 	}
 	return "package.json"
 }

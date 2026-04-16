@@ -1575,6 +1575,39 @@ func TestDetectPostWorktreeCmd(t *testing.T) {
 			wantCmd: "pnpm install",
 			wantCtx: "package.json + pnpm-lock.yaml",
 		},
+		{
+			name:    "single subdir with package.json",
+			files:   []string{"web/package.json", "web/package-lock.json"},
+			wantCmd: "cd web && npm install",
+			wantCtx: "web/package.json + web/package-lock.json",
+		},
+		{
+			name:    "single subdir with yarn",
+			files:   []string{"frontend/package.json", "frontend/yarn.lock"},
+			wantCmd: "cd frontend && yarn install",
+			wantCtx: "frontend/package.json + frontend/yarn.lock",
+		},
+		{
+			name:    "multiple subdirs — no auto-suggestion",
+			files:   []string{"web/package.json", "api/package.json"},
+			wantCmd: "",
+		},
+		{
+			name:    "root package.json takes precedence over subdir",
+			files:   []string{"package.json", "web/package.json"},
+			wantCmd: "npm install",
+			wantCtx: "package.json",
+		},
+		{
+			name:    "dotfile subdir ignored",
+			files:   []string{".hidden/package.json"},
+			wantCmd: "",
+		},
+		{
+			name:    "node_modules subdir ignored",
+			files:   []string{"node_modules/package.json"},
+			wantCmd: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1582,7 +1615,11 @@ func TestDetectPostWorktreeCmd(t *testing.T) {
 			tmpDir := t.TempDir()
 
 			for _, f := range tt.files {
-				if err := os.WriteFile(filepath.Join(tmpDir, f), []byte("{}"), 0644); err != nil {
+				fullPath := filepath.Join(tmpDir, f)
+				if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(fullPath, []byte("{}"), 0644); err != nil {
 					t.Fatal(err)
 				}
 			}

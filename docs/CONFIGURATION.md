@@ -115,7 +115,7 @@ Worktrees are bare checkouts — they lack build artifacts like `node_modules/`,
 **Setting it:**
 
 - **At init time:** `liza init "Goal" --post-worktree-cmd "npm install"`
-- **Auto-detection:** When `--post-worktree-cmd` is not provided, `liza init` checks for `package.json` in the project root and suggests the appropriate install command based on the lockfile:
+- **Auto-detection:** When `--post-worktree-cmd` is not provided, `liza init` checks for `package.json` in the project root (and immediate subdirectories for monorepo layouts) and suggests the appropriate install command based on the lockfile. For a single subdirectory (e.g. `web/`), it suggests `cd web && npm install`. For multiple subdirectories, it prompts for manual configuration:
 
   | Lockfile detected | Suggested command |
   |-------------------|-------------------|
