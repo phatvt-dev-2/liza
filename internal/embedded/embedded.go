@@ -43,6 +43,17 @@ var gitGuardHookContent []byte
 //go:embed "hooks/rtk-guard.sh"
 var rtkGuardHookContent []byte
 
+// Git-level pre-commit hook for task worktrees. Deliberately NOT in hooks/
+// — that directory holds Claude Code PreToolUse hooks that get written to
+// .claude/hooks/ and referenced from claude-settings.json. This one is a
+// git-native pre-commit hook rendered per-worktree by
+// RenderWorktreePreCommitHook and installed into <worktree>/.liza-hooks/
+// (see ops.InstallWorktreePreCommitHook). Different transport, different
+// lifecycle, different directory.
+//
+//go:embed "git-hooks/worktree-pre-commit.sh"
+var worktreePreCommitHookContent []byte
+
 //go:embed "guardrails-template.md"
 var guardrailsTemplateContent []byte
 
@@ -652,6 +663,16 @@ func WriteSupportDoc(lizaDir string) error {
 		return fmt.Errorf("failed to write SUPPORT.md: %w", err)
 	}
 	return nil
+}
+
+// RenderWorktreePreCommitHook returns the rendered pre-commit hook script for a
+// task worktree with the liza binary path and task ID baked in. Callers write
+// the result to the worktree's hooks directory (chmod 0755) and configure
+// git's core.hooksPath to point at it.
+func RenderWorktreePreCommitHook(lizaBin, taskID string) []byte {
+	out := bytes.ReplaceAll(worktreePreCommitHookContent, []byte("__LIZA_BIN__"), []byte(lizaBin))
+	out = bytes.ReplaceAll(out, []byte("__TASK_ID__"), []byte(taskID))
+	return out
 }
 
 // WriteHooks writes embedded hook scripts to .claude/hooks/ in the project root.

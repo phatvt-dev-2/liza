@@ -182,6 +182,30 @@ func (g *Git) GetWorktreeRelPath(taskID string) string {
 	return filepath.Join(paths.WorktreesDirName, taskID)
 }
 
+// EnableWorktreeConfigExtension ensures the main repo has
+// extensions.worktreeConfig enabled so each worktree can override config
+// values (notably core.hooksPath) without polluting the shared repo config.
+// Idempotent: safe to call repeatedly.
+func (g *Git) EnableWorktreeConfigExtension() error {
+	_, err := g.exec("config", "extensions.worktreeConfig", "true")
+	return err
+}
+
+// SetWorktreeHooksPath sets core.hooksPath in the per-worktree config for the
+// worktree at worktreeDir, pointing git at hooksAbsPath. Requires
+// extensions.worktreeConfig=true in the main repo.
+func (g *Git) SetWorktreeHooksPath(worktreeDir, hooksAbsPath string) error {
+	_, err := g.execInDir(worktreeDir, "config", "--worktree", "core.hooksPath", hooksAbsPath)
+	return err
+}
+
+// GetWorktreeHooksPath returns the effective core.hooksPath git will use for
+// the worktree at worktreeDir (i.e. the value honoring extensions.worktreeConfig
+// merging). Used to verify that a prior SetWorktreeHooksPath actually took.
+func (g *Git) GetWorktreeHooksPath(worktreeDir string) (string, error) {
+	return g.execInDir(worktreeDir, "config", "--get", "core.hooksPath")
+}
+
 // ValidateWorktreeHealth checks that a worktree directory and its .git link
 // file both exist and are accessible. A worktree without its .git file is an
 // orphan that git cannot operate on — this can happen when concurrent
