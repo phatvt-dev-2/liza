@@ -19,6 +19,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -47,6 +48,7 @@ class TurnUsage:
     cache_creation_input_tokens: int = 0
     cache_read_input_tokens: int = 0
     output_tokens: int = 0
+    duration_ms: int = 0
 
     @property
     def total_input(self) -> int:
@@ -63,6 +65,7 @@ class TurnAction:
     result_chars: int = 0
     is_error: bool = False
     result_preview: str = ""
+    duration_ms: int = 0
 
 
 @dataclass
@@ -103,6 +106,18 @@ class SessionReport:
 # ---------------------------------------------------------------------------
 # Format detection
 # ---------------------------------------------------------------------------
+
+
+def _parse_ts_ms(ts_str: str) -> int:
+    """Parse an ISO timestamp like '2026-04-15T00:25:57.276Z' to milliseconds."""
+    if not ts_str:
+        return 0
+    try:
+        # Python 3.7+ supports fromisoformat, but Z needs to be handled
+        dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        return int(dt.timestamp() * 1000)
+    except (ValueError, TypeError):
+        return 0
 
 
 def detect_format(first_line: str) -> str:
@@ -261,6 +276,8 @@ def parse_rich(lines: list[str]) -> SessionReport:
     pending_tool_uses: dict[str, tuple[str, str, int]] = {}  # id → (name, detail, turn_num)
     first_assistant_texts: list[str] = []
     first_assistant_captured = False
+    last_ts_ms = 0
+    current_turn_duration_ms = 0
 
     for line in lines:
         line = line.strip()
@@ -272,6 +289,17 @@ def parse_rich(lines: list[str]) -> SessionReport:
             continue
 
         event_type = obj.get("type", "")
+
+        ts_str = obj.get("timestamp")
+        if ts_str:
+            ts_ms = _parse_ts_ms(ts_str)
+            if ts_ms > 0:
+                if last_ts_ms > 0 and report.turns:
+                    delta = ts_ms - last_ts_ms
+                    # Attribute the time since last timestamp to the *current* turn
+                    report.turns[-1].duration_ms += delta
+                    current_turn_duration_ms += delta
+                last_ts_ms = ts_ms
 
         if event_type == "system":
             report.meta.session_id = obj.get("session_id", "")
@@ -300,6 +328,7 @@ def parse_rich(lines: list[str]) -> SessionReport:
                 )
                 seen_message_ids[msg_id] = turn
                 report.turns.append(turn)
+                current_turn_duration_ms = 0  # reset for new turn
 
             # Extract content items and tool call names
             for block in msg.get("content", []):
@@ -395,6 +424,7 @@ def parse_rich(lines: list[str]) -> SessionReport:
                                 result_chars=result_chars,
                                 is_error=effective_error,
                                 result_preview=result_preview,
+                                duration_ms=current_turn_duration_ms,
                             )
                         )
 
@@ -768,6 +798,56 @@ def render_per_turn_growth(report: SessionReport) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_longest_turns(report: SessionReport, n: int = 10) -> str:
+    """Top longest turns by duration (rich format only)."""
+    if not report.turns:
+        return ""
+
+    sorted_turns = sorted(report.turns, key=lambda t: -t.duration_ms)[:n]
+
+    # Map turn number to a summary of actions
+    turn_actions: dict[int, list[TurnAction]] = {}
+    for action in report.actions:
+        turn_actions.setdefault(action.turn_num, []).append(action)
+
+    lines = [
+        "",
+        "-" * 132,
+        f"TOP {n} LONGEST TURNS",
+        "-" * 132,
+        f"  {'#':>3s}  {'Duration':>10s}  {'Input':>10s}  {'Output':>10s}  {'Detail'}",
+        f"  {'-' * 3}  {'-' * 10}  {'-' * 10}  {'-' * 10}  {'-' * 80}",
+    ]
+
+    # Map message_id back to turn number (1-based index in the original list)
+    id_to_num = {t.message_id: i + 1 for i, t in enumerate(report.turns)}
+
+    for turn in sorted_turns:
+        num = id_to_num.get(turn.message_id, 0)
+        dur = f"{turn.duration_ms / 1000:.1f}s"
+
+        actions = turn_actions.get(num, [])
+        if actions:
+            # Join tool names and details
+            detail_parts = []
+            for a in actions:
+                part = f"{a.tool_name}({a.detail[:40]})"
+                detail_parts.append(part)
+            detail = " | ".join(detail_parts)
+        else:
+            # No tool calls - likely a text response or thinking block
+            detail = "(text message)"
+
+        lines.append(
+            f"  {num:>3d}  {dur:>10s}  "
+            f"{_fmt_tokens(turn.total_input):>10s}  "
+            f"{_fmt_tokens(turn.output_tokens):>10s}  "
+            f"{detail[:80]}"
+        )
+
+    return "\n".join(lines) + "\n"
+
+
 def render_cost(report: SessionReport) -> str:
     """Rich format only: cost breakdown with system prompt multiplier."""
     if report.total_cost_usd == 0:
@@ -1019,24 +1099,26 @@ def render_turn_timeline(report: SessionReport) -> str:
 
     lines = [
         "",
-        "-" * 142,
+        "-" * 152,
         "TURN TIMELINE",
-        "-" * 142,
-        f"  {'#':>3s}  {'Tool':<20s} {'Detail':<100s} {'Result':>8s} {'Err':>4s}",
-        f"  {'-' * 3}  {'-' * 20} {'-' * 100} {'-' * 8} {'-' * 4}",
+        "-" * 152,
+        f"  {'#':>3s}  {'Duration':>10s}  {'Tool':<20s} {'Detail':<100s} {'Result':>8s} {'Err':>4s}",
+        f"  {'-' * 3}  {'-' * 10}  {'-' * 20} {'-' * 100} {'-' * 8} {'-' * 4}",
     ]
 
     for i, action in enumerate(report.actions, 1):
         detail = action.detail[:100] if action.detail else ""
         result_size = f"{action.result_chars / 1024:.1f}K" if action.result_chars >= 1024 else f"{action.result_chars}"
         err = " ERR" if action.is_error else ""
-        lines.append(f"  {i:>3d}  {action.tool_name:<20s} {detail:<100s} {result_size:>8s} {err:>4s}")
+        dur = f"{action.duration_ms / 1000:.1f}s"
+        lines.append(f"  {i:>3d}  {dur:>10s}  {action.tool_name:<20s} {detail:<100s} {result_size:>8s} {err:>4s}")
 
     total_result = sum(a.result_chars for a in report.actions)
     error_count = sum(1 for a in report.actions if a.is_error)
-    lines.append(f"  {'-' * 3}  {'-' * 20} {'-' * 100} {'-' * 8} {'-' * 4}")
+    lines.append(f"  {'-' * 3}  {'-' * 10}  {'-' * 20} {'-' * 100} {'-' * 8} {'-' * 4}")
     lines.append(
-        f"  {'':>3s}  {len(report.actions)} calls{' ' * 102}{total_result / 1024:.0f}K total   {error_count} err"
+        f"  {'':>3s}  {'':>10s}  {len(report.actions)} calls{' ' * 102}"
+        f"{total_result / 1024:.0f}K total   {error_count} err"
     )
 
     return "\n".join(lines) + "\n"
@@ -1270,6 +1352,7 @@ def render_report(report: SessionReport) -> str:
 
     if report.meta.format == "rich":
         sections.append(render_per_turn_growth(report))
+        sections.append(render_longest_turns(report))
         sections.append(render_turn_timeline(report))
         sections.append(render_tool_result_breakdown(report))
         sections.append(render_mcp_usage(report))
@@ -1281,6 +1364,7 @@ def render_report(report: SessionReport) -> str:
         sections.append("")
         sections.append("  Note: Per-turn growth unavailable in sparse format (single turn).")
         sections.append("")
+        sections.append(render_longest_turns(report))
         sections.append(render_turn_timeline(report))
         sections.append(render_tool_result_breakdown(report))
         sections.append(render_mcp_usage(report))
