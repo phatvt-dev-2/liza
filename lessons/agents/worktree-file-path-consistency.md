@@ -16,3 +16,6 @@ Claude Code's Edit tool tracks prior reads by exact string path. If you Read via
 - Write rejected for a new file: fall back to Bash with a quoted heredoc:
   `cat > {{.WorktreePath}}/path <<'EOF'` … content … `EOF`
   (Single-quoted `'EOF'` prevents variable expansion.)
+
+**Related lesson:**
+[worktree-path-construction.md](worktree-path-construction.md) covers a different failure — prepending the task id inside an already-task-rooted worktree path (`.worktrees/<id>/<id>/`). Same path-variable discipline fixes both.

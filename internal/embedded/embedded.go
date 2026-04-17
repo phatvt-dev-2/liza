@@ -43,6 +43,9 @@ var gitGuardHookContent []byte
 //go:embed "hooks/rtk-guard.sh"
 var rtkGuardHookContent []byte
 
+//go:embed "hooks/worktree-path-guard.sh"
+var worktreePathGuardHookContent []byte
+
 // Git-level pre-commit hook for task worktrees. Deliberately NOT in hooks/
 // — that directory holds Claude Code PreToolUse hooks that get written to
 // .claude/hooks/ and referenced from claude-settings.json. This one is a
@@ -684,9 +687,10 @@ func WriteHooks(projectRoot string) error {
 	}
 
 	for name, content := range map[string][]byte{
-		"enforce-init.sh": enforceInitHookContent,
-		"git-guard.sh":    gitGuardHookContent,
-		"rtk-guard.sh":    rtkGuardHookContent,
+		"enforce-init.sh":        enforceInitHookContent,
+		"git-guard.sh":           gitGuardHookContent,
+		"rtk-guard.sh":           rtkGuardHookContent,
+		"worktree-path-guard.sh": worktreePathGuardHookContent,
 	} {
 		hookPath := filepath.Join(hooksDir, name)
 		if err := os.WriteFile(hookPath, content, 0755); err != nil {
