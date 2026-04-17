@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -328,4 +329,197 @@ func runGitInDir(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %v in %s: %v", args, dir, err)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// setupChainTestWorktree creates a worktree wired to a stub liza binary that
+// exits with lizaExitCode. The hook is the real rendered template, so tests
+// exercise the in-repo script. Returns the worktree dir.
+func setupChainTestWorktree(t *testing.T, lizaExitCode int) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := CreateWorktree(tmpDir, "task-1", false)
+	if err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+
+	stubBin := filepath.Join(tmpDir, "stub-liza")
+	stubScript := fmt.Sprintf("#!/bin/sh\nexit %d\n", lizaExitCode)
+	if err := os.WriteFile(stubBin, []byte(stubScript), 0755); err != nil {
+		t.Fatalf("write stub liza: %v", err)
+	}
+	hookPath := filepath.Join(result.WorktreeDir, ".liza-hooks", "pre-commit")
+	if err := os.WriteFile(hookPath, embedded.RenderWorktreePreCommitHook(stubBin, "task-1"), 0755); err != nil {
+		t.Fatalf("write hook: %v", err)
+	}
+
+	runGitInDir(t, result.WorktreeDir, "config", "user.email", "test@example.com")
+	runGitInDir(t, result.WorktreeDir, "config", "user.name", "Test User")
+
+	return result.WorktreeDir
+}
+
+// makeIsolatedPath creates a directory with `git` symlinked in (so the hook's
+// own `git rev-parse` works) and optionally a `pre-commit` stub. Returns the
+// dir, intended for use as PATH on the commit invocation. The stub touches
+// markerFile when invoked and exits with preCommitExit.
+func makeIsolatedPath(t *testing.T, withPreCommit bool, preCommitExit int, markerFile string) string {
+	t.Helper()
+	dir := t.TempDir()
+	gitBin, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not on PATH")
+	}
+	if err := os.Symlink(gitBin, filepath.Join(dir, "git")); err != nil {
+		t.Fatalf("symlink git: %v", err)
+	}
+	if withPreCommit {
+		// Shell-builtin-only: `:` is a no-op builtin, `> file` is redirection.
+		// Avoids external `touch` which wouldn't be on the restricted PATH.
+		// Echo to stderr surfaces invocation in CombinedOutput when debugging.
+		script := fmt.Sprintf("#!/bin/sh\necho 'pre-commit-stub-invoked' >&2\n: > %q\nexit %d\n", markerFile, preCommitExit)
+		if err := os.WriteFile(filepath.Join(dir, "pre-commit"), []byte(script), 0755); err != nil {
+			t.Fatalf("write pre-commit stub: %v", err)
+		}
+	}
+	return dir
+}
+
+// commitInIsolatedPath runs `git commit --allow-empty` in worktreeDir with
+// PATH restricted to isolatedPath, so the hook sees a controlled binary set.
+func commitInIsolatedPath(t *testing.T, worktreeDir, isolatedPath, message string) ([]byte, error) {
+	t.Helper()
+	cmd := exec.Command("git", "-C", worktreeDir, "commit", "--allow-empty", "-m", message)
+	cmd.Env = append(os.Environ(), "PATH="+isolatedPath)
+	return cmd.CombinedOutput()
+}
+
+// writePreCommitConfig drops a minimal .pre-commit-config.yaml into the
+// worktree. Content is irrelevant to the chain — only file presence matters.
+func writePreCommitConfig(t *testing.T, worktreeDir string) {
+	t.Helper()
+	path := filepath.Join(worktreeDir, ".pre-commit-config.yaml")
+	if err := os.WriteFile(path, []byte("repos: []\n"), 0644); err != nil {
+		t.Fatalf("write pre-commit config: %v", err)
+	}
+}
+
+// TestHook_ChainsToProjectPreCommit_WhenConfigPresent covers spec acceptance
+// criteria 1 and 4: when both the Liza guard and a project pre-commit config
+// are in play, the hook chains through and project pre-commit fires.
+func TestHook_ChainsToProjectPreCommit_WhenConfigPresent(t *testing.T) {
+	worktreeDir := setupChainTestWorktree(t, 0) // guard allows
+	writePreCommitConfig(t, worktreeDir)
+
+	marker := filepath.Join(t.TempDir(), "invoked")
+	isolatedPath := makeIsolatedPath(t, true, 0, marker)
+
+	out, err := commitInIsolatedPath(t, worktreeDir, isolatedPath, "chain-runs")
+	if err != nil {
+		t.Fatalf("commit failed: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("pre-commit stub was not invoked (marker %q missing): %v\noutput:\n%s", marker, err, out)
+	}
+}
+
+// TestHook_NoChainWhenConfigAbsent covers acceptance criterion 2: with no
+// .pre-commit-config.yaml in the worktree, the hook does not invoke
+// pre-commit at all.
+func TestHook_NoChainWhenConfigAbsent(t *testing.T) {
+	worktreeDir := setupChainTestWorktree(t, 0) // guard allows
+
+	marker := filepath.Join(t.TempDir(), "invoked")
+	isolatedPath := makeIsolatedPath(t, true, 0, marker)
+
+	out, err := commitInIsolatedPath(t, worktreeDir, isolatedPath, "no-chain")
+	if err != nil {
+		t.Fatalf("commit failed: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Errorf("pre-commit stub was invoked despite missing config\noutput:\n%s", out)
+	}
+}
+
+// TestHook_FailLoudOnMissingPreCommitBinary covers acceptance criterion 3:
+// when a config is present but pre-commit is not installed, the hook fails
+// loudly rather than silently skipping.
+func TestHook_FailLoudOnMissingPreCommitBinary(t *testing.T) {
+	worktreeDir := setupChainTestWorktree(t, 0) // guard allows
+	writePreCommitConfig(t, worktreeDir)
+
+	isolatedPath := makeIsolatedPath(t, false, 0, "") // no pre-commit stub
+
+	out, err := commitInIsolatedPath(t, worktreeDir, isolatedPath, "missing-binary")
+	if err == nil {
+		t.Fatalf("commit should have failed, got success:\n%s", out)
+	}
+	if !strings.Contains(string(out), "pre-commit binary not installed") {
+		t.Errorf("expected loud error in stderr, got:\n%s", out)
+	}
+}
+
+// TestHook_GuardRejectShortCircuitsChain proves the Liza guard's reject
+// short-circuits before project pre-commit runs — the guard is authoritative
+// for task-state policy regardless of config presence.
+func TestHook_GuardRejectShortCircuitsChain(t *testing.T) {
+	worktreeDir := setupChainTestWorktree(t, 1) // guard rejects
+	writePreCommitConfig(t, worktreeDir)
+
+	marker := filepath.Join(t.TempDir(), "invoked")
+	isolatedPath := makeIsolatedPath(t, true, 0, marker)
+
+	out, err := commitInIsolatedPath(t, worktreeDir, isolatedPath, "guard-wins")
+	if err == nil {
+		t.Fatalf("commit should have been rejected by guard, got success:\n%s", out)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Errorf("pre-commit stub ran despite guard rejection\noutput:\n%s", out)
+	}
+}
+
+// TestHook_ProjectPreCommitFailureBlocksCommit proves project pre-commit's
+// real exit code propagates: a non-zero pre-commit exit blocks the commit.
+func TestHook_ProjectPreCommitFailureBlocksCommit(t *testing.T) {
+	worktreeDir := setupChainTestWorktree(t, 0) // guard allows
+	writePreCommitConfig(t, worktreeDir)
+
+	marker := filepath.Join(t.TempDir(), "invoked")
+	isolatedPath := makeIsolatedPath(t, true, 1, marker) // pre-commit fails
+
+	out, err := commitInIsolatedPath(t, worktreeDir, isolatedPath, "pre-commit-fails")
+	if err == nil {
+		t.Fatalf("commit should have failed when pre-commit exits 1, got success:\n%s", out)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("pre-commit stub was not invoked: %v\noutput:\n%s", err, out)
+	}
+}
+
+// TestHook_FailSafeOnUnknownGuardExitFallsThroughToChain covers acceptance
+// criterion 5: an unknown guard exit code (e.g. 127, stale binary) is treated
+// as allow, but the project pre-commit chain still runs — preserving the
+// fail-safe asymmetry. This complements TestHookShellFailSafeOnUnknownExitCode
+// which covers the no-config flavor of the same property.
+func TestHook_FailSafeOnUnknownGuardExitFallsThroughToChain(t *testing.T) {
+	worktreeDir := setupChainTestWorktree(t, 127) // guard exits 127
+	writePreCommitConfig(t, worktreeDir)
+
+	marker := filepath.Join(t.TempDir(), "invoked")
+	isolatedPath := makeIsolatedPath(t, true, 0, marker)
+
+	out, err := commitInIsolatedPath(t, worktreeDir, isolatedPath, "fail-safe-chains")
+	if err != nil {
+		t.Fatalf("commit should succeed (guard fail-safe + pre-commit allows): %v\n%s", err, out)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("pre-commit stub was not invoked despite fail-safe fall-through: %v\noutput:\n%s", err, out)
+	}
 }
