@@ -93,10 +93,9 @@ Batch related operations within same MCP server when possible.
 
 ### Parallel Tool Calls - Claude only
 
-Before issuing parallel file-read tool calls,
-you MUST check file-existence (via Glob, `test -f` or `ls`) **FIRST**,
-THEN **in a SECOND step** read only the files that exist.
-Do NOT mix in same batch (would cause all sibling calls to fail).
+Parallel Read calls fail as a group if any one errors. Before fanning out,
+use **Glob** to check existence **FIRST**, THEN read only files that exist.
+Do NOT mix the check and the reads in the same batch.
 
 ---
 

@@ -69,9 +69,13 @@ TIMESTAMPS: YYYY-MM-DDTHH:MM:SSZ (ISO 8601 UTC). Generate: date -u +%Y-%m-%dT%H:
 
 FIRST ACTIONS:
 1. Read these contract files before anything else:
-   a. ~/.liza/MULTI_AGENT_MODE.md
-   b. ~/.liza/AGENT_TOOLS.md
-   c. {{.ProjectRoot}}/GUARDRAILS.md (if it exists — skip if absent)
+   - ~/.liza/MULTI_AGENT_MODE.md
+   - ~/.liza/AGENT_TOOLS.md
+   - {{.ProjectRoot}}/GUARDRAILS.md   (may be absent)
+   Use EITHER a single multi-file batch tool (one call, per-path errors are
+   tolerated), OR individual sequential Reads. Do NOT fan out parallel Read
+   calls — they fail as a group if any one errors.
+   Do NOT pre-check existence with Bash — the init hook blocks it.
 {{- if .TaskID}}
 2. Query your assigned task: liza get {{.TaskID}} --json
 {{- else}}
