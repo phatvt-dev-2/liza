@@ -1,9 +1,9 @@
-# Liza Competitive Survey — March 2026
+# Liza Competitive Survey — March-April 2026
 
 ## Landscape Overview
 
 The multi-agent coding space has evolved rapidly since Liza's first release. The field now splits into
-five distinct categories, each solving a different problem. Liza sits in a category of one.
+six distinct categories, each solving a different problem. Liza sits in a category of one.
 
 **General-purpose agent orchestration frameworks** (CrewAI, LangGraph, AutoGen, Semantic Kernel) provide
 building blocks for assembling multi-agent workflows across any domain. They optimize for flexibility and
@@ -22,10 +22,16 @@ challenge. Thin orchestrators spawn fresh subagents for every operation, plans a
 before execution, and state lives in human-readable files. Trust derives from process structure
 (spec → plan → execute → verify) and context freshness, not behavioral enforcement.
 
+**Methodology / workflow frameworks** (BMAD-METHOD) install a multi-phase agile methodology into AI IDEs
+(Claude Code, Cursor, Codex, Copilot): named agent personas guide the human through brainstorming, PRFAQ,
+PRD interview, architecture, stories, and code review. Each workflow runs in a fresh chat session. Trust
+comes from structured process, context engineering, and a three-layer adversarial code review — all at the
+prompt level, with no mechanical merge gate.
+
 **Behavioral enforcement systems** (Liza). One entry. A hybrid hardened architecture: deterministic
 Go supervisors enforce state transitions, role boundaries, merge authority, and TDD gates mechanically,
-while LLM agents handle judgment under a behavioral contract addressing 55+ failure modes. Nine roles
-across two pipeline phases (specification → coding), each organized as adversarial doer/reviewer pairs
+while LLM agents handle judgment under a behavioral contract addressing 55+ failure modes. One orchestrator
+plus 12 other roles span three pipeline phases (specification → coding → integration), organized as adversarial doer/reviewer pairs
 with configurable review quorum and provider-diversity enforcement. Declarative YAML pipeline schema
 drives role context, skills, permissions, and prompt construction. Checkpoint-gated phase transitions
 ensure human review of planning output before coding begins. Optimizes for trust through mechanical
@@ -34,6 +40,32 @@ constraint of agent failure modes.
 ---
 
 ## Direct Competitors
+
+### BMAD-METHOD
+
+**What it is**: "Breakthrough Method for Agile AI-Driven Development" — npm-distributed methodology framework installed into AI IDEs (Claude Code, Cursor, Codex, Copilot). JavaScript/Node.js, MIT licensed. ~45.2k stars, ~5.4k forks, 132 contributors, 1,826 commits, 29 releases as of 2026-04-20. Trademarked by BMad Code, LLC.
+
+**Current state (April 2026)**: V6.3.0 shipped April 10, 2026 — consolidated three previous agents (Barry/Quick-Flow, Quinn/QA, Bob/SM) into a single Developer persona (Amelia). Active Discord, YouTube channel, docs in 5 languages (EN, FR, ZH, CS, VI). Module ecosystem: BMM core, BMad Builder, Test Architect, Game Dev Studio, Creative Intelligence Suite. Corporate sponsorship. Rapid iteration.
+
+**Philosophy**: Quality comes from methodology and context engineering. "AI tools do the thinking for you, producing average results; our agents are expert collaborators who guide you through a structured process." Each phase produces documents that inform the next. Grounded in agile methodology and Amazon's Working Backwards.
+
+**Trust model**: Structured process + context engineering. `bmad-code-review` runs three parallel adversarial reviewers (Blind Hunter with diff-only context, Edge Case Hunter with project read, Acceptance Auditor with spec) and triages findings into decision-needed / patch / defer / dismiss. Implementation readiness check returns PASS/CONCERNS/FAIL before implementation. But enforcement is prompt-level — no mechanical gate prevents merge without approval.
+
+**Where it falls short vs Liza**:
+- No code-enforced role boundaries (prompt-level only)
+- No failure mode catalog or academic failure-mode grounding
+- No mechanical merge gate — reviewers are advisory, not binding
+- No crash recovery (fresh-chat-per-workflow loses mid-task state if session dies)
+- Sequential by design; no concurrent multi-agent execution on the same codebase
+- No inter-workflow state; planning artifacts are re-read at each workflow entry (token cost)
+
+**What's interesting about it**:
+- Upstream planning breadth (brainstorming, market/domain/technical research, PRFAQ, PRD interview, UX design) is deeper than Liza's goal-document entry point — BMAD's Analysis phase reaches altitudes above Liza's vision input
+- Three-layer parallel adversarial review is the most developed prompt-level adversarial mechanism surveyed
+- Triage buckets (decision-needed / patch / defer / dismiss) are cleaner than binary approve/reject
+- Scale-adaptive tracks (Quick Flow / BMad Method / Enterprise) match planning depth to project complexity
+
+**Market position**: Closest philosophical neighbour. Same domain (software engineering with multi-agent coordination), opposite architectural bet. BMAD trusts agents when given good methodology; Liza mechanically constrains them. Liza's README acknowledges BMAD for "role templates and workflow patterns." Octo Technology places both at L4 maturity. Architecturally complementary — BMAD's upstream methodology (analysis, PRD, architecture, UX) feeds naturally into Liza's downstream execution (spec decomposition, adversarial coding, mechanical review, supervised merges). [Full comparison](liza-vs-bmad-comparison.md).
 
 ### MetaGPT / MGX
 
@@ -437,22 +469,22 @@ operates at architecture-selection level, not behavioral enforcement level. The 
 
 ## Competitive Dimensions Matrix
 
-| Dimension | Liza | CrewAI | Ruflo | GSD | Symphony | Paperclip |
-|-----------|------|--------|-------|-----|----------|-----------|
-| **Spec input level** | High-level goal doc (product decisions only) → orchestrator decomposes. Human owns spec via pairing (Coach/Challenger). | None (task descriptions) | None (task descriptions) | Detailed spec required → plan → execute → verify | Issue tracker (Linear) | Goal → delegated tasks |
-| **Domain** | Software engineering (9 roles, 2 phases, declarative pipeline) | General-purpose | Software engineering (60+ agent types) | Software engineering (15 agents, 4 phases) | Task scheduling | Business operations |
-| **Trust approach** | Behavioral contract (55+ failure modes) + review quorum + provider diversity | Post-hoc output validation | Track-record based (Q-learning) | Spec-driven + deviation rules | Implementation-dependent | Budget/approval governance |
-| **Role enforcement** | Code-enforced (MCP handler, YAML-driven permissions) | Prompt suggestion | Claude hooks (provider-specific) | Prompt-level (least-privilege tooling) | None (single-agent) | Org chart hierarchy |
-| **Review loop** | Adversarial doer/reviewer pairs with quorum + provider diversity gate | Optional manager mode (broken) | None (single-pass) | Checker + verifier (separate, not adversarial) | None | None |
-| **Failure handling** | Structural prevention + escalation + checkpoint-gated transitions | Retry on output failure | Pattern matching from past successes | 3 retries + document + move on | Implementation-dependent | Budget auto-pause |
-| **Provider compliance** | Empirical matrix (5 providers), provider-diversity enforcement | None published | Claude-only | Multi-runtime (6), no compliance testing | Codex-only | Agent-agnostic (no testing) |
-| **Context management** | Tiered degradation, structured HandoffEvents, prompt templates | Memory (short/long/entity) | HNSW-indexed persistent memory | Fresh subagent contexts, context budget enforcement | Per-issue workspace | Persistent sessions |
-| **Crash recovery** | recover-agent, recover-task | None | None | File-based state, session resume, state reconstruction | BEAM supervision trees | Session persistence |
-| **Cost tracking** | Planned (token-level) | None native | None | Model profiles (quality/balanced/budget), proxy metrics | None | Per-agent/task/project budgets |
-| **Multi-sprint** | Yes (numbering, checkpoints, archive, replan) | No | No | No (session/phase-scoped) | Per-issue runs | Heartbeat-based scheduling |
-| **Maturity** | Alpha MAS (both phases shipped), battle-tested pairing | Production (v1.9.0) | Active development | Production (v1.25+) | Engineering preview | Just launched |
-| **Stars** | Early | 45k | Growing | 37k | New | 14k |
-| **License** | Apache 2.0 | MIT | MIT | MIT | Apache 2.0 | MIT |
+| Dimension | Liza | BMAD | CrewAI | Ruflo | GSD | Symphony | Paperclip |
+|-----------|------|------|--------|-------|-----|----------|-----------|
+| **Spec input level** | High-level goal doc (product decisions only) → orchestrator decomposes. Human owns spec via pairing (Coach/Challenger). | Full lifecycle (brainstorming → PRFAQ → PRD → Architecture → Epics → Stories); PM agent interviews human | None (task descriptions) | None (task descriptions) | Detailed spec required → plan → execute → verify | Issue tracker (Linear) | Goal → delegated tasks |
+| **Domain** | Software engineering (13 roles, 3 phases, declarative pipeline) | Software engineering + product discovery (6 named agents, 4 phases + Quick Flow track) | General-purpose | Software engineering (60+ agent types) | Software engineering (15 agents, 4 phases) | Task scheduling | Business operations |
+| **Trust approach** | Behavioral contract (55+ failure modes) + review quorum + provider diversity | Structured process + context engineering; prompt-level discipline | Post-hoc output validation | Track-record based (Q-learning) | Spec-driven + deviation rules | Implementation-dependent | Budget/approval governance |
+| **Role enforcement** | Code-enforced (CLI-native Go supervisor, YAML-driven permissions) | Prompt-level (6 named personas, skill and workflow step files) | Prompt suggestion | Claude hooks (provider-specific) | Prompt-level (least-privilege tooling) | None (single-agent) | Org chart hierarchy |
+| **Review loop** | Adversarial doer/reviewer pairs with quorum + provider diversity gate | 3 parallel reviewers (Blind Hunter / Edge Case Hunter / Acceptance Auditor) → triage buckets; advisory (no merge gate) | Optional manager mode (broken) | None (single-pass) | Checker + verifier (separate, not adversarial) | None | None |
+| **Failure handling** | Structural prevention + escalation + checkpoint-gated transitions | `bmad-correct-course`, retrospective, readiness gate (PASS/CONCERNS/FAIL) | Retry on output failure | Pattern matching from past successes | 3 retries + document + move on | Implementation-dependent | Budget auto-pause |
+| **Provider compliance** | Empirical matrix (5 providers), provider-diversity enforcement | IDE-agnostic (Claude Code, Cursor, Codex, Copilot); no compliance testing | None published | Claude-only | Multi-runtime (6), no compliance testing | Codex-only | Agent-agnostic (no testing) |
+| **Context management** | Tiered degradation, structured HandoffEvents, prompt templates | Fresh chat per workflow; markdown artifact re-reads | Memory (short/long/entity) | HNSW-indexed persistent memory | Fresh subagent contexts, context budget enforcement | Per-issue workspace | Persistent sessions |
+| **Crash recovery** | recover-agent, recover-task | None (fresh-chat architecture) | None | None | File-based state, session resume, state reconstruction | BEAM supervision trees | Session persistence |
+| **Cost tracking** | Planned (token-level) | None documented | None native | None | Model profiles (quality/balanced/budget), proxy metrics | None | Per-agent/task/project budgets |
+| **Multi-sprint** | Yes (numbering, checkpoints, archive, replan) | `sprint-status.yaml` per sprint; no cross-sprint continuity | No | No | No (session/phase-scoped) | Per-issue runs | Heartbeat-based scheduling |
+| **Maturity** | Alpha MAS (three phases shipped), battle-tested pairing | Production (V6.3.0, April 2026) | Production (v1.9.0) | Active development | Production (v1.25+) | Engineering preview | Just launched |
+| **Stars** | Early | ~45.2k | 45k | Growing | 37k | New | 14k |
+| **License** | Apache 2.0 | MIT (trademarked) | MIT | MIT | MIT | Apache 2.0 | MIT |
 
 ---
 
@@ -461,6 +493,7 @@ operates at architecture-selection level, not behavioral enforcement level. The 
 | System | Input altitude | Who owns product decisions | Decomposition | Adversarial review |
 |--------|---------------|--------------------------|---------------|-------------------|
 | **Liza** | High-level goal (problem, users, behavior, scope) | Human via pairing (Coach/Challenger) | Orchestrator decomposes into tasks | Doer/reviewer pairs with quorum |
+| **BMAD** | Full lifecycle (brainstorming → PRFAQ → PRD → Architecture → Stories) | Human via conversational PM-agent interview | Phase workflows produce artifacts (PRD → Architecture → Epics → Stories) | Three-layer parallel reviewers at code stage (prompt-level) |
 | **Spec Kit** | High-level goal → agent-generated spec | Agent generates, human approves | Agent decomposes spec into tasks | None |
 | **OpenSpec** | Detailed delta-specs on existing system | Human (spec assumed pre-decided) | Slash commands structure tasks | None (verify is advisory) |
 | **Kiro** | Interactive 3-doc generation | Agent drives, human confirms | Agent decomposes from spec | None (single-agent) |
@@ -474,7 +507,7 @@ mechanically during execution.
 
 ---
 
-## Key Trends (March 2026)
+## Key Trends (March-April 2026)
 
 **The scheduler/orchestrator layer is commoditizing.** Symphony and Paperclip prove that dispatching
 work to agents, managing workspaces, and tracking runs is becoming table stakes. This is not where
@@ -500,16 +533,23 @@ But context engineering and behavioral enforcement solve different problems. A f
 still mutate tests, violate scope, or skip review. The complete solution needs both.
 
 **Spec-driven development is converging — but at different altitudes.** GitHub Spec Kit, OpenSpec,
-Kiro, Intent, and BMAD-METHOD all position around "spec before code." Most expect or generate
-a detailed technical spec as input — the decomposition starts from a near-complete requirements
-document. Liza starts one level higher: a goal document capturing product decisions (problem,
-users, behavior, scope boundaries) without implementation detail. The rule is explicit: "agents
-may make implementation choices but not product decisions." The goal-setting phase uses synchronous
-human-agent pairing (Coach mode for surfacing WHY, Challenger mode for stress-testing WHAT) because
-this phase has the highest decision density — every ambiguity resolved here prevents wrong turns
-downstream. Most competitors have the agent write the spec for human approval, inverting the
-control: the human reacts instead of driving. Liza's approach is slower to start but produces
-specs where product decisions are human-owned, not agent-proposed.
+Kiro, Intent, and BMAD-METHOD all position around "spec before code." Most either expect a
+detailed technical spec as input (OpenSpec, GSD) or have the agent generate one (Spec Kit,
+Kiro, MetaGPT). BMAD covers the broadest altitude range — from brainstorming and PRFAQ at the
+top through epics, stories, and code review at the bottom — but relies on continuous human
+participation across a chain of workflows. Liza picks a narrower altitude and bets on autonomy:
+the human authors a goal document capturing product decisions (problem, users, behavior, scope
+boundaries) without implementation detail, and the pipeline decomposes autonomously under
+adversarial review. The rule is explicit: "agents may make implementation choices but not
+product decisions." A ~200-line goal document describing the "Diagnosis Design" method produced
+a complete three-tier application in a single Liza run — Python FastAPI backend with
+SQLAlchemy/Alembic persistence, Go Cobra CLI, and a Vite/React/TanStack-Query web UI — with no
+human steering between the goal document and merged code; supporting run artifacts are in a non-public
+Diagnosis Design repo. The positioning question is not "who
+starts highest" but "what's the minimum human input that reliably produces working code": BMAD
+answers with iterative PM-agent interviews across phases; Liza answers with one front-loaded
+goal doc authored via pairing (Coach mode for surfacing WHY, Challenger mode for stress-testing
+WHAT), then mechanical pipeline execution.
 
 **Enterprise trust remains unsolved by everyone except Liza.** Every framework survey and comparison
 article mentions guardrails as a desirable feature. Nobody has what Liza has — 55+ documented failure

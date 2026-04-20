@@ -96,19 +96,21 @@ using Liza in Multi-agent mode - spec-driven with intermediate epic and User Sto
 
 ### MAS Architecture
 
-The multi-agent coding space splits into four categories:
+The multi-agent coding space splits into six categories:
 
 - **Orchestration frameworks** (CrewAI, LangGraph, AutoGen) — general-purpose multi-agent building blocks; none address behavioral trust in software engineering.
 - **Company simulators** (MetaGPT, ChatDev) — SOP-based pipelines mimicking software teams; trust assumed through process compliance.
 - **Scheduler/runners** (Symphony, Paperclip) — work dispatch and workspace isolation above coding agents; trust delegated to whatever happens inside each session.
+- **Context-engineered systems** (GSD) — thin orchestrators spawn fresh subagents for every operation to prevent "context rot"; trust derives from context freshness plus spec-driven process, not behavioral enforcement.
+- **Methodology / workflow frameworks** (BMAD-METHOD) — multi-phase agile methodology installed into AI IDEs (Claude Code, Cursor, Codex, Copilot); trust via structured process and context engineering, not mechanical enforcement.
 - **Behavioral enforcement** (Liza) — deterministic supervisors enforce state transitions, role boundaries, and merge authority mechanically; agents handle judgment under a behavioral contract addressing 55+ failure modes.
 
-| | Liza | CrewAI | Ruflo | Symphony | Paperclip |
-|---|---|---|---|---|---|
-| **Trust approach** | Behavioral contract (55+ failure modes) | Post-hoc output validation | Track-record based (Q-learning) | Implementation-dependent | Budget/approval governance |
-| **Review loop** | Adversarial doer/reviewer pairs | Optional manager mode | None | None | None |
-| **Role enforcement** | Code-enforced (Go supervisor) | Prompt suggestion | Claude hooks (provider-specific) | None (single-agent) | Org chart hierarchy |
-| **Failure handling** | Structural prevention + escalation | Retry on output failure | Pattern matching from past successes | Implementation-dependent | Budget auto-pause |
+| | Liza | BMAD | CrewAI | Ruflo | Symphony | Paperclip |
+|---|---|---|---|---|---|---|
+| **Trust approach** | Behavioral contract (55+ failure modes) | Prompt-level three-layer adversarial review (advisory) | Post-hoc output validation | Track-record based (Q-learning) | Implementation-dependent | Budget/approval governance |
+| **Review loop** | Adversarial doer/reviewer pairs | 3 parallel reviewers (Blind Hunter / Edge Case / Acceptance) | Optional manager mode | None | None | None |
+| **Role enforcement** | Code-enforced (Go supervisor) | Prompt-level (6 named personas) | Prompt suggestion | Claude hooks (provider-specific) | None (single-agent) | Org chart hierarchy |
+| **Failure handling** | Structural prevention + escalation | `bmad-correct-course` + readiness gate (PASS/CONCERNS/FAIL) | Retry on output failure | Pattern matching from past successes | Implementation-dependent | Budget auto-pause |
 
 **Where Liza leads** — no competitor offers any of these:
 - Failure mode catalog (55+) with mechanical countermeasures
@@ -118,7 +120,8 @@ The multi-agent coding space splits into four categories:
 - Multi-sprint continuity, crash recovery, context pressure management
 
 **Where others lead:**
-- **Ecosystem**: CrewAI (45k stars, production v1.9.0, enterprise product) and MetaGPT (64k stars) have far larger communities
+- **Ecosystem**: CrewAI (45k stars, production v1.9.0, enterprise product), MetaGPT (64k stars), and BMAD (~45.2k stars, Discord, 5-language docs, corporate sponsorship) have far larger communities
+- **Upstream planning**: BMAD covers brainstorming, market research, PRFAQ, PRD interviews, and UX design — breadth Liza's lighter goal-document entry point doesn't match
 - **Cost tracking**: Paperclip ships per-agent/task/project budgets today; Liza's is planned
 - **Flexibility**: CrewAI works for any domain; Liza is software-engineering-only
 
@@ -126,14 +129,16 @@ The multi-agent coding space splits into four categories:
 
 Spec-driven development is becoming the standard approach for AI coding. Most tools differ in *what altitude* they expect the input at and *who owns product decisions*.
 
-| | Liza                                              | Spec Kit | OpenSpec | Kiro | GSD |
-|---|---------------------------------------------------|---|---|---|---|
-| **Input level** | High-level goal (problem, users, behavior, scope) | High-level goal → agent-generated spec | Detailed delta-specs on existing system | Interactive 3-doc generation | Detailed spec required |
-| **Who decides what to build** | Human via pairing (Coach/Challenger modes)        | Agent generates, human approves | Human (spec pre-decided) | Agent drives, human confirms | Human (pre-written) |
-| **Decomposition** | Orchestrator decomposes into adversarial tasks    | Agent decomposes spec into tasks | Slash commands structure tasks | Agent decomposes from spec | Planner sizes to context budget |
-| **Review** | Doer/reviewer pairs with quorum                   | None | Advisory (verify warns, doesn't block) | None (single-agent) | Checker + verifier (not adversarial) |
+| | Liza                                              | BMAD | Spec Kit | OpenSpec | Kiro | GSD |
+|---|---------------------------------------------------|---|---|---|---|---|
+| **Input level** | High-level goal (problem, users, behavior, scope) | Full lifecycle (brainstorming → PRFAQ → PRD → Architecture → Stories) | High-level goal → agent-generated spec | Detailed delta-specs on existing system | Interactive 3-doc generation | Detailed spec required |
+| **Who decides what to build** | Human via pairing (Coach/Challenger modes)        | Human via conversational PM-agent interview | Agent generates, human approves | Human (spec pre-decided) | Agent drives, human confirms | Human (pre-written) |
+| **Decomposition** | Orchestrator decomposes into adversarial tasks    | Phase workflows produce artifacts (PRD → Architecture → Epics → Stories) | Agent decomposes spec into tasks | Slash commands structure tasks | Agent decomposes from spec | Planner sizes to context budget |
+| **Review** | Doer/reviewer pairs with quorum                   | Three parallel reviewers at code stage (prompt-level, advisory) | None | Advisory (verify warns, doesn't block) | None (single-agent) | Checker + verifier (not adversarial) |
 
-Most tools either expect the detailed spec already done (OpenSpec, GSD) or have the agent write it (Spec Kit, Kiro, MetaGPT). Liza treats goal-setting as a synchronous human-agent collaboration where the human makes product decisions and the agent helps surface gaps — then enforces those decisions mechanically during execution.
+Most tools either expect the detailed spec already done (OpenSpec, GSD) or have the agent write it (Spec Kit, Kiro, MetaGPT). BMAD spans the broadest altitude range — from brainstorming and PRFAQ at the top through stories and code review at the bottom — but relies on the PM agent interviewing the human conversationally across every workflow. Liza treats goal-setting as a synchronous human-agent collaboration where the human makes product decisions and the agent helps surface gaps — then enforces those decisions mechanically during autonomous pipeline execution.
+
+The positioning question is not "who starts highest" but "what's the minimum human input that reliably produces working code." BMAD answers with iterative PM-agent interviews; Liza answers with one front-loaded goal doc, then mechanical pipeline execution. A ~200-line goal document describing the "Diagnosis Design" method has been sufficient to produce a complete three-tier application (FastAPI backend, Go CLI, React web UI) in a single Liza run, with human intervention limited to answering questions (checkpoint-summary skill) between goal and merged code; the supporting run artifacts are in a non-public Diagnosis Design repo.
 
 **Rule of thumb: agents may make implementation choices but not product decisions.** The [goal document](docs/how-to-produce-a-goal.md) is where every product decision lives. The goal-setting phase uses pairing (Coach mode for surfacing WHY, Challenger mode for stress-testing WHAT) because this phase has the highest decision density — every ambiguity resolved here prevents wrong turns downstream.
 
