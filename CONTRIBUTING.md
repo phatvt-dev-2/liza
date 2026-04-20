@@ -95,9 +95,31 @@ All hooks must pass before committing. The suite includes:
 
 ## Scope
 
-Liza is intentionally scoped as a standalone engineering tool. Contributions that add
-integrations with external systems (Jira, GitHub, CI platforms, etc.) or target
-non-engineer personas are outside the current scope and will not be merged.
+Liza is intentionally scoped as a standalone, self-contained execution engine for software engineers. It takes a goal document as input and produces git commits as output. Nothing more.
+
+In scope:
+
+- Behavioral contracts, postures, and guardrails
+- Autonomous generation of specs, epics, user stories, and code plans from a vision document
+- Agent orchestration, supervision, and state machine enforcement
+- Adversarial doer/reviewer pipelines across all phases
+- Code generation, review, and validation pipelines, including test generation and quality enforcement
+- Worktree management and git integration
+- TUI, CLI, and blackboard coordination
+- Multi-model support via provider CLI wrapping (BYOM)
+- Execution observability: agent log analysis, sprint retrospectives, and continuous improvement tooling
+- Circuit breaker, crash recovery, and context handoff
+- Pipeline configuration and composable skills
+
+Out of scope — will not be merged:
+
+- Integrations with external project management, communication, or business workflow services (Jira, Linear, GitHub Issues, Slack, CI/CD platforms, etc.)
+- Authentication, SSO, or identity management
+- Multi-tenant or enterprise access controls
+- Reporting or audit trails targeting external stakeholders (management, executives, compliance)
+- Any feature targeting non-engineer personas
+
+Ambiguous contributions — features that could be interpreted as either in or out of scope — will be decided by the maintainer. The decision will be documented in the PR. No external approval is required or sought.
 
 ## Submitting Changes
 
