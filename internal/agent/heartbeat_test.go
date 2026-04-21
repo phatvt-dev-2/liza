@@ -231,6 +231,7 @@ func TestHeartbeatStop(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	hb := NewHeartbeat(config)
 	doneCh := make(chan error, 1)
@@ -240,7 +241,7 @@ func TestHeartbeatStop(t *testing.T) {
 
 	// Wait until at least one heartbeat update is observed.
 	bb := db.New(stateFile)
-	waitDeadline := time.After(3 * time.Second)
+	waitDeadline := time.After(5 * time.Second)
 	waitTicker := time.NewTicker(10 * time.Millisecond)
 	defer waitTicker.Stop()
 

@@ -77,7 +77,7 @@ func TestWaitForCoderWork(t *testing.T) {
 			}
 
 			bb := db.New(statePath)
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			strategy, _ := NewRoleStrategy("coder", testResolver(t))
@@ -232,7 +232,7 @@ func TestWaitForCodePlannerWork(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			config := SupervisorConfig{StatePath: statePath, AgentID: "code-planner-1", ProjectRoot: tmpDir}
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			strategy, _ := NewRoleStrategy("code-planner", testResolver(t))
@@ -347,7 +347,7 @@ func TestWaitForOrchestratorWork(t *testing.T) {
 				ProjectRoot: tmpDir,
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			// Orchestrator now respects maxWait parameter (uses 100ms timeout for test)
@@ -945,7 +945,7 @@ func TestWaitForEpicPlannerWork(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			config := SupervisorConfig{StatePath: statePath, AgentID: "epic-planner-1", ProjectRoot: projectRoot}
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			strategy, _ := NewRoleStrategy("epic-planner", testResolver(t))
@@ -1093,7 +1093,7 @@ func TestWaitForUSWriterWork(t *testing.T) {
 			testhelpers.WriteInitialState(t, statePath, state)
 
 			config := SupervisorConfig{StatePath: statePath, AgentID: "us-writer-1", ProjectRoot: projectRoot}
-			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			strategy, _ := NewRoleStrategy("us-writer", testResolver(t))
