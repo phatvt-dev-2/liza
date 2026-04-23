@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/roles"
@@ -147,6 +148,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		StatePath:   config.StatePath,
 		SpecsDir:    config.SpecsDir,
 		GoalDesc:    state.Goal.Description,
+		GoalSlug:    paths.GoalSlug(state.Goal.SpecRef),
 	}
 
 	// Prior rejection

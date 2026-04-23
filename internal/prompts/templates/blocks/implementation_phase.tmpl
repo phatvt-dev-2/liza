@@ -33,9 +33,9 @@ listed in SCOPE yet. Do NOT explore implementation directories that don't exist 
 plan from the provided spec artifacts (architecture document, goal spec, or assigned scope).
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Plan file location:
-   Run: mkdir -p {{.Worktree}}/specs/plans
+   Run: mkdir -p {{.Worktree}}/specs/plans/{{.GoalSlug}}
    Capture a timestamp by running: date -u +'%Y%m%d-%H%M%S'
-   Save your plan to: {{.Worktree}}/specs/plans/TIMESTAMP-{{.TaskID}}.md
+   Save your plan to: {{.Worktree}}/specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md
    All later references to "the plan file" mean the exact path chosen here.
    (Include a "## Spec Compliance Matrix" section — see step 6c.)
 3. For EACH coding task in your plan, call liza set-task-output --json with structured entries.
@@ -93,7 +93,12 @@ IMPLEMENTATION PHASE:
 2. Invoke skill: epic-writing FIRST.
 3. Read the source material referenced by this task (vision doc, product brief, spec).
 4. Follow the skill protocol: Size → Parse → Decompose → Write → Self-Review.
-5. For EACH capability in the epic, call liza set-task-output --json with structured entries.
+5. Epic document location:
+   Run: mkdir -p {{.Worktree}}/specs/epics/{{.GoalSlug}}
+   Capture a timestamp by running: date -u +'%Y%m%d-%H%M%S'
+   Save your epic to: {{.Worktree}}/specs/epics/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md
+   All later references to "the epic doc" mean the exact path chosen here.
+6. For EACH capability in the epic, call liza set-task-output --json with structured entries.
    Each entry becomes a US Writer child task after merge. The Epic Plan Reviewer will verify these.
    Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary),
    spec_ref (goal spec reference — preserves traceability to the original requirements),
@@ -104,10 +109,10 @@ IMPLEMENTATION PHASE:
    scope: derive from the capability's story documents table and out-of-scope section.
    spec_ref: set to {{.SpecRef}} for all entries (the task's own spec_ref, which is the goal spec).
    plan_ref: repo-relative path to the produced epic document with a markdown section anchor
-   for the specific capability heading (e.g., specs/plans/EP-001.md#capability-cap-001---task-creation).
-6. Update worktree artifacts required by DONE WHEN.
-7. Validate done_when criteria with concrete checks.
-8. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
+   for the specific capability heading (e.g., specs/epics/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md#capability-cap-001---task-creation).
+7. Update worktree artifacts required by DONE WHEN.
+8. Validate done_when criteria with concrete checks.
+9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
    a. output[] completeness: one entry per capability in the epic, each with all five fields
       (desc, done_when, scope, spec_ref, plan_ref) populated.
    b. output[] parity: re-read the epic document in the worktree and verify:
@@ -117,7 +122,7 @@ IMPLEMENTATION PHASE:
       - spec_ref equals {{.SpecRef}} (the goal spec reference, same for all entries).
       - plan_ref is the epic document path with a #section-anchor matching the capability heading.
    c. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
-9. Submit using liza submit-for-review --json only after all checks in step 8 pass.
+10. Submit using liza submit-for-review --json only after all checks in step 9 pass.
 {{- else if eq .Role "us-writer"}}
 
 IMPLEMENTATION PHASE:
@@ -141,9 +146,9 @@ IMPLEMENTATION PHASE:
 {{- end}}
 4. Explore the codebase to understand the existing architecture and relevant components.
 5. Architecture document:
-   Run: mkdir -p {{.Worktree}}/specs/arch-plan
+   Run: mkdir -p {{.Worktree}}/specs/arch-plan/{{.GoalSlug}}
    Capture a timestamp by running: date -u +'%Y%m%d-%H%M%S'
-   Save your architecture document to: {{.Worktree}}/specs/arch-plan/TIMESTAMP-{{.TaskID}}.md
+   Save your architecture document to: {{.Worktree}}/specs/arch-plan/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md
    All later references to "the arch doc" mean the exact path chosen here.
    The document should define:
    - Component boundaries and responsibilities

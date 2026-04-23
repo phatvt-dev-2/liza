@@ -131,7 +131,7 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 
 	state := &models.State{
 		Version:         1,
-		PipelineVersion: 2,
+		PipelineVersion: 3,
 		Goal: models.Goal{
 			ID:          goalID,
 			Description: params.Description,

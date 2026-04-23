@@ -89,6 +89,7 @@ type RoleContextData struct {
 	StatePath   string
 	SpecsDir    string
 	GoalDesc    string
+	GoalSlug    string
 	// Declarative (from pipeline YAML)
 	MandatoryDocs []string
 	Skills        []string

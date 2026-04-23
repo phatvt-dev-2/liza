@@ -2225,3 +2225,70 @@ pipeline:
 		assertContains(t, err.Error(), "bogus")
 	})
 }
+
+func TestTaskSlugOrName(t *testing.T) {
+	t.Run("returns slug when set", func(t *testing.T) {
+		td := TransitionDef{Name: "us-to-coding", TaskSlug: "architecture"}
+		if got := td.TaskSlugOrName(); got != "architecture" {
+			t.Errorf("TaskSlugOrName() = %q, want %q", got, "architecture")
+		}
+	})
+	t.Run("falls back to name when slug empty", func(t *testing.T) {
+		td := TransitionDef{Name: "us-to-coding"}
+		if got := td.TaskSlugOrName(); got != "us-to-coding" {
+			t.Errorf("TaskSlugOrName() = %q, want %q", got, "us-to-coding")
+		}
+	})
+}
+
+func TestLoad_InvalidTaskSlug(t *testing.T) {
+	yamlContent := `
+pipeline:
+  roles:
+    a:
+      type: doer
+      display-name: "A"
+    b:
+      type: reviewer
+      display-name: "B"
+  role-pairs:
+    pair-a:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_A
+        executing: WORKING_A
+        submitted: SUBMITTED_A
+        reviewing: REVIEWING_A
+        approved: APPROVED_A
+        rejected: REJECTED_A
+    pair-b:
+      doer: a
+      reviewer: b
+      states:
+        initial: DRAFT_B
+        executing: WORKING_B
+        submitted: SUBMITTED_B
+        reviewing: REVIEWING_B
+        approved: APPROVED_B
+        rejected: REJECTED_B
+  sub-pipelines:
+    sp:
+      steps: [pair-a, pair-b]
+      transitions:
+        - name: a-to-b
+          task-slug: "BAD SLUG"
+          from: pair-a.approved
+          to: pair-b.initial
+          trigger: manual
+          cardinality: per-subtask
+  entry-points:
+    default: sp.pair-a
+`
+	_, err := LoadFromBytes([]byte(yamlContent))
+	if err == nil {
+		t.Fatal("expected error for invalid task-slug")
+	}
+	assertContains(t, err.Error(), "task-slug")
+	assertContains(t, err.Error(), "kebab-case")
+}

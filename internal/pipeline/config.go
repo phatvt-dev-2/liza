@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -112,10 +113,19 @@ type SubPipeline struct {
 // TransitionDef describes a cross-pair transition within a sub-pipeline.
 type TransitionDef struct {
 	Name        string `yaml:"name"`
-	From        string `yaml:"from"`        // e.g., "code-planning-pair.approved"
-	To          string `yaml:"to"`          // e.g., "coding-pair.initial"
-	Trigger     string `yaml:"trigger"`     // "manual" or "auto"
-	Cardinality string `yaml:"cardinality"` // "per-subtask", "one-to-one", or "many-to-one"
+	TaskSlug    string `yaml:"task-slug,omitempty"` // segment used in child task IDs (falls back to Name)
+	From        string `yaml:"from"`                // e.g., "code-planning-pair.approved"
+	To          string `yaml:"to"`                  // e.g., "coding-pair.initial"
+	Trigger     string `yaml:"trigger"`             // "manual" or "auto"
+	Cardinality string `yaml:"cardinality"`         // "per-subtask", "one-to-one", or "many-to-one"
+}
+
+// TaskSlugOrName returns TaskSlug if set, otherwise Name.
+func (t TransitionDef) TaskSlugOrName() string {
+	if t.TaskSlug != "" {
+		return t.TaskSlug
+	}
+	return t.Name
 }
 
 // LoadFrozen loads the frozen pipeline config from .liza/pipeline.yaml.
@@ -139,6 +149,9 @@ func LoadFrozen(projectRoot string) (*PipelineConfig, error) {
 	refCfg, refErr := LoadEmbeddedReference()
 	if refErr == nil {
 		MigrateOperations(cfg, refCfg)
+		// Task-slugs are NOT migrated: old workspaces keep transition names as
+		// task ID segments (TaskSlugOrName falls back to Name). New workspaces
+		// get task-slugs frozen at init time from the embedded config.
 	}
 
 	return cfg, nil
@@ -371,11 +384,16 @@ var validPhases = map[string]bool{
 	"clean": true,
 }
 
+var kebabCaseRe = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+
 // validateTransitionHeader checks the common fields shared by all transition types:
 // non-empty name, valid trigger, and valid cardinality.
 func validateTransitionHeader(t TransitionDef) error {
 	if t.Name == "" {
 		return fmt.Errorf("transition name is empty")
+	}
+	if t.TaskSlug != "" && !kebabCaseRe.MatchString(t.TaskSlug) {
+		return fmt.Errorf("task-slug %q must be lowercase kebab-case (e.g. %q)", t.TaskSlug, "code-planning")
 	}
 	if t.Trigger != "manual" && t.Trigger != "auto" {
 		return fmt.Errorf("trigger must be %q or %q, got %q", "manual", "auto", t.Trigger)

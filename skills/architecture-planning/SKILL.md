@@ -8,7 +8,7 @@ description: Define component boundaries, interfaces, and structural decisions f
 Consolidate approved upstream deliverables into a cohesive architectural plan that downstream
 code-planners can implement independently.
 
-Output: a git-tracked architecture document (`specs/arch-plan/<timestamp>-<task-id>.md`) plus
+Output: a git-tracked architecture document (`specs/arch-plan/<goal-slug>/<timestamp>-<task-id>.md`) plus
 structured `output[]` entries, one per code-planning scope. Each output entry becomes a
 code-planning child task — the code-planner reads the architecture document and its scope entry,
 the goal spec, and referenced material. Write accordingly: the arch doc should be self-contained

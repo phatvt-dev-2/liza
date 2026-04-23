@@ -642,8 +642,8 @@ func InitCommandWithConfig(params InitParams) error {
 	timestamp := time.Now().UTC()
 	goalID := fmt.Sprintf("goal-%d", timestamp.Unix())
 
-	// Pipeline version (always v2 — pipeline is mandatory)
-	pipelineVersion := 2
+	// Pipeline version (always v3 — pipeline is mandatory)
+	pipelineVersion := 3
 
 	// Create initial state
 	state := &models.State{

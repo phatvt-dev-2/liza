@@ -2834,6 +2834,7 @@ func TestProceedInner_InheritedDepsAppendedAfterSiblingDeps(t *testing.T) {
 		targetStatus:   models.TaskStatus("DRAFT_CODE"),
 		cardinality:    "per-subtask",
 		targetRolePair: "coding-pair",
+		taskSlug:       "code-plan-to-coding",
 	}
 
 	inheritedDeps := []string{"upstream-child-0", "upstream-child-1"}
@@ -4008,5 +4009,134 @@ func TestExecuteAvailableTransitions_DefensiveSkipsReplannedEvenWithoutTransitio
 
 	if len(results) != 0 {
 		t.Errorf("results count = %d, want 0 (replanned task should be skipped)", len(results))
+	}
+}
+
+// --- Task-slug tests ---
+
+func setupTaskSlugProceedTest(t *testing.T) (string, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	src, err := os.ReadFile(filepath.Join(testhelpers.FindRepoRoot(t), "internal", "pipeline", "testdata", "valid-with-task-slugs.yaml"))
+	if err != nil {
+		t.Fatalf("Failed to read pipeline testdata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".liza", "pipeline.yaml"), src, 0o644); err != nil {
+		t.Fatalf("Failed to write frozen pipeline config: %v", err)
+	}
+	return tmpDir, stateFile
+}
+
+func TestProceed_TaskSlug_ChildIDsUseSlug(t *testing.T) {
+	tmpDir, stateFile := setupTaskSlugProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 3
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-task-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan the auth module",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Implement login", DoneWhen: "POST /login works", Scope: "auth", SpecRef: "specs/auth.md#login"},
+			{Desc: "Implement refresh", DoneWhen: "POST /refresh works", Scope: "auth", SpecRef: "specs/auth.md#refresh"},
+		},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	// Child IDs should use task-slug "coding", not transition name "code-plan-to-coding"
+	expectedID0 := "plan-task-1-coding-0"
+	expectedID1 := "plan-task-1-coding-1"
+	if result.ChildTaskIDs[0] != expectedID0 {
+		t.Errorf("ChildTaskIDs[0] = %q, want %q (task-slug should be used)", result.ChildTaskIDs[0], expectedID0)
+	}
+	if result.ChildTaskIDs[1] != expectedID1 {
+		t.Errorf("ChildTaskIDs[1] = %q, want %q (task-slug should be used)", result.ChildTaskIDs[1], expectedID1)
+	}
+}
+
+func TestProceed_TaskSlug_CrashRecoveryUsesSlug(t *testing.T) {
+	tmpDir, stateFile := setupTaskSlugProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 3
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-task-1"
+	reviewCommit := "abc123"
+
+	// Parent task with transition already executed but child missing (crash scenario)
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan the auth module",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Implement login", DoneWhen: "POST /login works", Scope: "auth", SpecRef: "specs/auth.md#login"},
+			{Desc: "Implement refresh", DoneWhen: "POST /refresh works", Scope: "auth", SpecRef: "specs/auth.md#refresh"},
+		},
+		TransitionsExecuted: map[string]bool{"code-plan-to-coding": true},
+	}
+
+	// Only child 0 exists (child 1 missing — simulates crash)
+	child0 := models.Task{
+		ID:          "plan-task-1-coding-0",
+		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
+		Description: "Implement login",
+		Status:      models.TaskStatus("DRAFT_CODE"),
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "specs/auth.md#login",
+		DoneWhen:    "POST /login works",
+		Scope:       "auth",
+		ParentTask:  &parentID,
+	}
+
+	state.Tasks = append(state.Tasks, task, child0)
+	state.Sprint.Scope.Planned = []string{parentID, child0.ID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	// Crash recovery should create the missing child using task-slug
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1 (only missing child)", len(result.ChildTaskIDs))
+	}
+	expectedRecovered := "plan-task-1-coding-1"
+	if result.ChildTaskIDs[0] != expectedRecovered {
+		t.Errorf("recovered child = %q, want %q", result.ChildTaskIDs[0], expectedRecovered)
 	}
 }

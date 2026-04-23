@@ -1013,8 +1013,8 @@ func TestInitCommandWithConfig_FreezesPipeline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read state: %v", err)
 	}
-	if state.PipelineVersion != 2 {
-		t.Errorf("state.PipelineVersion = %d, want 2", state.PipelineVersion)
+	if state.PipelineVersion != 3 {
+		t.Errorf("state.PipelineVersion = %d, want 3", state.PipelineVersion)
 	}
 }
 
@@ -1090,8 +1090,8 @@ func TestInitCommandWithConfig_NoConfigAutoFreezes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read state: %v", err)
 	}
-	if state.PipelineVersion != 2 {
-		t.Errorf("state.PipelineVersion = %d, want 2", state.PipelineVersion)
+	if state.PipelineVersion != 3 {
+		t.Errorf("state.PipelineVersion = %d, want 3", state.PipelineVersion)
 	}
 
 	// Verify no entry_point (not specified)

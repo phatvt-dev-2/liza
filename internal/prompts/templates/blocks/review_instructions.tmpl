@@ -67,7 +67,7 @@ REVIEW CHECKLIST:
 | Shared-file dependency | Two tasks modify the same file but lack depends_on between them — parallel coders will hit merge conflicts |
 | Spec compliance matrix | Plan has no "## Spec Compliance Matrix" section, or matrix has GAP rows, or matrix omits spec requirements, or matrix task mappings are inaccurate |
 | output[] populated | Task has no output[] entries (planner must call liza set-task-output --json) |
-| Plan file location | Plan artifact not in diff at specs/plans/TIMESTAMP-{{.TaskID}}.md |
+| Plan file location | Plan artifact not in diff at specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md |
 | output[] matches plan | For each output[] entry, compare desc, done_when, scope, and spec_ref against the plan artifact in the worktree — they must be identical, not paraphrased or extended |
 | Cross-reference consistency | For every cross-reference in the plan ("owned by CPx", "depends on CPx", "out of scope for CPx"), the referenced task must explicitly state that responsibility, dependency, or exclusion. Reject if any dangling reference. |
 | e2e/doc coverage | Spec compliance matrix missing mandatory E2E or DOC impact rows, or rows marked N/A without justification, or feature adds user-visible behavior but no e2e test or doc update task planned |
@@ -247,7 +247,7 @@ REVIEW PHASE:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 2. Invoke skill: systemic-thinking for cross-cutting coherence analysis.
 3. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
-4. Read the architecture document in the worktree (look for the arch doc in specs/arch-plan/).
+4. Read the architecture document in the worktree (look for the arch doc in specs/arch-plan/{{.GoalSlug}}/).
 5. Validate the decomposition: does it cover the full scope of the goal spec?
 6. Verify output[] entries: run liza get {{.TaskID}} --json and confirm
    output[] has one entry per code-planning scope with valid desc, done_when, scope, spec_ref, arch_ref.

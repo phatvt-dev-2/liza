@@ -61,6 +61,8 @@ type transitionDef struct {
 	doerDisplayName string
 	// taskType is the task type for child tasks, derived from the target role-pair.
 	taskType models.TaskType
+	// taskSlug is the segment used in child task IDs (falls back to transition name).
+	taskSlug string
 }
 
 // Proceed executes a manual inter-pair transition on a source task.
@@ -224,7 +226,7 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 		}
 	}
 
-	childID := manyToOneChildID(sharedParentID, transitionName)
+	childID := manyToOneChildID(sharedParentID, tDef.taskSlug)
 
 	// Idempotency: check if any cohort member already has transition executed
 	anyExecuted := false
@@ -337,7 +339,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	// Pre-compute sibling IDs for DependsOn resolution in per-subtask transitions.
 	siblingIDs := make([]string, len(task.Output))
 	for i := range task.Output {
-		siblingIDs[i] = perSubtaskChildID(taskID, transitionName, i)
+		siblingIDs[i] = perSubtaskChildID(taskID, tDef.taskSlug, i)
 	}
 
 	switch tDef.cardinality {
@@ -348,7 +350,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[i])
 		}
 	case "one-to-one":
-		childID := oneToOneChildID(taskID, transitionName)
+		childID := oneToOneChildID(taskID, tDef.taskSlug)
 		child := buildOneToOneChild(childID, taskID, task, tDef, inheritedDeps, now)
 		s.Tasks = append(s.Tasks, child)
 		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
@@ -375,7 +377,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		// Pre-compute sibling IDs for DependsOn resolution.
 		siblingIDs := make([]string, len(task.Output))
 		for i := range task.Output {
-			siblingIDs[i] = perSubtaskChildID(taskID, transitionName, i)
+			siblingIDs[i] = perSubtaskChildID(taskID, tDef.taskSlug, i)
 		}
 		var missingChildren []int
 		for i := range task.Output {
@@ -406,7 +408,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		return nil
 
 	case "one-to-one":
-		childID := oneToOneChildID(taskID, transitionName)
+		childID := oneToOneChildID(taskID, tDef.taskSlug)
 		if existing := s.FindTask(childID); existing != nil {
 			patchInheritedDeps(existing, inheritedDeps)
 			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
@@ -429,7 +431,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		if err != nil {
 			return fmt.Errorf("crash recovery cohort detection: %w", err)
 		}
-		childID := manyToOneChildID(sharedParentID, transitionName)
+		childID := manyToOneChildID(sharedParentID, tDef.taskSlug)
 		if existing := s.FindTask(childID); existing != nil {
 			for _, member := range cohort {
 				if member.TransitionsExecuted == nil {
@@ -482,15 +484,16 @@ func isTransitionIncomplete(s *models.State, task *models.Task, transName string
 	if err != nil {
 		return false
 	}
+	slug := td.TaskSlugOrName()
 	switch td.Cardinality {
 	case "per-subtask":
 		for i := 0; i < len(task.Output); i++ {
-			if s.FindTask(perSubtaskChildID(task.ID, transName, i)) == nil {
+			if s.FindTask(perSubtaskChildID(task.ID, slug, i)) == nil {
 				return true
 			}
 		}
 	case "one-to-one":
-		if s.FindTask(oneToOneChildID(task.ID, transName)) == nil {
+		if s.FindTask(oneToOneChildID(task.ID, slug)) == nil {
 			return true
 		}
 	case "many-to-one":
@@ -498,8 +501,8 @@ func isTransitionIncomplete(s *models.State, task *models.Task, transName string
 		if cohortParentID == "" {
 			return false
 		}
-		if s.FindTask(manyToOneChildID(task.ID, transName)) == nil &&
-			s.FindTask(manyToOneChildID(cohortParentID, transName)) == nil {
+		if s.FindTask(manyToOneChildID(task.ID, slug)) == nil &&
+			s.FindTask(manyToOneChildID(cohortParentID, slug)) == nil {
 			return true
 		}
 	}
@@ -971,6 +974,7 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 		targetRolePair:  targetPair,
 		doerDisplayName: doerDisplay,
 		taskType:        childTaskType,
+		taskSlug:        td.TaskSlugOrName(),
 	}, nil
 }
 
@@ -1078,6 +1082,7 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 	if err != nil {
 		return nil, fmt.Errorf("cannot compute inherited deps: unknown transition %q: %w", transitionName, err)
 	}
+	slug := td.TaskSlugOrName()
 
 	var inherited []string
 	for _, depID := range task.DependsOn {
@@ -1088,14 +1093,14 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 		switch td.Cardinality {
 		case "per-subtask":
 			for i := 0; i < len(depTask.Output); i++ {
-				childID := perSubtaskChildID(depID, transitionName, i)
+				childID := perSubtaskChildID(depID, slug, i)
 				if s.FindTask(childID) == nil {
 					return nil, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
 				}
 				inherited = append(inherited, childID)
 			}
 		case "one-to-one":
-			childID := oneToOneChildID(depID, transitionName)
+			childID := oneToOneChildID(depID, slug)
 			if s.FindTask(childID) == nil {
 				return nil, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
 			}
@@ -1111,7 +1116,7 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 			if cohortParentID == task.CohortParentID() {
 				continue
 			}
-			childID := manyToOneChildID(cohortParentID, transitionName)
+			childID := manyToOneChildID(cohortParentID, slug)
 			if s.FindTask(childID) == nil {
 				return nil, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
 			}

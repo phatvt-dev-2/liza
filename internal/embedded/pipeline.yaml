@@ -477,6 +477,7 @@ pipeline:
         - us-writing-pair
       transitions:
         - name: epic-to-us
+          task-slug: us-writing
           from: epic-planning-pair.approved
           to: us-writing-pair.initial
           trigger: manual  # human validates epic decomposition
@@ -489,11 +490,13 @@ pipeline:
         - coding-pair
       transitions:
         - name: architecture-to-code-plan
+          task-slug: code-planning
           from: architecture-pair.approved
           to: code-planning-pair.initial
           trigger: manual  # human validates architectural decomposition
           cardinality: per-subtask
         - name: code-plan-to-coding
+          task-slug: coding
           from: code-planning-pair.approved
           to: coding-pair.initial
           trigger: manual  # human validates implementation plan before coding begins
@@ -505,6 +508,7 @@ pipeline:
         - coding-pair
       transitions:
         - name: integration-to-fix
+          task-slug: integration-fixing
           from: integration-pair.approved
           to: coding-pair.initial
           trigger: auto
@@ -512,6 +516,7 @@ pipeline:
 
   pipeline-transitions:
     - name: us-to-coding
+      task-slug: architecture
       from: epic-spec-subpipeline.us-writing-pair.approved
       to: coding-subpipeline.architecture-pair.initial
       trigger: manual
