@@ -43,6 +43,7 @@ plan from the provided spec artifacts (architecture document, goal spec, or assi
    Run: mkdir -p {{.Worktree}}/specs/plans/{{.GoalSlug}}
    Capture a timestamp by running: date -u +'%Y%m%d-%H%M%S'
    Save your plan to: {{.Worktree}}/specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md
+   Save your task-output JSON to: {{.Worktree}}/specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}-output.json
    All later references to "the plan file" mean the exact path chosen here.
    (Include a "## Spec Compliance Matrix" section — see step 6c.)
 3. For EACH coding task in your plan, call liza set-task-output --json with structured entries.

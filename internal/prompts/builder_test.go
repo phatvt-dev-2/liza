@@ -1178,6 +1178,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"You are planning, not implementing",
 			"plan from the provided spec artifacts",
 			"TIMESTAMP-task-planner.md", // canonical plan file path with task ID
+			"TIMESTAMP-task-planner-output.json",
+			"Do NOT write task-output JSON under .liza/agent-outputs/",
 			"Submission requires a new worktree commit for this task",
 			"Submission proof: `liza submit-for-review` is not optional bookkeeping",
 			"COLLECTIVE PLAN SCOPING",
@@ -1222,6 +1224,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"TIMESTAMP-task-cpr",           // interpolated task ID in reviewer gate
 			"Plan file location",           // gate label present in checklist
 			"Plan artifact not in diff at", // gate condition wording
+			"Task-output JSON location",
+			"any committed task-output JSON appears under .liza/agent-outputs/",
 			"VERDICT SUBMISSION",
 		} {
 			if !strings.Contains(output, key) {
