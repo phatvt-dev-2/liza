@@ -506,24 +506,24 @@ func TestFullSprintSequence(t *testing.T) {
 
 	// Both US tasks should have us-to-coding executed (many-to-one).
 	for _, suffix := range []string{"0", "1"} {
-		usTaskID := "epic-1-epic-to-us-" + suffix
+		usTaskID := "epic-1-us-writing-" + suffix
 		assertTransitionExecuted(t, state, usTaskID, "us-to-coding")
 	}
 
 	// Architecture task fans out to code-planning tasks.
-	archTaskID := "epic-1-us-to-coding"
+	archTaskID := "epic-1-architecture"
 	assertTransitionExecuted(t, state, archTaskID, "architecture-to-code-plan")
 
 	// Each code-planning task fans out to a coding task.
 	for _, suffix := range []string{"0", "1"} {
-		codePlanTaskID := archTaskID + "-architecture-to-code-plan-" + suffix
+		codePlanTaskID := archTaskID + "-code-planning-" + suffix
 		assertTransitionExecuted(t, state, codePlanTaskID, "code-plan-to-coding")
 	}
 
 	// Verify capability scoping: each US task has the right scope, spec_ref (goal spec),
 	// and epic_ref (epic document with section anchor) from output[].
-	usTask0 := state.FindTask("epic-1-epic-to-us-0")
-	usTask1 := state.FindTask("epic-1-epic-to-us-1")
+	usTask0 := state.FindTask("epic-1-us-writing-0")
+	usTask1 := state.FindTask("epic-1-us-writing-1")
 	if usTask0 != nil {
 		if usTask0.Scope != "CAP-001 Authentication" {
 			t.Errorf("US task 0 scope = %q, want %q", usTask0.Scope, "CAP-001 Authentication")
@@ -559,7 +559,7 @@ func TestFullSprintSequence(t *testing.T) {
 
 	// Verify EpicRef propagates to code-planning tasks (per-subtask, inherited from parent).
 	for _, suffix := range []string{"0", "1"} {
-		cpTask := state.FindTask(archTaskID + "-architecture-to-code-plan-" + suffix)
+		cpTask := state.FindTask(archTaskID + "-code-planning-" + suffix)
 		if cpTask != nil {
 			wantEpicRef := "specs/epics/ep-001-auth.md"
 			if cpTask.EpicRef != wantEpicRef {
