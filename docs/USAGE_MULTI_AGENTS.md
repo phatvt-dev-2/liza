@@ -86,6 +86,46 @@ liza setup --force  # overwrite existing (e.g., after liza upgrade)
 liza setup --agent-tools ~/my-agent-tools.md  # use custom AGENT_TOOLS.md
 ```
 
+> **⚠️ Adapt `AGENT_TOOLS.md` to your setup.** The default `AGENT_TOOLS.md` references
+> specific MCP servers (JetBrains, morph-mcp, perplexity, context7, Ref, deepwiki,
+> filesystem, fetch) and tools (RTK) that may not be available in your environment.
+> Agents follow this file as their tool contract — if it lists MCP servers you don't
+> have, agents will waste context trying unavailable tools and falling back repeatedly.
+>
+> Before your first run, review `~/.liza/AGENT_TOOLS.md` against your actual MCP server and
+> CLI tool configuration: remove entries for servers you haven't installed and adjust tool
+> precedence to match what's available. Or maintain your own version and pass it at
+> setup time with `--agent-tools`.
+>
+> **Some support tools are structurally incompatible with Liza multi-agent mode.**
+> This applies to three categories:
+>
+> *Per-worktree servers* (LSP, JetBrains): Language servers (gopls, pyright,
+> tsserver) and IDE indexes are per-worktree resources. Each divergent worktree
+> needs its own server instance — and Liza can spawn dozens of concurrent
+> worktrees (13 roles × multiple instances × phases). You cannot afford 30-80
+> parallel gopls processes, and no IDE indexes a fleet of ephemeral worktrees.
+>
+> *Centralized indexes* (code-graph tools, embedding indexes like claude-context,
+> SQLite-backed context tools like claude-mem, code-review-graph, etc.): These
+> maintain a single index built from
+> one branch. When multiple agents work in divergent worktrees with different
+> file states, the shared index is stale for all but the branch it was built
+> from — returning wrong results silently.
+>
+> *Token-reduction tools* (caveman, etc.): Tools that compress context or
+> reduce token usage in interactive sessions add nothing here — Liza's
+> blackboard-driven instructions and headless run mode already go further
+> for token reduction than session-level compression can. Exception: RTK
+> is recommended with Claude Code agents — it compresses tool output at
+> the transport level, which stacks with Liza's architectural savings.
+>
+> These tools can work well in single-session pairing mode (one human,
+> one worktree), but should be removed from `AGENT_TOOLS.md` for multi-agent
+> use unless explicitly called out as safe above. Rely on grep and variants
+> (ripgrep, ast-grep), glob, and morph-mcp for code navigation instead.
+> Use RTK for Claude Code tool-output reduction.
+
 **2. Initialize Project**
 
 > **Commit your spec file before running `liza init`.** Worktrees are created from the current branch — uncommitted files won't be visible to agents.
