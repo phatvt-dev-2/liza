@@ -27,6 +27,23 @@ The project layer is portable (team-shared). The global layer is machine-specifi
 
 For global settings setup and provider-specific config (Claude, Codex, Gemini), see [Contract Activation](../contracts/contract-activation.md).
 
+## Codex Project Permissions
+
+**`~/.codex/config.toml`** — global Codex CLI settings.
+
+`liza init --codex` only manages minimal project permissions in this file. It
+adds the active project root and the active project `.git` directory to
+`sandbox_workspace_write.writable_roots` so Codex can edit project files and
+write git metadata for commits, worktrees, and review flows. If the file already
+exists, Liza prompts before merging those entries and preserves unrelated
+settings.
+
+This is not the full Codex baseline. Users still own broader settings such as
+`approval_policy`, `sandbox_mode`, `network_access`, cache directories like
+`~/.npm`, and MCP server configuration. See
+[Contract Activation](../contracts/contract-activation.md#codex) for the
+recommended complete setup.
+
 ### Troubleshooting
 
 **State file errors:**

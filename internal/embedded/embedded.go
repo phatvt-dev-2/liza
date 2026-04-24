@@ -13,6 +13,8 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/paths"
@@ -33,6 +35,9 @@ var skillsFS embed.FS
 
 //go:embed "claude-settings.json"
 var claudeSettingsContent []byte
+
+//go:embed "codex-config.toml"
+var codexConfigContent []byte
 
 //go:embed "hooks/enforce-init.sh"
 var enforceInitHookContent []byte
@@ -366,6 +371,330 @@ func WriteClaudeSettings(projectRoot string, reader *bufio.Reader) error {
 	}
 
 	return nil
+}
+
+// WriteCodexProjectPermissions merges the active project root and its .git
+// directory into ~/.codex/config.toml. It deliberately does not install the
+// full recommended Codex setup; users keep ownership of their global settings.
+func WriteCodexProjectPermissions(projectRoot string, reader *bufio.Reader) error {
+	if reader == nil {
+		reader = bufio.NewReader(os.Stdin)
+	}
+
+	configPath, err := codexConfigPath()
+	if err != nil {
+		return err
+	}
+
+	roots, err := codexProjectWritableRoots(projectRoot)
+	if err != nil {
+		return err
+	}
+
+	existingData, err := os.ReadFile(configPath)
+	if os.IsNotExist(err) {
+		if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+			return fmt.Errorf("failed to create .codex directory: %w", err)
+		}
+		content := renderCodexProjectConfig(roots)
+		if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write codex config: %w", err)
+		}
+		warnIncompleteCodexBaseline(content)
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to read codex config: %w", err)
+	}
+
+	merged, changed, err := mergeCodexWritableRoots(string(existingData), roots)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		warnIncompleteCodexBaseline(string(existingData))
+		return nil
+	}
+
+	ok, err := confirmMerge("Should Liza add this project's Codex writable roots to ~/.codex/config.toml? (y/n): ", reader)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+
+	if err := os.WriteFile(configPath, []byte(merged), 0644); err != nil {
+		return fmt.Errorf("failed to write codex config: %w", err)
+	}
+	warnIncompleteCodexBaseline(merged)
+	return nil
+}
+
+func codexConfigPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(homeDir, ".codex", "config.toml"), nil
+}
+
+func codexProjectWritableRoots(projectRoot string) ([]string, error) {
+	if projectRoot == "" {
+		return nil, fmt.Errorf("project root is required")
+	}
+	absRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve project root: %w", err)
+	}
+	return []string{absRoot, filepath.Join(absRoot, ".git")}, nil
+}
+
+func renderCodexProjectConfig(roots []string) string {
+	content := string(codexConfigContent)
+	if len(roots) >= 2 {
+		content = strings.ReplaceAll(content, "{{REPO_ROOT}}", tomlStringPlaceholderValue(roots[0]))
+		content = strings.ReplaceAll(content, "{{REPO_GIT_DIR}}", tomlStringPlaceholderValue(roots[1]))
+	}
+	return ensureTrailingNewline(content)
+}
+
+func mergeCodexWritableRoots(content string, roots []string) (string, bool, error) {
+	lines := strings.Split(content, "\n")
+	sectionStart, sectionEnd := findTomlSection(lines, "sandbox_workspace_write")
+	if sectionStart == -1 {
+		addition := renderCodexProjectConfig(roots)
+		return appendTomlBlock(content, addition), true, nil
+	}
+
+	rootLineStart, rootLineEnd := findTomlAssignment(lines, sectionStart+1, sectionEnd, "writable_roots")
+	if rootLineStart == -1 {
+		block := renderWritableRootsBlock("", roots)
+		updated := insertLines(lines, sectionEnd, strings.Split(strings.TrimSuffix(block, "\n"), "\n"))
+		return strings.Join(updated, "\n"), true, nil
+	}
+
+	existingRoots := extractTomlStrings(strings.Join(lines[rootLineStart:rootLineEnd+1], "\n"))
+	existingSet := map[string]bool{}
+	for _, root := range existingRoots {
+		existingSet[root] = true
+	}
+
+	var missing []string
+	for _, root := range roots {
+		if !existingSet[root] {
+			missing = append(missing, root)
+		}
+	}
+	if len(missing) == 0 {
+		return content, false, nil
+	}
+
+	if rootLineStart == rootLineEnd {
+		lines[rootLineStart] = appendToInlineTomlArray(lines[rootLineStart], missing)
+		return strings.Join(lines, "\n"), true, nil
+	}
+
+	indent := inferArrayValueIndent(lines[rootLineStart : rootLineEnd+1])
+	var additions []string
+	for _, root := range missing {
+		additions = append(additions, indent+tomlStringValue(root)+",")
+	}
+	updated := insertLines(lines, rootLineEnd, additions)
+	return strings.Join(updated, "\n"), true, nil
+}
+
+func findTomlSection(lines []string, name string) (int, int) {
+	start := -1
+	for i, line := range lines {
+		header, ok := tomlHeaderName(line)
+		if !ok {
+			continue
+		}
+		if start == -1 {
+			if header == name {
+				start = i
+			}
+			continue
+		}
+		return start, i
+	}
+	if start == -1 {
+		return -1, -1
+	}
+	return start, len(lines)
+}
+
+func tomlHeaderName(line string) (string, bool) {
+	trimmed := strings.TrimSpace(stripTomlLineComment(line))
+	if !strings.HasPrefix(trimmed, "[") || !strings.HasSuffix(trimmed, "]") {
+		return "", false
+	}
+	if strings.HasPrefix(trimmed, "[[") {
+		return "", false
+	}
+	return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, "["), "]")), true
+}
+
+func findTomlAssignment(lines []string, start, end int, key string) (int, int) {
+	for i := start; i < end; i++ {
+		trimmed := strings.TrimSpace(stripTomlLineComment(lines[i]))
+		if !strings.HasPrefix(trimmed, key) {
+			continue
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, key))
+		if !strings.HasPrefix(rest, "=") {
+			continue
+		}
+		arrayEnd := i
+		if strings.Contains(rest, "[") && !strings.Contains(rest, "]") {
+			for arrayEnd+1 < end {
+				arrayEnd++
+				if strings.Contains(stripTomlLineComment(lines[arrayEnd]), "]") {
+					break
+				}
+			}
+		}
+		return i, arrayEnd
+	}
+	return -1, -1
+}
+
+func stripTomlLineComment(line string) string {
+	inString := false
+	escaped := false
+	for i, r := range line {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' && inString {
+			escaped = true
+			continue
+		}
+		if r == '"' {
+			inString = !inString
+			continue
+		}
+		if r == '#' && !inString {
+			return line[:i]
+		}
+	}
+	return line
+}
+
+var tomlStringRE = regexp.MustCompile(`"([^"\\]|\\.)*"`)
+
+func extractTomlStrings(content string) []string {
+	matches := tomlStringRE.FindAllString(content, -1)
+	values := make([]string, 0, len(matches))
+	for _, match := range matches {
+		value, err := strconv.Unquote(match)
+		if err == nil {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+func appendToInlineTomlArray(line string, roots []string) string {
+	closeIndex := strings.LastIndex(line, "]")
+	if closeIndex == -1 {
+		return line
+	}
+
+	before := strings.TrimRight(line[:closeIndex], " \t")
+	after := line[closeIndex:]
+	separator := ""
+	if !strings.HasSuffix(strings.TrimSpace(before), "[") {
+		separator = ","
+	}
+
+	values := make([]string, 0, len(roots))
+	for _, root := range roots {
+		values = append(values, tomlStringValue(root))
+	}
+	return before + separator + " " + strings.Join(values, ", ") + after
+}
+
+func inferArrayValueIndent(lines []string) string {
+	for _, line := range lines[1:] {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "]") {
+			continue
+		}
+		return line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+	}
+	return "  "
+}
+
+func renderWritableRootsBlock(indent string, roots []string) string {
+	var builder strings.Builder
+	builder.WriteString(indent)
+	builder.WriteString("writable_roots = [\n")
+	for _, root := range roots {
+		builder.WriteString(indent)
+		builder.WriteString("  ")
+		builder.WriteString(tomlStringValue(root))
+		builder.WriteString(",\n")
+	}
+	builder.WriteString(indent)
+	builder.WriteString("]\n")
+	return builder.String()
+}
+
+func insertLines(lines []string, index int, insert []string) []string {
+	updated := make([]string, 0, len(lines)+len(insert))
+	updated = append(updated, lines[:index]...)
+	updated = append(updated, insert...)
+	updated = append(updated, lines[index:]...)
+	return updated
+}
+
+func appendTomlBlock(content, block string) string {
+	if strings.TrimSpace(content) == "" {
+		return ensureTrailingNewline(block)
+	}
+	return ensureTrailingNewline(content) + "\n" + ensureTrailingNewline(block)
+}
+
+func ensureTrailingNewline(content string) string {
+	if strings.HasSuffix(content, "\n") {
+		return content
+	}
+	return content + "\n"
+}
+
+func tomlStringValue(value string) string {
+	return strconv.Quote(value)
+}
+
+func tomlStringPlaceholderValue(value string) string {
+	quoted := tomlStringValue(value)
+	return strings.TrimSuffix(strings.TrimPrefix(quoted, `"`), `"`)
+}
+
+func warnIncompleteCodexBaseline(content string) {
+	if codexBaselineLooksComplete(content) {
+		return
+	}
+	fmt.Fprintln(os.Stderr, "Warning: Codex config has Liza's minimal project writable roots only. For full recommended Codex setup, see contracts/contract-activation.md#codex.")
+}
+
+func codexBaselineLooksComplete(content string) bool {
+	requiredSnippets := []string{
+		"approval_policy",
+		"sandbox_mode",
+		"network_access",
+		".npm",
+		"mcp_servers.filesystem",
+	}
+	for _, snippet := range requiredSnippets {
+		if !strings.Contains(content, snippet) {
+			return false
+		}
+	}
+	return true
 }
 
 // CleanStaleMCPEntry removes the "liza" key from the "mcpServers" object in

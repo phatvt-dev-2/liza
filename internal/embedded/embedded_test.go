@@ -1045,6 +1045,227 @@ func TestWriteClaudeSettings_JSONValidity(t *testing.T) {
 	}
 }
 
+func TestWriteCodexProjectPermissions_NewFile(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	projectRoot := filepath.Join(t.TempDir(), "project")
+	if err := os.MkdirAll(projectRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectPermissions(projectRoot, bufio.NewReader(strings.NewReader("")))
+	if err != nil {
+		t.Fatalf("WriteCodexProjectPermissions failed: %v", err)
+	}
+
+	configPath := filepath.Join(fakeHome, ".codex", "config.toml")
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read codex config: %v", err)
+	}
+
+	text := string(content)
+	for _, want := range []string{
+		"[sandbox_workspace_write]",
+		`"` + projectRoot + `"`,
+		`"` + filepath.Join(projectRoot, ".git") + `"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("config missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "approval_policy") {
+		t.Errorf("new config should contain minimal project permissions only:\n%s", text)
+	}
+}
+
+func TestWriteCodexProjectPermissions_MergeAccepted(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	codexDir := filepath.Join(fakeHome, ".codex")
+	configPath := filepath.Join(codexDir, "config.toml")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	existing := `model = "gpt-5"
+# keep this comment
+
+[sandbox_workspace_write]
+network_access = true
+writable_roots = [
+  "/home/test/.npm",
+]
+`
+	if err := os.WriteFile(configPath, []byte(existing), 0644); err != nil {
+		t.Fatal(err)
+	}
+	projectRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(projectRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectPermissions(projectRoot, bufio.NewReader(strings.NewReader("y\n")))
+	if err != nil {
+		t.Fatalf("WriteCodexProjectPermissions failed: %v", err)
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read codex config: %v", err)
+	}
+	text := string(content)
+	for _, want := range []string{
+		`model = "gpt-5"`,
+		"# keep this comment",
+		`"/home/test/.npm"`,
+		`"` + projectRoot + `"`,
+		`"` + filepath.Join(projectRoot, ".git") + `"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("merged config missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestWriteCodexProjectPermissions_MergeDeclined(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	codexDir := filepath.Join(fakeHome, ".codex")
+	configPath := filepath.Join(codexDir, "config.toml")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	original := "model = \"gpt-5\"\n"
+	if err := os.WriteFile(configPath, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectPermissions(t.TempDir(), bufio.NewReader(strings.NewReader("n\n")))
+	if err != nil {
+		t.Fatalf("WriteCodexProjectPermissions failed: %v", err)
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read codex config: %v", err)
+	}
+	if string(content) != original {
+		t.Errorf("config changed despite declined merge:\n%s", string(content))
+	}
+}
+
+func TestWriteCodexProjectPermissions_AppendsMissingSection(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	codexDir := filepath.Join(fakeHome, ".codex")
+	configPath := filepath.Join(codexDir, "config.toml")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	original := "model = \"gpt-5\"\n"
+	if err := os.WriteFile(configPath, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+	projectRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(projectRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectPermissions(projectRoot, bufio.NewReader(strings.NewReader("y\n")))
+	if err != nil {
+		t.Fatalf("WriteCodexProjectPermissions failed: %v", err)
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read codex config: %v", err)
+	}
+	text := string(content)
+	for _, want := range []string{
+		original,
+		"[sandbox_workspace_write]",
+		`"` + projectRoot + `"`,
+		`"` + filepath.Join(projectRoot, ".git") + `"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("config missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestWriteCodexProjectPermissions_AppendsInlineWritableRoots(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	codexDir := filepath.Join(fakeHome, ".codex")
+	configPath := filepath.Join(codexDir, "config.toml")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`[sandbox_workspace_write]
+writable_roots = ["/home/test/.npm"] # keep inline comment
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	projectRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(projectRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectPermissions(projectRoot, bufio.NewReader(strings.NewReader("y\n")))
+	if err != nil {
+		t.Fatalf("WriteCodexProjectPermissions failed: %v", err)
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read codex config: %v", err)
+	}
+	text := string(content)
+	for _, want := range []string{
+		`writable_roots = ["/home/test/.npm", "` + projectRoot + `", "` + filepath.Join(projectRoot, ".git") + `"] # keep inline comment`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("config missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestWriteCodexProjectPermissions_NoDuplicateRoots(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	projectRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(projectRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	codexDir := filepath.Join(fakeHome, ".codex")
+	configPath := filepath.Join(codexDir, "config.toml")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	original := `[sandbox_workspace_write]
+writable_roots = [
+  "` + projectRoot + `",
+  "` + filepath.Join(projectRoot, ".git") + `",
+]
+`
+	if err := os.WriteFile(configPath, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectPermissions(projectRoot, bufio.NewReader(strings.NewReader("")))
+	if err != nil {
+		t.Fatalf("WriteCodexProjectPermissions failed: %v", err)
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read codex config: %v", err)
+	}
+	if string(content) != original {
+		t.Errorf("already-configured roots should not be rewritten:\n%s", string(content))
+	}
+}
+
 func TestWriteHooks(t *testing.T) {
 	tmpDir := t.TempDir()
 

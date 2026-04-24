@@ -81,6 +81,7 @@ func InitPairingCommand(params InitPairingParams) error {
 	// Classify agents
 	var repoRootNames []string
 	hasClaude := false
+	hasCodex := false
 	hasMistral := false
 	for _, agent := range params.Agents {
 		if name, ok := InitAgentRepoSymlinks[agent]; ok {
@@ -89,9 +90,11 @@ func InitPairingCommand(params InitPairingParams) error {
 		switch agent {
 		case "claude":
 			hasClaude = true
+		case "codex":
+			hasCodex = true
 		case "mistral":
 			hasMistral = true
-		case "codex", "gemini":
+		case "gemini":
 			// handled by repoRootNames above
 		default:
 			return fmt.Errorf("unknown agent: %s", agent)
@@ -116,6 +119,12 @@ func InitPairingCommand(params InitPairingParams) error {
 	if hasClaude {
 		if err := embedded.WriteClaudeSettings(projectRoot, stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
+		}
+	}
+
+	if hasCodex {
+		if err := embedded.WriteCodexProjectPermissions(projectRoot, stdin); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write codex config: %v\n", err)
 		}
 	}
 
@@ -569,6 +578,12 @@ func InitCommandWithConfig(params InitParams) error {
 	// Note: This may prompt user for input if settings file exists
 	if err := embedded.WriteClaudeSettings(lizaPaths.ProjectRoot(), stdin); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
+	}
+
+	if slices.Contains(params.Agents, "codex") {
+		if err := embedded.WriteCodexProjectPermissions(lizaPaths.ProjectRoot(), stdin); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write codex config: %v\n", err)
+		}
 	}
 
 	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)

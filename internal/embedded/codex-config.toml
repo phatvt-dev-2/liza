@@ -1,0 +1,5 @@
+[sandbox_workspace_write]
+writable_roots = [
+  "{{REPO_ROOT}}",
+  "{{REPO_GIT_DIR}}",
+]

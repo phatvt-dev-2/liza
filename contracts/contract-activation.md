@@ -33,7 +33,14 @@ Verification: Run `claude` and prompt `hello`.
 
 ## Codex
 
-Edit `~/.codex/config.toml` (replace `<USER>` with your username):
+`liza init --codex` performs minimal project activation: it adds the active
+project root and its `.git` directory to
+`~/.codex/config.toml` → `sandbox_workspace_write.writable_roots`. If the file
+already exists, Liza prompts before merging those two entries and preserves
+existing settings. It does not install the full baseline below.
+
+For full Codex setup, edit `~/.codex/config.toml` (replace `<USER>` with your
+username):
 
 ```toml
 approval_policy = "on-failure"
@@ -41,12 +48,15 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 network_access = true
+exclude_tmpdir_env_var = false
+exclude_slash_tmp = false
 writable_roots = [
   "/home/<USER>/.codex",
   "/home/<USER>/.liza",
   "/home/<USER>/.cache",
   "/home/<USER>/.npm",
-  "/home/<USER>/Workspace/<PROJECT>/.git",
+  "/home/<USER>/.pyenv/shims",
+  # Project root and project .git entries are managed by `liza init --codex`.
 ]
 
 [mcp_servers.filesystem]
@@ -56,7 +66,7 @@ args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/<USER>/.claude",
 # Codex agents access Liza via `liza` CLI commands through Bash — no MCP server needed.
 ```
 
-If Codex agents must run `git add`, `git commit`, `git worktree`, or Liza review submission flows from a repo worktree, the active project root and its `.git` directory must both be listed in `writable_roots`. Without the `.git` entry, Codex may mount git metadata read-only even when the worktree files themselves are writable, which blocks creation of `index.lock` under `.git/worktrees/...`.
+If Codex agents must run `git add`, `git commit`, `git worktree`, or Liza review submission flows from a repo worktree, the active project root and its `.git` directory must both be listed in `writable_roots`. `liza init --codex` manages these two project-specific entries. Without the `.git` entry, Codex may mount git metadata read-only even when the worktree files themselves are writable, which blocks creation of `index.lock` under `.git/worktrees/...`.
 
 After editing `~/.codex/config.toml`, restart Codex completely before testing.
 

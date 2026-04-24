@@ -36,6 +36,7 @@ internal/embedded/*
 !internal/embedded/pipeline.yaml
 !internal/embedded/support.md
 !internal/embedded/claude-settings.json
+!internal/embedded/codex-config.toml
 !internal/embedded/git-hooks/
 !internal/embedded/hooks/
 /liza

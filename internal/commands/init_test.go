@@ -505,6 +505,17 @@ func TestInitCommand_CreatesContractSymlinks(t *testing.T) {
 			t.Errorf("Symlink %s target = %q, want %q", name, target, expectedTarget)
 		}
 	}
+
+	codexConfig := filepath.Join(fakeHome, ".codex", "config.toml")
+	configContent, err := os.ReadFile(codexConfig)
+	if err != nil {
+		t.Fatalf("Codex config not created for --codex: %v", err)
+	}
+	for _, want := range []string{gitDir, filepath.Join(gitDir, ".git")} {
+		if !strings.Contains(string(configContent), want) {
+			t.Errorf("Codex config missing writable root %q:\n%s", want, string(configContent))
+		}
+	}
 }
 
 func TestInitCommand_SkipsCorrectSymlinks(t *testing.T) {
