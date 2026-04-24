@@ -11,6 +11,9 @@ DONE WHEN: {{.DoneWhen}}
 {{- if ne .SpecRef ""}}
 SPEC: {{.SpecRef}}
 {{- end}}
+{{- if ne .EpicRef ""}}
+EPIC: {{.EpicRef}}
+{{- end}}
 {{- if ne .PlanRef ""}}
 PLAN: {{.PlanRef}}
 {{- end}}

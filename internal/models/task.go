@@ -210,6 +210,7 @@ type Task struct {
 	MergeCommit         *string            `yaml:"merge_commit,omitempty"`
 	LeaseExpires        *time.Time         `yaml:"lease_expires,omitempty"`
 	SpecRef             string             `yaml:"spec_ref"`
+	EpicRef             string             `yaml:"epic_ref,omitempty"`
 	PlanRef             string             `yaml:"plan_ref,omitempty"`
 	ArchRef             string             `yaml:"arch_ref,omitempty"`
 	DoneWhen            string             `yaml:"done_when"`
@@ -264,6 +265,7 @@ type OutputEntry struct {
 	DoneWhen  string   `yaml:"done_when" json:"done_when"`
 	Scope     string   `yaml:"scope" json:"scope"`
 	SpecRef   string   `yaml:"spec_ref" json:"spec_ref"`
+	EpicRef   string   `yaml:"epic_ref,omitempty" json:"epic_ref,omitempty"`
 	PlanRef   string   `yaml:"plan_ref,omitempty" json:"plan_ref,omitempty"`
 	ArchRef   string   `yaml:"arch_ref,omitempty" json:"arch_ref,omitempty"`
 	DependsOn []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`

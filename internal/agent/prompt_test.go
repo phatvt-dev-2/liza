@@ -10,6 +10,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -558,7 +559,7 @@ func TestBuildPrompt_IntegrationFixPropagation(t *testing.T) {
 	}
 }
 
-func TestSplitPlanRef(t *testing.T) {
+func TestSplitRef(t *testing.T) {
 	tests := []struct {
 		input       string
 		wantFile    string
@@ -570,11 +571,11 @@ func TestSplitPlanRef(t *testing.T) {
 		{"#section-only", "", "section-only"},
 	}
 	for _, tc := range tests {
-		if got := splitPlanRefFile(tc.input); got != tc.wantFile {
-			t.Errorf("splitPlanRefFile(%q) = %q, want %q", tc.input, got, tc.wantFile)
+		if got := paths.SplitRefFile(tc.input); got != tc.wantFile {
+			t.Errorf("SplitRefFile(%q) = %q, want %q", tc.input, got, tc.wantFile)
 		}
-		if got := splitPlanRefSection(tc.input); got != tc.wantSection {
-			t.Errorf("splitPlanRefSection(%q) = %q, want %q", tc.input, got, tc.wantSection)
+		if got := paths.SplitRefFragment(tc.input); got != tc.wantSection {
+			t.Errorf("SplitRefFragment(%q) = %q, want %q", tc.input, got, tc.wantSection)
 		}
 	}
 }

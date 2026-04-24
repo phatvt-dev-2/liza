@@ -364,6 +364,51 @@ func TestSetTaskOutput_NormalizesWorktreeArchRef(t *testing.T) {
 	}
 }
 
+func TestSetTaskOutput_NormalizesWorktreeEpicRef(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	output := []models.OutputEntry{
+		{Desc: "cap A", DoneWhen: "stories complete", Scope: "CAP-001", SpecRef: "specs/a.md", EpicRef: ".worktrees/task-1/specs/epics/ep-001.md#capability-cap-001"},
+		{Desc: "cap B", DoneWhen: "stories complete", Scope: "CAP-002", SpecRef: "specs/b.md", EpicRef: "specs/epics/ep-001.md#capability-cap-002"},
+		{Desc: "cap C", DoneWhen: "done", Scope: "CAP-003", SpecRef: "specs/c.md"},
+	}
+
+	err := SetTaskOutput(tmpDir, &SetTaskOutputInput{
+		TaskID:  "task-1",
+		AgentID: "coder-1",
+		Output:  output,
+	})
+	if err != nil {
+		t.Fatalf("SetTaskOutput() unexpected error: %v", err)
+	}
+
+	bb := db.For(stateFile)
+	stateAfter, err := bb.ReadCached()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	task := stateAfter.FindTask("task-1")
+	if task == nil {
+		t.Fatal("task-1 not found after SetTaskOutput")
+	}
+
+	wantEpicRefs := []string{"specs/epics/ep-001.md#capability-cap-001", "specs/epics/ep-001.md#capability-cap-002", ""}
+	for i, want := range wantEpicRefs {
+		if task.Output[i].EpicRef != want {
+			t.Errorf("Output[%d].EpicRef = %q, want %q", i, task.Output[i].EpicRef, want)
+		}
+	}
+}
+
 func TestSetTaskOutput_DependsOnRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

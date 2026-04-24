@@ -18,6 +18,7 @@ type ParentTaskContext struct {
 	Description string
 	DoneWhen    string
 	SpecRef     string
+	EpicRef     string
 	PlanRef     string
 }
 
@@ -36,8 +37,11 @@ type RoleContextData struct {
 	DoneWhen              string
 	Scope                 string
 	SpecRef               string
-	PlanRef               string // file path only (no fragment)
-	PlanSection           string // anchor fragment (e.g., "capability-cap-001---task-creation"), empty if none
+	EpicRef               string // epic document path only (no fragment)
+	EpicSection           string // epic anchor fragment (capability section), empty if none
+	EpicSlug              string // filesystem-safe slug derived from EpicRef filename
+	PlanRef               string // coding plan path only (no fragment)
+	PlanSection           string // coding plan anchor fragment, empty if none
 	ArchRef               string // path to architecture document, empty if none
 	ValidationPlan        string
 	Worktree              string // resolved absolute path

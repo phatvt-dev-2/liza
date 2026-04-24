@@ -134,6 +134,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			ParentTask:  task.ParentTask,
 			ParentTasks: slices.Clone(task.ParentTasks),
 			SpecRef:     task.SpecRef,
+			EpicRef:     task.EpicRef,
 			PlanRef:     task.PlanRef,
 			ArchRef:     task.ArchRef,
 			DoneWhen:    task.DoneWhen,

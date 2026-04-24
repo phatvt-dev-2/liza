@@ -51,8 +51,8 @@ Anti-patterns to avoid:
 
 CAPABILITY SCOPING:
 The parent epic document contains multiple capabilities. Your task covers ONE capability only.
-{{- if ne .PlanRef ""}}
-The parent epic is at {{.PlanRef}}.{{- if ne .PlanSection ""}} Your capability section: #{{.PlanSection}}.{{- end}}
+{{- if ne .EpicRef ""}}
+The parent epic is at {{.EpicRef}}.{{- if ne .EpicSection ""}} Your capability section: #{{.EpicSection}}.{{- end}}
 {{- end}}
 When reading the epic, use only these sections as input:
 - Personas and General Information (shared context for all capabilities)

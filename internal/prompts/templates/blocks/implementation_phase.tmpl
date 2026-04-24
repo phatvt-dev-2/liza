@@ -8,6 +8,9 @@ Read the implementation plan at {{.PlanRef}} for task decomposition context.
 {{- if ne .ArchRef ""}}
 Read the architecture document at {{.ArchRef}} for structural context and component boundaries.
 {{- end}}
+{{- if ne .EpicRef ""}}
+Read the epic at {{.EpicRef}} for requirement context and user stories at specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/.
+{{- end}}
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
 3. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Invoke skill: testing.
@@ -27,6 +30,10 @@ IMPLEMENTATION PHASE:
 {{- if ne .ArchRef ""}}
 ARCHITECTURE REFERENCE: {{.ArchRef}}
 Read the architecture document for structural context before planning.
+{{- end}}
+{{- if ne .EpicRef ""}}
+EPIC REFERENCE: {{.EpicRef}}
+Read the epic for requirement context. User stories are at specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/.
 {{- end}}
 NOTE: You are planning, not implementing. The codebase may not contain the directories
 listed in SCOPE yet. Do NOT explore implementation directories that don't exist —
@@ -102,25 +109,25 @@ IMPLEMENTATION PHASE:
    Each entry becomes a US Writer child task after merge. The Epic Plan Reviewer will verify these.
    Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary),
    spec_ref (goal spec reference — preserves traceability to the original requirements),
-   plan_ref (epic document path with section anchor — locates the specific capability for downstream agents),
+   epic_ref (epic document path with section anchor — locates the specific capability for downstream agents),
    depends_on (optional array of sibling index strings for capability ordering).
    desc: extract verbatim from the capability's one-sentence description in the epic.
    done_when: derive a falsifiable condition from the capability description and story documents.
    scope: derive from the capability's story documents table and out-of-scope section.
    spec_ref: set to {{.SpecRef}} for all entries (the task's own spec_ref, which is the goal spec).
-   plan_ref: repo-relative path to the produced epic document with a markdown section anchor
+   epic_ref: repo-relative path to the produced epic document with a markdown section anchor
    for the specific capability heading (e.g., specs/epics/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md#capability-cap-001---task-creation).
 7. Update worktree artifacts required by DONE WHEN.
 8. Validate done_when criteria with concrete checks.
 9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
    a. output[] completeness: one entry per capability in the epic, each with all five fields
-      (desc, done_when, scope, spec_ref, plan_ref) populated.
+      (desc, done_when, scope, spec_ref, epic_ref) populated.
    b. output[] parity: re-read the epic document in the worktree and verify:
       - desc is character-identical to the capability's one-sentence description.
       - done_when is consistent with the capability description and story documents.
       - scope is consistent with the capability's story documents and out-of-scope section.
       - spec_ref equals {{.SpecRef}} (the goal spec reference, same for all entries).
-      - plan_ref is the epic document path with a #section-anchor matching the capability heading.
+      - epic_ref is the epic document path with a #section-anchor matching the capability heading.
    c. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
 10. Submit using liza submit-for-review --json only after all checks in step 9 pass.
 {{- else if eq .Role "us-writer"}}
@@ -128,11 +135,13 @@ IMPLEMENTATION PHASE:
 IMPLEMENTATION PHASE:
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Invoke skill: user-story-writing FIRST.
-3. Read the epic at {{.PlanRef}}.{{- if ne .PlanSection ""}} Your capability section is anchored at #{{.PlanSection}}.{{- end}}
+3. Read the epic at {{.EpicRef}}.{{- if ne .EpicSection ""}} Your capability section is anchored at #{{.EpicSection}}.{{- end}}
    Locate your assigned capability by matching task SCOPE.
    Read only Personas + General Information + that capability section.
 4. Follow the skill protocol: Parse → Write → Self-Review.
-5. Write user stories to the output file path specified by the task.
+5. Story file location:
+   Run: mkdir -p {{.Worktree}}/specs/stories/{{.GoalSlug}}/{{.EpicSlug}}
+   Write user stories to {{.Worktree}}/specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/.
 6. Validate done_when criteria with concrete checks.
 7. Submit using liza submit-for-review --json when complete.
 {{- else if eq .Role "architect"}}

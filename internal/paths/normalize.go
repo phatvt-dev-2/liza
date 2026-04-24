@@ -51,6 +51,22 @@ func NormalizeSpecRef(specRef string) string {
 	return remainder
 }
 
+// SplitRefFile returns the file path portion of a ref, stripping any #fragment.
+func SplitRefFile(ref string) string {
+	if file, _, ok := strings.Cut(ref, "#"); ok {
+		return file
+	}
+	return ref
+}
+
+// SplitRefFragment returns the fragment portion of a ref (without the #), or "" if none.
+func SplitRefFragment(ref string) string {
+	if _, frag, ok := strings.Cut(ref, "#"); ok {
+		return frag
+	}
+	return ""
+}
+
 // isAbsAnyPlatform returns true if the path is absolute on any platform.
 // filepath.IsAbs is platform-dependent, so we also check for Windows
 // drive-letter prefixes (e.g. "C:\", "D:/") to catch cross-platform inputs.

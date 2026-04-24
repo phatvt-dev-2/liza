@@ -17,6 +17,7 @@ import (
 func buildMergedPlanningTask(id string, now time.Time) models.Task {
 	task := testhelpers.BuildTaskByStatus(id, models.TaskStatusMerged, now)
 	task.RolePair = "code-planning-pair"
+	task.EpicRef = "specs/epics/ep-001.md"
 	task.PlanRef = "specs/plan.md"
 	task.Output = []models.OutputEntry{
 		{Desc: "implement feature X", DoneWhen: "tests pass", Scope: "internal/", SpecRef: "README.md"},
@@ -30,6 +31,7 @@ func setupReplanTest(t *testing.T) (string, string) {
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
 	testhelpers.CreateSpecFile(t, tmpDir, "plan.md", "# Plan\n")
+	testhelpers.CreateSpecFile(t, tmpDir, "epics/ep-001.md", "# Epic\n")
 	// BuildTaskByStatus uses SpecRef: "README.md" (at project root, not specs/)
 	if err := os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# README\n"), 0644); err != nil {
 		t.Fatalf("Failed to create README.md: %v", err)
@@ -123,6 +125,9 @@ func TestReplan_HappyPath(t *testing.T) {
 	}
 	if newTask.SpecRef != oldTask.SpecRef {
 		t.Errorf("New task SpecRef = %q, want %q", newTask.SpecRef, oldTask.SpecRef)
+	}
+	if newTask.EpicRef != oldTask.EpicRef {
+		t.Errorf("New task EpicRef = %q, want %q", newTask.EpicRef, oldTask.EpicRef)
 	}
 	if newTask.PlanRef != oldTask.PlanRef {
 		t.Errorf("New task PlanRef = %q, want %q", newTask.PlanRef, oldTask.PlanRef)

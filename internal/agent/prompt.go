@@ -3,7 +3,6 @@ package agent
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
@@ -128,8 +127,11 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		DoneWhen:     task.DoneWhen,
 		Scope:        task.Scope,
 		SpecRef:      task.SpecRef,
-		PlanRef:      worktreeRelPath(splitPlanRefFile(task.PlanRef), resolveWorktreePath(config.ProjectRoot, task.Worktree)),
-		PlanSection:  splitPlanRefSection(task.PlanRef),
+		EpicRef:      worktreeRelPath(paths.SplitRefFile(task.EpicRef), resolveWorktreePath(config.ProjectRoot, task.Worktree)),
+		EpicSection:  paths.SplitRefFragment(task.EpicRef),
+		EpicSlug:     paths.GoalSlug(paths.SplitRefFile(task.EpicRef)),
+		PlanRef:      worktreeRelPath(paths.SplitRefFile(task.PlanRef), resolveWorktreePath(config.ProjectRoot, task.Worktree)),
+		PlanSection:  paths.SplitRefFragment(task.PlanRef),
 		ArchRef:      worktreeRelPath(task.ArchRef, resolveWorktreePath(config.ProjectRoot, task.Worktree)),
 		Worktree:     resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		IterationNum: task.Iteration,
@@ -220,6 +222,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 					Description: truncateDescription(parent.Description, 500),
 					DoneWhen:    parent.DoneWhen,
 					SpecRef:     parent.SpecRef,
+					EpicRef:     parent.EpicRef,
 					PlanRef:     parent.PlanRef,
 				})
 			}
@@ -300,22 +303,6 @@ func collectSiblingTasks(state *models.State, currentTaskID string) ([]prompts.S
 	}
 
 	return siblings, len(planned), ordinal
-}
-
-// splitPlanRefFile returns the file path portion of a PlanRef, stripping any #fragment.
-func splitPlanRefFile(planRef string) string {
-	if i := strings.IndexByte(planRef, '#'); i >= 0 {
-		return planRef[:i]
-	}
-	return planRef
-}
-
-// splitPlanRefSection returns the fragment portion of a PlanRef (without the #), or "" if none.
-func splitPlanRefSection(planRef string) string {
-	if i := strings.IndexByte(planRef, '#'); i >= 0 {
-		return planRef[i+1:]
-	}
-	return ""
 }
 
 // worktreeRelPath prefixes a relative path with the worktree path so agents

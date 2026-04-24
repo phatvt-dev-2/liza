@@ -178,6 +178,7 @@ func buildManyToOneChild(childID string, cohort []*models.Task, sharedParentID s
 	}
 
 	specRef := cohort[0].SpecRef
+	epicRef := paths.SplitRefFile(cohort[0].EpicRef) // doc-only: strip section anchor at many-to-one boundary
 
 	return models.Task{
 		ID:          childID,
@@ -188,6 +189,7 @@ func buildManyToOneChild(childID string, cohort []*models.Task, sharedParentID s
 		Priority:    cohort[0].Priority,
 		ParentTasks: parentIDs,
 		SpecRef:     paths.NormalizeSpecRef(specRef),
+		EpicRef:     paths.NormalizeSpecRef(epicRef),
 		DoneWhen:    fmt.Sprintf("Complete %s work based on %d parent tasks from %s", doerName, len(cohort), sharedParentID),
 		Scope:       fmt.Sprintf("Consolidation of %d tasks from %s", len(cohort), sharedParentID),
 		DependsOn:   inheritedDeps,
@@ -345,7 +347,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	switch tDef.cardinality {
 	case "per-subtask":
 		for i, entry := range task.Output {
-			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, task.ArchRef, now)
+			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, task.EpicRef, task.ArchRef, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[i])
 		}
@@ -393,7 +395,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
 		}
 		for _, idx := range missingChildren {
-			child := buildChildTask(siblingIDs[idx], taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, task.ArchRef, now)
+			child := buildChildTask(siblingIDs[idx], taskID, task.Output[idx], tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, task.EpicRef, task.ArchRef, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[idx])
 		}
@@ -982,13 +984,18 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 // siblingIDs maps output entry indices to their generated task IDs,
 // used to resolve DependsOn index references to actual task IDs.
 // inheritedDeps are phase-gate dependencies from upstream tasks' children.
-func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, taskType models.TaskType, siblingIDs, inheritedDeps []string, parentArchRef string, now time.Time) models.Task {
+func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, taskType models.TaskType, siblingIDs, inheritedDeps []string, parentEpicRef, parentArchRef string, now time.Time) models.Task {
 	var deps []string
 	for _, ref := range entry.DependsOn {
 		idx, _ := strconv.Atoi(ref) // validated upstream in validateOutputEntry
 		deps = append(deps, siblingIDs[idx])
 	}
 	deps = append(deps, inheritedDeps...)
+
+	epicRef := entry.EpicRef
+	if epicRef == "" {
+		epicRef = parentEpicRef
+	}
 
 	archRef := entry.ArchRef
 	if archRef == "" {
@@ -1004,6 +1011,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 		Priority:    1,
 		ParentTasks: []string{parentID},
 		SpecRef:     paths.NormalizeSpecRef(entry.SpecRef),
+		EpicRef:     paths.NormalizeSpecRef(epicRef),
 		PlanRef:     paths.NormalizeSpecRef(entry.PlanRef),
 		ArchRef:     paths.NormalizeSpecRef(archRef),
 		DoneWhen:    entry.DoneWhen,
@@ -1032,7 +1040,8 @@ func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef tran
 		Priority:    parent.Priority,
 		ParentTasks: []string{parentID},
 		SpecRef:     paths.NormalizeSpecRef(parent.SpecRef),
-		PlanRef:     parent.PlanRef, // inherited from parent (set from OutputEntry for per-subtask, propagated for one-to-one)
+		EpicRef:     parent.EpicRef,
+		PlanRef:     parent.PlanRef,
 		ArchRef:     parent.ArchRef,
 		DoneWhen:    fmt.Sprintf("Complete %s work based on parent task %s", doerName, parentID),
 		Scope:       fmt.Sprintf("Based on parent task %s", parentID),

@@ -205,6 +205,14 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 				return fmt.Errorf("%w (task: %s)", err, task.ID)
 			}
 		}
+		if task.EpicRef != "" && strings.Contains(task.EpicRef, ".worktrees/") {
+			return fmt.Errorf("task %s epic_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.EpicRef)
+		}
+		if !skipSpecFileCheck && task.EpicRef != "" {
+			if err := checkSpecFileExists(projectRoot, task.EpicRef, state.Config.IntegrationBranch); err != nil {
+				return fmt.Errorf("epic_ref: %w (task: %s)", err, task.ID)
+			}
+		}
 		if task.PlanRef != "" && strings.Contains(task.PlanRef, ".worktrees/") {
 			return fmt.Errorf("task %s plan_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.PlanRef)
 		}
@@ -375,6 +383,9 @@ func validateTaskOutput(task *models.Task) error {
 		}
 		if strings.Contains(entry.SpecRef, ".worktrees/") {
 			return fmt.Errorf("task %s output[%d] spec_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.SpecRef)
+		}
+		if entry.EpicRef != "" && strings.Contains(entry.EpicRef, ".worktrees/") {
+			return fmt.Errorf("task %s output[%d] epic_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.EpicRef)
 		}
 		if entry.PlanRef != "" && strings.Contains(entry.PlanRef, ".worktrees/") {
 			return fmt.Errorf("task %s output[%d] plan_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.PlanRef)

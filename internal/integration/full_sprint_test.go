@@ -158,14 +158,14 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 					DoneWhen: "Capability 1 stories complete",
 					Scope:    "CAP-001 Authentication",
 					SpecRef:  "specs/feature.md",
-					PlanRef:  "specs/epics/ep-001-auth.md#capability-cap-001---authentication",
+					EpicRef:  "specs/epics/ep-001-auth.md#capability-cap-001---authentication",
 				},
 				{
 					Desc:     fmt.Sprintf("Capability 2 from %s", taskID),
 					DoneWhen: "Capability 2 stories complete",
 					Scope:    "CAP-002 Authorization",
 					SpecRef:  "specs/feature.md",
-					PlanRef:  "specs/epics/ep-001-auth.md#capability-cap-002---authorization",
+					EpicRef:  "specs/epics/ep-001-auth.md#capability-cap-002---authorization",
 				},
 			},
 		}); err != nil {
@@ -521,7 +521,7 @@ func TestFullSprintSequence(t *testing.T) {
 	}
 
 	// Verify capability scoping: each US task has the right scope, spec_ref (goal spec),
-	// and plan_ref (epic document with section anchor) from output[].
+	// and epic_ref (epic document with section anchor) from output[].
 	usTask0 := state.FindTask("epic-1-epic-to-us-0")
 	usTask1 := state.FindTask("epic-1-epic-to-us-1")
 	if usTask0 != nil {
@@ -531,8 +531,8 @@ func TestFullSprintSequence(t *testing.T) {
 		if usTask0.SpecRef != "specs/feature.md" {
 			t.Errorf("US task 0 spec_ref = %q, want %q", usTask0.SpecRef, "specs/feature.md")
 		}
-		if usTask0.PlanRef != "specs/epics/ep-001-auth.md#capability-cap-001---authentication" {
-			t.Errorf("US task 0 plan_ref = %q, want %q", usTask0.PlanRef, "specs/epics/ep-001-auth.md#capability-cap-001---authentication")
+		if usTask0.EpicRef != "specs/epics/ep-001-auth.md#capability-cap-001---authentication" {
+			t.Errorf("US task 0 epic_ref = %q, want %q", usTask0.EpicRef, "specs/epics/ep-001-auth.md#capability-cap-001---authentication")
 		}
 	}
 	if usTask1 != nil {
@@ -542,8 +542,29 @@ func TestFullSprintSequence(t *testing.T) {
 		if usTask1.SpecRef != "specs/feature.md" {
 			t.Errorf("US task 1 spec_ref = %q, want %q", usTask1.SpecRef, "specs/feature.md")
 		}
-		if usTask1.PlanRef != "specs/epics/ep-001-auth.md#capability-cap-002---authorization" {
-			t.Errorf("US task 1 plan_ref = %q, want %q", usTask1.PlanRef, "specs/epics/ep-001-auth.md#capability-cap-002---authorization")
+		if usTask1.EpicRef != "specs/epics/ep-001-auth.md#capability-cap-002---authorization" {
+			t.Errorf("US task 1 epic_ref = %q, want %q", usTask1.EpicRef, "specs/epics/ep-001-auth.md#capability-cap-002---authorization")
+		}
+	}
+
+	// Verify EpicRef propagation across many-to-one boundary:
+	// Architecture task inherits doc-only EpicRef (section anchor stripped).
+	archTask := state.FindTask(archTaskID)
+	if archTask != nil {
+		wantEpicRef := "specs/epics/ep-001-auth.md"
+		if archTask.EpicRef != wantEpicRef {
+			t.Errorf("Architecture task epic_ref = %q, want %q (section should be stripped at many-to-one)", archTask.EpicRef, wantEpicRef)
+		}
+	}
+
+	// Verify EpicRef propagates to code-planning tasks (per-subtask, inherited from parent).
+	for _, suffix := range []string{"0", "1"} {
+		cpTask := state.FindTask(archTaskID + "-architecture-to-code-plan-" + suffix)
+		if cpTask != nil {
+			wantEpicRef := "specs/epics/ep-001-auth.md"
+			if cpTask.EpicRef != wantEpicRef {
+				t.Errorf("Code-plan task %s epic_ref = %q, want %q", cpTask.ID, cpTask.EpicRef, wantEpicRef)
+			}
 		}
 	}
 

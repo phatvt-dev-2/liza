@@ -1907,13 +1907,13 @@ func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
 		ID:           taskID,
 		Type:         models.TaskTypeCoding,
 		RolePair:     "us-writing-pair",
-		Description:  "US with plan_ref",
+		Description:  "US with epic_ref",
 		Status:       models.TaskStatus("US_APPROVED"),
 		Priority:     1,
 		Created:      now,
 		ParentTasks:  []string{cohortParentID},
-		SpecRef:      "specs/auth-epic.md",
-		PlanRef:      "specs/auth-epic.md",
+		SpecRef:      "specs/feature.md",
+		EpicRef:      "specs/epics/auth-epic.md#capability-cap-001---authentication",
 		DoneWhen:     "US approved",
 		Scope:        "auth module",
 		ReviewCommit: &reviewCommit,
@@ -1942,9 +1942,13 @@ func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
 	if child.PlanRef != "" {
 		t.Errorf("Child plan_ref = %q, want empty (many-to-one architecture tasks don't inherit PlanRef)", child.PlanRef)
 	}
-	// But does inherit SpecRef
-	if child.SpecRef != "specs/auth-epic.md" {
-		t.Errorf("Child spec_ref = %q, want %q", child.SpecRef, "specs/auth-epic.md")
+	// Inherits SpecRef
+	if child.SpecRef != "specs/feature.md" {
+		t.Errorf("Child spec_ref = %q, want %q", child.SpecRef, "specs/feature.md")
+	}
+	// Inherits EpicRef doc-only (section anchor stripped at many-to-one boundary)
+	if child.EpicRef != "specs/epics/auth-epic.md" {
+		t.Errorf("Child epic_ref = %q, want %q (section anchor should be stripped)", child.EpicRef, "specs/epics/auth-epic.md")
 	}
 }
 
@@ -2055,6 +2059,63 @@ func TestProceed_PerSubtask_InheritsParentArchRef(t *testing.T) {
 		}
 		if child.ArchRef != "specs/arch-plan/feature.md" {
 			t.Errorf("Child %d arch_ref = %q, want %q (should inherit from parent)", i, child.ArchRef, "specs/arch-plan/feature.md")
+		}
+	}
+}
+
+// --- epic_ref propagation tests ---
+
+func TestProceed_PerSubtask_InheritsParentEpicRef(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "arch-epicref-inherit-1"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "architecture-pair",
+		Description:  "Arch with parent epic_ref",
+		Status:       models.TaskStatus("ARCHITECTURE_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		EpicRef:      "specs/epics/ep-001.md",
+		DoneWhen:     "Architecture approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Task A", DoneWhen: "A works", Scope: "a", SpecRef: "specs/a.md", ArchRef: "specs/arch-plan/feature.md"},
+			{Desc: "Task B", DoneWhen: "B works", Scope: "b", SpecRef: "specs/b.md", ArchRef: "specs/arch-plan/feature.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "architecture-to-code-plan")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for i, childID := range result.ChildTaskIDs {
+		child := readState.FindTask(childID)
+		if child == nil {
+			t.Fatalf("Child task %d not found", i)
+		}
+		if child.EpicRef != "specs/epics/ep-001.md" {
+			t.Errorf("Child %d epic_ref = %q, want %q (should inherit from parent)", i, child.EpicRef, "specs/epics/ep-001.md")
 		}
 	}
 }

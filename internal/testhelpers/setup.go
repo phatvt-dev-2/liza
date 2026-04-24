@@ -125,12 +125,10 @@ func CreateTestWorktree(t *testing.T, tmpDir, taskID string) {
 func CreateSpecFile(t *testing.T, tmpDir, filename, content string) string {
 	t.Helper()
 
-	specsDir := filepath.Join(tmpDir, "specs")
-	if err := os.MkdirAll(specsDir, 0755); err != nil {
-		t.Fatalf("Failed to create specs directory: %v", err)
+	specFile := filepath.Join(tmpDir, "specs", filename)
+	if err := os.MkdirAll(filepath.Dir(specFile), 0755); err != nil {
+		t.Fatalf("Failed to create spec directory: %v", err)
 	}
-
-	specFile := filepath.Join(specsDir, filename)
 	if err := os.WriteFile(specFile, []byte(content), 0644); err != nil {
 		t.Fatalf("Failed to create spec file: %v", err)
 	}
