@@ -41,7 +41,13 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 network_access = true
-writable_roots = ["/home/<USER>/.codex", "/home/<USER>/.liza", "/home/<USER>/.cache"]
+writable_roots = [
+  "/home/<USER>/.codex",
+  "/home/<USER>/.liza",
+  "/home/<USER>/.cache",
+  "/home/<USER>/.npm",
+  "/home/<USER>/Workspace/<PROJECT>/.git",
+]
 
 [mcp_servers.filesystem]
 command = "npx"
@@ -49,6 +55,10 @@ args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/<USER>/.claude",
 
 # Codex agents access Liza via `liza` CLI commands through Bash — no MCP server needed.
 ```
+
+If Codex agents must run `git add`, `git commit`, `git worktree`, or Liza review submission flows from a repo worktree, the active project root and its `.git` directory must both be listed in `writable_roots`. Without the `.git` entry, Codex may mount git metadata read-only even when the worktree files themselves are writable, which blocks creation of `index.lock` under `.git/worktrees/...`.
+
+After editing `~/.codex/config.toml`, restart Codex completely before testing.
 
 ## Gemini
 
