@@ -387,6 +387,51 @@ func TestJSON_GetWrapsExisting(t *testing.T) {
 	}
 }
 
+func TestJSON_GetTasksSummaryActive(t *testing.T) {
+	projectRoot, _ := setupMutationTestProject(t, func(state *models.State) {
+		now := time.Now().UTC()
+		active := testhelpers.BuildTaskByStatus("task-active", models.TaskStatusImplementing, now)
+		active.DoneWhen = "verbose done when should not appear"
+		active.Scope = "verbose scope should not appear"
+		active.Output = []models.OutputEntry{{Kind: "code-task", Desc: "child"}}
+		merged := testhelpers.BuildTaskByStatus("task-merged", models.TaskStatusMerged, now)
+		state.Tasks = []models.Task{active, merged}
+	})
+
+	stdout, err := executeRootCommandCapture(t, projectRoot, "get", "tasks", "--active", "--summary", "--json")
+	if err != nil {
+		t.Fatalf("get tasks --active --summary --json failed: %v", err)
+	}
+
+	env := parseEnvelope(t, stdout)
+	if env["ok"] != true {
+		t.Fatalf("expected ok=true, got %v", env["ok"])
+	}
+	result, ok := env["result"].([]any)
+	if !ok {
+		t.Fatalf("expected result array, got %T", env["result"])
+	}
+	if len(result) != 1 {
+		t.Fatalf("summary result count = %d, want 1 active task", len(result))
+	}
+	task, ok := result[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected task object, got %T", result[0])
+	}
+	if task["id"] != "task-active" {
+		t.Errorf("id = %v, want task-active", task["id"])
+	}
+	if _, exists := task["done_when"]; exists {
+		t.Errorf("summary task includes done_when: %v", task)
+	}
+	if _, exists := task["scope"]; exists {
+		t.Errorf("summary task includes scope: %v", task)
+	}
+	if _, exists := task["output"]; exists {
+		t.Errorf("summary task includes output: %v", task)
+	}
+}
+
 func TestJSON_VoidSuccess(t *testing.T) {
 	projectRoot, _ := setupMutationTestProject(t, func(state *models.State) {
 		now := time.Now().UTC()

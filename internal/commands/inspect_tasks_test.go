@@ -210,6 +210,108 @@ func TestInspectTasks(t *testing.T) {
 	}
 }
 
+func TestInspectTasksSummaryActive(t *testing.T) {
+	now := time.Now()
+	assignedTo := "coder-1"
+	blockedReason := "waiting for input"
+	rejectionReason := "needs a narrower scope"
+
+	state := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:                  "task-1",
+				Description:         "Implement feature A",
+				RolePair:            "coding-pair",
+				Status:              models.TaskStatusImplementing,
+				Priority:            1,
+				AssignedTo:          &assignedTo,
+				Attempt:             2,
+				ReviewCyclesCurrent: 1,
+				Created:             now,
+				DoneWhen:            strings.Repeat("verbose done when ", 20),
+				Scope:               strings.Repeat("verbose scope ", 20),
+				Output: []models.OutputEntry{
+					{Kind: "code-task", Desc: "child 1"},
+					{Kind: "code-task", Desc: "child 2"},
+					{Kind: "review-task", Desc: "child 3"},
+				},
+			},
+			{
+				ID:               "task-2",
+				Description:      "Blocked task",
+				Status:           models.TaskStatusBlocked,
+				Priority:         2,
+				BlockedReason:    &blockedReason,
+				BlockedQuestions: []string{"Which API?"},
+				Created:          now,
+			},
+			{
+				ID:              "task-3",
+				Description:     "Rejected task",
+				Status:          models.TaskStatusRejected,
+				Priority:        3,
+				RejectionReason: &rejectionReason,
+				FailedBy:        []string{"integration-analyst-1"},
+				Created:         now,
+			},
+			{
+				ID:          "task-4",
+				Description: "Merged task",
+				Status:      models.TaskStatusMerged,
+				Priority:    4,
+				Created:     now,
+			},
+		},
+	}
+
+	result, err := inspectTasks(state, inspectTasksOptions{
+		Format:  "json",
+		Summary: true,
+		Active:  true,
+	})
+	if err != nil {
+		t.Fatalf("inspectTasks() error = %v", err)
+	}
+
+	output := result.(string)
+	var summaries []taskSummaryInfo
+	if err := json.Unmarshal([]byte(output), &summaries); err != nil {
+		t.Fatalf("summary JSON invalid: %v", err)
+	}
+
+	if len(summaries) != 3 {
+		t.Fatalf("summary count = %d, want 3 active tasks", len(summaries))
+	}
+	if summaries[0].ID != "task-1" || summaries[0].RolePair != "coding-pair" {
+		t.Fatalf("first summary = %+v, want task-1 coding-pair", summaries[0])
+	}
+	if summaries[0].Attempt != 2 {
+		t.Errorf("attempt = %d, want 2", summaries[0].Attempt)
+	}
+	if summaries[0].OutputCount != 3 {
+		t.Errorf("output_count = %d, want 3", summaries[0].OutputCount)
+	}
+	if got := strings.Join(summaries[0].OutputKinds, ","); got != "code-task,review-task" {
+		t.Errorf("output_kinds = %q, want code-task,review-task", got)
+	}
+	if summaries[1].BlockedReason == nil || *summaries[1].BlockedReason != blockedReason {
+		t.Errorf("blocked_reason = %v, want %q", summaries[1].BlockedReason, blockedReason)
+	}
+	if summaries[2].RejectionReason == nil || *summaries[2].RejectionReason != rejectionReason {
+		t.Errorf("rejection_reason = %v, want %q", summaries[2].RejectionReason, rejectionReason)
+	}
+	if strings.Contains(output, "verbose done when") || strings.Contains(output, "verbose scope") {
+		t.Errorf("summary output leaked verbose fields:\n%s", output)
+	}
+	var raw []map[string]any
+	if err := json.Unmarshal([]byte(output), &raw); err != nil {
+		t.Fatalf("summary JSON invalid on raw decode: %v", err)
+	}
+	if _, exists := raw[0]["output"]; exists {
+		t.Errorf("summary output includes full output field: %v", raw[0])
+	}
+}
+
 func TestInspectTask(t *testing.T) {
 	now := time.Now()
 	assignedTo := "coder-1"

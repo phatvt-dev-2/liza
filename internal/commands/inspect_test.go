@@ -193,6 +193,16 @@ func TestInspectCommand(t *testing.T) {
 			wantErr:      false,
 		},
 		{
+			name: "summary flag rejects non-task entity",
+			args: []string{"agents"},
+			opts: InspectOptions{
+				Format:      "json",
+				ProjectRoot: tmpDir,
+				Summary:     true,
+			},
+			wantErr: true,
+		},
+		{
 			name: "inspect specific agent",
 			args: []string{"agents", "coder-1"},
 			opts: InspectOptions{

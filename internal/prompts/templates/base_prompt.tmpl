@@ -79,7 +79,8 @@ FIRST ACTIONS:
 {{- if .TaskID}}
 2. Query your assigned task: liza get {{.TaskID}} --json
 {{- else}}
-2. Query workspace state: liza get tasks --json
+2. Query active task summary: liza get tasks --active --summary --json
+   Full task list only if needed: liza get tasks --json
 {{- end}}
 3. Read the goal spec: {{.GoalSpecRef}}
 4. Execute your role's protocol

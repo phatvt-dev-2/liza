@@ -18,6 +18,8 @@ type InspectOptions struct {
 	Format      string // Output format: json, yaml, table, value
 	ProjectRoot string // Project root directory
 	Internal    bool   // If true, return structured data for composition (not formatted string)
+	Summary     bool   // If true, return compact entity summaries
+	Active      bool   // If true, return only non-terminal tasks
 }
 
 // Validate checks if the inspect options are valid
@@ -122,13 +124,21 @@ func handleFieldQuery(state *models.State, fieldPath string, opts InspectOptions
 
 // handleEntityQuery handles queries for entities (tasks, agents, etc.)
 func handleEntityQuery(state *models.State, entity string, args []string, opts InspectOptions) (string, error) {
+	if entity != "tasks" && (opts.Summary || opts.Active) {
+		return "", fmt.Errorf("--summary and --active are only supported for tasks")
+	}
+
 	switch entity {
 	case "config":
 		return formatOutput(state.Config, opts.Format)
 	case "sprint":
 		return formatOutput(state.Sprint, opts.Format)
 	case "tasks":
-		taskOpts := inspectTasksOptions{Format: opts.Format}
+		taskOpts := inspectTasksOptions{
+			Format:  opts.Format,
+			Summary: opts.Summary,
+			Active:  opts.Active,
+		}
 		if len(args) > 0 {
 			return asString(inspectTask(state, args[0], taskOpts))
 		}

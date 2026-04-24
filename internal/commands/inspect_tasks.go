@@ -17,6 +17,8 @@ type inspectTasksOptions struct {
 	AssignedToFilter string // Filter by assignee
 	BlockedFilter    bool   // Show only blocked tasks
 	Internal         bool   // Return structured data for composition
+	Summary          bool   // Return compact task summaries
+	Active           bool   // Show only non-terminal tasks
 }
 
 // taskInfo represents task information with computed fields
@@ -43,9 +45,40 @@ type taskInfo struct {
 	AttemptNum      int                  `json:"attempt_num,omitempty" yaml:"attempt_num,omitempty"`
 }
 
+// taskSummaryInfo is a compact task projection for agent orchestration.
+type taskSummaryInfo struct {
+	ID               string   `json:"id" yaml:"id"`
+	Status           string   `json:"status" yaml:"status"`
+	RolePair         string   `json:"role_pair,omitempty" yaml:"role_pair,omitempty"`
+	Priority         int      `json:"priority" yaml:"priority"`
+	AssignedTo       *string  `json:"assigned_to,omitempty" yaml:"assigned_to,omitempty"`
+	ReviewingBy      *string  `json:"reviewing_by,omitempty" yaml:"reviewing_by,omitempty"`
+	DependsOn        []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	Attempt          int      `json:"attempt" yaml:"attempt"`
+	ReviewCycles     int      `json:"review_cycles,omitempty" yaml:"review_cycles,omitempty"`
+	LeaseExpires     *string  `json:"lease_expires,omitempty" yaml:"lease_expires,omitempty"`
+	BlockedReason    *string  `json:"blocked_reason,omitempty" yaml:"blocked_reason,omitempty"`
+	BlockedQuestions []string `json:"blocked_questions,omitempty" yaml:"blocked_questions,omitempty"`
+	RejectionReason  *string  `json:"rejection_reason,omitempty" yaml:"rejection_reason,omitempty"`
+	FailedBy         []string `json:"failed_by,omitempty" yaml:"failed_by,omitempty"`
+	OutputCount      int      `json:"output_count,omitempty" yaml:"output_count,omitempty"`
+	OutputKinds      []string `json:"output_kinds,omitempty" yaml:"output_kinds,omitempty"`
+}
+
 // inspectTasks lists all tasks or filters by criteria
 func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
 	filtered := filterTasks(state.Tasks, opts)
+
+	if opts.Summary {
+		summaries := make([]taskSummaryInfo, len(filtered))
+		for i, task := range filtered {
+			summaries[i] = buildTaskSummaryInfo(&task)
+		}
+		if opts.Internal {
+			return summaries, nil
+		}
+		return formatTasksSummaryOutput(summaries, opts.Format)
+	}
 
 	taskInfos := make([]taskInfo, len(filtered))
 	for i, task := range filtered {
@@ -63,6 +96,14 @@ func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (
 	foundTask := state.FindTask(taskID)
 	if foundTask == nil {
 		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
+	}
+
+	if opts.Summary {
+		info := buildTaskSummaryInfo(foundTask)
+		if opts.Internal {
+			return info, nil
+		}
+		return formatTaskSummaryOutput(info, opts.Format)
 	}
 
 	info := buildTaskInfo(foundTask)
@@ -106,6 +147,47 @@ func buildTaskInfo(task *models.Task) taskInfo {
 	return info
 }
 
+func buildTaskSummaryInfo(task *models.Task) taskSummaryInfo {
+	info := taskSummaryInfo{
+		ID:               task.ID,
+		Status:           string(task.Status),
+		RolePair:         task.RolePair,
+		Priority:         task.Priority,
+		AssignedTo:       task.AssignedTo,
+		ReviewingBy:      task.ReviewingBy,
+		DependsOn:        task.DependsOn,
+		Attempt:          task.EffectiveAttempt(),
+		ReviewCycles:     task.ReviewCyclesCurrent,
+		BlockedReason:    task.BlockedReason,
+		BlockedQuestions: task.BlockedQuestions,
+		RejectionReason:  task.RejectionReason,
+		FailedBy:         task.FailedBy,
+		OutputCount:      len(task.Output),
+		OutputKinds:      outputKinds(task.Output),
+	}
+
+	if task.LeaseExpires != nil {
+		remaining := time.Until(*task.LeaseExpires)
+		formatted := render.FormatDuration(remaining)
+		info.LeaseExpires = &formatted
+	}
+
+	return info
+}
+
+func outputKinds(output []models.OutputEntry) []string {
+	kinds := make([]string, 0, len(output))
+	seen := make(map[string]bool)
+	for _, entry := range output {
+		if entry.Kind == "" || seen[entry.Kind] {
+			continue
+		}
+		seen[entry.Kind] = true
+		kinds = append(kinds, entry.Kind)
+	}
+	return kinds
+}
+
 // calculateTimeInStatus calculates how long the task has been in its current status
 func calculateTimeInStatus(task *models.Task) time.Duration {
 	for i := len(task.History) - 1; i >= 0; i-- {
@@ -125,6 +207,9 @@ func filterTasks(tasks []models.Task, opts inspectTasksOptions) []models.Task {
 	var filtered []models.Task
 
 	for _, task := range tasks {
+		if opts.Active && task.Status.IsTerminal() {
+			continue
+		}
 		if opts.StatusFilter != "" && string(task.Status) != opts.StatusFilter {
 			continue
 		}
@@ -143,6 +228,126 @@ func filterTasks(tasks []models.Task, opts inspectTasksOptions) []models.Task {
 	}
 
 	return filtered
+}
+
+func formatTasksSummaryOutput(tasks []taskSummaryInfo, format string) (string, error) {
+	if format == "" {
+		format = "table"
+	}
+
+	switch format {
+	case "json":
+		return render.FormatJSON(tasks)
+	case "yaml":
+		return render.FormatYAML(tasks)
+	case "table":
+		return formatTaskSummariesTable(tasks), nil
+	case "value":
+		return "", fmt.Errorf("value format not supported for task summaries (use json, yaml, or table)")
+	default:
+		return "", fmt.Errorf("invalid format: %s", format)
+	}
+}
+
+func formatTaskSummaryOutput(task taskSummaryInfo, format string) (string, error) {
+	if format == "" {
+		format = "value"
+	}
+
+	switch format {
+	case "json":
+		return render.FormatJSON(task)
+	case "yaml":
+		return render.FormatYAML(task)
+	case "value":
+		return formatTaskSummaryValue(task), nil
+	case "table":
+		return formatTaskSummariesTable([]taskSummaryInfo{task}), nil
+	default:
+		return "", fmt.Errorf("invalid format: %s", format)
+	}
+}
+
+func formatTaskSummariesTable(tasks []taskSummaryInfo) string {
+	if len(tasks) == 0 {
+		return "No tasks found"
+	}
+
+	headers := []string{"ID", "STATUS", "ROLE_PAIR", "ATTEMPT", "PRIORITY", "ASSIGNED_TO", "REVIEWING_BY", "DEPS", "OUTPUTS"}
+	var rows [][]string
+	for _, task := range tasks {
+		assignedTo := "-"
+		if task.AssignedTo != nil {
+			assignedTo = *task.AssignedTo
+		}
+
+		reviewingBy := "-"
+		if task.ReviewingBy != nil {
+			reviewingBy = *task.ReviewingBy
+		}
+
+		deps := "-"
+		if len(task.DependsOn) > 0 {
+			deps = fmt.Sprintf("%d", len(task.DependsOn))
+		}
+
+		outputs := "-"
+		if task.OutputCount > 0 {
+			outputs = fmt.Sprintf("%d", task.OutputCount)
+		}
+
+		rows = append(rows, []string{
+			task.ID,
+			task.Status,
+			task.RolePair,
+			fmt.Sprintf("%d", task.Attempt),
+			fmt.Sprintf("%d", task.Priority),
+			assignedTo,
+			reviewingBy,
+			deps,
+			outputs,
+		})
+	}
+
+	return render.FormatTable(headers, rows)
+}
+
+func formatTaskSummaryValue(task taskSummaryInfo) string {
+	lines := []string{
+		fmt.Sprintf("ID: %s", task.ID),
+		fmt.Sprintf("Status: %s", task.Status),
+		fmt.Sprintf("Role Pair: %s", task.RolePair),
+		fmt.Sprintf("Priority: %d", task.Priority),
+		fmt.Sprintf("Attempt: %d", task.Attempt),
+	}
+
+	if task.AssignedTo != nil {
+		lines = append(lines, fmt.Sprintf("Assigned To: %s", *task.AssignedTo))
+	} else {
+		lines = append(lines, "Assigned To: -")
+	}
+	if task.ReviewingBy != nil {
+		lines = append(lines, fmt.Sprintf("Reviewing By: %s", *task.ReviewingBy))
+	} else {
+		lines = append(lines, "Reviewing By: -")
+	}
+	if len(task.DependsOn) > 0 {
+		lines = append(lines, fmt.Sprintf("Depends On: %s", strings.Join(task.DependsOn, ", ")))
+	}
+	if task.BlockedReason != nil {
+		lines = append(lines, fmt.Sprintf("Blocked Reason: %s", *task.BlockedReason))
+	}
+	if task.RejectionReason != nil {
+		lines = append(lines, fmt.Sprintf("Rejection Reason: %s", *task.RejectionReason))
+	}
+	if len(task.FailedBy) > 0 {
+		lines = append(lines, fmt.Sprintf("Failed By: %s", strings.Join(task.FailedBy, ", ")))
+	}
+	if task.OutputCount > 0 {
+		lines = append(lines, fmt.Sprintf("Output Count: %d", task.OutputCount))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // formatTasksOutput formats a list of tasks for output

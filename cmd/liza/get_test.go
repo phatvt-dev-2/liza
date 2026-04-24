@@ -238,6 +238,12 @@ func TestGetCommand(t *testing.T) {
 			wantContains: []string{`"id": "task-1"`, `"status": "IMPLEMENTING_CODE"`},
 		},
 		{
+			name:           "get active task summary - JSON format",
+			args:           []string{"get", "tasks", "--active", "--summary", "--format", "json"},
+			wantContains:   []string{`"id": "task-1"`, `"status": "IMPLEMENTING_CODE"`, `"attempt": 1`},
+			wantNotContain: []string{`"done_when"`, `"scope"`, `"output"`},
+		},
+		{
 			name:         "get task by ID shorthand",
 			args:         []string{"get", "task-1", "--format", "value"},
 			wantContains: []string{"ID: task-1", "Status: IMPLEMENTING", "Description: Test task"},

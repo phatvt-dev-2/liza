@@ -110,7 +110,8 @@ func TestBuildBasePrompt(t *testing.T) {
 			wantContains: []string{
 				"You are a Liza orchestrator agent",
 				"QUERY TOOLS",
-				`Query workspace state: liza get tasks --json`,
+				`Query active task summary: liza get tasks --active --summary --json`,
+				`Full task list only if needed: liza get tasks --json`,
 				"FORBIDDEN:",
 				"Do NOT manually modify task status",
 				"Do NOT make architecture decisions",

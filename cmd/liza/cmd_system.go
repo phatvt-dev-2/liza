@@ -499,6 +499,7 @@ Examples:
   liza get config.mode
   liza get sprint.elapsed
   liza get tasks --format table
+  liza get tasks --active --summary --json
   liza get tasks task-1 --format json
   liza get task-1                  # Shorthand for tasks task-1
   liza get fix-auth-bug            # Shorthand for tasks fix-auth-bug (any task ID)
@@ -521,6 +522,8 @@ Examples:
 		}
 
 		format, _ := cmd.Flags().GetString("format")
+		summary, _ := cmd.Flags().GetBool("summary")
+		active, _ := cmd.Flags().GetBool("active")
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
@@ -531,6 +534,8 @@ Examples:
 			opts := commands.InspectOptions{
 				Format:      "json",
 				ProjectRoot: projectRoot,
+				Summary:     summary,
+				Active:      active,
 			}
 			resultStr, err := commands.InspectCommand(args, opts)
 			if err != nil {
@@ -544,6 +549,8 @@ Examples:
 		opts := commands.InspectOptions{
 			Format:      format,
 			ProjectRoot: projectRoot,
+			Summary:     summary,
+			Active:      active,
 		}
 
 		result, err := commands.InspectCommand(args, opts)
@@ -663,6 +670,8 @@ func init() {
 
 	// Get command flags
 	getCmd.Flags().String("format", "", "output format: json, yaml, table, value (default varies by query type)")
+	getCmd.Flags().Bool("summary", false, "return compact task summaries")
+	getCmd.Flags().Bool("active", false, "return only non-terminal tasks")
 
 	// Status command flags
 	statusCmd.Flags().String("format", "", "output format: json, yaml, or dashboard (default)")
