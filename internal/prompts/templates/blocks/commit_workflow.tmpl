@@ -3,6 +3,7 @@
 COMMIT WORKFLOW:
 1. Stage files: git -C {{.Worktree}} add <files>
 2. Commit: git -C {{.Worktree}} commit -m "type(scope): summary"
-3. If pre-commit exits 1 with "files were modified by this hook": re-stage the modified files, retry commit.
+3. If pre-commit exits 1 with "files were modified by this hook": trust the auto-fix, re-stage the modified files, retry commit once.
 4. If pre-commit exits 1 with actual errors: fix the code, re-stage, retry.
+5. Do NOT manually invoke underlying formatters such as prettier unless pre-commit reports an actionable formatter/tooling error.
 {{- end -}}

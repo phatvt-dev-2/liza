@@ -298,10 +298,14 @@ Note: Debugging Protocol has its own Fast Path.
 - Tests pass (if any exist)
 - Gate artifact (mode-specific: approval request or checkpoint)
 
-### Rule 5: Validate Against Reality, Not Internal State
+### Rule 5: Validate Agent Claims Against External Reality, Not Internal State
 
 - Use Read tool before editing unfamiliar files
 - Fix effectiveness verified against actual outputs, not imagined results
+- Agent memory, intended effects, and assumptions are not evidence
+- External observations are evidence: current file contents, git state, blackboard state, command output, exit codes, and trusted support-tool reports
+- Tool output is authoritative for the command execution it reports. Re-run only after relevant state change, tool-reported uncertainty/corruption, or explicit retry instruction
+- Re-running the same command against unchanged state is step repetition, not stronger validation
 - When uncertain, say "I don't know"
 - If evidence contradicts hypothesis, state contradiction explicitly
 - Before referencing any file content, verify read occurred in current session

@@ -99,18 +99,24 @@ Do NOT mix the check and the reads in the same batch.
 
 ---
 
+## Trusted Support Tools
+
+Trusted support tools are execution infrastructure, not claims to audit. Treat their stdout, stderr, and exit codes as authoritative unless the tool itself reports uncertainty or corruption.
+
+Do NOT bypass, duplicate, or re-run through lower-level tools to "make sure." Re-run only after a relevant state change, or when the tool output explicitly instructs a retry.
+
+**pre-commit** is a trusted quality gate and auto-fix runner. If it modifies files, stage the modified files, then run pre-commit once more. Do NOT manually invoke underlying formatters such as prettier unless pre-commit reports an actionable formatter/tooling error.
+
 ## RTK (Rust Token Killer) - Claude only
 
-RTK is a CLI proxy that compresses tool output (git, go, pytest etc.) saving ~90% tokens. A PreToolUse hook rewrites
-most Bash commands to `rtk <command>` transparently.
-**Shorter, denser output is a feature.** Content is complete, exit codes are unaltered — diagnose real errors, trust RTK.
+RTK is a trusted output transport. A PreToolUse hook rewrites most Bash commands to `rtk <command>` transparently.
+
+Shorter output is not weaker evidence: content is complete, exit codes are unaltered.
 
 **Do NOT:**
-- Use rtk proxy. In case of error, fix the command (wrong flags, wrong path).
-- Try workarounds (subshells, echo debugging) to speculative errors.
-- Rationalize away unexpected output ("nothing to stash" when there are changes)
-- Read RTK tee files (`~/.local/share/rtk/tee/*.log`) — the compressed summary is the authoritative output.
-- Re-run passing tests "to see full output" — if RTK says it passed, it passed.
+- Bypass RTK to get "full" output, including by manually invoking `rtk proxy`
+- Read RTK tee files (`~/.local/share/rtk/tee/*.log`)
+- Re-run passing commands because RTK output looked short
 
 ---
 
