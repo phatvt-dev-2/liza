@@ -145,6 +145,8 @@ Worktrees are bare checkouts — they lack build artifacts like `node_modules/`,
 
 **Behavior:** The command runs via `sh -c` in the worktree directory. It is non-fatal — warnings are emitted but worktree creation succeeds even if the command fails.
 
+**Coder fallback:** If a coding worktree still lacks declared project dependencies during validation, coder prompts pre-authorize rerunning the configured project-scoped bootstrap command. Coders first query `liza get config.post_worktree_cmd --json`; when configured, they may run that command from the task worktree. If absent, they may use only the repo's existing lockfile-preserving install workflow. They must not edit manifests or lockfiles, install global/system tools, or add/upgrade/remove dependencies unless the task scope explicitly requires it.
+
 ## System Modes
 
 | Mode | Agents | Heartbeats | Set by |

@@ -1047,6 +1047,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"WORKTREE RULES:",
 			"COMMIT WORKFLOW:",
 			"IMPLEMENTATION PHASE",
+			"Dependency bootstrap exception",
+			"liza get config.post_worktree_cmd --json",
 			"SUBMISSION (MANDATORY",
 			"Submission requires a new worktree commit for this task",
 			"exact failing command and stderr/error text",
