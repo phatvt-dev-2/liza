@@ -3,7 +3,7 @@
 EPIC PLANNER TOOLS:
 - liza submit-for-review — Submit epic plan for review
   liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
-  Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+  Submission requires a new worktree commit for this task: stage the intended files, create the submission commit, confirm `git -C {{.Worktree}} status --short` is clean, then get the SHA with `git -C {{.Worktree}} rev-parse HEAD`. Do NOT submit the pre-change HEAD.
 {{template "await-verdict-loop" .}}
 - liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
   liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
@@ -18,4 +18,5 @@ EPIC PLANNER TOOLS:
   liza handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
 - liza mark-blocked — Cannot proceed
   liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
+  If a command failure is the blocker, `--reason` MUST include the exact failing command and stderr/error text. Do NOT infer root cause without a captured failure.
 {{- end -}}

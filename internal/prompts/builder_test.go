@@ -1048,6 +1048,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"COMMIT WORKFLOW:",
 			"IMPLEMENTATION PHASE",
 			"SUBMISSION (MANDATORY",
+			"Submission requires a new worktree commit for this task",
+			"exact failing command and stderr/error text",
+			"Do NOT submit the pre-change HEAD",
 			"COLLECTIVE PLAN SCOPING",
 			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
 			"Missing error handling",
@@ -1175,6 +1178,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"You are planning, not implementing",
 			"plan from the provided spec artifacts",
 			"TIMESTAMP-task-planner.md", // canonical plan file path with task ID
+			"Submission requires a new worktree commit for this task",
+			"Submission proof: `liza submit-for-review` is not optional bookkeeping",
 			"COLLECTIVE PLAN SCOPING",
 			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
 		} {
@@ -1253,6 +1258,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"WORKTREE RULES:",
 			"EPIC-WRITING SKILL:",
 			"IMPLEMENTATION PHASE:",
+			"Submission requires a new worktree commit for this task",
+			"Submission proof: `liza submit-for-review` must actually run successfully",
 			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
 		} {
 			if !strings.Contains(output, key) {
@@ -1332,6 +1339,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"USER-STORY-WRITING SKILL:",
 			"CAPABILITY SCOPING:",
 			"IMPLEMENTATION PHASE:",
+			"Submission requires a new worktree commit for this task",
+			"PRE-SUBMIT SELF-CHECK (MANDATORY",
 			"COLLECTIVE PLAN SCOPING",
 			"PRIOR REJECTION FEEDBACK (MUST ADDRESS)",
 			"specs/epics/ep-001.md",
@@ -1426,6 +1435,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"IMPLEMENTATION PHASE:",
 			"Architecture document",
 			"specs/arch-plan",
+			"Submission requires a new worktree commit for this task",
+			"Submission proof: `liza submit-for-review` must actually run successfully after step 9g",
 		} {
 			if !strings.Contains(output, key) {
 				t.Errorf("output missing key string %q", key)

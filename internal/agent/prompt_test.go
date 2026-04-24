@@ -2121,6 +2121,9 @@ func TestBuildPromptWithContext_Architect(t *testing.T) {
 		"specs/arch-plan",
 		"specs/goals/feature-x.md",
 		"ASSIGNED ARCHITECTURE TASK",
+		"Submission requires a new worktree commit for this task",
+		"Do NOT submit the pre-change HEAD",
+		"Submission proof: `liza submit-for-review` must actually run successfully after step 9g",
 	}
 	for _, s := range mustContain {
 		if !strings.Contains(prompt, s) {
