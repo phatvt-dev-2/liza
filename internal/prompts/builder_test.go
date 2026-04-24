@@ -150,9 +150,10 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 	projectRoot := setupPipelineConfig(t)
 
 	tests := []struct {
-		name         string
-		state        *models.State
-		wantContains []string
+		name           string
+		state          *models.State
+		wantContains   []string
+		wantNotContain []string
 	}{
 		{
 			name: "initial planning trigger (no tasks)",
@@ -178,7 +179,8 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"liza assess-blocked",
 				"liza supersede-task",
 				`liza wt-delete`,
-				`--agent-id "orchestrator-1" --json`,
+				`liza supersede-task <task-id> [replacement-task-ids] --reason "..." --agent-id "orchestrator-1" --json`,
+				`liza wt-delete <task-id> --json`,
 				`liza sprint-checkpoint — Create sprint checkpoint for human review`,
 				`liza update-sprint-metrics — Recompute sprint metrics`,
 				"This is initial planning",
@@ -187,6 +189,10 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"Tasks must partition the goal",
 				"role-pair-derived prefix with sequential suffixes",
 				"All tasks use the chosen role_pair matching the entry-point",
+			},
+			wantNotContain: []string{
+				`--replacement-ids`,
+				`liza wt-delete <task-id> --agent-id`,
 			},
 		},
 		{
@@ -328,6 +334,12 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 			for _, want := range tt.wantContains {
 				if !strings.Contains(result, want) {
 					t.Errorf("RenderOrchestratorDashboard() missing expected content:\n%q", want)
+				}
+			}
+
+			for _, notWant := range tt.wantNotContain {
+				if strings.Contains(result, notWant) {
+					t.Errorf("RenderOrchestratorDashboard() contains unexpected content:\n%q", notWant)
 				}
 			}
 		})

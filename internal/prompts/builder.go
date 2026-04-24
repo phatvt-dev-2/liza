@@ -119,11 +119,11 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	b.WriteString(fmt.Sprintf(`- liza add-tasks — Add one or more tasks to blackboard (atomic per task, with validation)
   liza add-tasks --tasks-file <path.json> --agent-id "%s" --json
 - liza supersede-task — Supersede task (replacement_ids optional — omit when work completed externally)
-  liza supersede-task <task-id> --replacement-ids "..." --reason "..." --agent-id "%s" --json
+  liza supersede-task <task-id> [replacement-task-ids] --reason "..." --agent-id "%s" --json
 - liza assess-blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
   liza assess-blocked <task-id> --note "..." --agent-id "%s" --json
 - liza wt-delete — Delete worktree for abandoned/superseded/blocked tasks
-  liza wt-delete <task-id> --agent-id "%s" --json
+  liza wt-delete <task-id> --json
 - liza sprint-checkpoint — Create sprint checkpoint for human review (pauses all agents)
   liza sprint-checkpoint --json
 - liza update-sprint-metrics — Recompute sprint metrics from current state
@@ -160,7 +160,7 @@ On CLI command errors, diagnose the root cause before retrying. Read the error m
 
 MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
 Work unit = all planned state changes executed. Do NOT exit until all commands have been run.
-`, agentID, agentID, agentID, agentID))
+	`, agentID, agentID, agentID))
 
 	// Wake instruction is rendered separately by the wake-instructions block
 	wakeInstr := fmt.Sprintf("INSTRUCTIONS:\n%s", wakeInstructions)
