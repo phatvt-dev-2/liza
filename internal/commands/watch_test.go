@@ -500,6 +500,70 @@ func TestCheckHypothesisExhaustion(t *testing.T) {
 	}
 }
 
+func TestReconcileStuckAlerts_DedupesClearsAndRealerts(t *testing.T) {
+	now := time.Now().UTC()
+	alert := Alert{
+		Timestamp: now,
+		Level:     AlertLevelCritical,
+		Category:  "INTEGRATION FAILED",
+		Message:   "task-1",
+	}
+	cache := map[string]time.Time{
+		"blocked:task-1": now.Add(-1 * time.Minute),
+		"stuck-alert:HYPOTHESIS EXHAUSTION:resolved-task": now.Add(-1 * time.Minute),
+	}
+
+	alerts := reconcileStuckAlerts([]Alert{alert}, cache)
+	if len(alerts) != 1 {
+		t.Fatalf("first call len(alerts) = %d, want 1", len(alerts))
+	}
+	if _, exists := cache["stuck-alert:INTEGRATION FAILED:task-1"]; !exists {
+		t.Fatal("active stuck alert cache key was not stored")
+	}
+	if _, exists := cache["stuck-alert:HYPOTHESIS EXHAUSTION:resolved-task"]; exists {
+		t.Fatal("resolved stuck alert cache key was not cleared")
+	}
+	if _, exists := cache["blocked:task-1"]; !exists {
+		t.Fatal("unrelated cache key was removed")
+	}
+
+	alerts = reconcileStuckAlerts([]Alert{alert}, cache)
+	if len(alerts) != 0 {
+		t.Fatalf("second call len(alerts) = %d, want 0", len(alerts))
+	}
+
+	alerts = reconcileStuckAlerts(nil, cache)
+	if len(alerts) != 0 {
+		t.Fatalf("clear call len(alerts) = %d, want 0", len(alerts))
+	}
+	if _, exists := cache["stuck-alert:INTEGRATION FAILED:task-1"]; exists {
+		t.Fatal("inactive stuck alert cache key was not cleared")
+	}
+	if _, exists := cache["blocked:task-1"]; !exists {
+		t.Fatal("unrelated cache key was removed during clear")
+	}
+
+	alerts = reconcileStuckAlerts([]Alert{alert}, cache)
+	if len(alerts) != 1 {
+		t.Fatalf("recurrence call len(alerts) = %d, want 1", len(alerts))
+	}
+
+	invalidStateAlert := Alert{
+		Timestamp: now,
+		Level:     AlertLevelCritical,
+		Category:  "INVALID STATE",
+		Message:   "state.yaml invalid",
+	}
+	alerts = reconcileStuckAlerts([]Alert{invalidStateAlert}, cache)
+	if len(alerts) != 1 {
+		t.Fatalf("invalid state first call len(alerts) = %d, want 1", len(alerts))
+	}
+	alerts = reconcileStuckAlerts([]Alert{invalidStateAlert}, cache)
+	if len(alerts) != 0 {
+		t.Fatalf("invalid state second call len(alerts) = %d, want 0", len(alerts))
+	}
+}
+
 func TestCheckReassigned(t *testing.T) {
 	now := time.Now().UTC()
 
@@ -1825,6 +1889,63 @@ func TestRunChecksWithState_BlockedTask(t *testing.T) {
 	if !found {
 		t.Errorf("expected alert with category BLOCKED, got %d alerts: %v", len(alerts), alerts)
 	}
+}
+
+func TestRunChecksWithState_StuckAlertsDedupedAndRealertAfterClear(t *testing.T) {
+	now := time.Now().UTC()
+
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	config := WatchConfig{
+		ProjectRoot: tmpDir,
+		AlertsLog:   paths.New(tmpDir).AlertsLogPath(),
+		StateCache:  make(map[string]time.Time),
+	}
+
+	failedState := testhelpers.CreateValidState()
+	failedState.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusIntegrationFailed, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, failedState)
+
+	alerts := RunChecksWithState(failedState, config)
+	if got := countAlertsByCategory(alerts, "INTEGRATION FAILED"); got != 1 {
+		t.Fatalf("first poll INTEGRATION FAILED alerts = %d, want 1; alerts: %v", got, alerts)
+	}
+
+	alerts = RunChecksWithState(failedState, config)
+	if got := countAlertsByCategory(alerts, "INTEGRATION FAILED"); got != 0 {
+		t.Fatalf("second poll INTEGRATION FAILED alerts = %d, want 0; alerts: %v", got, alerts)
+	}
+
+	mergedState := testhelpers.CreateValidState()
+	mergedState.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, mergedState)
+
+	alerts = RunChecksWithState(mergedState, config)
+	if got := countAlertsByCategory(alerts, "INTEGRATION FAILED"); got != 0 {
+		t.Fatalf("clear poll INTEGRATION FAILED alerts = %d, want 0; alerts: %v", got, alerts)
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, failedState)
+	alerts = RunChecksWithState(failedState, config)
+	if got := countAlertsByCategory(alerts, "INTEGRATION FAILED"); got != 1 {
+		t.Fatalf("recurrence poll INTEGRATION FAILED alerts = %d, want 1; alerts: %v", got, alerts)
+	}
+}
+
+func countAlertsByCategory(alerts []Alert, category string) int {
+	count := 0
+	for _, alert := range alerts {
+		if alert.Category == category {
+			count++
+		}
+	}
+	return count
 }
 
 func TestParseAlertLine_RoundTrip(t *testing.T) {

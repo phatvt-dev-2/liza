@@ -30,6 +30,8 @@ const (
 	StaleSentinelThreshold       = 2 * time.Minute
 )
 
+const stuckAlertCachePrefix = "stuck-alert:"
+
 // AlertLevel is the severity of a watch alert.
 type AlertLevel string
 
@@ -170,6 +172,10 @@ func runChecks(_ context.Context, config WatchConfig) error {
 // sprint stalled, and state validity checks against the provided state.
 // The config.StateCache is modified in place for alert throttling.
 func RunChecksWithState(state *models.State, config WatchConfig) []Alert {
+	if config.StateCache == nil {
+		config.StateCache = make(map[string]time.Time)
+	}
+
 	var alerts []Alert
 
 	// Load pipeline resolver once for checks that need it.
@@ -225,7 +231,53 @@ func RunChecksWithState(state *models.State, config WatchConfig) []Alert {
 		})
 	}
 
-	return alerts
+	return reconcileStuckAlerts(alerts, config.StateCache)
+}
+
+func reconcileStuckAlerts(alerts []Alert, cache map[string]time.Time) []Alert {
+	if cache == nil {
+		return alerts
+	}
+
+	now := time.Now().UTC()
+	activeKeys := make(map[string]bool)
+	deduped := make([]Alert, 0, len(alerts))
+
+	for _, alert := range alerts {
+		if !isStuckAlertCategory(alert.Category) {
+			deduped = append(deduped, alert)
+			continue
+		}
+
+		key := stuckAlertCacheKey(alert)
+		activeKeys[key] = true
+		if _, seen := cache[key]; seen {
+			continue
+		}
+		cache[key] = now
+		deduped = append(deduped, alert)
+	}
+
+	for key := range cache {
+		if strings.HasPrefix(key, stuckAlertCachePrefix) && !activeKeys[key] {
+			delete(cache, key)
+		}
+	}
+
+	return deduped
+}
+
+func isStuckAlertCategory(category string) bool {
+	switch category {
+	case "HYPOTHESIS EXHAUSTION", "INTEGRATION FAILED", "INVALID STATE":
+		return true
+	default:
+		return false
+	}
+}
+
+func stuckAlertCacheKey(alert Alert) string {
+	return stuckAlertCachePrefix + alert.Category + ":" + alert.Message
 }
 
 func checkCircuitBreakerEscalation(state *models.State, cache map[string]time.Time) []Alert {

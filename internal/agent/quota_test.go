@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -126,6 +127,42 @@ func TestClearQuotaSignal_Idempotent(t *testing.T) {
 	// Clear on non-existent file should not error.
 	if err := ClearQuotaSignal(projectRoot, "codex"); err != nil {
 		t.Fatalf("ClearQuotaSignal on missing file: %v", err)
+	}
+}
+
+func TestHandleQuotaSignal_DoesNotWriteObserverAlert(t *testing.T) {
+	projectRoot := t.TempDir()
+	lizaDir := filepath.Join(projectRoot, ".liza")
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := LogQuotaAlert(projectRoot, &QuotaExhaustion{
+		Provider: "codex",
+		Message:  "You've hit your usage limit",
+	}); err != nil {
+		t.Fatalf("LogQuotaAlert failed: %v", err)
+	}
+
+	if err := WriteQuotaSignal(projectRoot, "codex", "You've hit your usage limit"); err != nil {
+		t.Fatalf("WriteQuotaSignal failed: %v", err)
+	}
+
+	handled := handleQuotaSignal(SupervisorConfig{
+		AgentID:     "coder-1",
+		ProjectRoot: projectRoot,
+		CLIName:     "codex",
+	})
+	if !handled {
+		t.Fatal("handleQuotaSignal returned false, want true")
+	}
+
+	alertsPath := filepath.Join(lizaDir, "alerts.log")
+	data, err := os.ReadFile(alertsPath)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("failed to read alerts log: %v", err)
+	}
+	if got := strings.Count(string(data), "PROVIDER QUOTA EXHAUSTED"); got != 1 {
+		t.Fatalf("observer changed quota alert count: got %d, want 1\n%s", got, string(data))
 	}
 }
 
