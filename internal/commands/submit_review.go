@@ -8,8 +8,8 @@ import (
 
 // SubmitForReviewCommand submits a task for review and prints the result to stdout.
 // Delegates business logic to ops.SubmitForReview.
-func SubmitForReviewCommand(projectRoot, taskID, commitSHA, agentID string) error {
-	result, err := ops.SubmitForReview(projectRoot, taskID, commitSHA, agentID)
+func SubmitForReviewCommand(projectRoot, taskID, commitRef, agentID string) error {
+	result, err := ops.SubmitForReview(projectRoot, taskID, commitRef, agentID)
 	if err != nil {
 		return fmt.Errorf("submit for review: %w", err)
 	}

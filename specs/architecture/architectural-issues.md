@@ -397,11 +397,13 @@ Self-reinforcing patterns that can amplify failures.
 **Skill:** systemic-thinking
 **Category:** FEEDBACK
 
-**Issue:** The architectural issues registry is treated as the durable source of resolved-vs-open architectural risk, but its own resolution claims can diverge from live internal behavior. The `submit-for-review` `commit_sha` item is currently marked resolved in this file while the internal CLI/MCP/ops surfaces still require and enforce caller-provided SHA. That creates a reinforcing loop where planning and review work trusts the registry, then inherits stale assumptions, then perpetuates stale status.
+**Issue:** The architectural issues registry is treated as the durable source of resolved-vs-open architectural risk, but its own resolution claims can diverge from live internal behavior. A prior example was the `submit-for-review` `commit_sha` item: the registry treated it as resolved while internal CLI/ops surfaces still required caller-provided SHA. That creates a reinforcing loop where planning and review work trusts the registry, then inherits stale assumptions, then perpetuates stale status.
 
 **Implication:** Architectural debt tracking becomes self-invalidating: "resolved" no longer means the risk is absent in current runtime surfaces.
 
 **Current mitigation:** Manual source verification during reviews can detect the mismatch, but only when a reviewer re-audits internals.
+
+**Update:** The `submit-for-review` example was addressed on 2026-04-25 by allowing worktree-local commit refs (`HEAD`) and defaulting omitted refs to `HEAD`. The meta-risk remains: registry resolution claims need validation artifacts.
 
 **Future options:**
 - Add automated checks that verify each "resolved" entry against current code contracts

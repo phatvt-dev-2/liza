@@ -174,8 +174,8 @@ Before setting READY_FOR_REVIEW, coder must ensure:
 # Working tree clean
 [ -z "$(git -C $WORKTREE status --porcelain)" ] || abort "Uncommitted changes"
 
-# Record commit for Code Reviewer
-COMMIT_SHA=$(git -C $WORKTREE rev-parse HEAD)
+# Submit HEAD for Code Reviewer; the CLI resolves HEAD inside the task worktree
+liza submit-for-review "$TASK_ID" HEAD --agent-id "$AGENT_ID"
 ```
 
 **Definition of "clean":**
@@ -185,7 +185,7 @@ COMMIT_SHA=$(git -C $WORKTREE rev-parse HEAD)
 - `git status --porcelain` returns empty string
 - Submodule state is not checked (out of scope for v1)
 
-Blackboard records `review_commit: $COMMIT_SHA`. Code Reviewer verifies this SHA before reviewing.
+Blackboard records `review_commit` as the resolved worktree HEAD. Code Reviewer verifies this SHA before reviewing.
 
 ---
 

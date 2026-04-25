@@ -3,6 +3,7 @@ package git
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -76,6 +77,47 @@ func TestGetWorktreeHEAD(t *testing.T) {
 	// Worktree should be at same commit as integration (since we just created it)
 	if headSHA != integrationSHA {
 		t.Errorf("GetWorktreeHEAD() = %s, want %s", headSHA, integrationSHA)
+	}
+}
+
+func TestResolveWorktreeCommit_Head(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	taskID := "task-resolve-head"
+	if _, err := git.CreateWorktree(taskID, "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+
+	resolvedSHA, err := git.ResolveWorktreeCommit(taskID, "HEAD")
+	if err != nil {
+		t.Fatalf("ResolveWorktreeCommit() error = %v", err)
+	}
+	headSHA, err := git.GetWorktreeHEAD(taskID)
+	if err != nil {
+		t.Fatalf("GetWorktreeHEAD() error = %v", err)
+	}
+
+	if resolvedSHA != headSHA {
+		t.Errorf("ResolveWorktreeCommit(HEAD) = %s, want %s", resolvedSHA, headSHA)
+	}
+}
+
+func TestResolveWorktreeCommit_InvalidRef(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	taskID := "task-resolve-invalid"
+	if _, err := git.CreateWorktree(taskID, "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+
+	_, err := git.ResolveWorktreeCommit(taskID, "not-a-ref")
+	if err == nil {
+		t.Fatal("ResolveWorktreeCommit() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "failed to resolve worktree commit ref") {
+		t.Fatalf("ResolveWorktreeCommit() error = %v, want ref-resolution error", err)
 	}
 }
 

@@ -4,8 +4,8 @@ INTEGRATION ANALYST TOOLS:
 - liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
   liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
 - liza submit-for-review — Submit integration analysis for review
-  liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
-  Submission requires a new worktree commit for this task: stage the intended files, create the submission commit, confirm `git -C {{.Worktree}} status --short` is clean, then get the SHA with `git -C {{.Worktree}} rev-parse HEAD`. Do NOT submit the pre-change HEAD.
+  liza submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
+  Submission requires a new worktree commit for this task: stage the intended files, create the submission commit, confirm `git -C {{.Worktree}} status --short` is clean, then submit with HEAD. Do NOT submit the pre-change HEAD.
 {{template "await-verdict-loop" .}}
 - liza set-task-output — Persist fix-task definitions for downstream creation
   liza set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json

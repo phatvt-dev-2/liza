@@ -22,16 +22,16 @@ type SubmitForReviewResult struct {
 	AgentID      string `json:"agent_id"`
 }
 
-// SubmitForReview validates that commitSHA matches the worktree HEAD before rebase,
+// SubmitForReview validates that commitRef resolves to the worktree HEAD before rebase,
 // rebases the task branch onto the integration branch to catch conflicts early,
 // then atomically transitions the task to READY_FOR_REVIEW.
 // No terminal I/O.
-func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitForReviewResult, error) {
+func SubmitForReview(projectRoot, taskID, commitRef, agentID string) (*SubmitForReviewResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
-	if commitSHA == "" {
-		return nil, &PreconditionError{Reason: "commit SHA is required"}
+	if commitRef == "" {
+		return nil, &PreconditionError{Reason: "commit ref is required"}
 	}
 	if agentID == "" {
 		return nil, &PreconditionError{Reason: "LIZA_AGENT_ID is required"}
@@ -115,8 +115,12 @@ func SubmitForReview(projectRoot, taskID, commitSHA, agentID string) (*SubmitFor
 	if err != nil {
 		return nil, &OperationalError{Message: "failed to read worktree HEAD", Err: err}
 	}
-	if commitSHA != preRebaseCommit {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit SHA %s does not match worktree HEAD %s", commitSHA, preRebaseCommit)}
+	resolvedCommit, err := g.ResolveWorktreeCommit(taskID, commitRef)
+	if err != nil {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit ref %q could not be resolved in worktree", commitRef)}
+	}
+	if resolvedCommit != preRebaseCommit {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit ref %q resolved to %s, which does not match worktree HEAD %s", commitRef, resolvedCommit, preRebaseCommit)}
 	}
 
 	// TDD enforcement: code tasks must include test files (doer roles only).

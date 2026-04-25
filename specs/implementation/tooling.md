@@ -34,7 +34,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza sprint-checkpoint` | Create checkpoint and generate sprint summary |
 | `liza agent <role> --agent-id x [--cli C]` | Agent supervisor (`--cli`: claude, codex, gemini, mistral, kimi) |
 | `liza claim-task <task> <agent>` | Claim task with two-phase commit (called by supervisor) |
-| `liza submit-for-review <task> <sha>` | Validate `<sha>` matches pre-rebase worktree HEAD, then set READY_FOR_REVIEW + post-rebase `review_commit` + history |
+| `liza submit-for-review <task> [commit-ref]` | Resolve `[commit-ref]` in the task worktree (default `HEAD`), validate it matches pre-rebase worktree HEAD, then set READY_FOR_REVIEW + post-rebase `review_commit` + history |
 | `liza submit-verdict <task> <V> [--reason "<reason>"]` | Atomically set APPROVED/REJECTED + review fields + history |
 | `liza wt-create <task> [--fresh]` | Create worktree for task |
 | `liza wt-merge <task>` | Merge approved worktree (supervisor-executed after APPROVED) |
@@ -140,8 +140,8 @@ This pattern ensures no task is ever in IMPLEMENTING state without a valid workt
 
 ```bash
 # Request review (atomic)
-liza submit-for-review task-3 "$COMMIT"
-# Requires: $COMMIT == git -C .worktrees/task-3 rev-parse HEAD (pre-rebase)
+liza submit-for-review task-3 HEAD
+# Requires: HEAD resolves to .worktrees/task-3 HEAD (pre-rebase)
 # Sets READY_FOR_REVIEW + post-rebase review_commit + history
 
 # Add task (Planner operation)
@@ -374,8 +374,8 @@ liza claim-task task-3 coder-1
 
 **liza submit-for-review** — Request review (Coder)
 ```bash
-liza submit-for-review task-3 "$COMMIT"
-# Requires: $COMMIT == git -C .worktrees/task-3 rev-parse HEAD (pre-rebase)
+liza submit-for-review task-3 HEAD
+# Requires: HEAD resolves to .worktrees/task-3 HEAD (pre-rebase)
 # Sets READY_FOR_REVIEW + post-rebase review_commit + history
 ```
 

@@ -16,7 +16,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 	tests := []struct {
 		name          string
 		taskID        string
-		commitSHA     string
+		commitRef     string
 		agentID       string
 		setupState    func(*models.State)
 		wantErr       bool
@@ -28,23 +28,23 @@ func TestSubmitForReviewCommand(t *testing.T) {
 		{
 			name:       "missing task ID",
 			taskID:     "",
-			commitSHA:  "abc123",
+			commitRef:  "abc123",
 			agentID:    "coder-1",
 			wantErr:    true,
 			wantErrMsg: "task ID is required",
 		},
 		{
-			name:       "missing commit SHA",
+			name:       "missing commit ref",
 			taskID:     "t1",
-			commitSHA:  "",
+			commitRef:  "",
 			agentID:    "coder-1",
 			wantErr:    true,
-			wantErrMsg: "commit SHA is required",
+			wantErrMsg: "commit ref is required",
 		},
 		{
 			name:       "missing agent ID",
 			taskID:     "t1",
-			commitSHA:  "abc123",
+			commitRef:  "abc123",
 			agentID:    "",
 			wantErr:    true,
 			wantErrMsg: "LIZA_AGENT_ID is required",
@@ -52,7 +52,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 		{
 			name:       "task not found",
 			taskID:     "nonexistent",
-			commitSHA:  "abc123",
+			commitRef:  "abc123",
 			agentID:    "coder-1",
 			wantErr:    true,
 			wantErrMsg: "task not found",
@@ -63,7 +63,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 		{
 			name:       "task not in IMPLEMENTING status",
 			taskID:     "t1",
-			commitSHA:  "abc123",
+			commitRef:  "abc123",
 			agentID:    "coder-1",
 			wantErr:    true,
 			wantErrMsg: "task t1 is not IMPLEMENTING",
@@ -83,7 +83,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 		{
 			name:       "task not assigned to agent",
 			taskID:     "t1",
-			commitSHA:  "abc123",
+			commitRef:  "abc123",
 			agentID:    "coder-1",
 			wantErr:    true,
 			wantErrMsg: "task t1 is not assigned to agent coder-1",
@@ -107,7 +107,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 		{
 			name:       "task assigned to different agent",
 			taskID:     "t1",
-			commitSHA:  "abc123",
+			commitRef:  "abc123",
 			agentID:    "coder-2",
 			wantErr:    true,
 			wantErrMsg: "task t1 is not assigned to agent coder-2",
@@ -156,7 +156,7 @@ func TestSubmitForReviewCommand(t *testing.T) {
 			bb := testhelpers.WriteInitialState(t, statePath, initialState)
 
 			// Execute command
-			err := SubmitForReviewCommand(tmpDir, tt.taskID, tt.commitSHA, tt.agentID)
+			err := SubmitForReviewCommand(tmpDir, tt.taskID, tt.commitRef, tt.agentID)
 
 			// Check error
 			if tt.wantErr {

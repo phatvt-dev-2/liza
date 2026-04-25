@@ -18,27 +18,27 @@ func TestSubmitForReview_Validation(t *testing.T) {
 	tests := []struct {
 		name        string
 		taskID      string
-		commitSHA   string
+		commitRef   string
 		agentID     string
 		errContains string
 	}{
 		{
-			name: "empty task ID", commitSHA: "abc123", agentID: "coder-1",
+			name: "empty task ID", commitRef: "abc123", agentID: "coder-1",
 			errContains: "task ID is required",
 		},
 		{
-			name: "empty commit SHA", taskID: "t1", agentID: "coder-1",
-			errContains: "commit SHA is required",
+			name: "empty commit ref", taskID: "t1", agentID: "coder-1",
+			errContains: "commit ref is required",
 		},
 		{
-			name: "empty agent ID", taskID: "t1", commitSHA: "abc123",
+			name: "empty agent ID", taskID: "t1", commitRef: "abc123",
 			errContains: "LIZA_AGENT_ID is required",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := SubmitForReview("/nonexistent", tt.taskID, tt.commitSHA, tt.agentID)
+			_, err := SubmitForReview("/nonexistent", tt.taskID, tt.commitRef, tt.agentID)
 			testhelpers.RequireErrorContains(t, err, tt.errContains)
 		})
 	}
@@ -428,6 +428,33 @@ func TestSubmitForReview_WritesHandoffEvent(t *testing.T) {
 	}
 	if len(event.Failed) != 0 {
 		t.Errorf("HandoffEvent.Failed should be empty for submission, got %v", event.Failed)
+	}
+}
+
+func TestSubmitForReview_ResolvesHeadInWorktree(t *testing.T) {
+	tmpDir, taskID, _, agentID, bb := setupSuccessfulSubmitScenario(t)
+
+	result, err := SubmitForReview(tmpDir, taskID, "HEAD", agentID)
+	if err != nil {
+		t.Fatalf("SubmitForReview() unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("SubmitForReview() returned nil result")
+	}
+
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("bb.Read() error: %v", err)
+	}
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("task not found after submission")
+	}
+	if task.ReviewCommit == nil {
+		t.Fatal("task.ReviewCommit is nil")
+	}
+	if *task.ReviewCommit != result.ReviewCommit {
+		t.Fatalf("task.ReviewCommit = %s, want %s", *task.ReviewCommit, result.ReviewCommit)
 	}
 }
 

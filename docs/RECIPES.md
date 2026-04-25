@@ -64,8 +64,7 @@ liza get tasks task-1   # shows all fields including rejection_reason
 # Fix issues, commit, resubmit
 git add . && git commit -m "Address review feedback"
 cd ../..
-COMMIT=$(git -C .worktrees/task-1 rev-parse HEAD)
-liza submit-for-review task-1 $COMMIT --agent-id coder-1
+liza submit-for-review task-1 HEAD --agent-id coder-1
 ```
 
 Watch daemon alerts on high review cycles (>= 5). Check with `liza get tasks task-1`.
@@ -188,8 +187,7 @@ git add . && git commit -m "Resolve integration conflict"
 
 # 4. Resubmit (goes through review again)
 cd ../..
-COMMIT=$(git -C .worktrees/task-1 rev-parse HEAD)
-liza submit-for-review task-1 $COMMIT --agent-id coder-2
+liza submit-for-review task-1 HEAD --agent-id coder-2
 ```
 
 **Prevention**: Keep task scope small, merge integration branch into task branches frequently.

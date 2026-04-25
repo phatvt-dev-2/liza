@@ -28,7 +28,6 @@ WORKFLOW:
    Run tests in the worktree. Verify done_when criteria still met.
 
 5. SUBMIT
-   Get SHA: git -C {{.Worktree}} rev-parse HEAD
-   liza submit-for-review {{.TaskID}} <SHA from above> --agent-id {{.AgentID}} --json
+   liza submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
 {{- end}}
 {{- end -}}

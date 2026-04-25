@@ -16,7 +16,7 @@ import (
 )
 
 var submitForReviewCmd = &cobra.Command{
-	Use:   "submit-for-review <task-id> <commit-sha>",
+	Use:   "submit-for-review <task-id> [commit-ref]",
 	Short: "Submit a task for review",
 	Long: `Validate a task worktree commit and submit it for review.
 
@@ -26,13 +26,14 @@ Requirements:
   - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
   - Task must be in an executing status (resolved from pipeline config)
   - Task must be assigned to the submitting agent
-  - <commit-sha> must exactly match current worktree HEAD before rebase
+  - [commit-ref] resolves in the task worktree and must match current worktree HEAD before rebase
+  - If [commit-ref] is omitted, HEAD is used
 
 Updates:
   - status = role-pair's submitted status (e.g. CODE_READY_FOR_REVIEW, CODING_PLAN_TO_REVIEW)
   - review_commit = post-rebase worktree HEAD
   - Adds history entry with event "submitted_for_review"`,
-	Args: cobra.ExactArgs(2),
+	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
 			log.SetOutput(io.Discard)
@@ -46,7 +47,10 @@ Updates:
 		}
 
 		taskID := args[0]
-		commitSHA := args[1]
+		commitRef := "HEAD"
+		if len(args) == 2 {
+			commitRef = args[1]
+		}
 
 		agentID, err := requireAgentID(cmd)
 		if err != nil {
@@ -67,10 +71,10 @@ Updates:
 		}
 
 		if isJSON(cmd) {
-			result, err := ops.SubmitForReview(projectRoot, taskID, commitSHA, agentID)
+			result, err := ops.SubmitForReview(projectRoot, taskID, commitRef, agentID)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.SubmitForReviewCommand(projectRoot, taskID, commitSHA, agentID)
+		return commands.SubmitForReviewCommand(projectRoot, taskID, commitRef, agentID)
 	},
 }
 

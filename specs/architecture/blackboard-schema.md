@@ -816,10 +816,10 @@ Before setting READY_FOR_REVIEW, coder must ensure working tree is clean:
 
 ```bash
 [ -z "$(git -C $WORKTREE status --porcelain)" ] || abort "Uncommitted changes"
-COMMIT_SHA=$(git -C $WORKTREE rev-parse HEAD)
+liza submit-for-review "$TASK_ID" HEAD --agent-id "$AGENT_ID"
 ```
 
-Blackboard records `review_commit: $COMMIT_SHA`. Code Reviewer verifies this SHA before reviewing.
+Blackboard records `review_commit` as the resolved worktree HEAD. Code Reviewer verifies this SHA before reviewing.
 
 For detailed definition including edge cases (submodules, untracked files), see [Worktree Management — Clean Sync Invariant](../protocols/worktree-management.md#clean-sync-invariant).
 

@@ -42,6 +42,16 @@ func (g *Git) GetWorktreeHEAD(taskID string) (string, error) {
 	return g.execInDir(wtPath, "rev-parse", "HEAD")
 }
 
+// ResolveWorktreeCommit resolves ref to a full commit SHA inside a task worktree.
+func (g *Git) ResolveWorktreeCommit(taskID, ref string) (string, error) {
+	wtPath := g.GetWorktreePath(taskID)
+	commit, err := g.execInDir(wtPath, "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve worktree commit ref %q: %w", ref, err)
+	}
+	return commit, nil
+}
+
 // GetWorktreeBranch returns the current branch name in a worktree
 func (g *Git) GetWorktreeBranch(wtPath string) (string, error) {
 	branch, err := g.execInDir(wtPath, "branch", "--show-current")
