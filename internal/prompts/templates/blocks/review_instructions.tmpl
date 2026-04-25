@@ -11,7 +11,7 @@ Approval = meets requirements + spec + tests + no defects. Not: perfect or produ
 
 INSTRUCTIONS:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
-2. Run tests: cd {{.Worktree}} && <project test command> (always cd first — never pass worktree paths as test runner arguments)
+2. Run tests from the worktree without `cd &&`: use the test runner's directory flag or the execution tool's working-directory option. Examples: go -C {{.Worktree}} test ./..., make -C {{.Worktree}} test, npm --prefix {{.Worktree}} test, cargo test --manifest-path {{.Worktree}}/Cargo.toml.
    If tests fail, TRIAGE ONLY — do not debug:
    git -C {{.Worktree}} diff --name-only {{.BaseCommit}}..{{.ReviewCommit}}
    Check: does any changed file share a package with the failing test?

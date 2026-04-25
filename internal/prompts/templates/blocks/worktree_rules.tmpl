@@ -1,8 +1,8 @@
 {{- define "worktree-rules" -}}
 
 WORKTREE RULES:
-First, run: cd {{.Worktree}} && pwd
-Verify the output matches {{.Worktree}}. Then:
+First, run: test -d {{.Worktree}}
+Then:
 - ALL file operations use {{.Worktree}}/ prefix (Read, Edit, Glob, Grep tools)
 - All git commands MUST use: git -C {{.Worktree}}
 - NEVER use the project root path for file operations

@@ -28,6 +28,10 @@ OPERATIONAL RULES:
   Future agents read lessons/agents/ at init.
 
 BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
+- NEVER use `cd <path> && ...` to locate a command. Use explicit path arguments,
+  per-command directory flags, or the execution tool's working-directory option.
+  Examples: git -C <path> <cmd>, go -C <path> <cmd>, make -C <path> <target>,
+  npm --prefix <path> <script>, cargo test --manifest-path <path>/Cargo.toml.
 - NEVER combine cd and git in one command. Use: git -C <path> <cmd>
 - NEVER use $() command substitution, backticks, or ANSI-C quoting ($'...') in Bash commands.
   For git commits use heredoc on stdin: git -C <path> commit -F - <<'EOF'\n<message>\nEOF

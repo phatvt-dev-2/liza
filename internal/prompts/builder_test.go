@@ -564,8 +564,15 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 	// --- BASH CONSTRAINTS: universal safety rules ---
 	assertSection("bash-constraints", []string{
 		"BASH CONSTRAINTS",
+		"NEVER use `cd <path> && ...` to locate a command",
+		"per-command directory flags",
+		"execution tool's working-directory option",
 		"NEVER combine cd and git in one command",
 		"git -C <path> <cmd>",
+		"go -C <path> <cmd>",
+		"make -C <path> <target>",
+		"npm --prefix <path> <script>",
+		"cargo test --manifest-path <path>/Cargo.toml",
 		"NEVER use $() command substitution",
 		"ANSI-C quoting",
 		"NEVER install OS packages, language runtimes, IDE tooling",
@@ -1078,6 +1085,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"ANOMALY LOGGING:",
 			"BLOCKING PROTOCOL:",
 			"WORKTREE RULES:",
+			"First, run: test -d " + data.Worktree,
+			"git -C " + data.Worktree,
 			"COMMIT WORKFLOW:",
 			"IMPLEMENTATION PHASE",
 			"Dependency bootstrap exception",
@@ -1093,6 +1102,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			if !strings.Contains(output, key) {
 				t.Errorf("output missing key string %q", key)
 			}
+		}
+		if strings.Contains(output, "cd "+data.Worktree+" &&") {
+			t.Error("coder prompt must not teach cd && worktree commands")
 		}
 	})
 
@@ -1131,6 +1143,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"liza await-resubmission",
 			"ANOMALY LOGGING:",
 			"WORKTREE RULES:",
+			"First, run: test -d " + data.Worktree,
+			"Run tests from the worktree without `cd &&`",
 			"REVIEW SCOPE:",
 			"REJECTION FORMAT",
 			"VERDICT SUBMISSION",
@@ -1140,6 +1154,9 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			if !strings.Contains(output, key) {
 				t.Errorf("output missing key string %q", key)
 			}
+		}
+		if strings.Contains(output, "cd "+data.Worktree+" &&") {
+			t.Error("code-reviewer prompt must not teach cd && worktree commands")
 		}
 	})
 
@@ -1924,6 +1941,12 @@ func TestBlockBranchIntegrationContext_Populated(t *testing.T) {
 	}
 	if !strings.Contains(result, "git -C /home/user/.worktrees/task-1 diff abc123def456..HEAD") {
 		t.Error("expected diff command with GoalBaseCommit and Worktree path")
+	}
+	if !strings.Contains(result, "without `cd &&`") {
+		t.Error("expected branch integration test guidance to reject cd &&")
+	}
+	if strings.Contains(result, "cd /home/user/.worktrees/task-1 &&") {
+		t.Error("branch integration context must not teach cd && worktree commands")
 	}
 	for _, task := range data.CompletedTasks {
 		if !strings.Contains(result, task.ID) {
