@@ -21,6 +21,9 @@ By default, run the analyzer per role.
 Report sections: session header, token summary (fresh/cached/output, cache hit rate), content breakdown by type (chars, estimated tokens, share %), top 10 items by size, tool call frequency, MCP usage (per-server call count + error rate, result volume, top tools). Rich format adds per-turn context growth and cost breakdown.
 
 2. Refine the analysis using the raw logs.
+   - When referring to a specific session in your summary, include the log filename
+     (for example `coder-1-20260417-171454.txt`) so the reader can trace the claim
+     back to the exact source log quickly.
 
 3. Before proposing a fix, check whether the fix is already implemented (e.g. an instruction already exists but agents ignore it):
    - Read one agent prompt of the relevant role in `.liza/agent-prompts/`

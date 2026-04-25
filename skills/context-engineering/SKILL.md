@@ -202,6 +202,10 @@ Produce findings in this format:
 - Output corpus: [N outputs, size range, roles]
 - Primary bottleneck: [one sentence]
 
+When referring to a specific session in the Executive Summary or Findings, name
+the concrete `.liza/agent-outputs/` log filename. If the claim depends on a
+paired prompt, also name the concrete `.liza/agent-prompts/` filename.
+
 ## Findings
 
 ### P1/P2/P3: [Finding Title]
