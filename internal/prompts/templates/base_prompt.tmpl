@@ -73,9 +73,8 @@ FIRST ACTIONS:
    - ~/.liza/MULTI_AGENT_MODE.md
    - ~/.liza/AGENT_TOOLS.md
    - {{.ProjectRoot}}/GUARDRAILS.md   (may be absent)
-   Use EITHER a single multi-file batch tool (one call, per-path errors are
-   tolerated), OR individual sequential Reads. Do NOT fan out parallel Read
-   calls — they fail as a group if any one errors.
+   Read all three in ONE call via filesystem/read_multiple_files or equivalent tolerating per-path errors,
+   or read them one at a time sequentially. Do NOT use cat if file-read tools are available.
    Do NOT pre-check existence with Bash — the init hook blocks it.
 {{- if .TaskID}}
 2. Query your assigned task: liza get {{.TaskID}} --json
