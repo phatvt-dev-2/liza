@@ -97,6 +97,8 @@ Parallel Read calls fail as a group if any one errors. Before fanning out,
 use **Glob** to check existence **FIRST**, THEN read only files that exist.
 Do NOT mix the check and the reads in the same batch.
 
+Session initialization has its own stricter read sequence.
+
 ---
 
 ## Trusted Support Tools
