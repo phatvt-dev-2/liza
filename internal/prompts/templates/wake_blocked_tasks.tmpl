@@ -12,9 +12,21 @@ Tasks are BLOCKED. Analyze and resolve immediately:
    Example supersede workflow:
    a. Re-read the task via liza get <task-id> --json to confirm it is still BLOCKED.
       If status changed (e.g., task was claimed), skip — the task is being actively worked.
-   b. Run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
-   c. Run: liza supersede-task <task-id> <new-ids> --reason "Split due to complexity" --agent-id {{.AgentID}} --json
-   d. Run: liza wt-delete <task-id> --json (if worktree exists)
+   b. Write a tasks JSON file as a bare array — NOT a wrapper object:
+      [{
+        "id": "<new-task-id>",
+        "desc": "<short task description>",
+        "spec": "<spec path>",
+        "done": "<falsifiable completion condition>",
+        "scope": "<allowed files or behavior>",
+        "priority": 1,
+        "depends": [],
+        "type": "coding",
+        "role_pair": "coding-pair"
+      }]
+   c. Run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
+   d. Run: liza supersede-task <task-id> <new-id-1>,<new-id-2> --reason "Split due to complexity" --agent-id {{.AgentID}} --json
+   e. Run: liza wt-delete <task-id> --json (if worktree exists)
 4. After analyzing each blocked task:
    - If you resolved it (superseded): no further action needed for that task
    - If you CANNOT resolve it (genuine spec ambiguity, external dependency): run liza assess-blocked to record your assessment
