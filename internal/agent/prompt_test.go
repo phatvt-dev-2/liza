@@ -264,12 +264,17 @@ func TestBuildPrompt_CollectiveScoping(t *testing.T) {
 		"COLLECTIVE PLAN SCOPING",
 		"1 of 3 in the current sprint",
 		"specs/vision.md",
-		"task-2: Add user API [DRAFT_CODE]",
-		"task-3: Add tests [MERGED]",
+		"task-2: Add user API",
+		"task-3: Add tests",
 	}
 	for _, want := range wantContains {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("buildPrompt() missing expected scoping content: %q", want)
+		}
+	}
+	for _, statusTag := range []string{"[DRAFT_CODE]", "[MERGED]"} {
+		if strings.Contains(prompt, statusTag) {
+			t.Errorf("buildPrompt() should not include sibling status tag %q", statusTag)
 		}
 	}
 
@@ -418,11 +423,16 @@ func TestBuildPrompt_CollectiveScopingOrdinal(t *testing.T) {
 		t.Error("buildPrompt() should not include current task in sibling list")
 	}
 	// task-1 and task-3 should appear as siblings
-	if !strings.Contains(prompt, "task-1: Add auth [MERGED]") {
+	if !strings.Contains(prompt, "task-1: Add auth") {
 		t.Error("buildPrompt() should include task-1 as sibling")
 	}
-	if !strings.Contains(prompt, "task-3: Add tests [DRAFT_CODE]") {
+	if !strings.Contains(prompt, "task-3: Add tests") {
 		t.Error("buildPrompt() should include task-3 as sibling")
+	}
+	for _, statusTag := range []string{"[MERGED]", "[DRAFT_CODE]"} {
+		if strings.Contains(prompt, statusTag) {
+			t.Errorf("buildPrompt() should not include sibling status tag %q", statusTag)
+		}
 	}
 }
 

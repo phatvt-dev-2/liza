@@ -22,7 +22,7 @@ If you discover work needed outside your scope that you cannot handle, log it as
 
 SIBLING TASKS (for {{- if eq .RoleType "reviewer"}} scope boundary awareness{{- else}} context only — do NOT implement{{- end}}):
 {{- range .SiblingTasks}}
-- {{.ID}}: {{.Description}} [{{.Status}}]{{if ne .PlanRef ""}} — plan: {{.PlanRef}}{{end}}
+- {{.ID}}: {{.Description}}{{if ne .PlanRef ""}} — plan: {{.PlanRef}}{{end}}
 {{- end}}
 {{- if ne .PlanRef ""}}
 PLAN ARTIFACT: {{.PlanRef}}
@@ -37,7 +37,7 @@ PLAN ARTIFACT: {{.PlanRef}}
 SIBLING CONSISTENCY RULE:
 This task depends on prior planning task(s):
 {{- range .DependsOn}}{{$depID := .}}{{range $siblings}}{{if and (eq .ID $depID) (eq .RolePair $rolePair)}}
-- {{.ID}} [{{.Status}}]{{if ne .PlanRef ""}} — plan: {{.PlanRef}}{{end}}
+- {{.ID}}{{if ne .PlanRef ""}} — plan: {{.PlanRef}}{{end}}
 {{- end}}{{end}}{{end}}
 If your plan CANNOT be made consistent with those prior plans:
 - Do NOT iterate with the reviewer — mark BLOCKED immediately via liza mark-blocked --json.

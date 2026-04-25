@@ -1779,6 +1779,9 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 		if !strings.Contains(output, "liza mark-blocked") {
 			t.Error("expected BLOCKED instruction in rule")
 		}
+		if strings.Contains(output, "[MERGED]") {
+			t.Error("did not expect sibling status tag in output")
+		}
 	})
 
 	t.Run("without DependsOn → no sibling-consistency rule", func(t *testing.T) {
@@ -1910,8 +1913,8 @@ func TestBlockBranchIntegrationContext_Populated(t *testing.T) {
 		if !strings.Contains(result, task.ID) {
 			t.Errorf("expected completed task ID %q in output", task.ID)
 		}
-		if !strings.Contains(result, task.DoneWhen) {
-			t.Errorf("expected completed task DoneWhen %q in output", task.DoneWhen)
+		if strings.Contains(result, task.DoneWhen) {
+			t.Errorf("did not expect completed task DoneWhen %q in output", task.DoneWhen)
 		}
 		if !strings.Contains(result, task.SpecRef) {
 			t.Errorf("expected completed task SpecRef %q in output", task.SpecRef)

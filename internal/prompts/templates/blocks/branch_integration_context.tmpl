@@ -14,7 +14,6 @@ Failing tests are findings. Include them in your output[] as fix tasks with the 
 COMPLETED TASKS:
 {{- range .CompletedTasks}}
 - {{.ID}}: {{.Description}}
-  Done when: {{.DoneWhen}}
   Spec: {{.SpecRef}}
 {{- end}}
 {{- if not .CompletedTasks}}
