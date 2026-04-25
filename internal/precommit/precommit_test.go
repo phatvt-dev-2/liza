@@ -149,6 +149,19 @@ func TestConfigExistsOnIntegration_Error(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("git-plumbing-failure-no-context-build-sentinel", func(t *testing.T) {
+		got, err := precommit.ConfigExistsOnIntegration(t.TempDir(), "main")
+		if err == nil {
+			t.Fatalf("expected error, got nil (exists=%v)", got)
+		}
+		if got {
+			t.Errorf("expected exists=false on error, got true")
+		}
+		if errors.Is(err, precommit.ErrContextBuild) {
+			t.Fatalf("errors.Is(err, ErrContextBuild) = true for transient/plumbing failure; err=%v", err)
+		}
+	})
 }
 
 func TestBootstrapInFlight_Hit(t *testing.T) {

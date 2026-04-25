@@ -13,6 +13,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/taskkind"
 )
 
 // Kind is the typed marker value (see architecture-1 §2.1) that the
@@ -21,14 +22,12 @@ import (
 // the literal. Go templates cannot import constants — the architect
 // prompt template reads this value via RoleContextData.PreCommitKind
 // rather than by package import.
-const Kind = "bootstrap-precommit"
+const Kind = taskkind.PreCommitBootstrap
 
-// ErrContextBuild is the sentinel returned (wrapped) by every error
-// path in this package. Callers discriminate precommit-originated
-// failures from other BuildPrompt failures via errors.Is — that
-// discrimination lets the supervisor narrow its BLOCKED recovery to
-// this package's error domain without misclassifying unrelated
-// template/pipeline defects as task-local failures.
+// ErrContextBuild is the sentinel returned (wrapped) by configuration errors
+// that require human intervention. Callers use errors.Is to distinguish those
+// failures from transient git plumbing failures, which should follow normal
+// retry behavior instead of task-local BLOCKED recovery.
 var ErrContextBuild = errors.New("precommit context build failed")
 
 // ConfigExistsOnIntegration reports whether .pre-commit-config.yaml
@@ -39,9 +38,11 @@ var ErrContextBuild = errors.New("precommit context build failed")
 //
 // Returns (true, nil) when the file is tracked on the branch.
 // Returns (false, nil) when the branch exists and the file is not
-// tracked on it. Returns (_, err) only for plumbing failures that
-// prevent a reliable answer — empty inputs, invalid branch ref, or
-// unexpected non-zero exit. Every error wraps ErrContextBuild.
+// tracked on it. Returns an ErrContextBuild-wrapped error only for
+// configuration-correctness failures that require human intervention
+// (empty inputs or missing integration branch). Other git plumbing errors
+// are returned without the sentinel so the supervisor's normal retry path
+// can handle transient failures.
 func ConfigExistsOnIntegration(projectRoot, integrationBranch string) (bool, error) {
 	if projectRoot == "" {
 		return false, fmt.Errorf("precommit: projectRoot is empty: %w", ErrContextBuild)
@@ -62,8 +63,8 @@ func ConfigExistsOnIntegration(projectRoot, integrationBranch string) (bool, err
 				"precommit: integration branch %q not found in %s: %w",
 				integrationBranch, projectRoot, ErrContextBuild)
 		}
-		return false, fmt.Errorf("precommit: rev-parse --verify %q: %v: %w",
-			integrationBranch, err, ErrContextBuild)
+		return false, fmt.Errorf("precommit: rev-parse --verify %q: %v",
+			integrationBranch, err)
 	}
 
 	// Step 2 — read the tree entry. Exit 0 with empty stdout means
@@ -76,8 +77,8 @@ func ConfigExistsOnIntegration(projectRoot, integrationBranch string) (bool, err
 	lsTree.Stderr = &stderr
 	if err := lsTree.Run(); err != nil {
 		return false, fmt.Errorf(
-			"precommit: ls-tree %q -- .pre-commit-config.yaml: %v (stderr: %s): %w",
-			integrationBranch, err, strings.TrimSpace(stderr.String()), ErrContextBuild)
+			"precommit: ls-tree %q -- .pre-commit-config.yaml: %v (stderr: %s)",
+			integrationBranch, err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.Len() > 0, nil
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/roles"
+	"github.com/liza-mas/liza/internal/taskkind"
 )
 
 // TaskType represents the kind of task, determining which roles participate in its lifecycle.
@@ -271,6 +272,24 @@ type OutputEntry struct {
 	ArchRef   string   `yaml:"arch_ref,omitempty" json:"arch_ref,omitempty"`
 	Kind      string   `yaml:"kind,omitempty" json:"kind,omitempty"`
 	DependsOn []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
+}
+
+// validKinds is the registry of non-empty OutputEntry.Kind / Task.Kind values.
+// Empty kind remains valid and behaviorally inert for backward compatibility.
+var validKinds = map[string]struct{}{
+	taskkind.PreCommitBootstrap: {},
+}
+
+// ValidateKind rejects unknown non-empty Kind values before they can bypass
+// kind-based consumers such as task deduplication.
+func ValidateKind(kind string) error {
+	if kind == "" {
+		return nil
+	}
+	if _, ok := validKinds[kind]; ok {
+		return nil
+	}
+	return fmt.Errorf("unknown kind %q", kind)
 }
 
 // ValidateDependsOn checks that DependsOn indices are valid references within

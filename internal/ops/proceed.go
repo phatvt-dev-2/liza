@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log"
@@ -70,14 +71,14 @@ func collectNonTerminalByKind(s *models.State) map[string]string {
 //   - Kind seen earlier in batch    -> skipped; remap[i] points at the first
 //     occurrence's deterministic child ID.
 //
-// taskID and transitionName let the helper synthesize the first-occurrence
+// taskID and taskSlug let the helper synthesize the first-occurrence
 // sibling ID via perSubtaskChildID, so within-batch duplicates remap to the
 // child that WILL be created this batch (not yet in s.Tasks when this runs).
 // Return keys in skip and remap always match: every skipped entry is remapped.
 func resolveKindDedup(
 	entries []models.OutputEntry,
 	inFlight map[string]string,
-	taskID, transitionName string,
+	taskID, taskSlug string,
 ) (skip map[int]string, remap map[int]string) {
 	skip = map[int]string{}
 	remap = map[int]string{}
@@ -96,9 +97,23 @@ func resolveKindDedup(
 			remap[i] = firstID
 			continue
 		}
-		emittedThisBatch[e.Kind] = perSubtaskChildID(taskID, transitionName, i)
+		emittedThisBatch[e.Kind] = perSubtaskChildID(taskID, taskSlug, i)
 	}
 	return
+}
+
+// resolvePerSubtaskSiblings returns the effective sibling ID for each output
+// entry after applying kind-based deduplication.
+func resolvePerSubtaskSiblings(entries []models.OutputEntry, inFlightByKind map[string]string, taskID, taskSlug string) ([]string, map[int]string, map[int]string) {
+	siblingIDs := make([]string, len(entries))
+	for i := range entries {
+		siblingIDs[i] = perSubtaskChildID(taskID, taskSlug, i)
+	}
+	skipEntry, remapSibling := resolveKindDedup(entries, inFlightByKind, taskID, taskSlug)
+	for i, reID := range remapSibling {
+		siblingIDs[i] = reID
+	}
+	return siblingIDs, skipEntry, remapSibling
 }
 
 // ProceedResult contains the outcome of executing a manual inter-pair transition.
@@ -400,9 +415,10 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	// task ID that takes entry i's place for downstream dep resolution.
 	var skipEntry map[int]string
 	var remapSibling map[int]string
+	var siblingIDs []string
 	if tDef.cardinality == "per-subtask" {
 		inFlightByKind := collectNonTerminalByKind(s)
-		skipEntry, remapSibling = resolveKindDedup(task.Output, inFlightByKind, taskID, transitionName)
+		siblingIDs, skipEntry, remapSibling = resolvePerSubtaskSiblings(task.Output, inFlightByKind, taskID, tDef.taskSlug)
 	}
 
 	// Write this first for crash recovery
@@ -411,21 +427,14 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	}
 	task.TransitionsExecuted[transitionName] = true
 
-	// Pre-compute sibling IDs for DependsOn resolution in per-subtask transitions.
-	siblingIDs := make([]string, len(task.Output))
-	for i := range task.Output {
-		siblingIDs[i] = perSubtaskChildID(taskID, tDef.taskSlug, i)
-	}
-
 	switch tDef.cardinality {
 	case "per-subtask":
 		for i, entry := range task.Output {
-			if reID, dedupd := remapSibling[i]; dedupd {
+			if _, dedupd := remapSibling[i]; dedupd {
 				// Dep resolution still needs an ID; point at the incumbent so
 				// that downstream siblings with depends_on: [i] resolve to the
 				// real in-flight (or first-of-batch) task. Do NOT append a
 				// child for i.
-				siblingIDs[i] = reID
 				continue
 			}
 			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, task.EpicRef, task.ArchRef, now)
@@ -454,7 +463,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 			})
 		}
 		slices.SortFunc(skipped, func(a, b map[string]any) int {
-			return a["output_index"].(int) - b["output_index"].(int)
+			return cmp.Compare(a["output_index"].(int), b["output_index"].(int))
 		})
 		histExtra["skipped_entries"] = skipped
 	}
@@ -476,19 +485,11 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transitionName string, tDef transitionDef, inheritedDeps []string, now time.Time, result *ProceedResult) error {
 	switch tDef.cardinality {
 	case "per-subtask":
-		// Pre-compute sibling IDs for DependsOn resolution.
-		siblingIDs := make([]string, len(task.Output))
-		for i := range task.Output {
-			siblingIDs[i] = perSubtaskChildID(taskID, tDef.taskSlug, i)
-		}
 		// Re-compute dedup decision against current repo-wide state. For skipped
 		// entries, siblingIDs[i] must point at the foreign incumbent so downstream
 		// dep resolution remaps correctly — mirrors proceedInner's per-subtask path.
 		inFlightByKind := collectNonTerminalByKind(s)
-		skipEntry, remapSibling := resolveKindDedup(task.Output, inFlightByKind, taskID, transitionName)
-		for i, reID := range remapSibling {
-			siblingIDs[i] = reID
-		}
+		siblingIDs, skipEntry, _ := resolvePerSubtaskSiblings(task.Output, inFlightByKind, taskID, tDef.taskSlug)
 		var missingChildren []int
 		for i := range task.Output {
 			// (1) SKIPPED — short-circuit BEFORE any FindTask / patchInheritedDeps.
@@ -1194,6 +1195,9 @@ func validateOutputEntry(entry models.OutputEntry, index, totalEntries int) erro
 	}
 	if entry.SpecRef == "" {
 		return fmt.Errorf("output[%d] missing spec_ref", index)
+	}
+	if err := models.ValidateKind(entry.Kind); err != nil {
+		return fmt.Errorf("output[%d] %w", index, err)
 	}
 	return models.ValidateDependsOn(entry.DependsOn, index, totalEntries)
 }

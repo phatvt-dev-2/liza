@@ -689,6 +689,30 @@ func TestOutputEntry_KindJSONRoundTrip(t *testing.T) {
 	})
 }
 
+func TestValidateKind(t *testing.T) {
+	tests := []struct {
+		name    string
+		kind    string
+		wantErr bool
+	}{
+		{name: "empty is inert", kind: "", wantErr: false},
+		{name: "registered bootstrap", kind: "bootstrap-precommit", wantErr: false},
+		{name: "unknown non-empty", kind: "bootstrap-pre-commit", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateKind(tt.kind)
+			if tt.wantErr && err == nil {
+				t.Fatalf("ValidateKind(%q) error = nil, want error", tt.kind)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("ValidateKind(%q) error = %v, want nil", tt.kind, err)
+			}
+		})
+	}
+}
+
 func TestTask_KindYAMLRoundTrip(t *testing.T) {
 	now := time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC)
 

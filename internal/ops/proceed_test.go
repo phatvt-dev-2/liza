@@ -4734,6 +4734,7 @@ func TestProceed_PerSubtask_KindDedup_CrossGoal(t *testing.T) {
 	triggerID := "goalB-plan"
 	trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
 		{Desc: "goal B boot", DoneWhen: "b", Scope: "s", SpecRef: "specs/goals/goal-B.md", Kind: "bootstrap-precommit"},
+		{Desc: "goal B follow-up", DoneWhen: "f", Scope: "s", SpecRef: "specs/goals/goal-B.md", DependsOn: []string{"0"}},
 	}, now)
 	trigger.SpecRef = "specs/goals/goal-B.md"
 	trigger.ParentTasks = []string{"goalB-arch"}
@@ -4746,8 +4747,11 @@ func TestProceed_PerSubtask_KindDedup_CrossGoal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Proceed() error: %v", err)
 	}
-	if len(result.ChildTaskIDs) != 0 {
-		t.Fatalf("ChildTaskIDs count = %d, want 0 (cross-goal skip)", len(result.ChildTaskIDs))
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1 (bootstrap skipped, follower created)", len(result.ChildTaskIDs))
+	}
+	if result.ChildTaskIDs[0] != "goalB-plan-code-plan-to-coding-1" {
+		t.Fatalf("ChildTaskIDs[0] = %q, want follower child", result.ChildTaskIDs[0])
 	}
 
 	readState, err := db.New(stateFile).Read()
@@ -4760,6 +4764,25 @@ func TestProceed_PerSubtask_KindDedup_CrossGoal(t *testing.T) {
 	}
 	if !slices.Equal(gotA.DependsOn, originalA) {
 		t.Errorf("cross-goal mutation: goalA-boot.DependsOn = %v, want %v", gotA.DependsOn, originalA)
+	}
+	follower := readState.FindTask("goalB-plan-code-plan-to-coding-1")
+	if follower == nil {
+		t.Fatal("goal B follower child missing")
+	}
+	if !slices.Contains(follower.DependsOn, "goalA-boot") {
+		t.Fatalf("follower DependsOn = %v, want goalA-boot", follower.DependsOn)
+	}
+
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+	if follower.IsClaimable("coder", readState.Tasks, resolver) {
+		t.Fatal("follower claimable before foreign bootstrap merges")
+	}
+	gotA.Status = models.TaskStatusMerged
+	if !follower.IsClaimable("coder", readState.Tasks, resolver) {
+		t.Fatal("follower not claimable after foreign bootstrap merges")
 	}
 
 	trig := readState.FindTask(triggerID)
@@ -4954,5 +4977,30 @@ func TestProceed_PerSubtask_NoKind_UnaffectedByDedup(t *testing.T) {
 	}
 	if gotUnrelated.Status != models.TaskStatusReady {
 		t.Errorf("unrelated status changed: got %v", gotUnrelated.Status)
+	}
+}
+
+func TestProceed_PerSubtask_KindDedup_RejectsUnknownKind(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	triggerID := "plan-unknown-kind"
+	trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+		{Desc: "Boot typo", DoneWhen: "b", Scope: "s", SpecRef: "README.md", Kind: "bootstrap-pre-commit"},
+	}, now)
+	state.Tasks = append(state.Tasks, trigger)
+	state.Sprint.Scope.Planned = []string{triggerID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+	if err == nil {
+		t.Fatal("Proceed() error = nil, want unknown kind error")
+	}
+	if !strings.Contains(err.Error(), `unknown kind "bootstrap-pre-commit"`) {
+		t.Fatalf("Proceed() error = %v, want unknown kind", err)
 	}
 }

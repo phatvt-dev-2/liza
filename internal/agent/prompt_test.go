@@ -2196,6 +2196,7 @@ func TestBuildPromptWithContext_Architect(t *testing.T) {
 		"CODER TOOLS",
 		"CODER STATE TRANSITIONS",
 		"CODE PLANNER TOOLS",
+		"lines 41-44",
 	}
 	for _, s := range mustNotContain {
 		if strings.Contains(prompt, s) {

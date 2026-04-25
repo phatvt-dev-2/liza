@@ -493,6 +493,13 @@ func TestSetTaskOutput_DependsOnValidation(t *testing.T) {
 			},
 			errContains: "out of range",
 		},
+		{
+			name: "unknown kind",
+			output: []models.OutputEntry{
+				{Desc: "d", DoneWhen: "dw", Scope: "s", Kind: "bootstrap-pre-commit"},
+			},
+			errContains: `unknown kind "bootstrap-pre-commit"`,
+		},
 	}
 
 	for _, tt := range tests {

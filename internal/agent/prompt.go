@@ -216,7 +216,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		data.MandatoryDocs = mandatoryDocs
 	}
 
-	// Architect-specific: parent task contexts
+	// Architect-specific context
 	if config.Role == roles.Architect {
 		for _, parentID := range task.EffectiveParentTasks() {
 			parent := state.FindTask(parentID)
@@ -231,10 +231,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 				})
 			}
 		}
-	}
 
-	// Architect-specific: pre-commit bootstrap context
-	if config.Role == roles.Architect {
 		exists, err := precommit.ConfigExistsOnIntegration(config.ProjectRoot, state.Config.IntegrationBranch)
 		if err != nil {
 			return nil, fmt.Errorf("precommit config check: %w", err)

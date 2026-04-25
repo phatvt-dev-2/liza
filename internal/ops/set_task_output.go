@@ -35,6 +35,9 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 		if entry.Scope == "" {
 			return &PreconditionError{Reason: fmt.Sprintf("output[%d].scope is required", i)}
 		}
+		if err := models.ValidateKind(entry.Kind); err != nil {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].%s", i, err.Error())}
+		}
 		if err := models.ValidateDependsOn(entry.DependsOn, i, len(input.Output)); err != nil {
 			return &PreconditionError{Reason: err.Error()}
 		}

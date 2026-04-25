@@ -101,7 +101,7 @@ Additive optional fields on `OutputEntry` and the propagated persisted `Task` ar
 
 1. **Additive only.** New fields MUST be optional with a zero-value default that is behaviorally inert (`omitempty` on YAML and JSON tags; empty string or empty slice is the default).
 2. **Backward-compatible on load.** State files written before the field existed must decode without error into a zero-valued field. No migration pass may be required.
-3. **No required-field semantics.** An empty value MUST NOT cause `validateOutputEntry` (or any successor validator) to reject the entry. Enforcement of the new field's semantics is the responsibility of the consuming code paths, not the generic struct validator.
+3. **No required-field semantics.** An empty value MUST NOT cause `validateOutputEntry` (or any successor validator) to reject the entry. Enforcement of the new field's semantics is the responsibility of the consuming code paths, not the generic struct validator. For `kind`, that means empty remains inert and backward-compatible, while non-empty values must be registered in the models kind registry; unknown non-empty values are rejected through `models.ValidateKind` so typos cannot silently bypass kind-based consumers.
 4. **Provenance via `Extends:` link.** The introducing ADR MUST declare `**Extends:** ADR-0036 (Structured Task Output) — <field name> on OutputEntry.` (or equivalent wording) in its Consequences section, so the cross-reference graph stays navigable without in-place edits here.
 5. **No breaking removals.** Removing a field that has ever shipped requires a superseding ADR (this ADR remains the authoritative record of the additive policy). This revision does not remove any existing field.
 
