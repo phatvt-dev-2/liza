@@ -1079,6 +1079,35 @@ func TestWriteCodexProjectPermissions_NewFile(t *testing.T) {
 	}
 }
 
+func TestWriteCodexProjectPermissions_ReplacesEmptyCodexFile(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	codexPath := filepath.Join(fakeHome, ".codex")
+	if err := os.WriteFile(codexPath, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	projectRoot := filepath.Join(t.TempDir(), "project")
+	if err := os.MkdirAll(projectRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectPermissions(projectRoot, bufio.NewReader(strings.NewReader("")))
+	if err != nil {
+		t.Fatalf("WriteCodexProjectPermissions failed: %v", err)
+	}
+
+	info, err := os.Stat(codexPath)
+	if err != nil {
+		t.Fatalf("failed to stat .codex path: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf(".codex should be a directory, got mode %v", info.Mode())
+	}
+	if _, err := os.Stat(filepath.Join(codexPath, "config.toml")); err != nil {
+		t.Fatalf("expected config.toml to be created: %v", err)
+	}
+}
+
 func TestWriteCodexProjectPermissions_MergeAccepted(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
@@ -1366,6 +1395,61 @@ func TestWriteCodexProjectHooks_NewFile(t *testing.T) {
 		}
 	}
 	assertHookScripts(t, filepath.Join(projectRoot, ".codex", "hooks"))
+}
+
+func TestWriteCodexProjectHooks_ReplacesEmptyCodexFile(t *testing.T) {
+	projectRoot := t.TempDir()
+	codexPath := filepath.Join(projectRoot, ".codex")
+	if err := os.WriteFile(codexPath, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteCodexProjectHooks(projectRoot, bufio.NewReader(strings.NewReader(""))); err != nil {
+		t.Fatalf("WriteCodexProjectHooks failed: %v", err)
+	}
+
+	info, err := os.Stat(codexPath)
+	if err != nil {
+		t.Fatalf("failed to stat .codex path: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf(".codex should be a directory, got mode %v", info.Mode())
+	}
+	if _, err := os.Stat(filepath.Join(codexPath, "config.toml")); err != nil {
+		t.Fatalf("expected config.toml to be created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(codexPath, "hooks.json")); err != nil {
+		t.Fatalf("expected hooks.json to be created: %v", err)
+	}
+}
+
+func TestWriteCodexProjectHooks_NonEmptyCodexFileErrors(t *testing.T) {
+	projectRoot := t.TempDir()
+	codexPath := filepath.Join(projectRoot, ".codex")
+	original := []byte("not empty")
+	if err := os.WriteFile(codexPath, original, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("")))
+	if err == nil {
+		t.Fatal("expected WriteCodexProjectHooks to fail when .codex is a non-empty file")
+	}
+
+	info, statErr := os.Stat(codexPath)
+	if statErr != nil {
+		t.Fatalf("failed to stat .codex path: %v", statErr)
+	}
+	if info.IsDir() {
+		t.Fatal(".codex should remain a file on failure")
+	}
+	content, readErr := os.ReadFile(codexPath)
+	if readErr != nil {
+		t.Fatalf("failed to read .codex file: %v", readErr)
+	}
+	if string(content) != string(original) {
+		t.Fatalf(".codex content changed on failure: got %q want %q", string(content), string(original))
+	}
 }
 
 func TestWriteCodexProjectHooks_MergesExistingFiles(t *testing.T) {

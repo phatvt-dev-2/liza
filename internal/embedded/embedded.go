@@ -393,12 +393,12 @@ func WriteCodexProjectPermissions(projectRoot string, reader *bufio.Reader) erro
 	if err != nil {
 		return err
 	}
+	if err := ensureCodexDir(filepath.Dir(configPath)); err != nil {
+		return fmt.Errorf("failed to create .codex directory: %w", err)
+	}
 
 	existingData, err := os.ReadFile(configPath)
 	if os.IsNotExist(err) {
-		if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
-			return fmt.Errorf("failed to create .codex directory: %w", err)
-		}
 		content := renderCodexProjectConfig(roots)
 		if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write codex config: %w", err)
@@ -442,7 +442,7 @@ func WriteCodexProjectHooks(projectRoot string, reader *bufio.Reader) error {
 		reader = bufio.NewReader(os.Stdin)
 	}
 	codexDir := filepath.Join(projectRoot, ".codex")
-	if err := os.MkdirAll(codexDir, 0755); err != nil {
+	if err := ensureCodexDir(codexDir); err != nil {
 		return fmt.Errorf("failed to create .codex directory: %w", err)
 	}
 
@@ -473,6 +473,26 @@ func WriteCodexProjectHooks(projectRoot string, reader *bufio.Reader) error {
 		}
 	}
 	return nil
+}
+
+func ensureCodexDir(codexDir string) error {
+	info, err := os.Stat(codexDir)
+	if err == nil {
+		if info.IsDir() {
+			return nil
+		}
+		if info.Mode().IsRegular() && info.Size() == 0 {
+			if err := os.Remove(codexDir); err != nil {
+				return err
+			}
+			return os.MkdirAll(codexDir, 0755)
+		}
+		return fmt.Errorf("%s exists and is not a directory", codexDir)
+	}
+	if !os.IsNotExist(err) {
+		return err
+	}
+	return os.MkdirAll(codexDir, 0755)
 }
 
 func prepareCodexHooksFeature(configPath string, reader *bufio.Reader) (bool, string, error) {
