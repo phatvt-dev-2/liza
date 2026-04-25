@@ -141,6 +141,7 @@ Worktrees are bare checkouts — they lack build artifacts like `node_modules/`,
   | `bun.lockb` / `bun.lock` | `bun install` |
   | `package-lock.json` (or none) | `npm install` |
 
+- **After merge:** If `post_worktree_cmd` is still unset and a successful merge introduces an unambiguous Node project layout on the integration branch, `liza wt-merge` auto-populates the same detected command. Ambiguous layouts still require manual configuration.
 - **After init:** Add `post_worktree_cmd: "your command"` to the `config` section of `.liza/state.yaml`.
 
 **Behavior:** The command runs via `sh -c` in the worktree directory. It is non-fatal — warnings are emitted but worktree creation succeeds even if the command fails.

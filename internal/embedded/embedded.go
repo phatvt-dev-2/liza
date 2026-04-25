@@ -476,8 +476,18 @@ func WriteCodexProjectHooks(projectRoot string, reader *bufio.Reader) error {
 }
 
 func ensureCodexDir(codexDir string) error {
-	info, err := os.Stat(codexDir)
+	info, err := os.Lstat(codexDir)
 	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			targetInfo, targetErr := os.Stat(codexDir)
+			if targetErr == nil && targetInfo.IsDir() {
+				return nil
+			}
+			if targetErr != nil {
+				return fmt.Errorf("%s exists as symlink: %w", codexDir, targetErr)
+			}
+			return fmt.Errorf("%s exists as symlink and is not a directory", codexDir)
+		}
 		if info.IsDir() {
 			return nil
 		}

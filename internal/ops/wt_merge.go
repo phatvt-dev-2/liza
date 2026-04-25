@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -18,6 +19,7 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/projectdetect"
 )
 
 // maxMergeRetries is the maximum number of CAS retry attempts for the merge loop.
@@ -421,6 +423,17 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 		log.Printf("wt-merge %s: WARNING — unable to stat integration test script at %s: %v; proceeding without tests", taskID, integrationTestScript, statErr)
 	}
 
+	var detectedPostWorktreeCmd string
+	var detectedNodeSubdirs []string
+	var postWorktreeCmdAmbiguous bool
+	if state.Config.PostWorktreeCmd == nil {
+		detectedPostWorktreeCmd = projectdetect.DetectPostWorktreeCmd(projectRoot)
+		if detectedPostWorktreeCmd == "" {
+			detectedNodeSubdirs = projectdetect.DetectNodeSubdirs(projectRoot)
+			postWorktreeCmdAmbiguous = len(detectedNodeSubdirs) > 1
+		}
+	}
+
 	// Restore working tree when checked-out branch differs from integration.
 	if branchErr == nil && currentBranch != integrationBranch {
 		if syncErr := gitWrapper.RestoreSyncedFiles(preMergeHEAD, mergeCommit, "HEAD"); syncErr != nil {
@@ -431,6 +444,7 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 	// Update state to MERGED (before worktree cleanup — if write fails,
 	// worktree still exists for investigation; reverse order would lose the worktree
 	// while state still says APPROVED)
+	var autoConfiguredPostWorktreeCmd bool
 	err = bb.Modify(func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
@@ -442,6 +456,11 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 		}
 		if err := pipelineTransition(t, models.TaskStatusMerged, pb); err != nil {
 			return err
+		}
+		if s.Config.PostWorktreeCmd == nil && detectedPostWorktreeCmd != "" {
+			cmd := detectedPostWorktreeCmd
+			s.Config.PostWorktreeCmd = &cmd
+			autoConfiguredPostWorktreeCmd = true
 		}
 		t.Worktree = nil
 		t.MergeCommit = &mergeCommit
@@ -483,6 +502,12 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to update state to MERGED: %w", err)
+	}
+	if postWorktreeCmdAmbiguous && !autoConfiguredPostWorktreeCmd {
+		warnings = append(warnings, fmt.Sprintf(
+			"post_worktree_cmd remains unset: detected Node projects in %s; configure manually",
+			strings.Join(detectedNodeSubdirs, ", "),
+		))
 	}
 
 	// Cleanup: Remove worktree directory and branch (after state commit — safe now).

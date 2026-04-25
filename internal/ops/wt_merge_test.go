@@ -369,6 +369,102 @@ func TestMergeWorktree_Success(t *testing.T) {
 	}
 }
 
+func TestMergeWorktree_AutoSetsPostWorktreeCmd(t *testing.T) {
+	taskID := "merge-node-bootstrap"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	advanceApprovedTaskWithFiles(t, tmpDir, stateFile, taskID, map[string]string{
+		"web/package.json":      `{"name":"web"}`,
+		"web/package-lock.json": "{}",
+	})
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+
+	state := readStateForTest(t, stateFile)
+	if state.Config.PostWorktreeCmd == nil {
+		t.Fatal("PostWorktreeCmd should be auto-set after merging a single Node subdir")
+	}
+	if *state.Config.PostWorktreeCmd != "cd web && npm install" {
+		t.Errorf("PostWorktreeCmd = %q, want %q", *state.Config.PostWorktreeCmd, "cd web && npm install")
+	}
+	for _, warning := range result.Warnings {
+		if strings.Contains(warning, "post_worktree_cmd remains unset") {
+			t.Fatalf("unexpected ambiguity warning: %q", warning)
+		}
+	}
+}
+
+func TestMergeWorktree_LeavesPostWorktreeCmdUnsetWhenAmbiguous(t *testing.T) {
+	taskID := "merge-node-ambiguous"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	advanceApprovedTaskWithFiles(t, tmpDir, stateFile, taskID, map[string]string{
+		"web/package.json": `{"name":"web"}`,
+		"api/package.json": `{"name":"api"}`,
+	})
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+
+	state := readStateForTest(t, stateFile)
+	if state.Config.PostWorktreeCmd != nil {
+		t.Fatalf("PostWorktreeCmd = %q, want nil when detection is ambiguous", *state.Config.PostWorktreeCmd)
+	}
+	found := false
+	for _, warning := range result.Warnings {
+		if strings.Contains(warning, "post_worktree_cmd remains unset") &&
+			strings.Contains(warning, "api") &&
+			strings.Contains(warning, "web") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ambiguity warning in result warnings, got %v", result.Warnings)
+	}
+}
+
+func TestMergeWorktree_PreservesExistingPostWorktreeCmd(t *testing.T) {
+	taskID := "merge-node-preserve"
+	agentID := "coder-1"
+	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+
+	state := readStateForTest(t, stateFile)
+	original := "make sync-embedded"
+	state.Config.PostWorktreeCmd = &original
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	advanceApprovedTaskWithFiles(t, tmpDir, stateFile, taskID, map[string]string{
+		"web/package.json":      `{"name":"web"}`,
+		"web/package-lock.json": "{}",
+	})
+
+	result, err := MergeWorktree(tmpDir, taskID, agentID)
+	if err != nil {
+		t.Fatalf("MergeWorktree() unexpected error: %v", err)
+	}
+
+	state = readStateForTest(t, stateFile)
+	if state.Config.PostWorktreeCmd == nil {
+		t.Fatal("PostWorktreeCmd should remain set after merge")
+	}
+	if *state.Config.PostWorktreeCmd != original {
+		t.Errorf("PostWorktreeCmd = %q, want %q", *state.Config.PostWorktreeCmd, original)
+	}
+	for _, warning := range result.Warnings {
+		if strings.Contains(warning, "post_worktree_cmd remains unset") {
+			t.Fatalf("unexpected ambiguity warning: %q", warning)
+		}
+	}
+}
+
 func TestMergeWorktree_SyncsRenamedFiles(t *testing.T) {
 	taskID := "merge-rename"
 	agentID := "coder-1"
@@ -1449,6 +1545,32 @@ func readStateForTest(t *testing.T, stateFile string) *models.State {
 		t.Fatalf("Failed to read state: %v", err)
 	}
 	return state
+}
+
+func advanceApprovedTaskWithFiles(t *testing.T, projectRoot, stateFile, taskID string, files map[string]string) {
+	t.Helper()
+	wtDir := filepath.Join(projectRoot, ".worktrees", taskID)
+	for relPath, content := range files {
+		absPath := filepath.Join(wtDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+			t.Fatalf("failed to create parent directory for %s: %v", relPath, err)
+		}
+		if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
+			t.Fatalf("failed to write %s: %v", relPath, err)
+		}
+	}
+
+	testhelpers.MustGit(t, wtDir, "add", ".")
+	testhelpers.MustGit(t, wtDir, "commit", "-m", "Add node bootstrap files")
+	reviewCommit := testhelpers.MustGit(t, wtDir, "rev-parse", "HEAD")
+
+	state := readStateForTest(t, stateFile)
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatalf("task %s not found in state", taskID)
+	}
+	task.ReviewCommit = &reviewCommit
+	testhelpers.WriteInitialState(t, stateFile, state)
 }
 
 func TestMarkIntegrationFailed_RefreshesLease(t *testing.T) {

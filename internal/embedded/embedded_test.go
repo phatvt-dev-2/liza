@@ -1452,6 +1452,48 @@ func TestWriteCodexProjectHooks_NonEmptyCodexFileErrors(t *testing.T) {
 	}
 }
 
+func TestWriteCodexProjectHooks_SymlinkedCodexFileErrors(t *testing.T) {
+	projectRoot := t.TempDir()
+	targetDir := t.TempDir()
+	targetPath := filepath.Join(targetDir, "codex-target")
+	original := []byte("keep me")
+	if err := os.WriteFile(targetPath, original, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	codexPath := filepath.Join(projectRoot, ".codex")
+	if err := os.Symlink(targetPath, codexPath); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	err := WriteCodexProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("")))
+	if err == nil {
+		t.Fatal("expected WriteCodexProjectHooks to fail when .codex is a symlink to a file")
+	}
+
+	info, statErr := os.Lstat(codexPath)
+	if statErr != nil {
+		t.Fatalf("failed to lstat .codex path: %v", statErr)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf(".codex should remain a symlink, got mode %v", info.Mode())
+	}
+	linkTarget, readlinkErr := os.Readlink(codexPath)
+	if readlinkErr != nil {
+		t.Fatalf("failed to read .codex symlink: %v", readlinkErr)
+	}
+	if linkTarget != targetPath {
+		t.Fatalf(".codex symlink target changed: got %q want %q", linkTarget, targetPath)
+	}
+	content, readErr := os.ReadFile(targetPath)
+	if readErr != nil {
+		t.Fatalf("failed to read symlink target file: %v", readErr)
+	}
+	if string(content) != string(original) {
+		t.Fatalf("symlink target content changed on failure: got %q want %q", string(content), string(original))
+	}
+}
+
 func TestWriteCodexProjectHooks_MergesExistingFiles(t *testing.T) {
 	projectRoot := t.TempDir()
 	codexDir := filepath.Join(projectRoot, ".codex")
