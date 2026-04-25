@@ -126,6 +126,9 @@ func InitPairingCommand(params InitPairingParams) error {
 		if err := embedded.WriteCodexProjectPermissions(projectRoot, stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write codex config: %v\n", err)
 		}
+		if err := embedded.WriteCodexProjectHooks(projectRoot, stdin); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write codex hooks: %v\n", err)
+		}
 	}
 
 	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)
@@ -583,6 +586,9 @@ func InitCommandWithConfig(params InitParams) error {
 	if slices.Contains(params.Agents, "codex") {
 		if err := embedded.WriteCodexProjectPermissions(lizaPaths.ProjectRoot(), stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write codex config: %v\n", err)
+		}
+		if err := embedded.WriteCodexProjectHooks(lizaPaths.ProjectRoot(), stdin); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write codex hooks: %v\n", err)
 		}
 	}
 

@@ -33,11 +33,19 @@ Verification: Run `claude` and prompt `hello`.
 
 ## Codex
 
-`liza init --codex` performs minimal project activation: it adds the active
-project root and its `.git` directory to
-`~/.codex/config.toml` → `sandbox_workspace_write.writable_roots`. If the file
-already exists, Liza prompts before merging those two entries and preserves
-existing settings. It does not install the full baseline below.
+`liza init --codex` performs project activation: it adds the active project root
+and its `.git` directory to
+`~/.codex/config.toml` → `sandbox_workspace_write.writable_roots`, enables
+Codex hooks in `<project>/.codex/config.toml`, writes
+`<project>/.codex/hooks.json`, and deploys hook scripts to
+`<project>/.codex/hooks/`. If a config file already exists, Liza prompts before
+merging and preserves existing settings. It does not install the full baseline
+below.
+
+The session-init hook allows the mandatory startup documents to be read through
+Codex MCP filesystem read tools, or through simple Bash read commands such as
+`cat`, `sed`, `head`, `tail`, and `wc`. More complex Bash commands remain
+blocked until initialization is complete.
 
 For full Codex setup, edit `~/.codex/config.toml` (replace `<USER>` with your
 username):

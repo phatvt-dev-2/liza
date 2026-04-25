@@ -39,6 +39,9 @@ var claudeSettingsContent []byte
 //go:embed "codex-config.toml"
 var codexConfigContent []byte
 
+//go:embed "codex-hooks.json"
+var codexHooksContent []byte
+
 //go:embed "hooks/enforce-init.sh"
 var enforceInitHookContent []byte
 
@@ -429,6 +432,127 @@ func WriteCodexProjectPermissions(projectRoot string, reader *bufio.Reader) erro
 	}
 	warnIncompleteCodexBaseline(merged)
 	return nil
+}
+
+// WriteCodexProjectHooks writes repo-local Codex hook configuration and hook
+// scripts to .codex/. Codex also requires the codex_hooks feature flag in an
+// active config layer, so this manages the project-local config.toml feature.
+func WriteCodexProjectHooks(projectRoot string, reader *bufio.Reader) error {
+	if reader == nil {
+		reader = bufio.NewReader(os.Stdin)
+	}
+	codexDir := filepath.Join(projectRoot, ".codex")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .codex directory: %w", err)
+	}
+
+	configPath := filepath.Join(codexDir, "config.toml")
+	install, configContent, err := prepareCodexHooksFeature(configPath, reader)
+	if err != nil {
+		return err
+	}
+	if !install {
+		return nil
+	}
+	hooksOutput, installed, err := renderCodexHooksJSON(filepath.Join(codexDir, "hooks.json"), reader)
+	if err != nil {
+		return err
+	}
+	if !installed {
+		return nil
+	}
+	if err := WriteCodexHooks(projectRoot); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "hooks.json"), hooksOutput, 0644); err != nil {
+		return fmt.Errorf("failed to write codex hooks.json: %w", err)
+	}
+	if configContent != "" {
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			return fmt.Errorf("failed to write codex project config: %w", err)
+		}
+	}
+	return nil
+}
+
+func prepareCodexHooksFeature(configPath string, reader *bufio.Reader) (bool, string, error) {
+	existing, err := os.ReadFile(configPath)
+	if os.IsNotExist(err) {
+		return true, "[features]\ncodex_hooks = true\n", nil
+	}
+	if err != nil {
+		return false, "", fmt.Errorf("failed to read codex project config: %w", err)
+	}
+
+	merged, changed := mergeCodexHooksFeature(string(existing))
+	if !changed {
+		return true, "", nil
+	}
+
+	ok, err := confirmMerge("Should Liza enable Codex hooks in .codex/config.toml? (y/n): ", reader)
+	if err != nil {
+		return false, "", err
+	}
+	if !ok {
+		return false, "", nil
+	}
+	return true, merged, nil
+}
+
+func mergeCodexHooksFeature(content string) (string, bool) {
+	lines := strings.Split(content, "\n")
+	sectionStart, sectionEnd := findTomlSection(lines, "features")
+	if sectionStart == -1 {
+		return appendTomlBlock(content, "[features]\ncodex_hooks = true\n"), true
+	}
+
+	featureLineStart, featureLineEnd := findTomlAssignment(lines, sectionStart+1, sectionEnd, "codex_hooks")
+	if featureLineStart == -1 {
+		updated := insertLines(lines, sectionEnd, []string{"codex_hooks = true"})
+		return ensureTrailingNewline(strings.Join(updated, "\n")), true
+	}
+
+	assignment := strings.TrimSpace(stripTomlLineComment(strings.Join(lines[featureLineStart:featureLineEnd+1], "\n")))
+	if assignment == "codex_hooks = true" {
+		return content, false
+	}
+
+	lines[featureLineStart] = "codex_hooks = true"
+	if featureLineEnd > featureLineStart {
+		lines = append(lines[:featureLineStart+1], lines[featureLineEnd+1:]...)
+	}
+	return ensureTrailingNewline(strings.Join(lines, "\n")), true
+}
+
+func renderCodexHooksJSON(hooksPath string, reader *bufio.Reader) ([]byte, bool, error) {
+	var lizaHooks map[string]any
+	if err := json.Unmarshal(codexHooksContent, &lizaHooks); err != nil {
+		return nil, false, fmt.Errorf("failed to parse embedded codex-hooks.json: %w", err)
+	}
+
+	finalHooks := lizaHooks
+	if existingData, err := os.ReadFile(hooksPath); err == nil {
+		ok, err := confirmMerge("Should the Liza Codex hooks be merged into .codex/hooks.json? (y/n): ", reader)
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok {
+			return nil, false, nil
+		}
+
+		var existingHooks map[string]any
+		if err := json.Unmarshal(existingData, &existingHooks); err != nil {
+			return nil, false, fmt.Errorf("failed to parse existing codex hooks.json: %w", err)
+		}
+		finalHooks = mergeSettings(lizaHooks, existingHooks)
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, false, fmt.Errorf("failed to read codex hooks.json: %w", err)
+	}
+	output, err := json.MarshalIndent(finalHooks, "", "  ")
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to marshal codex hooks.json: %w", err)
+	}
+	return append(output, '\n'), true, nil
 }
 
 func codexConfigPath() (string, error) {
@@ -1019,6 +1143,28 @@ func WriteHooks(projectRoot string) error {
 		"enforce-init.sh":        enforceInitHookContent,
 		"git-guard.sh":           gitGuardHookContent,
 		"rtk-guard.sh":           rtkGuardHookContent,
+		"worktree-path-guard.sh": worktreePathGuardHookContent,
+	} {
+		hookPath := filepath.Join(hooksDir, name)
+		if err := os.WriteFile(hookPath, content, 0755); err != nil {
+			return fmt.Errorf("failed to write %s: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+// WriteCodexHooks writes embedded hook scripts to .codex/hooks/ in the project
+// root. Always overwrites — hooks are Liza infrastructure, not user-customizable.
+func WriteCodexHooks(projectRoot string) error {
+	hooksDir := filepath.Join(projectRoot, ".codex", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .codex/hooks directory: %w", err)
+	}
+
+	for name, content := range map[string][]byte{
+		"enforce-init.sh":        enforceInitHookContent,
+		"git-guard.sh":           gitGuardHookContent,
 		"worktree-path-guard.sh": worktreePathGuardHookContent,
 	} {
 		hookPath := filepath.Join(hooksDir, name)

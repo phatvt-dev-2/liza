@@ -96,7 +96,7 @@ Existing workspaces can add post_worktree_cmd to state.yaml's config section.
 PAIRING MODE: Use agent flags without a description to create only the contract
 symlinks needed for pairing (no .liza/ workspace):
   liza init --claude           # creates CLAUDE.md → ~/.liza/CORE.md
-  liza init --claude --codex   # creates CLAUDE.md + AGENTS.md`,
+  liza init --claude --codex   # creates CLAUDE.md + AGENTS.md and repo hooks`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agents := collectAgentFlags(cmd)
@@ -350,7 +350,7 @@ func init() {
 	initCmd.Flags().Bool("auto-resume", false, "automatically resume at checkpoint and sprint completion")
 	initCmd.Flags().String("default-cli", "", "default CLI for agent spawning ("+strings.Join(agent.ValidCLIs(), ", ")+")")
 	initCmd.Flags().Bool("claude", false, "create CLAUDE.md symlink to ~/.liza/CORE.md")
-	initCmd.Flags().Bool("codex", false, "create AGENTS.md symlink to ~/.liza/CORE.md")
+	initCmd.Flags().Bool("codex", false, "create AGENTS.md symlink to ~/.liza/CORE.md and configure repo hooks")
 	initCmd.Flags().Bool("gemini", false, "create GEMINI.md symlink to ~/.liza/CORE.md")
 	initCmd.Flags().Bool("mistral", false, "set up ~/.vibe/ for Liza contract")
 

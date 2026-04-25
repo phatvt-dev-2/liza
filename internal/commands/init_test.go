@@ -516,6 +516,7 @@ func TestInitCommand_CreatesContractSymlinks(t *testing.T) {
 			t.Errorf("Codex config missing writable root %q:\n%s", want, string(configContent))
 		}
 	}
+	verifyCodexHooks(t, gitDir)
 }
 
 func TestInitCommand_SkipsCorrectSymlinks(t *testing.T) {
@@ -1344,6 +1345,7 @@ func TestInitPairingCommand_MultipleAgents(t *testing.T) {
 			t.Errorf("%s → %q, want %q", tc.file, target, expected)
 		}
 	}
+	verifyCodexHooks(t, gitDir)
 }
 
 func TestInitPairingCommand_Idempotent(t *testing.T) {
@@ -2075,5 +2077,43 @@ func TestInitCommand_WorkspaceInit(t *testing.T) {
 	// Must NOT contain stale MCP wording
 	if strings.Contains(stdout, "MCP tools and personal permissions") {
 		t.Error("stdout still contains stale MCP note after MCP removal")
+	}
+}
+
+func verifyCodexHooks(t *testing.T, projectRoot string) {
+	t.Helper()
+
+	configPath := filepath.Join(projectRoot, ".codex", "config.toml")
+	configContent, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("Codex project config not created: %v", err)
+	}
+	if !strings.Contains(string(configContent), "codex_hooks = true") {
+		t.Errorf("Codex project config missing hooks feature:\n%s", string(configContent))
+	}
+
+	hooksPath := filepath.Join(projectRoot, ".codex", "hooks.json")
+	hooksContent, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("Codex hooks.json not created: %v", err)
+	}
+	var hooks map[string]any
+	if err := json.Unmarshal(hooksContent, &hooks); err != nil {
+		t.Fatalf("Codex hooks.json is invalid JSON: %v", err)
+	}
+	for _, want := range []string{".codex/hooks/enforce-init.sh", ".codex/hooks/git-guard.sh", ".codex/hooks/worktree-path-guard.sh"} {
+		if !strings.Contains(string(hooksContent), want) {
+			t.Errorf("Codex hooks.json missing %q:\n%s", want, string(hooksContent))
+		}
+	}
+
+	for _, name := range []string{"enforce-init.sh", "git-guard.sh", "worktree-path-guard.sh"} {
+		info, err := os.Stat(filepath.Join(projectRoot, ".codex", "hooks", name))
+		if err != nil {
+			t.Fatalf("Codex hook %s not created: %v", name, err)
+		}
+		if info.Mode()&0111 == 0 {
+			t.Errorf("Codex hook %s should be executable, got %o", name, info.Mode())
+		}
 	}
 }

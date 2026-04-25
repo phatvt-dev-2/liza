@@ -67,6 +67,36 @@ func TestWorktreePathGuardHook(t *testing.T) {
 			payload:    `{"tool_name":"Write","tool_input":{"file_path":"/p/.worktrees/task-1/task-1"}}`,
 			wantDenied: true,
 		},
+		{
+			name:       "codex mcp path field denies",
+			payload:    `{"tool_name":"mcp__filesystem__read_file","tool_input":{"path":"/p/.worktrees/task-1/task-1/foo.go"}}`,
+			wantDenied: true,
+		},
+		{
+			name:       "codex mcp paths array denies",
+			payload:    `{"tool_name":"mcp__filesystem__read_multiple_files","tool_input":{"paths":["/p/.worktrees/task-1/task-1/foo.go"]}}`,
+			wantDenied: true,
+		},
+		{
+			name:       "codex mcp paths array denies when duplicated path appears second",
+			payload:    `{"tool_name":"mcp__filesystem__read_multiple_files","tool_input":{"paths":["/p/.worktrees/task-1/foo.go","/p/.worktrees/task-1/task-1/bar.go"]}}`,
+			wantDenied: true,
+		},
+		{
+			name:       "payload content mention does not deny valid target",
+			payload:    `{"tool_name":"apply_patch","tool_input":{"path":"/p/.worktrees/task-1/foo.go","patch":"note mentions /p/.worktrees/task-1/task-1/foo.go in file content"}}`,
+			wantDenied: false,
+		},
+		{
+			name:       "apply_patch header duplicate denies",
+			payload:    "{\"tool_name\":\"apply_patch\",\"tool_input\":{\"command\":\"*** Update File: /p/.worktrees/task-1/task-1/foo.go\\n@@\\n-old\\n+new\\n\"}}",
+			wantDenied: true,
+		},
+		{
+			name:       "apply_patch later duplicate header denies",
+			payload:    "{\"tool_name\":\"apply_patch\",\"tool_input\":{\"command\":\"*** Update File: /p/.worktrees/task-1/foo.go\\n@@\\n-old\\n+new\\n*** Update File: /p/.worktrees/task-1/task-1/bar.go\\n@@\\n-old\\n+new\\n\"}}",
+			wantDenied: true,
+		},
 	}
 
 	for _, tc := range cases {

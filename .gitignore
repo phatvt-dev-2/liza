@@ -1,6 +1,7 @@
 # IDE and editor directories
 .idea/
 .claude/
+.codex/
 *.iml
 
 # OS generated files
@@ -37,6 +38,7 @@ internal/embedded/*
 !internal/embedded/support.md
 !internal/embedded/claude-settings.json
 !internal/embedded/codex-config.toml
+!internal/embedded/codex-hooks.json
 !internal/embedded/git-hooks/
 !internal/embedded/hooks/
 /liza

@@ -27,23 +27,46 @@ input=$(cat)
 # Extract JSON string values without jq. Matches "key": "value" anywhere in
 # the blob — file_path is unique enough inside the Read/Write/Edit/MultiEdit
 # payload shapes that a cross-key collision isn't a practical concern.
-json_val() { echo "$input" | grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | sed 's/.*:[[:space:]]*"//;s/"$//'; }
+json_val() { echo "$input" | grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | sed 's/.*:[[:space:]]*"//;s/"$//'; }
+json_array_vals() { echo "$input" | grep -o "\"$1\"[[:space:]]*:[[:space:]]*\\[[^]]*\\]" | head -1 | sed -E "s/^\"$1\"[[:space:]]*:[[:space:]]*\\[//; s/\\]$//; s/\",[[:space:]]*\"/\\
+/g; s/^\"//; s/\"$//"; }
 
-file_path=$(json_val file_path)
+# For apply_patch payloads, inspect only file headers rather than the whole
+# patch body. This catches duplicated worktree paths in edited files without
+# false-denying on arbitrary content that merely mentions them.
+patch_targets=$(printf '%s' "$input" |
+    sed 's/\\n/\
+/g' |
+    grep -Eo '(\*\*\* (Update|Delete|Add) File: |\+\+\+ |--- )[^"\\]*\.worktrees/[^"\\]*' |
+    sed -E 's/^(\*\*\* (Update|Delete|Add) File: |\+\+\+ |--- )//')
 
-if [[ -z "$file_path" ]]; then
+targets=$(printf '%s\n%s\n%s\n%s' "$(json_val file_path)" "$(json_val path)" "$(json_array_vals paths)" "$patch_targets" | sed '/^$/d')
+
+if [[ -z "$targets" ]]; then
     exit 0
 fi
 
-# Detect .worktrees/<segment>/<same-segment>. POSIX ERE has no
-# backreferences, so split: capture the two segments after .worktrees/ and
-# compare them as strings. Works with bash 3.2+ (macOS default).
-if [[ "$file_path" =~ \.worktrees/([^/]+)/([^/]+) ]]; then
-    first="${BASH_REMATCH[1]}"
-    second="${BASH_REMATCH[2]}"
-    if [[ "$first" == "$second" ]]; then
-        cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Worktree path duplicates the task id segment (.worktrees/$first/$second). The worktree root already ends in the task id — strip the duplicate segment from your relative path. Path: $file_path"}}
+# Detect .worktrees/<segment>/<same-segment>. POSIX ERE has no backreferences,
+# so split: capture the two segments after .worktrees/ and compare them as
+# strings. Works with bash 3.2+ (macOS default). Deny if any extracted target
+# has the duplicate segment.
+while IFS= read -r target; do
+    [[ -z "$target" ]] && continue
+    while IFS= read -r candidate; do
+        [[ -z "$candidate" ]] && continue
+        if [[ "$candidate" =~ \.worktrees/([^/]+)/([^/]+) ]]; then
+            first="${BASH_REMATCH[1]}"
+            second="${BASH_REMATCH[2]}"
+            if [[ "$first" == "$second" ]]; then
+                cat <<EOF
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Worktree path duplicates the task id segment (.worktrees/$first/$second). The worktree root already ends in the task id — strip the duplicate segment from your relative path. Path: $candidate"}}
 EOF
-    fi
-fi
+                exit 0
+            fi
+        fi
+    done <<EOF
+$(echo "$target" | grep -Eo '\.worktrees/[^[:space:]"]+/[^[:space:]"]+')
+EOF
+done <<EOF
+$targets
+EOF

@@ -1331,6 +1331,270 @@ func TestWriteHooks_Overwrites(t *testing.T) {
 	}
 }
 
+func TestWriteCodexProjectHooks_NewFile(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	if err := WriteCodexProjectHooks(projectRoot, bufio.NewReader(strings.NewReader(""))); err != nil {
+		t.Fatalf("WriteCodexProjectHooks failed: %v", err)
+	}
+
+	configPath := filepath.Join(projectRoot, ".codex", "config.toml")
+	configContent, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read codex config: %v", err)
+	}
+	if string(configContent) != "[features]\ncodex_hooks = true\n" {
+		t.Errorf("unexpected codex config:\n%s", string(configContent))
+	}
+
+	hooksPath := filepath.Join(projectRoot, ".codex", "hooks.json")
+	hooksContent, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("failed to read codex hooks.json: %v", err)
+	}
+	var hooks map[string]any
+	if err := json.Unmarshal(hooksContent, &hooks); err != nil {
+		t.Fatalf("hooks.json is invalid JSON: %v", err)
+	}
+	text := string(hooksContent)
+	for _, want := range []string{
+		`.codex/hooks/enforce-init.sh`,
+		`"matcher": "^Bash$"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("hooks.json missing %q:\n%s", want, text)
+		}
+	}
+	assertHookScripts(t, filepath.Join(projectRoot, ".codex", "hooks"))
+}
+
+func TestWriteCodexProjectHooks_MergesExistingFiles(t *testing.T) {
+	projectRoot := t.TempDir()
+	codexDir := filepath.Join(projectRoot, ".codex")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte("model = \"gpt-5\"\n[features]\nother = true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	existingHooks := `{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo done"
+          }
+        ]
+      }
+    ]
+  }
+}`
+	if err := os.WriteFile(filepath.Join(codexDir, "hooks.json"), []byte(existingHooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteCodexProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("y\ny\n"))); err != nil {
+		t.Fatalf("WriteCodexProjectHooks failed: %v", err)
+	}
+
+	configContent, err := os.ReadFile(filepath.Join(codexDir, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"model = \"gpt-5\"", "[features]", "other = true", "codex_hooks = true"} {
+		if !strings.Contains(string(configContent), want) {
+			t.Errorf("config missing %q:\n%s", want, string(configContent))
+		}
+	}
+
+	hooksContent, err := os.ReadFile(filepath.Join(codexDir, "hooks.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"echo done", ".codex/hooks/enforce-init.sh"} {
+		if !strings.Contains(string(hooksContent), want) {
+			t.Errorf("hooks.json missing %q:\n%s", want, string(hooksContent))
+		}
+	}
+}
+
+func TestWriteCodexProjectHooks_EnableDeclinedSkipsArtifacts(t *testing.T) {
+	projectRoot := t.TempDir()
+	codexDir := filepath.Join(projectRoot, ".codex")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	originalConfig := "model = \"gpt-5\"\n"
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(originalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteCodexProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("n\n"))); err != nil {
+		t.Fatalf("WriteCodexProjectHooks failed: %v", err)
+	}
+
+	configContent, err := os.ReadFile(filepath.Join(codexDir, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(configContent) != originalConfig {
+		t.Errorf("config changed despite declined hook enablement:\n%s", string(configContent))
+	}
+	if _, err := os.Stat(filepath.Join(codexDir, "hooks.json")); !os.IsNotExist(err) {
+		t.Fatalf("hooks.json should not be written when enablement is declined, stat err: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(codexDir, "hooks")); !os.IsNotExist(err) {
+		t.Fatalf("hooks directory should not be written when enablement is declined, stat err: %v", err)
+	}
+}
+
+func TestWriteCodexProjectHooks_HooksMergeDeclinedSkipsArtifactsAndConfigEnable(t *testing.T) {
+	projectRoot := t.TempDir()
+	codexDir := filepath.Join(projectRoot, ".codex")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	originalConfig := "model = \"gpt-5\"\n"
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(originalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+	existingHooks := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo done"}]}]}}`
+	if err := os.WriteFile(filepath.Join(codexDir, "hooks.json"), []byte(existingHooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteCodexProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("y\nn\n"))); err != nil {
+		t.Fatalf("WriteCodexProjectHooks failed: %v", err)
+	}
+
+	configContent, err := os.ReadFile(filepath.Join(codexDir, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(configContent) != originalConfig {
+		t.Errorf("config changed despite declined hooks.json merge:\n%s", string(configContent))
+	}
+
+	hooksContent, err := os.ReadFile(filepath.Join(codexDir, "hooks.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(hooksContent) != existingHooks {
+		t.Errorf("hooks.json changed despite declined merge:\n%s", string(hooksContent))
+	}
+	if _, err := os.Stat(filepath.Join(codexDir, "hooks")); !os.IsNotExist(err) {
+		t.Fatalf("hooks directory should not be written when hooks.json merge is declined, stat err: %v", err)
+	}
+}
+
+func TestWriteCodexProjectHooks_InvalidExistingHooksJSONLeavesConfigUnchanged(t *testing.T) {
+	projectRoot := t.TempDir()
+	codexDir := filepath.Join(projectRoot, ".codex")
+	if err := os.MkdirAll(codexDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	originalConfig := "model = \"gpt-5\"\n"
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(originalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "hooks.json"), []byte("{not-json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("y\ny\n")))
+	if err == nil {
+		t.Fatal("expected WriteCodexProjectHooks to fail on invalid existing hooks.json")
+	}
+
+	configContent, readErr := os.ReadFile(filepath.Join(codexDir, "config.toml"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(configContent) != originalConfig {
+		t.Errorf("config changed despite hooks.json merge failure:\n%s", string(configContent))
+	}
+}
+
+func TestWriteCodexProjectHooks_HookInstallFailureDoesNotWriteHooksJSON(t *testing.T) {
+	projectRoot := t.TempDir()
+	codexDir := filepath.Join(projectRoot, ".codex")
+	hooksDir := filepath.Join(codexDir, "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	originalHooks := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo done"}]}]}}`
+	if err := os.WriteFile(filepath.Join(codexDir, "hooks.json"), []byte(originalHooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+	blockingPath := filepath.Join(hooksDir, "git-guard.sh")
+	if err := os.MkdirAll(blockingPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := WriteCodexProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("")))
+	if err == nil {
+		t.Fatal("expected WriteCodexProjectHooks to fail when hook script deployment fails")
+	}
+
+	hooksContent, readErr := os.ReadFile(filepath.Join(codexDir, "hooks.json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(hooksContent) != originalHooks {
+		t.Errorf("hooks.json changed despite hook install failure:\n%s", string(hooksContent))
+	}
+}
+
+func TestWriteCodexHooks_Overwrites(t *testing.T) {
+	tmpDir := t.TempDir()
+	hooksDir := filepath.Join(tmpDir, ".codex", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"enforce-init.sh", "git-guard.sh", "worktree-path-guard.sh"} {
+		if err := os.WriteFile(filepath.Join(hooksDir, name), []byte("old"), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := WriteCodexHooks(tmpDir); err != nil {
+		t.Fatalf("WriteCodexHooks failed: %v", err)
+	}
+
+	assertHookScripts(t, hooksDir)
+}
+
+func assertHookScripts(t *testing.T, hooksDir string) {
+	t.Helper()
+	for name, wantContent := range hookScriptContents() {
+		hookPath := filepath.Join(hooksDir, name)
+		info, err := os.Stat(hookPath)
+		if err != nil {
+			t.Fatalf("hook file %s not found: %v", name, err)
+		}
+		if info.Mode()&0111 == 0 {
+			t.Errorf("hook file %s is not executable: %v", name, info.Mode())
+		}
+		content, err := os.ReadFile(hookPath)
+		if err != nil {
+			t.Fatalf("failed to read hook %s: %v", name, err)
+		}
+		if !bytes.Equal(content, wantContent) {
+			t.Errorf("hook %s content does not match embedded source", name)
+		}
+	}
+}
+
+func hookScriptContents() map[string][]byte {
+	return map[string][]byte{
+		"enforce-init.sh":        enforceInitHookContent,
+		"git-guard.sh":           gitGuardHookContent,
+		"worktree-path-guard.sh": worktreePathGuardHookContent,
+	}
+}
+
 func TestCleanStaleMCPEntry(t *testing.T) {
 	t.Run("no file", func(t *testing.T) {
 		if err := CleanStaleMCPEntry(t.TempDir()); err != nil {
