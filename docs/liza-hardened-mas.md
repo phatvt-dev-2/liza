@@ -410,6 +410,7 @@ Skills encode methodology — not instructions, but structured protocols agents 
 | **adr-backfill** | Backfill missing Architecture Decision Records from git history |
 | **lesson-capture** | Capture operational lessons from mistakes and discoveries |
 | **liza-logs** | Analyze agent logs for token optimization and struggle detection |
+| **context-engineering** | Analyze agent prompts and outputs for context quality and handoff fit |
 | **have-you-considered** | Surface alternatives and different approaches |
 | **feynman** | Explain complex ideas clearly (knowledge transfer) |
 | **generic-subagent** | Context-efficient delegation to subagents |

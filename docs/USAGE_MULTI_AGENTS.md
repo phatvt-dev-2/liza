@@ -28,6 +28,7 @@ See [DEMO](DEMO.md) for a full example.
 ├── pipeline.yaml                      # Default pipeline config (role-pairs, transitions, entry-points)
 └── skills/                            # Skill definitions
     ├── code-review/SKILL.md
+    ├── context-engineering/SKILL.md
     ├── debugging/SKILL.md
     ├── liza-logs/SKILL.md
     └── ...
@@ -453,7 +454,8 @@ The full template also pre-approves skills (code-review, testing, debugging, etc
 >
 > If your project uses tools not in this list, add them to `.claude/settings.json` before
 > spawning agents. Run `/liza-logs` after your first sprint to catch any remaining
-> permission denials.
+> permission denials. Run `/context-engineering` when logs point to prompt bloat,
+> missing context, or poor handoffs.
 
 CLI commands (e.g., `liza add-task`) operate on `.liza/state.yaml` with proper locking. Agents use CLI commands via Bash with `--json` for structured output.
 
@@ -461,7 +463,7 @@ The settings template is embedded into the binary. `liza init` writes the active
 
 ### Analyzing Agent Logs
 
-Agent logs are your primary diagnostic tool for understanding what agents actually did and where they got stuck. **Use `/liza-logs` early and often** — it cross-correlates logs across agents, surfaces patterns that slow down the execution and increase token usage, and proposes actionable fixes.
+Agent logs are your primary diagnostic tool for understanding what agents actually did and where they got stuck. **Use `/liza-logs` early and often** — it cross-correlates logs across agents, surfaces patterns that slow down the execution and increase token usage, and proposes actionable fixes. Use `/context-engineering` when the likely cause is prompt payload shape, context bloat, missing or duplicated context, cacheability, or weak handoff fit.
 
 #### Identifying Frictions
 
@@ -471,7 +473,7 @@ Log analysis serves different purposes depending on where you are in your Liza j
 
 **Seasoned users — regression and drift detection.** Once your setup is stable, log analysis shifts to catching new frictions: provider CLI updates that change output formats or break flags, context budget regressions from prompt growth, new tool failure patterns, or behavioral drift after contract changes. Run `/liza-logs` when a previously-smooth pipeline starts producing unexpected checkpoints, rejections, or BLOCKED tasks.
 
-In both cases, the pattern is the same: run the analysis, read the friction report, fix the root cause, re-run. Logs are cheap; debugging blind is expensive.
+In both cases, the pattern is the same: run the analysis, read the friction report, fix the root cause, re-run. Logs are cheap; debugging blind is expensive. When `/liza-logs` shows token pressure, repeated broad searches, or handoff/rejection patterns, follow with `/context-engineering` to inspect the paired `.liza/agent-prompts/` and `.liza/agent-outputs/` evidence.
 
 #### Log Format
 
@@ -491,6 +493,14 @@ Both analysis tools auto-detect the format.
 ```
 
 This works with any coding agent (Claude Code, Codex, etc.) in pairing mode. The agent runs the analyzer, reads the reports, correlates errors across agents, and suggests actionable fixes.
+
+For prompt/context-specific diagnosis, run:
+
+```
+/context-engineering
+```
+
+That skill pairs prompts and outputs by role and timestamp, then audits context quality, cacheability, load-on-demand opportunities, tool-output pressure, and cross-agent handoff fit. Its corpus indexer supports both Claude rich stream-json logs and Codex sparse `item.completed` logs.
 
 **CLI analyzer** (`~/.liza/skills/liza-logs/scripts/analyze-log.py`) — stdlib-only Python 3.12+, for batch/CI use:
 
@@ -524,7 +534,7 @@ jq -c 'select(.type == "assistant") | {id: .message.id, usage: .message.usage}' 
   .liza/agent-outputs/orchestrator-1-*.txt
 ```
 
-**Interactive diagnosis** — open a regular coding agent session (`claude`, `codex`, etc.) in the project directory. It can read `.liza/state.yaml`, agent logs, and prompts — everything needed to diagnose issues interactively. The `/liza-logs` skill works this way.
+**Interactive diagnosis** — open a regular coding agent session (`claude`, `codex`, etc.) in the project directory. It can read `.liza/state.yaml`, agent logs, and prompts — everything needed to diagnose issues interactively. The `/liza-logs` and `/context-engineering` skills work this way.
 
 ### Submit, Await Verdict, Handle Result
 

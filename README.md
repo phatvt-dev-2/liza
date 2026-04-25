@@ -62,7 +62,7 @@ Liza is a **frontier Multi-Agent System**:
     leaving the **judgment to the agent**. Strict task state machine with 43+ validation rules.
   - Agents communicate and act through Liza's **CLI**.
   - 35k LOC of Go (+92k of tests). Liza is not a prompt collection.
-  - Agent logs recording for automatic analysis and continuous improvements (token optimization, tool usage analysis, ...). The `/liza-logs` skill cross-correlates logs across agents to identify frictions — from misconfiguration in early setups to regressions from provider CLI updates in mature ones.
+  - Agent logs and prompts recording for automatic analysis and continuous improvements (token optimization, tool usage analysis, context quality, ...). The `/liza-logs` skill cross-correlates logs across agents to identify frictions — from misconfiguration in early setups to regressions from provider CLI updates in mature ones. The `/context-engineering` skill audits prompt payload shape, context bloat, cacheability, and handoff fit.
 - **Multi-model:**
   - Liza wraps provider **CLIs**, not their APIs. This means your existing subscription (Claude Max, ChatGPT Pro, etc.) works — no API keys or per-token billing required — and your personal setup is used.
   - BYOM: Claude Code, Codex CLI, Kimi, Mistral, Gemini. [Not all are made equal though](docs/demo-benchmark).
@@ -285,7 +285,7 @@ liza analyze                                        # Circuit breaker analysis
 
 ### Diagnosing Issues
 
-After your first sprint, run `/liza-logs` in any coding agent session to identify frictions. New users will typically find setup issues (missing tool permissions in `AGENT_TOOLS.md`, wrong `--post-worktree-cmd`, stale `~/.liza/` files). Seasoned users use it to catch regressions — provider CLI updates that break flags, context budget growth from prompt changes, or new tool failure patterns. See [Analyzing Agent Logs](docs/USAGE_MULTI_AGENTS.md#analyzing-agent-logs) for details.
+After your first sprint, run `/liza-logs` in any coding agent session to identify frictions. New users will typically find setup issues (missing tool permissions in `AGENT_TOOLS.md`, wrong `--post-worktree-cmd`, stale `~/.liza/` files). Seasoned users use it to catch regressions — provider CLI updates that break flags, context budget growth from prompt changes, or new tool failure patterns. Use `/context-engineering` when the question is whether agents received the right prompt context, too much context, or poor handoff context. See [Analyzing Agent Logs](docs/USAGE_MULTI_AGENTS.md#analyzing-agent-logs) for details.
 
 ### Recommended Tools
 

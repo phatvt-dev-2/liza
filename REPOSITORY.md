@@ -119,6 +119,7 @@ Specialized protocols agents load conditionally. Each contains a single `SKILL.m
 | `adr-backfill/` | Extracting ADRs from git history |
 | `feynman/` | Explaining complex ideas simply |
 | `lesson-capture/` | Capturing project-specific operational lessons |
+| `context-engineering/` | Analyzing agent prompts and outputs for context quality, bloat, and handoff fit |
 
 Skills execute within contract constraints — contract gates are non-negotiable, skill steps operate within them.
 
