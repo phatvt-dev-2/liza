@@ -94,7 +94,7 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 	globalCoreFile := filepath.Join(globalDir, "CORE.md")
 	if _, err := os.Stat(globalCoreFile); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("global config not found at %s\nRun 'liza setup' first to install contracts and skills", globalDir)
+			return fmt.Errorf("global config not found at %s\nRun 'liza setup' first to install contracts, skills, and support docs", globalDir)
 		}
 		return fmt.Errorf("cannot access global config at %s: %w", globalCoreFile, err)
 	}

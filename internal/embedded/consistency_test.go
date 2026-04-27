@@ -68,6 +68,53 @@ func TestArtifactConsistency(t *testing.T) {
 		}
 	})
 
+	t.Run("support-docs", func(t *testing.T) {
+		masterDir := filepath.Join(repoRoot, "support-docs")
+		embDir := filepath.Join(embeddedDir, "support-docs")
+
+		entries, err := os.ReadDir(masterDir)
+		if err != nil {
+			t.Fatalf("reading support-docs dir: %v", err)
+		}
+
+		var checked int
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			checked++
+			compareMasterToEmbedded(t, filepath.Join(masterDir, e.Name()), filepath.Join(embDir, e.Name()))
+		}
+		if checked == 0 {
+			t.Fatal("no .md files found in support-docs/")
+		}
+	})
+
+	t.Run("docs support stubs resolve", func(t *testing.T) {
+		stubs := map[string]string{
+			"docs/CONFIGURATION.md":           "support-docs/CONFIGURATION.md",
+			"docs/CUSTOMIZING_AGENT_TOOLS.md": "support-docs/CUSTOMIZING_AGENT_TOOLS.md",
+			"docs/TROUBLESHOOTING.md":         "support-docs/TROUBLESHOOTING.md",
+			"docs/USAGE_MULTI_AGENTS.md":      "support-docs/USAGE_MULTI_AGENTS.md",
+			"docs/USAGE_PAIRING.md":           "support-docs/USAGE_PAIRING.md",
+			"docs/how-to-produce-a-goal.md":   "support-docs/how-to-produce-a-goal.md",
+		}
+
+		for stub, target := range stubs {
+			stubPath := filepath.Join(repoRoot, stub)
+			targetPath := filepath.Join(repoRoot, target)
+			content, err := os.ReadFile(stubPath)
+			if err != nil {
+				t.Fatalf("reading stub %s: %v", stub, err)
+			}
+			if _, err := os.Stat(targetPath); err != nil {
+				t.Fatalf("stub target missing for %s -> %s: %v", stub, target, err)
+			}
+			if !strings.Contains(string(content), target) {
+				t.Fatalf("stub %s does not point to %s", stub, target)
+			}
+		}
+	})
 }
 
 // compareMasterToEmbedded reads both files and reports a test error if they differ.

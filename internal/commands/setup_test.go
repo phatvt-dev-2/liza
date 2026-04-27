@@ -40,6 +40,17 @@ func TestSetupCommand_NewInstall(t *testing.T) {
 	if _, err := os.Stat(langFile); os.IsNotExist(err) {
 		t.Error("skills/clean-code/languages/go.md not created")
 	}
+
+	// Verify support docs are installed to targetDir/support-docs/
+	supportFile := filepath.Join(tmpDir, "support-docs", "USAGE_MULTI_AGENTS.md")
+	if _, err := os.Stat(supportFile); os.IsNotExist(err) {
+		t.Error("support-docs/USAGE_MULTI_AGENTS.md not created")
+	}
+
+	supportIndex := filepath.Join(tmpDir, "support-docs", "SUPPORT.md")
+	if _, err := os.Stat(supportIndex); os.IsNotExist(err) {
+		t.Error("support-docs/SUPPORT.md not created")
+	}
 }
 
 func TestSetupCommand_ExistingWithoutForce(t *testing.T) {

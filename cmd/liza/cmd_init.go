@@ -40,12 +40,13 @@ var versionCmd = &cobra.Command{
 
 var setupCmd = &cobra.Command{
 	Use:   "setup",
-	Short: "One-time global setup of Liza contracts and skills",
-	Long: `Write Liza contracts and skills to ~/.liza/ for global access.
+	Short: "One-time global setup of Liza contracts, skills, and support docs",
+	Long: `Write Liza contracts, skills, and support docs to ~/.liza/ for global access.
 
 This is a one-time setup step that populates the global config directory.
 Contracts are written flat (e.g., ~/.liza/CORE.md) and skills are written
-to ~/.liza/skills/.
+to ~/.liza/skills/. Installable support docs are written to
+~/.liza/support-docs/.
 
 After running setup, use 'liza init' in each project to create the
 project-local blackboard and symlinks.

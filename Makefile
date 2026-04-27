@@ -16,10 +16,11 @@ LDFLAGS=-ldflags "-X 'github.com/liza-mas/liza/internal/embedded.Version=$(VERSI
 .PHONY: sync-embedded
 sync-embedded:
 	@echo "Syncing files to internal/embedded/..."
-	@rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/docs internal/embedded/specs
-	@mkdir -p internal/embedded/contracts internal/embedded/skills
+	@rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/support-docs internal/embedded/docs internal/embedded/specs
+	@mkdir -p internal/embedded/contracts internal/embedded/skills internal/embedded/support-docs
 	@cp contracts/*.md internal/embedded/contracts/
 	@cp -r skills/* internal/embedded/skills/
+	@cp support-docs/*.md internal/embedded/support-docs/
 	@find internal/embedded/skills/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 	@echo "Files synced successfully"
 
@@ -49,7 +50,7 @@ clean:
 	rm -f $(BINARY_NAME)-*
 	rm -f coverage.out
 	rm -rf dist
-	rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/docs internal/embedded/specs
+	rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/support-docs internal/embedded/docs internal/embedded/specs
 	go clean
 
 # Install the binaries

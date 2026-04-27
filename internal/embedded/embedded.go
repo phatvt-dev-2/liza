@@ -33,6 +33,9 @@ var contractsFS embed.FS
 //go:embed skills
 var skillsFS embed.FS
 
+//go:embed support-docs/*.md
+var supportDocsFS embed.FS
+
 //go:embed "claude-settings.json"
 var claudeSettingsContent []byte
 
@@ -71,11 +74,10 @@ var guardrailsTemplateContent []byte
 //go:embed "claudeignore"
 var claudeIgnoreContent []byte
 
-//go:embed "support.md"
-var supportDocContent []byte
-
 //go:embed "pipeline.yaml"
 var pipelineConfigContent []byte
+
+const supportDocEmbeddedPath = "support-docs/SUPPORT.md"
 
 // PipelineConfigContent returns the raw embedded pipeline.yaml content.
 // Used by init to auto-freeze when --config is not provided.
@@ -83,17 +85,26 @@ func PipelineConfigContent() []byte {
 	return pipelineConfigContent
 }
 
-// PlanGlobalFiles returns the list of absolute paths that WriteGlobalFiles would create,
-// without actually writing anything. Useful for pre-flight checks and verbose output.
+type embeddedCorpus struct {
+	name    string
+	fs      embed.FS
+	destDir string
+}
+
+func globalCorpora(targetDir string) []embeddedCorpus {
+	return []embeddedCorpus{
+		{name: "contracts", fs: contractsFS, destDir: targetDir},
+		{name: "skills", fs: skillsFS, destDir: filepath.Join(targetDir, "skills")},
+		{name: "support docs", fs: supportDocsFS, destDir: filepath.Join(targetDir, "support-docs")},
+	}
+}
+
+// PlanGlobalFiles returns the list of absolute paths that WriteGlobalFiles would
+// create, without actually writing anything. Useful for pre-flight checks and
+// verbose output.
 func PlanGlobalFiles(targetDir string) []string {
 	var paths []string
-	for _, pair := range []struct {
-		fs      embed.FS
-		destDir string
-	}{
-		{contractsFS, targetDir},
-		{skillsFS, filepath.Join(targetDir, "skills")},
-	} {
+	for _, pair := range globalCorpora(targetDir) {
 		_ = fs.WalkDir(pair.fs, ".", func(path string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || path == "." {
 				return nil
@@ -109,24 +120,21 @@ func PlanGlobalFiles(targetDir string) []string {
 	return paths
 }
 
-// WriteGlobalFiles writes contracts and skills to the global Liza directory (~/.liza/).
-// Contracts are written flat into targetDir/ and skills into targetDir/skills/.
-// Markdown files are prepended with YAML frontmatter containing version metadata.
-// Files whose absolute path appears in skipFiles are silently skipped.
-// Returns the list of absolute paths written.
+// WriteGlobalFiles writes contracts, skills, and support docs to the global
+// Liza directory (~/.liza/). Contracts are written flat into targetDir/,
+// skills into targetDir/skills/, and support docs into
+// targetDir/support-docs/. Markdown files are prepended with YAML frontmatter
+// containing version metadata. Files whose absolute path appears in skipFiles
+// are silently skipped. Returns the list of absolute paths written.
 func WriteGlobalFiles(targetDir string, skipFiles map[string]bool) ([]string, error) {
 	var written []string
-	contractPaths, err := writeEmbeddedFS(contractsFS, targetDir, skipFiles)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write contracts: %w", err)
+	for _, corpus := range globalCorpora(targetDir) {
+		paths, err := writeEmbeddedFS(corpus.fs, corpus.destDir, skipFiles)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write %s: %w", corpus.name, err)
+		}
+		written = append(written, paths...)
 	}
-	written = append(written, contractPaths...)
-
-	skillPaths, err := writeEmbeddedFS(skillsFS, filepath.Join(targetDir, "skills"), skipFiles)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write skills: %w", err)
-	}
-	written = append(written, skillPaths...)
 
 	return written, nil
 }
@@ -262,7 +270,7 @@ func frontmatter() string {
 // ListEmbeddedFiles returns a list of all embedded file paths (for testing).
 func ListEmbeddedFiles() ([]string, error) {
 	var files []string
-	for _, fsys := range []embed.FS{contractsFS, skillsFS} {
+	for _, fsys := range []embed.FS{contractsFS, skillsFS, supportDocsFS} {
 		collected, err := collectFiles(fsys)
 		if err != nil {
 			return nil, err
@@ -1141,11 +1149,15 @@ func WriteClaudeIgnore(projectRoot string, reader *bufio.Reader) error {
 	return nil
 }
 
-// WriteSupportDoc writes the embedded SUPPORT.md to the .liza/ directory.
-// Always overwrites — content tracks the Liza version.
+// WriteSupportDoc writes the canonical SUPPORT.md body to the .liza/
+// directory. Always overwrites — content tracks the Liza version.
 func WriteSupportDoc(lizaDir string) error {
+	content, err := supportDocsFS.ReadFile(supportDocEmbeddedPath)
+	if err != nil {
+		return fmt.Errorf("failed to read embedded SUPPORT.md: %w", err)
+	}
 	supportPath := filepath.Join(lizaDir, "SUPPORT.md")
-	if err := os.WriteFile(supportPath, supportDocContent, 0644); err != nil {
+	if err := os.WriteFile(supportPath, content, 0644); err != nil {
 		return fmt.Errorf("failed to write SUPPORT.md: %w", err)
 	}
 	return nil

@@ -118,6 +118,12 @@ func TestInitProject_Success(t *testing.T) {
 		t.Fatal("archive directory was not created")
 	}
 
+	// Verify SUPPORT.md exists
+	supportPath := filepath.Join(lizaDir, "SUPPORT.md")
+	if _, err := os.Stat(supportPath); os.IsNotExist(err) {
+		t.Fatal("SUPPORT.md was not created")
+	}
+
 	// Verify pipeline.yaml frozen
 	pipelinePath := filepath.Join(lizaDir, "pipeline.yaml")
 	if _, err := os.Stat(pipelinePath); os.IsNotExist(err) {

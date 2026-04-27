@@ -140,7 +140,7 @@ Most tools either expect the detailed spec already done (OpenSpec, GSD) or have 
 
 The positioning question is not "who starts highest" but "what's the minimum human input that reliably produces working code." BMAD answers with iterative PM-agent interviews; Liza answers with one front-loaded goal doc, then mechanical pipeline execution. A ~200-line goal document describing the "Diagnosis Design" method has been sufficient to produce a complete three-tier application (FastAPI backend, Go CLI, React web UI) in a single Liza run, with human intervention limited to answering questions (checkpoint-summary skill) between goal and merged code; the supporting run artifacts are in a non-public Diagnosis Design repo.
 
-**Rule of thumb: agents may make implementation choices but not product decisions.** The [goal document](docs/how-to-produce-a-goal.md) is where every product decision lives. The goal-setting phase uses pairing (Coach mode for surfacing WHY, Challenger mode for stress-testing WHAT) because this phase has the highest decision density — every ambiguity resolved here prevents wrong turns downstream.
+**Rule of thumb: agents may make implementation choices but not product decisions.** The [goal document](support-docs/how-to-produce-a-goal.md) is where every product decision lives. The goal-setting phase uses pairing (Coach mode for surfacing WHY, Challenger mode for stress-testing WHAT) because this phase has the highest decision density — every ambiguity resolved here prevents wrong turns downstream.
 
 [Full competitive survey →](specs/architecture/mas-survey.md)
 
@@ -236,9 +236,9 @@ The interactive wizard walks through mode selection (pairing vs full MAS), agent
 
 > **New to Liza?** Start with Pairing mode — it's the fastest way to experience how the behavioral contract changes agent behavior. The trust you build watching agents pause at gates, surface assumptions, and validate before claiming done is what makes letting them run autonomously in Multi-Agent mode a comfortable next step.
 
-- **Pairing**: See [Pairing Guide](docs/USAGE_PAIRING.md) — human-agent collaboration under contract
-- **Multi-Agent (Liza)**: See [USAGE](docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
-- **Reference**: [Configuration](docs/CONFIGURATION.md) · [Recipes](docs/RECIPES.md) · [Troubleshooting](docs/TROUBLESHOOTING.md)
+- **Pairing**: See [Pairing Guide](support-docs/USAGE_PAIRING.md) — human-agent collaboration under contract
+- **Multi-Agent (Liza)**: See [USAGE](support-docs/USAGE_MULTI_AGENTS.md), then try the [DEMO](docs/DEMO.md)
+- **Reference**: [Configuration](support-docs/CONFIGURATION.md) · [Recipes](docs/RECIPES.md) · [Troubleshooting](support-docs/TROUBLESHOOTING.md)
 
 **Pairing mode** — install once, then start coding in any project (`liza init` still required per project):
 
@@ -253,9 +253,9 @@ Or you may choose to make it your Socratic colleague, your rubber duck, or your 
 **Multi-agent mode** — autonomous spec-to-code pipeline:
 1. `liza init "[Goal description]" --spec vision.md` (this file needs to be committed) . Use the `--entry-point detailed-spec` option to skip the spec phase and go coding directly.
 2. `liza tui` — the TUI shows live system state (agents, tasks, alerts, sprint metrics). From it you can spawn agents with role autocompletion (`s` uses configured default CLI, `S` lets you pick). Pause/resume the system, add tasks, and trigger sprint checkpoints.
-   Check [Quick Start](docs/USAGE_MULTI_AGENTS.md#quick-start-target-usage) for required roles and options (configuring default CLI, logging).
+   Check [Quick Start](support-docs/USAGE_MULTI_AGENTS.md#quick-start-target-usage) for required roles and options (configuring default CLI, logging).
 
-Refer to [How to Produce a Goal Document For Liza](docs/how-to-produce-a-goal.md) to write a good input doc to use as a `--spec` argument.
+Refer to [How to Produce a Goal Document For Liza](support-docs/how-to-produce-a-goal.md) to write a good input doc to use as a `--spec` argument.
 
 ### Common Commands
 
@@ -285,7 +285,7 @@ liza analyze                                        # Circuit breaker analysis
 
 ### Diagnosing Issues
 
-After your first sprint, run `/liza-logs` in any coding agent session to identify frictions. New users will typically find setup issues (missing tool permissions in `AGENT_TOOLS.md`, wrong `--post-worktree-cmd`, stale `~/.liza/` files). Seasoned users use it to catch regressions — provider CLI updates that break flags, context budget growth from prompt changes, or new tool failure patterns. Use `/context-engineering` when the question is whether agents received the right prompt context, too much context, or poor handoff context. See [Analyzing Agent Logs](docs/USAGE_MULTI_AGENTS.md#analyzing-agent-logs) for details.
+After your first sprint, run `/liza-logs` in any coding agent session to identify frictions. New users will typically find setup issues (missing tool permissions in `AGENT_TOOLS.md`, wrong `--post-worktree-cmd`, stale `~/.liza/` files). Seasoned users use it to catch regressions — provider CLI updates that break flags, context budget growth from prompt changes, or new tool failure patterns. Use `/context-engineering` when the question is whether agents received the right prompt context, too much context, or poor handoff context. See [Analyzing Agent Logs](support-docs/USAGE_MULTI_AGENTS.md#analyzing-agent-logs) for details.
 
 ### Recommended Tools
 

@@ -12,7 +12,8 @@ This document is a navigation aid: where to find things and why they're organize
 ├── contracts/              # Behavioral contracts governing agents
 ├── specs/                  # Specifications (durable agent context)
 ├── skills/                 # Domain-specific agent skills
-├── docs/                   # User-facing documentation
+├── docs/                   # Public docs, walkthroughs, and compatibility indexes/stubs
+├── support-docs/           # Installable operational docs copied to ~/.liza/support-docs/
 ├── lessons/                # Project-specific operational lessons
 ├── templates/              # Document templates
 │
@@ -149,24 +150,33 @@ Locking is internal to the binary — no external `flock` wrapper needed.
 
 ## docs/
 
-User-facing documentation.
+Public documentation, walkthroughs, and compatibility stubs for moved support docs.
 
 | File                    | Purpose |
 |-------------------------|---------|
-| `USAGE_MULTI_AGENTS.md` | Quick start guide (Liza multi-agent) |
-| `USAGE_PAIRING.md`      | Pairing mode guide (human-agent collaboration) |
-| `CONFIGURATION.md`      | Configuration documentation |
 | `DEMO.md`               | Full end-to-end walkthrough |
 | `TESTING.md`            | Testing documentation |
 | `PERFORMANCE.md`        | Performance documentation |
 | `RECIPES.md`            | Usage recipes |
-| `TROUBLESHOOTING.md`    | Common issues and fixes |
 | `liza-hardened-mas.md`  | Hardening measures inventory (defense-in-depth layers) |
 | `release_notes/`        | Version changelogs |
 | `demo-benchmark/`       | Multi-agent demo traces and comparisons |
 | `agent-testimony/`      | Agent session transcripts and observations |
 
-Contract activation guide: `contracts/contract-activation.md`
+## support-docs/
+
+Installable operational documentation written to `~/.liza/support-docs/` by
+`liza setup`.
+
+| File | Purpose |
+|------|---------|
+| `USAGE_MULTI_AGENTS.md` | Quick start guide (Liza multi-agent) |
+| `USAGE_PAIRING.md` | Pairing mode guide (human-agent collaboration) |
+| `CONFIGURATION.md` | Configuration documentation |
+| `TROUBLESHOOTING.md` | Common issues and fixes |
+| `CUSTOMIZING_AGENT_TOOLS.md` | How to adapt `AGENT_TOOLS.md` to the local tool surface |
+| `how-to-produce-a-goal.md` | How to write a good goal doc for `liza init --spec` |
+| `SUPPORT.md` | Installed support reference copied into project-local `.liza/` |
 
 ## templates/
 
@@ -184,8 +194,8 @@ ADR template lives at `specs/architecture/ADR/TEMPLATE.md`.
 For newcomers:
 
 1. `README.md` — What Liza is and why
-2. `docs/USAGE_PAIRING.md` — Pairing mode: what you get and how to use it
+2. `support-docs/USAGE_PAIRING.md` — Pairing mode: what you get and how to use it
 3. `specs/build/0 - Vision.md` — Design philosophy and success criteria
 4. `specs/architecture/overview.md` — System components and data flow
 5. `contracts/CORE.md` — The behavioral contract
-6. `docs/USAGE_MULTI_AGENTS.md` — How to run the multi-agent system
+6. `support-docs/USAGE_MULTI_AGENTS.md` — How to run the multi-agent system

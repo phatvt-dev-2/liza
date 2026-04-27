@@ -6,8 +6,8 @@
 
 | Document | Purpose |
 |----------|---------|
-| [Pairing Usage](USAGE_PAIRING.md) | Practical guide to human-agent pairing under contract |
-| [Multi-Agent Usage](USAGE_MULTI_AGENTS.md) | Running Liza as a multi-agent system |
+| [Pairing Usage](../support-docs/USAGE_PAIRING.md) | Practical guide to human-agent pairing under contract |
+| [Multi-Agent Usage](../support-docs/USAGE_MULTI_AGENTS.md) | Running Liza as a multi-agent system |
 | [Demo](DEMO.md) | End-to-end walkthrough: Hello World Python CLI |
 | [Recipes](RECIPES.md) | Step-by-step workflows for common operations |
 
@@ -15,10 +15,10 @@
 
 | Document | Purpose |
 |----------|---------|
-| [Configuration](CONFIGURATION.md) | System config, tuning parameters, environment variables |
+| [Configuration](../support-docs/CONFIGURATION.md) | System config, tuning parameters, environment variables |
 | [Performance](PERFORMANCE.md) | Lock metrics, state caching, file system watching, tuning |
 | [Testing](TESTING.md) | Running tests, coverage targets, test utilities |
-| [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions |
+| [Troubleshooting](../support-docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
 ### Demo Benchmark
 
@@ -52,14 +52,14 @@
 ## Reading Order
 
 **Getting started:**
-1. [Pairing Usage](USAGE_PAIRING.md) — how to pair with an agent
+1. [Pairing Usage](../support-docs/USAGE_PAIRING.md) — how to pair with an agent
 2. [Demo](DEMO.md) — see it in action
-3. [Configuration](CONFIGURATION.md) — tune the system
+3. [Configuration](../support-docs/CONFIGURATION.md) — tune the system
 
 **Running multi-agent sprints:**
-1. [Multi-Agent Usage](USAGE_MULTI_AGENTS.md) — activation and setup
+1. [Multi-Agent Usage](../support-docs/USAGE_MULTI_AGENTS.md) — activation and setup
 2. [Recipes](RECIPES.md) — operational workflows
-3. [Troubleshooting](TROUBLESHOOTING.md) — when things go wrong
+3. [Troubleshooting](../support-docs/TROUBLESHOOTING.md) — when things go wrong
 
 ---
 

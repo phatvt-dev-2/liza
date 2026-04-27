@@ -33,6 +33,8 @@ func TestListEmbeddedFiles(t *testing.T) {
 		"skills/code-review/SKILL.md":           false,
 		"skills/debugging/SKILL.md":             false,
 		"skills/clean-code/languages/go.md":     false,
+		"support-docs/SUPPORT.md":               false,
+		"support-docs/USAGE_MULTI_AGENTS.md":    false,
 	}
 
 	for _, file := range files {
@@ -259,6 +261,41 @@ func TestStripFrontmatter(t *testing.T) {
 				t.Errorf("expected %q, got %q", tt.expected, result)
 			}
 		})
+	}
+}
+
+func TestSupportDocCanonicalContent(t *testing.T) {
+	globalDir := t.TempDir()
+	projectLizaDir := t.TempDir()
+
+	_, err := WriteGlobalFiles(globalDir, map[string]bool{})
+	if err != nil {
+		t.Fatalf("WriteGlobalFiles failed: %v", err)
+	}
+	if err := WriteSupportDoc(projectLizaDir); err != nil {
+		t.Fatalf("WriteSupportDoc failed: %v", err)
+	}
+
+	masterContent, err := supportDocsFS.ReadFile(supportDocEmbeddedPath)
+	if err != nil {
+		t.Fatalf("reading embedded support doc: %v", err)
+	}
+
+	globalContent, err := os.ReadFile(filepath.Join(globalDir, "support-docs", "SUPPORT.md"))
+	if err != nil {
+		t.Fatalf("reading global support doc: %v", err)
+	}
+
+	projectContent, err := os.ReadFile(filepath.Join(projectLizaDir, "SUPPORT.md"))
+	if err != nil {
+		t.Fatalf("reading project support doc: %v", err)
+	}
+
+	if !bytes.Equal(stripFrontmatter(globalContent), masterContent) {
+		t.Fatal("global installed SUPPORT.md does not match canonical support-doc body")
+	}
+	if !bytes.Equal(projectContent, masterContent) {
+		t.Fatal("project-local SUPPORT.md does not match canonical support-doc body")
 	}
 }
 

@@ -1,4 +1,4 @@
 # Usage
 
-- [For Pairing mode](USAGE_PAIRING.md)
-- [For Liza (multi-agent) mode](USAGE_MULTI_AGENTS.md)
+- [For Pairing mode](../support-docs/USAGE_PAIRING.md)
+- [For Liza (multi-agent) mode](../support-docs/USAGE_MULTI_AGENTS.md)

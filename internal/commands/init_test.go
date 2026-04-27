@@ -1096,6 +1096,11 @@ func TestInitCommandWithConfig_NoConfigAutoFreezes(t *testing.T) {
 		t.Errorf("pipeline.yaml should be auto-frozen from embedded config")
 	}
 
+	supportPath := filepath.Join(tmpDir, ".liza", "SUPPORT.md")
+	if _, err := os.Stat(supportPath); os.IsNotExist(err) {
+		t.Errorf("SUPPORT.md should be written during init")
+	}
+
 	// Verify pipeline_version is set
 	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
 	state, err := bb.Read()
