@@ -150,9 +150,11 @@ The positioning question is not "who starts highest" but "what's the minimum hum
 
 ### Requirements
 
+- Unix-like environment. On Windows, use WSL with `bash`, not Powershell.
 - A supported coding agent CLI: Claude Code, Codex, Kimi, Mistral, or Gemini (see [Provider Compatibility](#provider-compatibility)).
   Liza runs on top of these CLIs — your provider subscription covers usage, no separate API billing needed.
 - Git 2.38+ (for full worktree support)
+- [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) — used by contracts and skills as the default code search tool
 - Go 1.25.5+ (only for building from source — pre-built binaries available via `install.sh`)
 
 ### Installation
@@ -195,19 +197,21 @@ liza version
 ```
 
 ```bash
-liza setup  # initial install or liza upgrade: installs contracts + skills to ~/.liza/
+liza setup  # initial install or liza upgrade: installs contracts, skills, and support docs to ~/.liza/
 # With: agent-specific activation (skill symlinks, contract config)
 liza setup --claude --codex --gemini --mistral
 ```
 
-> **️⚠️ Customize your tool setup:**<br>
-> The installed `~/.liza/AGENT_TOOLS.md` ships with a default
-> tool configuration. It defines which tools agents prefer (IDE integrations,
-> search providers, documentation sources, etc.) and is specific to each user's environment.<br>
-> Context management is of paramount importance — see [Recommended Tools](#recommended-tools) below.<br>
-> Edit `~/.liza/AGENT_TOOLS.md` to match your own setup — remove tools you don't have,
-> add ones you do, and adjust precedence rules accordingly.<br>
-> Or better, provide your own file at install time: `liza setup --agent-tools ~/my-tools.md`.<br>
+> **⚠️ Do not skip `AGENT_TOOLS.md` customization.** Before your first real run, review
+> `~/.liza/AGENT_TOOLS.md` against your actual environment, or provide your own file with
+> `liza setup --agent-tools ~/my-tools.md`.
+>
+> This is operationally critical: agents treat `AGENT_TOOLS.md` as their tool
+> contract. A mismatched file causes wasted context, repeated fallback attempts,
+> and in multi-agent mode can point agents at tools that are structurally wrong
+> for worktree-based execution.
+>
+> See [Customizing AGENT_TOOLS.md](support-docs/CUSTOMIZING_AGENT_TOOLS.md).
 
 To init your project repo, do:
 ```bash
@@ -296,8 +300,22 @@ Liza optimizes cost-to-quality, not cost-to-lets-cross-fingers. These tools redu
 | [RTK](https://github.com/rtk-ai/rtk) | CLI proxy that compresses tool output (git, go, pytest, ...) — ~90% token savings on command results | Fewer tokens per tool call, more budget for reasoning |
 | [MorphLLM MCP](https://www.morphllm.com/) (WarpGrep) | Fast Apply edits via `// ... existing code ...` placeholders + semantic codebase search | Avoids reading full files into context for edits |
 | [claude-usage](https://github.com/phuryn/claude-usage) | Tracks Claude subscription usage with cost breakdown | Visibility into where tokens go — essential for optimizing agent configurations |
+| [ast-grep](https://ast-grep.github.io/) | AST-aware structural search/replace — matches code structure, not text | Finds patterns regex can't express (function signatures, call shapes, nested expressions) |
+| [mdq](https://github.com/yshavit/mdq) | Extract specific sections from Markdown files — like `jq` for Markdown | Reads only the section you need from large `.md` files, reducing context noise |
+| [jq](https://jqlang.github.io/jq/) / [yq](https://github.com/mikefarah/yq) | Query and extract fields from JSON / YAML / TOML | Avoids reading full structured data files into context |
+| [filesystem MCP](https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-filesystem) | Bulk file operations — multi-file reads, recursive directory trees, file metadata | Batch reads in one call instead of sequential Read tool calls |
+| [JetBrains MCP](https://www.jetbrains.com/help/ai-assistant/mcp.html#use_ide_as_an_mcp_server) | IDE-aware indexed search, symbol info, refactoring, and diagnostics | Fast workspace-aware navigation and editing when IDE state is fresh |
+| [perplexity](https://github.com/perplexityai/modelcontextprotocol/) | Current-info web search with synthesis | Lower-context discovery for external libraries, unfamiliar tech, and current information |
+| [context7](https://context7.com/docs/resources/all-clients) | Structured API reference lookup with examples | High-signal library/API docs with consistent formatting |
+| [Ref](https://ref.tools/) | Broad documentation and guide search | Better coverage for tutorials, niche libraries, and how-to material |
+| [fetch MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) | Exact web page retrieval | Raw HTML, pagination, and precise page content without summarization |
+| [deepwiki](https://docs.devin.ai/work-with-devin/deepwiki-mcp) | Repository architecture and code-structure exploration | Fast high-level orientation on unfamiliar repositories |
+| [postgres](https://github.com/modelcontextprotocol/servers#using-an-mcp-client) | Read-only SQL exploration and validation | Direct schema and data inspection when a database MCP is available |
+| [LSP](https://microsoft.github.io/language-server-protocol/) | Semantic navigation, references, and call hierarchy | Type-aware code understanding when workspace language servers are configured |
 
-Configure tool preferences in `~/.liza/AGENT_TOOLS.md` (see [installation notes](#installation) above).
+These tools are referenced in the default `~/.liza/AGENT_TOOLS.md`; see
+[Customizing AGENT_TOOLS.md](support-docs/CUSTOMIZING_AGENT_TOOLS.md).
+Liza does not install them, so install the ones you intend to use, and remove or replace the others in `AGENT_TOOLS.md` to match your environment.
 
 **`.claudeignore`** — Claude Code reads all files on disk, including git-tracked ones it doesn't need. Add a `.claudeignore` at your project root (same syntax as `.gitignore`) to keep irrelevant content out of the context budget. Liza ships one by default; review and adapt it to your project. Common candidates:
 

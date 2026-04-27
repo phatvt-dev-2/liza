@@ -359,47 +359,47 @@ IN_PROGRESS → CHECKPOINT ──→ COMPLETED ──→ (new sprint) IN_PROGRES
 
 The `liza` binary provides all system operations. Key commands:
 
-| Command | Purpose |
-|---------|---------|
-| **Setup & Init** | |
-| `liza setup` | One-time global setup of contracts, skills, and support docs to `~/.liza/` |
+| Command | Purpose                                                                                                              |
+|---------|----------------------------------------------------------------------------------------------------------------------|
+| **Setup & Init** |                                                                                                                      |
+| `liza setup` | One-time global setup of contracts, skills and support docs to `~/.liza/`                                            |
 | `liza init <goal> --spec <spec_ref> [--branch <name>]` | Initialize `.liza/` directory with blackboard (spec_ref defaults to specs/vision.md, branch defaults to integration) |
-| **Agents & Monitoring** | |
-| `liza agent <role> [--agent-id <id>]` | Agent supervisor (start, restart, backoff loop; ID auto-assigned if omitted) |
-| `liza tui` | Live TUI: spawn agents, monitor state, manage system |
-| `liza status` | Show system and task status at a glance |
-| **System Control** | |
-| `liza pause` / `liza resume` | Pause/resume system (resume also advances CHECKPOINT → COMPLETED → new sprint) |
-| `liza replan [task-id]` | Amend a planner's output at CHECKPOINT (invalidate old task, create new planning task) |
-| `liza stop` / `liza start` | Stop/start system |
-| `liza sprint-checkpoint` | Create a checkpoint (halt + summary) |
-| **Task Operations** | |
-| `liza add-task` | Add a new task to the state |
-| `liza claim-task <task-id> <agent-id>` | Atomically claim a task for a doer agent (creates worktree, updates state) |
-| `liza submit-for-review <task-id> [commit-ref]` | Submit a task for review (doer agents; defaults to worktree `HEAD`) |
-| `liza submit-verdict <task-id> <APPROVED\|REJECTED> [--reason "<reason>"]` | Submit a review verdict (reviewer agents; `--reason` required for REJECTED) |
-| `liza mark-blocked <task-id>` | Mark a task as BLOCKED with reason and questions |
-| `liza assess-blocked <task-id>` | Record orchestrator assessment of a BLOCKED task (prevents re-wake loops) |
-| `liza assess-hypothesis-exhausted <task-id>` | Record orchestrator assessment of a hypothesis-exhausted task (2+ coders failed) |
-| `liza cancel-task <task-id> --reason "..."` | Cancel a task (transition to ABANDONED with audit trail) |
-| `liza handoff <task-id> <summary> <next-action>` | Context-exhaustion handoff for a doer agent's claimed task |
-| `liza supersede-task <task-id> [replacements] --reason "..."` | Mark a task as SUPERSEDED (with or without replacements) |
-| `liza proceed <task-id> <transition>` | Execute inter-pair pipeline transition (e.g., code-plan-to-coding) |
-| **Worktree Management** | |
-| `liza wt-create <task-id>` | Create a worktree for an executing task |
-| `liza wt-merge <task-id>` | Merge an approved task into the integration branch (reviewer agents) |
-| `liza wt-delete <task-id>` | Delete a worktree for a completed/abandoned task |
-| **Recovery** | |
-| `liza recover-task <task-id>` | Recover by task ID (release claims + remove worktree/branch) |
-| `liza recover-agent <agent-id>` | Recover by agent ID (release claim + remove worktree + delete agent) |
-| `liza release-claim <task-id> [--role R]` | Release claim on a task (manual, granular recovery) |
-| `liza delete agent <id>` / `liza delete task <id>` | Delete an agent or task from state |
-| **Analysis** | |
-| `liza validate` | Validate blackboard state against schema invariants |
-| `liza analyze` | Run circuit breaker pattern detection |
-| `liza update-sprint-metrics` | Recompute sprint metrics from current state |
-| `liza clear-stale-review-claims` | Clear expired review leases |
-| `liza get <query>` | Query state data (tasks, agents, etc.) |
+| **Agents & Monitoring** |                                                                                                                      |
+| `liza agent <role> [--agent-id <id>]` | Agent supervisor (start, restart, backoff loop; ID auto-assigned if omitted)                                         |
+| `liza tui` | Live TUI: spawn agents, monitor state, manage system                                                                 |
+| `liza status` | Show system and task status at a glance                                                                              |
+| **System Control** |                                                                                                                      |
+| `liza pause` / `liza resume` | Pause/resume system (resume also advances CHECKPOINT → COMPLETED → new sprint)                                       |
+| `liza replan [task-id]` | Amend a planner's output at CHECKPOINT (invalidate old task, create new planning task)                               |
+| `liza stop` / `liza start` | Stop/start system                                                                                                    |
+| `liza sprint-checkpoint` | Create a checkpoint (halt + summary)                                                                                 |
+| **Task Operations** |                                                                                                                      |
+| `liza add-task` | Add a new task to the state                                                                                          |
+| `liza claim-task <task-id> <agent-id>` | Atomically claim a task for a doer agent (creates worktree, updates state)                                           |
+| `liza submit-for-review <task-id> [commit-ref]` | Submit a task for review (doer agents; defaults to worktree `HEAD`)                                                  |
+| `liza submit-verdict <task-id> <APPROVED\|REJECTED> [--reason "<reason>"]` | Submit a review verdict (reviewer agents; `--reason` required for REJECTED)                                          |
+| `liza mark-blocked <task-id>` | Mark a task as BLOCKED with reason and questions                                                                     |
+| `liza assess-blocked <task-id>` | Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)                                            |
+| `liza assess-hypothesis-exhausted <task-id>` | Record orchestrator assessment of a hypothesis-exhausted task (2+ coders failed)                                     |
+| `liza cancel-task <task-id> --reason "..."` | Cancel a task (transition to ABANDONED with audit trail)                                                             |
+| `liza handoff <task-id> <summary> <next-action>` | Context-exhaustion handoff for a doer agent's claimed task                                                           |
+| `liza supersede-task <task-id> [replacements] --reason "..."` | Mark a task as SUPERSEDED (with or without replacements)                                                             |
+| `liza proceed <task-id> <transition>` | Execute inter-pair pipeline transition (e.g., code-plan-to-coding)                                                   |
+| **Worktree Management** |                                                                                                                      |
+| `liza wt-create <task-id>` | Create a worktree for an executing task                                                                              |
+| `liza wt-merge <task-id>` | Merge an approved task into the integration branch (reviewer agents)                                                 |
+| `liza wt-delete <task-id>` | Delete a worktree for a completed/abandoned task                                                                     |
+| **Recovery** |                                                                                                                      |
+| `liza recover-task <task-id>` | Recover by task ID (release claims + remove worktree/branch)                                                         |
+| `liza recover-agent <agent-id>` | Recover by agent ID (release claim + remove worktree + delete agent)                                                 |
+| `liza release-claim <task-id> [--role R]` | Release claim on a task (manual, granular recovery)                                                                  |
+| `liza delete agent <id>` / `liza delete task <id>` | Delete an agent or task from state                                                                                   |
+| **Analysis** |                                                                                                                      |
+| `liza validate` | Validate blackboard state against schema invariants                                                                  |
+| `liza analyze` | Run circuit breaker pattern detection                                                                                |
+| `liza update-sprint-metrics` | Recompute sprint metrics from current state                                                                          |
+| `liza clear-stale-review-claims` | Clear expired review leases                                                                                          |
+| `liza get <query>` | Query state data (tasks, agents, etc.)                                                                               |
 
 **Important:** The supervisor claims tasks *before* starting the agent CLI. This avoids interactive permission prompts in non-interactive mode. Agents receive their assigned task in the bootstrap prompt and should NOT call claim commands directly.
 

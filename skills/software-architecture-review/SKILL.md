@@ -161,7 +161,7 @@ When Complexity is your primary lens, START with a systematic LOC scan before an
 find . -name "*.py" -type f ! -path "*/__pycache__/*" -exec wc -l {} + | sort -rn | head -20
 ```
 Flag ALL files >500 LOC as potential god scripts. For each:
-1. Grep REVIEW_FILE for the filename + "god" (e.g., `grep -i "detect_platforms.*god\|god.*detect_platforms"`) — do NOT read full review
+1. Search REVIEW_FILE for the filename + "god" (e.g., `rg -i "detect_platforms.*god|god.*detect_platforms"`) — do NOT read full review
 2. If not already flagged, investigate — god scripts tend to cluster other smells (duplication, coupling, silent failures)
 3. Note findings for merge phase
 
@@ -224,7 +224,7 @@ Do NOT proceed with enrichment without explicit user choice. The prompt exists b
    | 2 | Start from config — what's configurable? What's hardcoded that shouldn't be? |
    | 3 | Start from a random mid-sized file (100-300 LOC) — trace its dependencies |
    | 4 | Start from specs/ or docs/ — what's specified but not implemented? What's implemented but not specified? |
-   | 5 | Start from error handling — grep for `except`, `raise`, `error` — how are failures handled? |
+   | 5 | Start from error handling — search for `except`, `raise`, `error` — how are failures handled? |
    | 6 | Start from data flow — pick an input, trace it to output |
    | 7 | Start from documented smells in existing review — investigate each for clustering issues |
 

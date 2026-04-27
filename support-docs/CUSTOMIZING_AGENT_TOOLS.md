@@ -13,6 +13,7 @@ or wrong for the current mode.
 Before your first real run:
 
 - Review `~/.liza/AGENT_TOOLS.md` against your actual MCP servers, CLI tools, and editor integrations.
+- If you use Claude Code, allow the CLI tools and MCP servers you intend to use in `~/.claude/settings.json`; otherwise agents may be routed to tools that Claude is not allowed to call.
 - Remove tools and servers you do not have.
 - If you have the capability under a different provider or tool name, adapt the
   row to that surface instead of deleting it.

@@ -1,3 +1,9 @@
+---
+liza_version: "0.2.0"
+liza_git_commit: "5f89648a"
+liza_build_date: "2026-04-27T14:54:53Z"
+---
+
 # Core Contract
 
 **This file is loaded as system prompt — process it TILL THE END before proceeding.
@@ -210,7 +216,7 @@ If this cannot be stated unambiguously → BLOCKED.
 ```
 Doc Impact: [none | list of affected docs]
 ```
-Categories: API/interface → usage docs, behavior → specs, new capability → README/feature docs, config/env → setup docs. "None" requires a search (`grep -rl "related-feature" docs/ specs/`); if siblings are documented, the new feature needs the same treatment.
+Categories: API/interface → usage docs, behavior → specs, new capability → README/feature docs, config/env → setup docs. "None" requires a search (`rg -l "related-feature" docs/ specs/`); if siblings are documented, the new feature needs the same treatment.
 
 **Test Impact Declaration:** Before execution, declare:
 ```
@@ -345,7 +351,7 @@ One intent per commit.
 Prerequisite claims ('X requires Y first') must specify what fails without Y, not just what's cleaner with it.
 
 **DRY Gate:** Before writing ≥10 lines of utility-like code (parsing, formatting, iteration patterns, error handling):
-1. Search codebase for similar patterns: `grep -r "pattern_hint"` or glob for related files
+1. Search codebase for similar patterns: `rg "pattern_hint"` or glob for related files
 2. If similar code exists: reuse or extract to shared location
 3. If writing new utility: propose shared location before inlining
 

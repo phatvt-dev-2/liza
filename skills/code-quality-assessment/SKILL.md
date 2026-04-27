@@ -224,10 +224,10 @@ Collect per language (prefer `cloc`, `scc`, or `tokei` when available; fall back
 
 | Language | Production LOC | Test Files | Test Count | Dependencies |
 |----------|---------------|------------|------------|--------------|
-| Go | `*.go` excluding `*_test.go` | `*_test.go` | `grep -r "func Test"` | `require` blocks in go.mod |
-| Python | `*.py` excluding `test_*`, `*_test.py` | `test_*.py`, `*_test.py` | `grep -r "def test_"` | pyproject.toml / requirements.txt |
-| TS/JS | `*.ts`, `*.js` excluding `*.test.*`, `*.spec.*`, `node_modules/` | `*.test.*`, `*.spec.*` | `grep -r "it(\|test("` | `dependencies` in package.json |
-| Rust | `*.rs` excluding `tests/` | `tests/`, `#[cfg(test)]` modules | `grep -r "#\[test\]"` | `[dependencies]` in Cargo.toml |
+| Go | `*.go` excluding `*_test.go` | `*_test.go` | `rg "func Test"` | `require` blocks in go.mod |
+| Python | `*.py` excluding `test_*`, `*_test.py` | `test_*.py`, `*_test.py` | `rg "def test_"` | pyproject.toml / requirements.txt |
+| TS/JS | `*.ts`, `*.js` excluding `*.test.*`, `*.spec.*`, `node_modules/` | `*.test.*`, `*.spec.*` | `rg 'it\(|test\('` | `dependencies` in package.json |
+| Rust | `*.rs` excluding `tests/` | `tests/`, `#[cfg(test)]` modules | `rg '#\[test\]'` | `[dependencies]` in Cargo.toml |
 
 These are approximations for order-of-magnitude assessment, not precision tooling.
 
@@ -276,9 +276,9 @@ Scan for patterns that indicate quality discipline or gaps:
 
   | Language | Scan Approach |
   |----------|---------------|
-  | Go | `grep -rn '"[a-z_]*"' --include='*.go' \| grep -v '_test.go'` filtered to control flow contexts |
-  | Python | `grep -rn "['\"]\w+['\"]" --include='*.py'` in if/match/dispatch contexts |
-  | TS/JS | `grep -rn "['\"]\w+['\"]" --include='*.ts'` in switch/if/event contexts |
+  | Go | `rg -n '"[a-z_]*"' -g '*.go' -g '!*_test.go'` filtered to control flow contexts |
+  | Python | `rg -n "['\"]\w+['\"]" -g '*.py'` in if/match/dispatch contexts |
+  | TS/JS | `rg -n "['\"]\w+['\"]" -g '*.ts'` in switch/if/event contexts |
 
   Not every string literal is a magic value. Focus on:
   - Strings used in **dispatch** (switch/if chains, event names, status checks)
