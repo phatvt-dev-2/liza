@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/liza-mas/liza/internal/embedded"
 )
 
@@ -244,6 +245,24 @@ func printSetupSummary(targetDir string, written []string, skipFiles map[string]
 		fmt.Printf("\nSome agents require manual configuration.\n")
 		fmt.Printf("See: https://github.com/liza-mas/liza/blob/main/contracts/contract-activation.md\n")
 	}
+
+	docPath := relDisplay(targetDir, filepath.Join(targetDir, "support-docs", "CUSTOMIZING_AGENT_TOOLS.md"))
+	content := fmt.Sprintf(`Liza global setup complete
+
+Next steps:
+  1. Customize agent tools for your project:
+       %s
+  2. Enable Liza in a project:
+       cd your-project && liza init --claude`, docPath)
+
+	style := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("2")).
+		Padding(1, 2)
+
+	fmt.Println()
+	fmt.Println(style.Render(content))
+	fmt.Println()
 }
 
 // backupFile copies src to src.bak using streaming I/O.

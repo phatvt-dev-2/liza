@@ -19,14 +19,17 @@ Next steps:
   1. Open your AI agent (Claude, Codex, etc.)
   2. The Liza contract is now active
      Your agent follows Liza quality standards
-  3. To try the full multi-agent system later:
+  3. Read the pairing guide:
+       ~/.liza/support-docs/USAGE_PAIRING.md
+  4. To try the full multi-agent system later:
        liza init "Your project goal" --spec specs/vision.md`, agentList)
 	} else {
 		content = `Liza workspace initialized
 
 Next steps:
-  1. Run the TUI:       liza tui
-  2. Spawn agents:      press [s] to spawn an orchestrator and workers`
+  1. Read the guide:    ~/.liza/support-docs/USAGE_MULTI_AGENTS.md
+  2. Run the TUI:       liza tui
+  3. Spawn agents:      press [s] to spawn an orchestrator and workers`
 	}
 
 	style := lipgloss.NewStyle().
